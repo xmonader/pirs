@@ -8,6 +8,8 @@ members = [
     "crates/pirs",
     "crates/pirs-orchestrator",
     "crates/pirs-mcp",
+    "crates/pirs-graph",
+    "crates/pirs-lsp",
 ]
 
 [workspace.package]
@@ -43,3 +45,5 @@ pirs-agent = { path = "crates/pirs-agent" }
 pirs-tools = { path = "crates/pirs-tools" }
 pirs-rhai = { path = "crates/pirs-rhai" }
 pirs-mcp = { path = "crates/pirs-mcp" }
+pirs-graph = { path = "crates/pirs-graph" }
+pirs-lsp = { path = "crates/pirs-lsp" }

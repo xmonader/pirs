@@ -14,6 +14,8 @@ pirs-agent = { workspace = true }
 pirs-tools = { workspace = true }
 pirs-rhai = { workspace = true }
 pirs-mcp = { workspace = true }
+pirs-graph = { workspace = true }
+pirs-lsp = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }

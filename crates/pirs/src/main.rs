@@ -10,6 +10,7 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
 mod approval;
+mod serve;
 mod tui;
 mod discovery;
 mod session;
@@ -70,6 +71,10 @@ struct Cli {
     #[arg(long, default_value = "128000")]
     context_window: u64,
 
+    /// Disable the code graph (code_map/ast_edit tools, blast-radius notes)
+    #[arg(long)]
+    no_graph: bool,
+
     /// Start with only core tools loaded; model loads more via use_tool
     #[arg(long)]
     tool_diet: bool,
@@ -77,6 +82,22 @@ struct Cli {
     /// Execute tool calls one at a time (helps weaker models)
     #[arg(long)]
     sequential: bool,
+
+    /// Draft each turn with a cheaper model; escalate to the main model only when the draft is rejected
+    #[arg(long)]
+    cascade: Option<String>,
+
+    /// Run the local web app (pirs serve): browser UI on localhost
+    #[arg(long)]
+    serve: bool,
+
+    /// Port for --serve
+    #[arg(long, default_value = "8477")]
+    port: u16,
+
+    /// Bind address for --serve
+    #[arg(long, default_value = "127.0.0.1")]
+    bind: String,
 }
 
 struct Printer {
@@ -253,6 +274,35 @@ async fn main() -> anyhow::Result<()> {
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
     let mut hooks = Hooks::default();
+
+    let graph: Option<std::sync::Arc<pirs_graph::LazyGraph>> = if cli.no_graph {
+        None
+    } else {
+        Some(std::sync::Arc::new(pirs_graph::LazyGraph::new(cwd.clone())))
+    };
+    if let Some(g) = &graph {
+        tools.push(std::sync::Arc::new(pirs_graph::code_map::CodeMapTool::new(
+            std::sync::Arc::clone(g),
+            cwd.clone(),
+        )));
+        tools.push(std::sync::Arc::new(pirs_graph::ast_edit::AstEditTool::new(cwd.clone())));
+    }
+    {
+        let manifests = ["Cargo.toml", "package.json", "go.mod", "pyproject.toml", "setup.py"];
+        let has_project = manifests.iter().any(|m| cwd.join(m).exists());
+        let has_server = pirs_lsp::client::SERVERS
+            .iter()
+            .any(pirs_lsp::client::server_available);
+        if has_project && has_server {
+            let found: Vec<&str> = pirs_lsp::client::SERVERS
+                .iter()
+                .filter(|s| pirs_lsp::client::server_available(s))
+                .map(|s| s.language)
+                .collect();
+            eprintln!("[lsp: {}]", found.join(", "));
+            tools.push(std::sync::Arc::new(pirs_lsp::tool::LspTool::new(cwd.clone())));
+        }
+    }
     let mut policy_hooks: Option<(
         pirs_agent::events::BeforeToolCallHook,
         pirs_agent::events::AfterToolCallHook,
@@ -342,7 +392,67 @@ async fn main() -> anyhow::Result<()> {
         *policy_slot.lock().unwrap() = policy_hooks.clone();
         if !yolo {
             hooks.before_tool_call = ext_hooks.before_tool_call;
-            hooks.after_tool_call = ext_hooks.after_tool_call;
+            let rhai_after = ext_hooks.after_tool_call;
+            let graph_after = graph.clone().map(|g| {
+                let g = std::sync::Arc::clone(&g);
+                let cwd2 = cwd.clone();
+                let f: pirs_agent::events::AfterToolCallHook = std::sync::Arc::new(move |_id, name, result| {
+                    if (name != "edit" && name != "write") || result.is_error {
+                        return None;
+                    }
+                    let path = result
+                        .details
+                        .as_ref()
+                        .and_then(|d| d.get("path"))
+                        .and_then(|p| p.as_str())
+                        .map(std::path::PathBuf::from)
+                        .or_else(|| {
+                            result
+                                .content
+                                .iter()
+                                .filter_map(|b| b.as_text())
+                                .next()
+                                .and_then(|t| {
+                                    t.rsplit_once(" in ")
+                                        .map(|(_, p)| std::path::PathBuf::from(p.trim()))
+                                })
+                        })?;
+                    let abs = if path.is_absolute() { path } else { cwd2.join(path) };
+                    let graph = g.get();
+                    let mut notes: Vec<String> = Vec::new();
+                    for sym in graph.file_symbols(&abs) {
+                        let n = graph.callers(&sym.name).len();
+                        if n > 0 {
+                            notes.push(format!("{} ({} caller{})", sym.name, n, if n == 1 { "" } else { "s" }));
+                        }
+                    }
+                    if notes.is_empty() {
+                        return None;
+                    }
+                    let mut content = result.content.clone();
+                    let total_callers: usize = graph
+                        .file_symbols(&abs)
+                        .iter()
+                        .map(|s| graph.callers(&s.name).len())
+                        .sum();
+                    content.push(pirs_ai::ContentBlock::text(format!(
+                        "Blast radius: {} graph caller(s) of edited symbols: {}",
+                        total_callers,
+                        notes.join(", ")
+                    )));
+                    Some(pirs_agent::ToolResultPatch {
+                        content: Some(content),
+                        ..Default::default()
+                    })
+                });
+                f
+            });
+            hooks.after_tool_call = match (rhai_after, graph_after) {
+                (Some(r), Some(g)) => Some(std::sync::Arc::new(move |id, name, result| {
+                    r(id, name, result).or_else(|| g(id, name, result))
+                })),
+                (a, b) => a.or(b),
+            };
         }
         hooks.transform_context = ext_hooks.transform_context;
         hooks.should_stop_after_turn = ext_hooks.should_stop_after_turn;
@@ -461,6 +571,49 @@ async fn main() -> anyhow::Result<()> {
         hooks.before_tool_call = Some(gate.hook());
     }
 
+    let cascade_cfg = cli.cascade.as_ref().map(|draft_model| {
+        let judge_provider = std::sync::Arc::clone(&provider);
+        let judge_model = draft_model.clone();
+        let judge: pirs_agent::agent_loop::CascadeJudge = std::sync::Arc::new(move |draft| {
+            let provider = std::sync::Arc::clone(&judge_provider);
+            let model = judge_model.clone();
+            let draft_text = draft.text();
+            let stop = draft.stop_reason;
+            let has_tool_calls = !draft.tool_calls().is_empty();
+            Box::pin(async move {
+                if matches!(stop, pirs_ai::StopReason::Error | pirs_ai::StopReason::Aborted) {
+                    return false;
+                }
+                if !has_tool_calls && draft_text.trim().is_empty() {
+                    return false;
+                }
+                let prompt = format!(
+                    "Rate this agent turn as ACCEPT or REJECT (one word). Turn: {draft_text}"
+                );
+                let ctx = pirs_ai::Context {
+                    system_prompt: Some("You are a terse judge. Reply ACCEPT or REJECT.".into()),
+                    messages: vec![Message::user(prompt)],
+                    tools: vec![],
+                };
+                let mut stream = provider
+                    .stream(&model, &ctx, &Default::default(), tokio_util::sync::CancellationToken::new())
+                    .await;
+                let mut verdict = String::new();
+                use futures::StreamExt;
+                while let Some(ev) = stream.next().await {
+                    if let pirs_ai::StreamEvent::TextDelta(d) = ev {
+                        verdict.push_str(&d);
+                    }
+                }
+                !verdict.to_uppercase().contains("REJECT")
+            })
+        });
+        pirs_agent::agent_loop::CascadeConfig {
+            draft_model: draft_model.clone(),
+            judge,
+        }
+    });
+
     let mut agent = Agent::new(provider, &cli.model)
         .with_system_prompt(system)
         .with_tools(tools)
@@ -468,7 +621,8 @@ async fn main() -> anyhow::Result<()> {
         .with_hooks(hooks)
         .with_compaction(compaction)
         .with_visible_tools(visible)
-        .with_tool_execution(execution);
+        .with_tool_execution(execution)
+        .with_cascade(cascade_cfg);
     agent.set_extra_usage_handle(usage_slot.clone());
     {
         let steer = agent.steer_sender();
@@ -531,6 +685,16 @@ async fn main() -> anyhow::Result<()> {
                 _ => p.event(event),
             }
         }));
+    }
+
+    if cli.serve {
+        return serve::run(serve::ServeOptions {
+            agent,
+            host,
+            port: cli.port,
+            bind: cli.bind.clone(),
+        })
+        .await;
     }
 
     if cli.mode == "tui" {

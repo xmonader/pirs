@@ -11,6 +11,37 @@ use serde_json::Value;
 use crate::paths;
 use crate::truncate::{self, MAX_LINES};
 
+static READ_CACHE: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<PathBuf, (std::time::SystemTime, String)>>,
+> = std::sync::OnceLock::new();
+
+fn cache() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, (std::time::SystemTime, String)>> {
+    READ_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+fn read_cached(path: &std::path::Path) -> anyhow::Result<String> {
+    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    if let Some(mtime) = mtime {
+        let map = cache().lock().unwrap();
+        if let Some((cached_mtime, content)) = map.get(path) {
+            if *cached_mtime == mtime {
+                return Ok(content.clone());
+            }
+        }
+    }
+    let raw = std::fs::read(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let content = String::from_utf8_lossy(&raw).into_owned();
+    if let Some(mtime) = mtime {
+        let mut map = cache().lock().unwrap();
+        if map.len() > 500 {
+            map.clear();
+        }
+        map.insert(path.to_path_buf(), (mtime, content.clone()));
+    }
+    Ok(content)
+}
+
 #[derive(Deserialize, JsonSchema)]
 struct ReadArgs {
     /// Path to the file to read
@@ -85,9 +116,7 @@ impl AgentTool for ReadTool {
             }
         }
 
-        let raw = std::fs::read(&path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
-        let content = String::from_utf8_lossy(&raw);
+        let content = std::borrow::Cow::from(read_cached(&path)?);
         let offset = args.offset.unwrap_or(1);
         let total_lines = content.lines().count();
         if offset > total_lines && total_lines > 0 {

@@ -43,6 +43,7 @@ pub struct ExtensionHost {
     command_registry: Vec<RegisteredCommand>,
     subagent_runner: Mutex<Option<SubagentRunner>>,
     hook_errors: Mutex<Vec<String>>,
+    inbox: Arc<Mutex<Vec<(String, String)>>>,
     pub load_errors: Vec<String>,
 }
 
@@ -191,8 +192,13 @@ impl ExtensionHost {
             command_registry: Vec::new(),
             subagent_runner: Mutex::new(None),
             hook_errors: Mutex::new(Vec::new()),
+            inbox: Arc::new(Mutex::new(Vec::new())),
             load_errors: Vec::new(),
         }
+    }
+
+    pub fn inbox_drain(&self) -> Vec<(String, String)> {
+        std::mem::take(&mut *self.inbox.lock().unwrap())
     }
 
     pub fn drain_hook_errors(&self) -> Vec<String> {
@@ -289,11 +295,50 @@ impl ExtensionHost {
                     Err(e) => format!("sub-agent error: {e}"),
                 }
             });
+            let runner2 = Arc::clone(&runner);
             engine.register_fn("run_subagent", move |task: &str, model: &str| -> String {
-                match runner(task.to_string(), Some(model.to_string())) {
+                match runner2(task.to_string(), Some(model.to_string())) {
                     Ok(answer) => answer,
                     Err(e) => format!("sub-agent error: {e}"),
                 }
+            });
+
+            let inbox = Arc::clone(&self.inbox);
+            let spawn_runner = Arc::clone(&runner);
+            engine.register_fn(
+                "spawn_subagent",
+                move |task: &str, model: &str, tag: &str| -> String {
+                    let runner = Arc::clone(&spawn_runner);
+                    let inbox = Arc::clone(&inbox);
+                    let task = task.to_string();
+                    let model = if model.is_empty() {
+                        None
+                    } else {
+                        Some(model.to_string())
+                    };
+                    let tag = tag.to_string();
+                    let tag2 = tag.clone();
+                    std::thread::spawn(move || {
+                        let result = runner(task, model)
+                            .unwrap_or_else(|e| format!("sub-agent error: {e}"));
+                        inbox.lock().unwrap().push((tag, result));
+                    });
+                    tag2
+                },
+            );
+            let inbox2 = Arc::clone(&self.inbox);
+            engine.register_fn("inbox", move || -> rhai::Array {
+                let items: Vec<(String, String)> =
+                    std::mem::take(&mut *inbox2.lock().unwrap());
+                items
+                    .into_iter()
+                    .map(|(tag, result)| {
+                        let mut m = rhai::Map::new();
+                        m.insert("tag".into(), tag.into());
+                        m.insert("result".into(), result.into());
+                        Dynamic::from_map(m)
+                    })
+                    .collect()
             });
         }
 

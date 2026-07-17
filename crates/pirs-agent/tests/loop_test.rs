@@ -572,3 +572,42 @@ async fn bash_background_job_runs_to_completion() {
     let list = pirs_agent::jobs::registry().list();
     assert!(list.iter().any(|l| l.contains("exited(0)")), "{list:?}");
 }
+
+#[tokio::test]
+async fn cascade_escalates_on_judge_reject_and_keeps_good_draft() {
+    use pirs_agent::agent_loop::{CascadeConfig, CascadeJudge};
+
+    let provider = Arc::new(MockProvider::new(vec![
+        AssistantMessage::default(), // bad draft (empty)
+        text_msg("main model answer"),
+    ]));
+    let seen_models = Arc::clone(&provider.seen_models);
+    let judge: CascadeJudge = Arc::new(|draft| {
+        let ok = !draft.text().trim().is_empty();
+        Box::pin(async move { ok })
+    });
+    let mut agent = Agent::new(provider, "mock-model").with_cascade(Some(CascadeConfig {
+        draft_model: "draft-model".into(),
+        judge,
+    }));
+    agent.prompt("go").await.unwrap();
+
+    let models = seen_models.lock().unwrap().clone();
+    assert_eq!(models, vec!["draft-model", "mock-model"], "draft then escalate");
+    assert!(matches!(
+        agent.messages.last(),
+        Some(Message::Assistant(a)) if a.text() == "main model answer"
+    ));
+
+    let provider2 = Arc::new(MockProvider::new(vec![text_msg("draft is fine")]));
+    let seen_models2 = Arc::clone(&provider2.seen_models);
+    let mut agent2 = Agent::new(provider2, "mock-model").with_cascade(Some(CascadeConfig {
+        draft_model: "draft-model".into(),
+        judge: Arc::new(|draft| {
+            let ok = !draft.text().trim().is_empty();
+            Box::pin(async move { ok })
+        }),
+    }));
+    agent2.prompt("go").await.unwrap();
+    assert_eq!(seen_models2.lock().unwrap().clone(), vec!["draft-model"], "accepted draft: no escalation");
+}

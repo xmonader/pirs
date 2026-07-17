@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use pirs_ai::{CompletionOptions, Context, LlmProvider, Message};
 use tokio_util::sync::CancellationToken;
 
-use crate::agent_loop::{run_agent_loop, LoopConfig, VisibleTools};
+use crate::agent_loop::{run_agent_loop, CascadeConfig, LoopConfig, VisibleTools};
 use crate::compaction::{compact_messages, CompactionConfig};
 use crate::events::{AgentEvent, Emit, Hooks};
 use crate::tool::{AgentTool, ExecutionMode};
@@ -35,6 +35,7 @@ pub struct Agent {
     tool_execution: ExecutionMode,
     pub compaction: Option<CompactionConfig>,
     visible_tools: Option<VisibleTools>,
+    cascade: Option<CascadeConfig>,
     extra_usage: Arc<Mutex<pirs_ai::Usage>>,
     hooks: Hooks,
     listeners: Vec<Emit>,
@@ -58,6 +59,7 @@ impl Agent {
             tool_execution: ExecutionMode::Parallel,
             compaction: Some(CompactionConfig::default()),
             visible_tools: None,
+            cascade: None,
             extra_usage: Arc::new(Mutex::new(pirs_ai::Usage::default())),
             hooks: Hooks::default(),
             listeners: Vec::new(),
@@ -97,6 +99,11 @@ impl Agent {
 
     pub fn with_visible_tools(mut self, visible: Option<VisibleTools>) -> Self {
         self.visible_tools = visible;
+        self
+    }
+
+    pub fn with_cascade(mut self, cascade: Option<CascadeConfig>) -> Self {
+        self.cascade = cascade;
         self
     }
 
@@ -272,6 +279,7 @@ impl Agent {
             compaction: self.compaction.clone(),
             visible_tools: self.visible_tools.clone(),
             extra_usage: Arc::clone(&self.extra_usage),
+            cascade: self.cascade.clone(),
         };
 
         let tools = self.tools.clone();

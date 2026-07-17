@@ -21,6 +21,17 @@ pub struct LoopConfig {
     pub compaction: Option<CompactionConfig>,
     pub visible_tools: Option<VisibleTools>,
     pub extra_usage: std::sync::Arc<std::sync::Mutex<pirs_ai::Usage>>,
+    pub cascade: Option<CascadeConfig>,
+}
+
+pub type CascadeJudge = Arc<
+    dyn Fn(&AssistantMessage) -> futures::future::BoxFuture<'static, bool> + Send + Sync,
+>;
+
+#[derive(Clone)]
+pub struct CascadeConfig {
+    pub draft_model: String,
+    pub judge: CascadeJudge,
 }
 
 pub type VisibleTools = std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>;
@@ -225,6 +236,50 @@ async fn stream_assistant(
     emit: &Emit,
     cancel: CancellationToken,
 ) -> AssistantMessage {
+    if let Some(cascade) = &config.cascade {
+        let draft = stream_once(
+            context,
+            tools,
+            provider,
+            config,
+            &cascade.draft_model,
+            emit,
+            cancel.clone(),
+        )
+        .await;
+        if (cascade.judge)(&draft).await {
+            return draft;
+        }
+        if let Some(last) = context.messages.last() {
+            if last.is_assistant() {
+                context.messages.pop();
+            }
+        }
+        emit(AgentEvent::MessageStart {
+            message: Box::new(Message::Assistant(AssistantMessage::default())),
+        });
+    }
+    stream_once(
+        context,
+        tools,
+        provider,
+        config,
+        &config.model.clone(),
+        emit,
+        cancel,
+    )
+    .await
+}
+
+async fn stream_once(
+    context: &mut Context,
+    tools: &[Arc<dyn AgentTool>],
+    provider: &Arc<dyn LlmProvider>,
+    config: &LoopConfig,
+    model: &str,
+    emit: &Emit,
+    cancel: CancellationToken,
+) -> AssistantMessage {
     let mut opts = config.completion.clone();
     if let Some(f) = &config.hooks.get_api_key {
         if let Some(key) = f() {
@@ -246,12 +301,12 @@ async fn stream_assistant(
     };
 
     let mut stream = provider
-        .stream(&config.model, &llm_ctx, &opts, cancel.clone())
+        .stream(model, &llm_ctx, &opts, cancel.clone())
         .await;
 
     let mut partial = AssistantMessage {
         provider: "unknown".into(),
-        model: config.model.clone(),
+        model: model.to_string(),
         ..Default::default()
     };
     context.messages.push(Message::Assistant(partial.clone()));
