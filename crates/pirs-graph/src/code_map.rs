@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::graph::{Graph, Symbol};
+use crate::graph::Symbol;
 
 #[derive(Deserialize, JsonSchema)]
 struct CodeMapArgs {
@@ -20,12 +20,12 @@ struct CodeMapArgs {
 }
 
 pub struct CodeMapTool {
-    graph: Arc<Graph>,
+    graph: Arc<crate::LazyGraph>,
     root: PathBuf,
 }
 
 impl CodeMapTool {
-    pub fn new(graph: Arc<Graph>, root: PathBuf) -> Self {
+    pub fn new(graph: Arc<crate::LazyGraph>, root: PathBuf) -> Self {
         CodeMapTool { graph, root }
     }
 }
@@ -59,10 +59,11 @@ impl AgentTool for CodeMapTool {
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: CodeMapArgs = serde_json::from_value(ctx.args)?;
+        let graph = self.graph.get();
         let target = args.target.unwrap_or_default();
         let out = match args.action.as_str() {
             "symbol" => {
-                let defs = self.graph.symbol(&target);
+                let defs = graph.symbol(&target);
                 if defs.is_empty() {
                     format!("no definition found for '{target}'")
                 } else {
@@ -73,7 +74,7 @@ impl AgentTool for CodeMapTool {
                 }
             }
             "callers" => {
-                let callers = self.graph.callers(&target);
+                let callers = graph.callers(&target);
                 if callers.is_empty() {
                     format!("no callers of '{target}' in the graph")
                 } else {
@@ -85,7 +86,7 @@ impl AgentTool for CodeMapTool {
                 }
             }
             "callees" => {
-                let callees = self.graph.callees(&target);
+                let callees = graph.callees(&target);
                 if callees.is_empty() {
                     format!("'{target}' calls nothing in the graph")
                 } else {
@@ -94,7 +95,7 @@ impl AgentTool for CodeMapTool {
             }
             "top" => {
                 let n = args.limit.unwrap_or(15);
-                self.graph
+                graph
                     .top(n)
                     .iter()
                     .map(|(s, rank)| format!("{rank:.4} {}", fmt_symbol(s, &self.root)))
@@ -103,7 +104,7 @@ impl AgentTool for CodeMapTool {
             }
             "file_map" => {
                 let path = self.root.join(&target);
-                let syms = self.graph.file_symbols(&path);
+                let syms = graph.file_symbols(&path);
                 if syms.is_empty() {
                     format!("no symbols in {target}")
                 } else {
@@ -114,8 +115,8 @@ impl AgentTool for CodeMapTool {
                 }
             }
             "blast" => {
-                let callers = self.graph.callers(&target);
-                let callees = self.graph.callees(&target);
+                let callers = graph.callers(&target);
+                let callees = graph.callees(&target);
                 format!(
                     "'{target}' blast radius: {} direct caller(s), {} direct callee(s)\ncallers:\n{}",
                     callers.len(),
@@ -146,7 +147,7 @@ mod tests {
             "fn a() { b(); }\nfn b() {}\nfn c() { b(); }\n",
         )
         .unwrap();
-        let graph = Arc::new(Graph::build(dir.path()));
+        let graph = Arc::new(crate::LazyGraph::new(dir.path().to_path_buf()));
         let tool = CodeMapTool::new(graph, dir.path().to_path_buf());
 
         let run = |args: Value| {

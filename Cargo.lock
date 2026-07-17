@@ -1307,6 +1307,7 @@ dependencies = [
  "pirs-agent",
  "pirs-ai",
  "pirs-graph",
+ "pirs-lsp",
  "pirs-mcp",
  "pirs-rhai",
  "pirs-tools",
@@ -1377,6 +1378,23 @@ dependencies = [
  "tree-sitter-python",
  "tree-sitter-rust",
  "tree-sitter-typescript",
+]
+
+[[package]]
+name = "pirs-lsp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pirs-agent",
+ "pirs-ai",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

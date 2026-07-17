@@ -10,6 +10,7 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
 mod approval;
+mod serve;
 mod tui;
 mod discovery;
 mod session;
@@ -85,6 +86,18 @@ struct Cli {
     /// Draft each turn with a cheaper model; escalate to the main model only when the draft is rejected
     #[arg(long)]
     cascade: Option<String>,
+
+    /// Run the local web app (pirs serve): browser UI on localhost
+    #[arg(long)]
+    serve: bool,
+
+    /// Port for --serve
+    #[arg(long, default_value = "8477")]
+    port: u16,
+
+    /// Bind address for --serve
+    #[arg(long, default_value = "127.0.0.1")]
+    bind: String,
 }
 
 struct Printer {
@@ -262,17 +275,10 @@ async fn main() -> anyhow::Result<()> {
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
     let mut hooks = Hooks::default();
 
-    let graph: Option<std::sync::Arc<pirs_graph::Graph>> = if cli.no_graph {
+    let graph: Option<std::sync::Arc<pirs_graph::LazyGraph>> = if cli.no_graph {
         None
     } else {
-        let start = std::time::Instant::now();
-        let g = std::sync::Arc::new(pirs_graph::Graph::build(&cwd));
-        eprintln!(
-            "[code graph: {} symbols in {:.1}s]",
-            g.symbols.len(),
-            start.elapsed().as_secs_f64()
-        );
-        Some(g)
+        Some(std::sync::Arc::new(pirs_graph::LazyGraph::new(cwd.clone())))
     };
     if let Some(g) = &graph {
         tools.push(std::sync::Arc::new(pirs_graph::code_map::CodeMapTool::new(
@@ -280,6 +286,22 @@ async fn main() -> anyhow::Result<()> {
             cwd.clone(),
         )));
         tools.push(std::sync::Arc::new(pirs_graph::ast_edit::AstEditTool::new(cwd.clone())));
+    }
+    {
+        let manifests = ["Cargo.toml", "package.json", "go.mod", "pyproject.toml", "setup.py"];
+        let has_project = manifests.iter().any(|m| cwd.join(m).exists());
+        let has_server = pirs_lsp::client::SERVERS
+            .iter()
+            .any(pirs_lsp::client::server_available);
+        if has_project && has_server {
+            let found: Vec<&str> = pirs_lsp::client::SERVERS
+                .iter()
+                .filter(|s| pirs_lsp::client::server_available(s))
+                .map(|s| s.language)
+                .collect();
+            eprintln!("[lsp: {}]", found.join(", "));
+            tools.push(std::sync::Arc::new(pirs_lsp::tool::LspTool::new(cwd.clone())));
+        }
     }
     let mut policy_hooks: Option<(
         pirs_agent::events::BeforeToolCallHook,
@@ -396,9 +418,10 @@ async fn main() -> anyhow::Result<()> {
                                 })
                         })?;
                     let abs = if path.is_absolute() { path } else { cwd2.join(path) };
+                    let graph = g.get();
                     let mut notes: Vec<String> = Vec::new();
-                    for sym in g.file_symbols(&abs) {
-                        let n = g.callers(&sym.name).len();
+                    for sym in graph.file_symbols(&abs) {
+                        let n = graph.callers(&sym.name).len();
                         if n > 0 {
                             notes.push(format!("{} ({} caller{})", sym.name, n, if n == 1 { "" } else { "s" }));
                         }
@@ -407,10 +430,10 @@ async fn main() -> anyhow::Result<()> {
                         return None;
                     }
                     let mut content = result.content.clone();
-                    let total_callers: usize = g
+                    let total_callers: usize = graph
                         .file_symbols(&abs)
                         .iter()
-                        .map(|s| g.callers(&s.name).len())
+                        .map(|s| graph.callers(&s.name).len())
                         .sum();
                     content.push(pirs_ai::ContentBlock::text(format!(
                         "Blast radius: {} graph caller(s) of edited symbols: {}",
@@ -662,6 +685,16 @@ async fn main() -> anyhow::Result<()> {
                 _ => p.event(event),
             }
         }));
+    }
+
+    if cli.serve {
+        return serve::run(serve::ServeOptions {
+            agent,
+            host,
+            port: cli.port,
+            bind: cli.bind.clone(),
+        })
+        .await;
     }
 
     if cli.mode == "tui" {

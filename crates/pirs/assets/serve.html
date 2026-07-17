@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>pirs</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font: 14px/1.5 ui-monospace, monospace; background: #0d1117; color: #c9d1d9; display: flex; flex-direction: column; height: 100vh; }
+  #log { flex: 1; overflow-y: auto; padding: 12px 16px; white-space: pre-wrap; word-break: break-word; }
+  .user { color: #7ee787; font-weight: bold; }
+  .assistant { color: #c9d1d9; }
+  .thinking { color: #6e7681; font-style: italic; }
+  .tool { color: #79c0ff; }
+  .tool-result { color: #6e7681; }
+  .error { color: #ff7b72; }
+  .status { color: #d29922; }
+  #bar { padding: 6px 16px; background: #161b22; color: #8b949e; font-size: 12px; border-top: 1px solid #30363d; }
+  #inputrow { display: flex; border-top: 1px solid #30363d; }
+  #input { flex: 1; background: #0d1117; color: #c9d1d9; border: 0; padding: 12px 16px; font: inherit; outline: none; }
+  #send, #cancel { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 0 18px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="log"></div>
+<div id="bar">connecting…</div>
+<div id="inputrow">
+  <input id="input" placeholder="message pirs (while running, this steers)" autofocus>
+  <button id="send">send</button>
+  <button id="cancel">cancel</button>
+</div>
+<script>
+const log = document.getElementById('log');
+const bar = document.getElementById('bar');
+const input = document.getElementById('input');
+let current = null;
+
+function line(cls, text) {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+  return d;
+}
+
+function refreshState() {
+  fetch('/state').then(r => r.json()).then(s => {
+    bar.textContent = `${s.model} | ${s.running ? 'running' : 'idle'} | in ${s.usage.input} (${s.usage.cacheRead} cached) out ${s.usage.output} | ${s.usage.calls} calls`;
+  });
+}
+setInterval(refreshState, 2000);
+
+const es = new EventSource('/events');
+es.onmessage = (e) => {
+  const ev = JSON.parse(e.data);
+  switch (ev.type) {
+    case 'message_start':
+      if (ev.role === 'assistant') current = null;
+      break;
+    case 'message_update': {
+      if (!current) current = { text: line('assistant', ''), think: line('thinking', '') };
+      current.text.textContent = ev.text;
+      current.think.textContent = ev.thinking ? 'thinking: ' + ev.thinking : '';
+      log.scrollTop = log.scrollHeight;
+      break;
+    }
+    case 'message_end':
+      if (ev.role === 'user') line('user', '> ' + ev.text);
+      current = null;
+      refreshState();
+      break;
+    case 'tool_start':
+      line('tool', '> ' + ev.name + ' ' + (ev.args.command || ev.args.path || ev.args.pattern || ev.args.task || ''));
+      break;
+    case 'tool_end':
+      line(ev.isError ? 'error' : 'tool-result', '- ' + (ev.text || '').split('\n').slice(0, 3).join('\n'));
+      break;
+    case 'status': line('status', '[' + ev.text + ']'); break;
+    case 'usage':
+      refreshState();
+      break;
+  }
+};
+
+function send() {
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  fetch('/prompt', { method: 'POST', body: JSON.stringify({ text }) });
+}
+document.getElementById('send').onclick = send;
+document.getElementById('cancel').onclick = () => fetch('/cancel', { method: 'POST' });
+input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+refreshState();
+</script>
+</body>
+</html>
