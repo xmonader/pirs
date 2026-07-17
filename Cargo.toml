@@ -6,6 +6,7 @@ members = [
     "crates/pirs-tools",
     "crates/pirs-rhai",
     "crates/pirs",
+    "crates/pirs-orchestrator",
 ]
 
 [workspace.package]
