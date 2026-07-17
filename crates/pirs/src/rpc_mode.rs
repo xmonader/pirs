@@ -43,10 +43,14 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
     let mut hooks = Hooks::default();
     let mut host = pirs_rhai::ExtensionHost::new();
-    host.load_default_dirs(cwd);
-    for err in &host.load_errors {
-        eprintln!("[extension error] {err}");
-    }
+    let policy_slot: std::sync::Arc<
+        std::sync::Mutex<
+            Option<(
+                pirs_agent::events::BeforeToolCallHook,
+                pirs_agent::events::AfterToolCallHook,
+            )>,
+        >,
+    > = std::sync::Arc::new(std::sync::Mutex::new(None));
     let runner_provider = std::sync::Arc::clone(&provider);
     let runner_completion = CompletionOptions {
         api_key: Some(opts.api_key.clone()),
@@ -54,21 +58,29 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     };
     let runner_model = opts.model.clone();
     let runner_cwd = cwd.clone();
+    let policy_slot_run = std::sync::Arc::clone(&policy_slot);
     host.set_subagent_runner(std::sync::Arc::new(
         move |task: String, model: Option<String>| {
             let provider = std::sync::Arc::clone(&runner_provider);
             let completion = runner_completion.clone();
             let cwd = runner_cwd.clone();
             let model = model.unwrap_or_else(|| runner_model.clone());
+            let policy = policy_slot_run.lock().unwrap().clone();
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .map_err(|e| e.to_string())?;
                 rt.block_on(async move {
+                    let mut hooks = pirs_agent::Hooks::default();
+                    if let Some((b, a)) = &policy {
+                        hooks.before_tool_call = Some(b.clone());
+                        hooks.after_tool_call = Some(a.clone());
+                    }
                     let mut agent = pirs_agent::Agent::new(provider, &model)
                         .with_tools(pirs_tools::default_tools(cwd))
                         .with_completion(completion)
+                        .with_hooks(hooks)
                         .with_compaction(None);
                     let new = agent.prompt(&task).await.map_err(|e| e.to_string())?;
                     new.iter()
@@ -86,9 +98,20 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
             .unwrap_or_else(|_| Err("sub-agent thread panicked".to_string()))
         },
     ));
+    host.load_default_dirs(cwd);
+    for err in &host.load_errors {
+        eprintln!("[extension error] {err}");
+    }
     let host = Arc::new(host);
     tools.extend(host.tools());
     let ext_hooks = host.hooks();
+    *policy_slot.lock().unwrap() = match (
+        &ext_hooks.before_tool_call,
+        &ext_hooks.after_tool_call,
+    ) {
+        (Some(b), Some(a)) => Some((b.clone(), a.clone())),
+        _ => None,
+    };
     hooks.before_tool_call = ext_hooks.before_tool_call;
     hooks.after_tool_call = ext_hooks.after_tool_call;
     hooks.transform_context = ext_hooks.transform_context;

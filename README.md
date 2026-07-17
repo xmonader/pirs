@@ -73,6 +73,14 @@ Scripts can also spawn fresh-context sub-agents themselves: `run_subagent(task, 
 
 rhai gotchas (pinned by tests): interpolation only in backtick strings `` `${x}` ``; string methods like `trim()` mutate in place; no `let mut`; arrays have no `join` — use `str_join(arr, sep)` or a loop; array property access clones (write whole entries back); `const` doesn't resolve inside nested closures.
 
+## Skills & commands (.claude / .agents / .pirs)
+
+Standard conventions are honored at startup, project dir first then `$HOME`:
+
+- **Skills**: `SKILL.md` (with `name`/`description` frontmatter) in `.claude/skills/`, `.agents/skills/`, `.pirs/skills/` — injected as an `<available_skills>` block; the model loads the file via `read` when relevant (progressive disclosure).
+- **Commands**: `*.md` in `.claude/commands/`, `.agents/commands/`, `.pirs/commands/` — become `/name` slash commands; `$ARGUMENTS` is substituted with the text after the command.
+- **Context**: `AGENTS.md` / `CLAUDE.md` in the project root are appended to the system prompt.
+
 ## Orchestrator
 
 Run fleets of headless agents (`pirs --mode rpc`, pi-compatible JSONL RPC):

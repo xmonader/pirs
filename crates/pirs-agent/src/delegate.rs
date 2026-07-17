@@ -5,6 +5,7 @@ use pirs_ai::{CompletionOptions, LlmProvider, Message};
 use serde_json::{json, Value};
 
 use crate::agent::Agent;
+use crate::events::{AfterToolCallHook, BeforeToolCallHook, Hooks};
 use crate::tool::{AgentTool, ToolExecContext, ToolOutput};
 
 /// Runs a subtask in a fresh sub-agent with its own clean context and
@@ -15,6 +16,7 @@ pub struct DelegateTool {
     model: String,
     completion: CompletionOptions,
     make_tools: Arc<dyn Fn() -> Vec<Arc<dyn AgentTool>> + Send + Sync>,
+    policy_hooks: std::sync::Mutex<Option<(BeforeToolCallHook, AfterToolCallHook)>>,
 }
 
 impl DelegateTool {
@@ -29,7 +31,16 @@ impl DelegateTool {
             model: model.into(),
             completion,
             make_tools: Arc::new(make_tools),
+            policy_hooks: std::sync::Mutex::new(None),
         })
+    }
+
+    pub fn with_policy_hooks(
+        &self,
+        before: BeforeToolCallHook,
+        after: AfterToolCallHook,
+    ) {
+        *self.policy_hooks.lock().unwrap() = Some((before, after));
     }
 }
 
@@ -86,9 +97,16 @@ impl AgentTool for DelegateTool {
 
         ctx.emit_update(format!("sub-agent started ({model}): {task}"));
 
+        let mut hooks = Hooks::default();
+        if let Some((before, after)) = self.policy_hooks.lock().unwrap().clone() {
+            hooks.before_tool_call = Some(before);
+            hooks.after_tool_call = Some(after);
+        }
+
         let mut agent = Agent::new(Arc::clone(&self.provider), &model)
             .with_tools((self.make_tools)())
             .with_completion(self.completion.clone())
+            .with_hooks(hooks)
             .with_compaction(None);
 
         let new_messages = agent.prompt(&task).await?;

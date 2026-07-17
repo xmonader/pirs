@@ -468,3 +468,42 @@ async fn delegate_runs_subagent_with_fresh_context() {
         "sub-agent must not see the main conversation"
     );
 }
+
+#[tokio::test]
+async fn delegate_inherits_policy_hooks() {
+    use pirs_agent::delegate::DelegateTool;
+
+    let provider = Arc::new(MockProvider::new(vec![
+        tool_call_msg("c1", "delegate", json!({"task": "run echo"})),
+        tool_call_msg("sub", "echo", json!({"text": "x"})),
+        text_msg("sub finished"),
+        text_msg("main done"),
+    ]));
+
+    let blocker: pirs_agent::events::BeforeToolCallHook =
+        Arc::new(|_id, name, _args| Some(format!("policy denies {name}")));
+    let passthrough: pirs_agent::events::AfterToolCallHook = Arc::new(|_, _, _| None);
+
+    let delegate = DelegateTool::new(
+        provider.clone(),
+        "mock-model",
+        CompletionOptions::default(),
+        || vec![Arc::new(EchoTool)],
+    );
+    delegate.with_policy_hooks(blocker, passthrough);
+
+    let mut agent = Agent::new(provider.clone(), "mock-model").with_tools(vec![delegate]);
+    agent.prompt("go").await.unwrap();
+
+    let calls = provider.seen.lock().unwrap();
+    let sub_turn2 = calls
+        .iter()
+        .skip(1)
+        .find(|ctx| {
+            ctx.messages.iter().any(|m| matches!(
+                m,
+                Message::ToolResult(r) if r.is_error && r.content[0].as_text().map(|t| t.contains("policy denies echo")).unwrap_or(false)
+            ))
+        });
+    assert!(sub_turn2.is_some(), "policy hook must apply inside sub-agent: {calls:?}");
+}

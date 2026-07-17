@@ -9,6 +9,7 @@ use pirs_ai::{CompletionOptions, Message, OpenAiCompat};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
+mod discovery;
 mod session;
 mod system_prompt;
 mod rpc_mode;
@@ -207,15 +208,23 @@ async fn main() -> anyhow::Result<()> {
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
     let mut hooks = Hooks::default();
+    let mut policy_hooks: Option<(
+        pirs_agent::events::BeforeToolCallHook,
+        pirs_agent::events::AfterToolCallHook,
+    )> = None;
+    let policy_slot: std::sync::Arc<
+        std::sync::Mutex<
+            Option<(
+                pirs_agent::events::BeforeToolCallHook,
+                pirs_agent::events::AfterToolCallHook,
+            )>,
+        >,
+    > = std::sync::Arc::new(std::sync::Mutex::new(None));
 
     let host = if cli.no_extensions {
         None
     } else {
         let mut h = pirs_rhai::ExtensionHost::new();
-        h.load_default_dirs(&cwd);
-        for err in &h.load_errors {
-            eprintln!("[extension error] {err}");
-        }
         let runner_provider = std::sync::Arc::new(
             pirs_ai::OpenAiCompat::new(cli.base_url.clone()).with_max_retries(cli.max_retries),
         );
@@ -225,21 +234,29 @@ async fn main() -> anyhow::Result<()> {
         };
         let runner_model = cli.model.clone();
         let runner_cwd = cwd.clone();
+        let policy_slot_run = std::sync::Arc::clone(&policy_slot);
         h.set_subagent_runner(std::sync::Arc::new(
             move |task: String, model: Option<String>| {
                 let provider = std::sync::Arc::clone(&runner_provider);
                 let completion = runner_completion.clone();
                 let cwd = runner_cwd.clone();
                 let model = model.unwrap_or_else(|| runner_model.clone());
+                let policy = policy_slot_run.lock().unwrap().clone();
                 std::thread::spawn(move || {
                     let rt = tokio::runtime::Builder::new_current_thread()
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
                     rt.block_on(async move {
+                        let mut hooks = pirs_agent::Hooks::default();
+                        if let Some((b, a)) = &policy {
+                            hooks.before_tool_call = Some(b.clone());
+                            hooks.after_tool_call = Some(a.clone());
+                        }
                         let mut agent = pirs_agent::Agent::new(provider, &model)
                             .with_tools(pirs_tools::default_tools(cwd))
                             .with_completion(completion)
+                            .with_hooks(hooks)
                             .with_compaction(None);
                         let new = agent.prompt(&task).await.map_err(|e| e.to_string())?;
                         new.iter()
@@ -257,12 +274,21 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| Err("sub-agent thread panicked".to_string()))
             },
         ));
+        h.load_default_dirs(&cwd);
+        for err in &h.load_errors {
+            eprintln!("[extension error] {err}");
+        }
         let h = Arc::new(h);
         if !h.extension_names().is_empty() {
             eprintln!("[extensions: {}]", h.extension_names().join(", "));
         }
         tools.extend(h.tools());
         let ext_hooks = h.hooks();
+        policy_hooks = match (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
+            (Some(b), Some(a)) => Some((b.clone(), a.clone())),
+            _ => None,
+        };
+        *policy_slot.lock().unwrap() = policy_hooks.clone();
         hooks.before_tool_call = ext_hooks.before_tool_call;
         hooks.after_tool_call = ext_hooks.after_tool_call;
         hooks.transform_context = ext_hooks.transform_context;
@@ -272,7 +298,13 @@ async fn main() -> anyhow::Result<()> {
         Some(h)
     };
 
+    let skills = discovery::discover_skills(&cwd);
+    let file_commands = discovery::discover_commands(&cwd);
+
     let mut system = system_prompt::build_system_prompt(&cwd, &tools);
+    if let Some(block) = discovery::skills_prompt_block(&skills) {
+        system.push_str(&block);
+    }
     if let Some(h) = &host {
         let cmds = h.commands();
         if !cmds.is_empty() {
@@ -316,6 +348,9 @@ async fn main() -> anyhow::Result<()> {
             delegate_completion,
             move || pirs_tools::default_tools(delegate_cwd.clone()),
         );
+        if let Some((b, a)) = &policy_hooks {
+            delegate.with_policy_hooks(b.clone(), a.clone());
+        }
         tools.push(delegate);
     }
 
@@ -393,7 +428,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    repl(&mut agent, &printer, &session_path, &cwd, host.as_ref()).await
+    repl(&mut agent, &printer, &session_path, &cwd, host.as_ref(), &file_commands).await
 }
 
 async fn run_turn(
@@ -460,6 +495,7 @@ async fn repl(
     session_path: &Path,
     cwd: &Path,
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
+    file_commands: &[discovery::FileCommand],
 ) -> anyhow::Result<()> {
     let mut rl = DefaultEditor::new()?;
     println!("pirs — pi agent harness, Rust port. /help for commands, Ctrl-D to quit.");
@@ -472,7 +508,7 @@ async fn repl(
                 }
                 let _ = rl.add_history_entry(line);
                 if line.starts_with('/') {
-                    match handle_command(line, agent, session_path, host).await {
+                    match handle_command(line, agent, session_path, host, file_commands, printer).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(e) => {
@@ -533,6 +569,8 @@ async fn handle_command(
     agent: &mut Agent,
     session_path: &Path,
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
+    file_commands: &[discovery::FileCommand],
+    printer: &Arc<Printer>,
 ) -> anyhow::Result<bool> {
     let mut parts = line.splitn(2, ' ');
     let cmd = parts.next().unwrap_or("");
@@ -540,6 +578,9 @@ async fn handle_command(
     match cmd {
         "/quit" | "/exit" => return Ok(true),
         "/help" => {
+            for fc in file_commands {
+                println!("/{:<12} {}", fc.name, fc.description);
+            }
             println!(
                 "/model [id]   show or set model\n\
                  /export <p>   export session to a JSONL file\n\
@@ -592,7 +633,15 @@ async fn handle_command(
                 }
             }
             if !handled {
-                println!("unknown command: {other}");
+                let cmd_name = other.trim_start_matches('/');
+                if let Some(fc) = file_commands.iter().find(|c| c.name == cmd_name) {
+                    let prompt = discovery::expand_command(fc, arg);
+                    if let Err(e) = run_turn(agent, &prompt, printer, session_path).await {
+                        eprintln!("[error: {e}]");
+                    }
+                } else {
+                    println!("unknown command: {other}");
+                }
             }
         }
     }
