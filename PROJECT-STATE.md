@@ -1,8 +1,8 @@
 # PROJECT-STATE
 
 ## Current State
-- Done: Rust port of pi core (OpenAI-compat provider, agent loop, 7 built-in tools, rhai extensions, CLI REPL) + `pirs --mode rpc` headless instances + `pirs-orchestrator` (daemon/supervisor/UDS/CLI). 70 tests green, clippy -D warnings clean, e2e verified (mock OpenAI + real daemon spawn/prompt/stream/stop).
-- Next: ratatui TUI; Anthropic provider; compaction; edit-tool file mutation queue parity; `!` bash-mode editor integration; `/compact` command. Orchestrator gaps: no radius (cloud presence, intentionally omitted), no `extension_ui_request` routing (pirs has no TUI prompts), rpc commands fork/clone/tree/compact/export_html unsupported.
+- Done: pi core port (provider, loop, tools, rhai ext, CLI) + rpc mode + orchestrator + weak-model hardening wave: auto-compaction (+/compact), retry of empty/error completions, tool diet (use_tool) + --sequential, delegate sub-agents, corrective error phrasing, rhai exec() + weak-model.rhai pack (loop detector, verify-after-edit, plan pinning). 89 tests green, clippy clean. Repo: github.com/xmonader/pirs.
+- Next: ratatui TUI; Anthropic provider; model-aware tokenizer for compaction; skills; MCP. Rhai gotchas pinned in tests: backtick ${} interpolation only, trim() mutates in place, call_fn needs statements cleared.
 - Blocked: nothing.
 
 ## Key Decisions

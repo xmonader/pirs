@@ -14,7 +14,9 @@ export OPENAI_API_KEY=...            # or --api-key; OPENAI_BASE_URL for compati
 ./target/release/pirs "fix the failing test"   # one-shot
 ```
 
-REPL commands: `/model`, `/export`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`).
+REPL commands: `/model`, `/export`, `/compact`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`).
+
+Hardening flags: `--tool-diet` (start with core tools only; the model loads more via `use_tool`), `--sequential` (one tool call at a time), `--no-compaction` / `--context-window N`, `--max-retries N` (also retries empty/garbage completions). A `delegate` tool runs subtasks in fresh-context sub-agents, and auto-compaction summarizes old history when the context window fills. `examples/extensions/weak-model.rhai` adds loop-detection, verify-after-edit, and plan pinning as a script pack.
 
 ## Extensions (rhai)
 
@@ -39,7 +41,7 @@ fn on_tool_call(id, name, args) {
 }
 ```
 
-Loop hooks: `on_context(messages)`, `on_should_stop(info)`, `on_steering()`, `on_follow_up()`, `on_event(type, data)`. State per extension via `state_get`/`state_set`. See `examples/extensions/word_count.rhai`.
+Loop hooks: `on_context(messages)`, `on_should_stop(info)`, `on_steering()`, `on_follow_up()`, `on_event(type, data)`. State per extension via `state_get`/`state_set`; shell out via `exec(cmd, timeout_secs)`. See `examples/extensions/` (word_count, weak-model pack).
 
 ## Orchestrator
 
@@ -74,4 +76,4 @@ make lint    # clippy -D warnings
 
 ## Notable divergences from pi
 
-- OpenAI-compatible providers only (for now); grep/find are native Rust instead of rg/fd binaries; fuzzy `edit` is line-based; no radius cloud presence; MIT licensed.
+- OpenAI-compatible providers only (for now); grep/find are native Rust instead of rg/fd binaries; fuzzy `edit` is line-based; compaction is trigger-based (no model-aware tokenizer); no radius cloud presence; MIT licensed.
