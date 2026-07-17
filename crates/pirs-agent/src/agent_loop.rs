@@ -19,6 +19,16 @@ pub struct LoopConfig {
     pub tool_execution: ExecutionMode,
     pub hooks: Hooks,
     pub compaction: Option<CompactionConfig>,
+    pub visible_tools: Option<VisibleTools>,
+}
+
+pub type VisibleTools = std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>;
+
+pub fn is_visible(visible: &Option<VisibleTools>, name: &str) -> bool {
+    match visible {
+        None => true,
+        Some(set) => set.lock().unwrap().contains(name),
+    }
 }
 
 pub struct ToolCallData {
@@ -112,7 +122,13 @@ pub async fn run_agent_loop(
                                 .unwrap_or(false)
                         });
                     results = execute_tool_calls(
-                        calls, tools, &config.hooks, cancel.clone(), emit, forced_sequential,
+                        calls,
+                        tools,
+                        &config.hooks,
+                        cancel.clone(),
+                        emit,
+                        forced_sequential,
+                        config.visible_tools.clone(),
                     )
                     .await;
                 }
@@ -221,7 +237,10 @@ async fn stream_assistant(
     let llm_ctx = Context {
         system_prompt: context.system_prompt.clone(),
         messages,
-        tools: tool_defs(tools),
+        tools: tool_defs(tools)
+            .into_iter()
+            .filter(|d| is_visible(&config.visible_tools, &d.name))
+            .collect(),
     };
 
     let mut stream = provider
@@ -349,6 +368,7 @@ fn prepare_call(
     call: &ToolCallData,
     tools: &[Arc<dyn AgentTool>],
     hooks: &Hooks,
+    visible: &Option<VisibleTools>,
 ) -> Prepared {
     let Some(tool) = tools.iter().find(|t| t.name() == call.name) else {
         return Prepared::Failed {
@@ -356,6 +376,19 @@ fn prepare_call(
             result: error_result(&call.id, &call.name, &format!("Tool {} not found", call.name)),
         };
     };
+    if !is_visible(visible, &call.name) {
+        return Prepared::Failed {
+            index,
+            result: error_result(
+                &call.id,
+                &call.name,
+                &format!(
+                    "Tool {} is not loaded in this session. Call use_tool(\"{}\") first to load it, then re-issue your call.",
+                    call.name, call.name
+                ),
+            ),
+        };
+    }
     let schema = tool.parameters();
     let args = coerce_args(&schema, &call.arguments);
     if let Err(e) = validate_args(&schema, &args) {
@@ -447,6 +480,7 @@ async fn execute_tool_calls(
     cancel: CancellationToken,
     emit: &Emit,
     sequential: bool,
+    visible: Option<VisibleTools>,
 ) -> Vec<ToolResultMessage> {
     let n = calls.len();
     let meta: Vec<(String, String)> = calls
@@ -463,7 +497,7 @@ async fn execute_tool_calls(
                 tool_name: call.name.clone(),
                 args: call.arguments.clone(),
             });
-            let result = match prepare_call(index, &call, tools, hooks) {
+            let result = match prepare_call(index, &call, tools, hooks, &visible) {
                 Prepared::Failed { result, .. } => result,
                 Prepared::Ready {
                     id,
@@ -494,7 +528,7 @@ async fn execute_tool_calls(
                 tool_name: call.name.clone(),
                 args: call.arguments.clone(),
             });
-            match prepare_call(index, &call, tools, hooks) {
+            match prepare_call(index, &call, tools, hooks, &visible) {
                 Prepared::Failed { index, result } => {
                     emit(AgentEvent::ToolExecutionEnd {
                         tool_call_id: result.tool_call_id.clone(),

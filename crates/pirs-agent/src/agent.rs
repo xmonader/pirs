@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use pirs_ai::{CompletionOptions, Context, LlmProvider, Message};
 use tokio_util::sync::CancellationToken;
 
-use crate::agent_loop::{run_agent_loop, LoopConfig};
+use crate::agent_loop::{run_agent_loop, LoopConfig, VisibleTools};
 use crate::compaction::{compact_messages, CompactionConfig};
 use crate::events::{AgentEvent, Emit, Hooks};
 use crate::tool::{AgentTool, ExecutionMode};
@@ -34,6 +34,7 @@ pub struct Agent {
     completion: CompletionOptions,
     tool_execution: ExecutionMode,
     pub compaction: Option<CompactionConfig>,
+    visible_tools: Option<VisibleTools>,
     hooks: Hooks,
     listeners: Vec<Emit>,
     steering: Arc<Mutex<VecDeque<Message>>>,
@@ -55,6 +56,7 @@ impl Agent {
             completion: CompletionOptions::default(),
             tool_execution: ExecutionMode::Parallel,
             compaction: Some(CompactionConfig::default()),
+            visible_tools: None,
             hooks: Hooks::default(),
             listeners: Vec::new(),
             steering: Arc::new(Mutex::new(VecDeque::new())),
@@ -88,6 +90,11 @@ impl Agent {
 
     pub fn with_compaction(mut self, config: Option<CompactionConfig>) -> Self {
         self.compaction = config;
+        self
+    }
+
+    pub fn with_visible_tools(mut self, visible: Option<VisibleTools>) -> Self {
+        self.visible_tools = visible;
         self
     }
 
@@ -247,6 +254,7 @@ impl Agent {
             tool_execution: self.tool_execution,
             hooks,
             compaction: self.compaction.clone(),
+            visible_tools: self.visible_tools.clone(),
         };
 
         let tools = self.tools.clone();

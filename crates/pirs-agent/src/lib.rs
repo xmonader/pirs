@@ -3,6 +3,7 @@ pub mod compaction;
 pub mod agent_loop;
 pub mod events;
 pub mod tool;
+pub mod use_tool;
 pub mod validate;
 
 pub use agent::{Agent, AgentError, QueueMode};

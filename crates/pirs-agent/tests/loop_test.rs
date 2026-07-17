@@ -339,3 +339,59 @@ async fn no_compaction_below_threshold() {
     agent.prompt("go").await.unwrap();
     assert_eq!(seen.lock().unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn tool_diet_blocks_hidden_tool_until_loaded() {
+    use pirs_agent::use_tool::UseTool;
+    use std::collections::HashSet;
+
+    let visible: pirs_agent::agent_loop::VisibleTools =
+        Arc::new(Mutex::new(HashSet::from(["use_tool".to_string()])));
+    let tools: Vec<Arc<dyn AgentTool>> = vec![Arc::new(EchoTool)];
+    let use_tool = UseTool::new(&visible, &tools);
+    let mut all_tools: Vec<Arc<dyn AgentTool>> = vec![Arc::new(EchoTool), use_tool];
+
+    let provider = MockProvider::new(vec![
+        tool_call_msg("c1", "echo", json!({"text": "blocked"})),
+        AssistantMessage {
+            content: vec![
+                ContentBlock::ToolCall {
+                    id: "c2".into(),
+                    name: "use_tool".into(),
+                    arguments: json!({"name": "echo"}),
+                    thought_signature: None,
+                },
+                ContentBlock::ToolCall {
+                    id: "c3".into(),
+                    name: "echo".into(),
+                    arguments: json!({"text": "now works"}),
+                    thought_signature: None,
+                },
+            ],
+            stop_reason: StopReason::ToolUse,
+            ..Default::default()
+        },
+        text_msg("done"),
+    ]);
+    all_tools.truncate(2);
+    let mut agent = make_agent(provider, all_tools).with_visible_tools(Some(visible));
+    let new = agent.prompt("go").await.unwrap();
+
+    let blocked = new.iter().any(|m| matches!(
+        m,
+        Message::ToolResult(r) if r.is_error && r.content[0].as_text().unwrap().contains("not loaded in this session")
+    ));
+    assert!(blocked, "hidden tool call should be rejected with use_tool hint");
+
+    let loaded = new.iter().any(|m| matches!(
+        m,
+        Message::ToolResult(r) if !r.is_error && r.tool_name == "use_tool" && r.content[0].as_text().unwrap().contains("Tool 'echo' loaded")
+    ));
+    assert!(loaded);
+
+    let worked = new.iter().any(|m| matches!(
+        m,
+        Message::ToolResult(r) if !r.is_error && r.tool_name == "echo" && r.content[0].as_text() == Some("echo: now works")
+    ));
+    assert!(worked, "tool should work after use_tool loads it");
+}

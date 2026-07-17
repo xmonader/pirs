@@ -54,6 +54,14 @@ struct Cli {
     /// Model context window in tokens (drives compaction threshold)
     #[arg(long, default_value = "128000")]
     context_window: u64,
+
+    /// Start with only core tools loaded; model loads more via use_tool
+    #[arg(long)]
+    tool_diet: bool,
+
+    /// Execute tool calls one at a time (helps weaker models)
+    #[arg(long)]
+    sequential: bool,
 }
 
 struct Printer {
@@ -222,12 +230,32 @@ async fn main() -> anyhow::Result<()> {
         })
     };
 
+    let (visible, mut tools) = if cli.tool_diet {
+        let set: pirs_agent::agent_loop::VisibleTools = std::sync::Arc::new(
+            std::sync::Mutex::new(pirs_agent::use_tool::UseTool::default_visible()),
+        );
+        let use_tool = pirs_agent::use_tool::UseTool::new(&set, &tools);
+        tools.push(use_tool);
+        (Some(set), tools)
+    } else {
+        (None, tools)
+    };
+    let _ = &mut tools;
+
+    let execution = if cli.sequential {
+        pirs_agent::ExecutionMode::Sequential
+    } else {
+        pirs_agent::ExecutionMode::Parallel
+    };
+
     let mut agent = Agent::new(provider, &cli.model)
         .with_system_prompt(system)
         .with_tools(tools)
         .with_completion(completion)
         .with_hooks(hooks)
-        .with_compaction(compaction);
+        .with_compaction(compaction)
+        .with_visible_tools(visible)
+        .with_tool_execution(execution);
 
     let session_path = session::session_path(&cwd)?;
     if cli.resume {
