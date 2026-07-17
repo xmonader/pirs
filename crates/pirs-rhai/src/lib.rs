@@ -87,12 +87,10 @@ fn exec_impl(command: &str, timeout_secs: u64) -> rhai::Map {
     };
     let pid = child.id();
 
-    fn read_all<R: std::io::Read + Send + 'static>(r: R) -> std::sync::mpsc::Receiver<String> {
+    fn read_all<R: std::io::Read + Send + 'static>(mut r: R) -> std::sync::mpsc::Receiver<String> {
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let mut s = String::new();
-            let mut r = r;
-            use std::io::Read;
             let _ = r.read_to_string(&mut s);
             let _ = tx.send(s);
         });
