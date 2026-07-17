@@ -53,8 +53,25 @@ Shipped packs in `examples/extensions/`:
 | `conductor.rhai` | strong-planner/weak-executor guidance + plan tool |
 | `context-janitor.rhai` | shrink stale giant tool outputs in outgoing context |
 | `reviewer.rhai` | force a review pass after file edits before run ends |
+| `instincts.rhai` | learn failure→fix pairs, steer away from repeats |
+| `session-handoff.rhai` | next-session brief carried via `.pirs/handoff.md` |
+| `failure-diary.rhai` | known-pitfalls pin built from tool failures |
+| `red-team.rhai` | fresh-context adversary attacks your diff before run ends |
+| `shadow-verify.rhai` | re-runs test commands, flags claimed-vs-actual discrepancies |
+| `spec-check.rhai` | pins ACCEPTANCE.md, forces item-by-item verification |
+| `semantic-bookmarks.rhai` | model-pinned notes at context tail (max 5) |
+| `diff-shield.rhai` | merges consecutive same-tool results to save context |
+| `chapter-spine.rhai` | weak-model chapter titles keep long sessions coherent |
+| `repo-pulse.rhai` | fresh branch/dirty-files pin after every edit |
+| `env-doctor.rhai` | blocks calls to missing toolchains with install hints |
+| `cost-sentinel.rhai` | token budget: warn at 50%, hard-stop at cap |
+| `critic-arena.rhai` | same task on two models, you judge the answers |
+| `relay-race.rhai` | draft→critique→finalize pipeline as one tool |
+| `hive-note.rhai` | shared blackboard for multi-instance coordination |
 
-rhai gotchas (pinned by tests): interpolation only in backtick strings `` `${x}` ``; string methods like `trim()` mutate in place; no `let mut`; arrays have no `join`/`slice` — loop or `extract()`; `const` doesn't resolve inside nested closures.
+Scripts can also spawn fresh-context sub-agents themselves: `run_subagent(task, model?)`.
+
+rhai gotchas (pinned by tests): interpolation only in backtick strings `` `${x}` ``; string methods like `trim()` mutate in place; no `let mut`; arrays have no `join` — use `str_join(arr, sep)` or a loop; array property access clones (write whole entries back); `const` doesn't resolve inside nested closures.
 
 ## Orchestrator
 

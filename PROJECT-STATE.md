@@ -1,7 +1,7 @@
 # PROJECT-STATE
 
 ## Current State
-- Done: pi core port (provider, loop, tools, rhai ext, CLI) + rpc mode + orchestrator + weak-model hardening wave (compaction, retry, diet, delegate, phrasing, exec, pack) + multi-model: delegate model override, orchestrator spawn --env. Live proof: strong planner -> delegate(model=weak) -> weak executor (no history leak) -> strong synthesis. usage in events (turn_end/agent_end), register_command + REPL dispatch, fs_append/fs_read/now_millis, five packs (guardrails, audit-log, conductor, context-janitor, reviewer). 100 tests green, clippy clean. Repo: github.com/xmonader/pirs.
+- Done: pi core port (provider, loop, tools, rhai ext, CLI) + rpc mode + orchestrator + weak-model hardening wave (compaction, retry, diet, delegate, phrasing, exec, pack) + multi-model: delegate model override, orchestrator spawn --env. Live proof: strong planner -> delegate(model=weak) -> weak executor (no history leak) -> strong synthesis. usage in events (turn_end/agent_end), register_command + REPL dispatch, fs_append/fs_read/now_millis, five packs (guardrails, audit-log, conductor, context-janitor, reviewer). run_subagent(task, model?) host fn (dedicated-thread runtime), str_join, 21 packs incl. instincts/red-team/arena/relay/hive. 115 tests green. Live-proven vs DashScope (qwen3.7-plus planner + glm-4.7 executors, multi-repo trials, UA gate fix). Repo: github.com/xmonader/pirs.
 - Next: ratatui TUI; Anthropic provider; model-aware tokenizer for compaction; skills; MCP. Rhai gotchas pinned in tests: backtick ${} interpolation only, trim() mutates in place, call_fn needs statements cleared.
 - Blocked: nothing.
 
