@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use pirs_ai::{AssistantMessage, ContentBlock, Message, ToolResultMessage};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub type Emit = Arc<dyn Fn(AgentEvent) + Send + Sync>;
@@ -12,7 +13,8 @@ pub type ShouldStopHook = Arc<dyn Fn(&pirs_ai::Context) -> bool + Send + Sync>;
 pub type MessageSourceHook = Arc<dyn Fn() -> Vec<Message> + Send + Sync>;
 pub type ApiKeyHook = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum AgentEvent {
     AgentStart,
     AgentEnd { messages: Vec<Message> },
