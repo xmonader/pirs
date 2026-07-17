@@ -168,11 +168,21 @@ impl Agent {
         let follow_up_mode = self.follow_up_mode;
 
         let mut hooks = self.hooks.clone();
+        let ext_steering = hooks.get_steering_messages.take();
         hooks.get_steering_messages = Some(Arc::new(move || {
-            drain_queue(&steering, steering_mode)
+            let mut msgs = drain_queue(&steering, steering_mode);
+            if let Some(f) = &ext_steering {
+                msgs.extend(f());
+            }
+            msgs
         }));
+        let ext_follow_up = hooks.get_follow_up_messages.take();
         hooks.get_follow_up_messages = Some(Arc::new(move || {
-            drain_queue(&follow_up, follow_up_mode)
+            let mut msgs = drain_queue(&follow_up, follow_up_mode);
+            if let Some(f) = &ext_follow_up {
+                msgs.extend(f());
+            }
+            msgs
         }));
 
         let listeners = self.listeners.clone();

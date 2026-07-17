@@ -141,7 +141,7 @@ pub struct ToolResultMessage {
     pub tool_call_id: String,
     pub tool_name: String,
     pub content: Vec<ContentBlock>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub details: Option<serde_json::Value>,
     #[serde(default)]
     pub is_error: bool,

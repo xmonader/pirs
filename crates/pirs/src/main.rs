@@ -169,9 +169,12 @@ async fn main() -> anyhow::Result<()> {
         let ext_hooks = h.hooks();
         hooks.before_tool_call = ext_hooks.before_tool_call;
         hooks.after_tool_call = ext_hooks.after_tool_call;
+        hooks.transform_context = ext_hooks.transform_context;
+        hooks.should_stop_after_turn = ext_hooks.should_stop_after_turn;
+        hooks.get_steering_messages = ext_hooks.get_steering_messages;
+        hooks.get_follow_up_messages = ext_hooks.get_follow_up_messages;
         Some(h)
     };
-    let _ = host;
 
     let mut system = system_prompt::build_system_prompt(&cwd, &tools);
     if let Some(ctx) = system_prompt::read_project_context(&cwd) {
@@ -201,6 +204,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let printer = Arc::new(Printer::new());
+    if let Some(h) = &host {
+        if let Some(l) = h.listener() {
+            agent.subscribe(l);
+        }
+    }
     let printed = Arc::new(Mutex::new(0usize));
     {
         let p = Arc::clone(&printer);

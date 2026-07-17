@@ -16,26 +16,53 @@ pub struct RegisteredTool {
 
 pub struct Extension {
     pub path: PathBuf,
+    engine: Engine,
     ast: AST,
     scope: Scope<'static>,
     has_on_tool_call: bool,
     has_on_tool_result: bool,
+    has_on_context: bool,
+    has_on_should_stop: bool,
+    has_on_steering: bool,
+    has_on_follow_up: bool,
+    has_on_event: bool,
 }
 
 pub struct ExtensionHost {
-    engine: Arc<Mutex<Engine>>,
     extensions: Vec<Mutex<Extension>>,
     tool_registry: Vec<RegisteredTool>,
     pub load_errors: Vec<String>,
 }
 
+type StateStore = Arc<Mutex<std::collections::BTreeMap<String, Dynamic>>>;
+
+fn build_engine(state: &StateStore) -> Engine {
+    let mut engine = Engine::new();
+    engine.set_max_operations(200_000);
+    engine.set_max_call_levels(32);
+
+    let get_state = Arc::clone(state);
+    engine.register_fn("state_get", move |key: &str| -> Dynamic {
+        get_state.lock().unwrap().get(key).cloned().unwrap_or(Dynamic::UNIT)
+    });
+    let set_state = Arc::clone(state);
+    engine.register_fn("state_set", move |key: &str, value: Dynamic| {
+        set_state.lock().unwrap().insert(key.to_string(), value);
+    });
+    let has_state = Arc::clone(state);
+    engine.register_fn("state_has", move |key: &str| -> bool {
+        has_state.lock().unwrap().contains_key(key)
+    });
+    let del_state = Arc::clone(state);
+    engine.register_fn("state_del", move |key: &str| {
+        del_state.lock().unwrap().remove(key);
+    });
+    engine
+}
+
 impl ExtensionHost {
     pub fn new() -> Self {
-        let mut engine = Engine::new();
-        engine.set_max_operations(200_000);
-        engine.set_max_call_levels(32);
         ExtensionHost {
-            engine: Arc::new(Mutex::new(engine)),
             extensions: Vec::new(),
             tool_registry: Vec::new(),
             load_errors: Vec::new(),
@@ -79,10 +106,8 @@ impl ExtensionHost {
         let ext_index = self.extensions.len();
         let registered: Arc<Mutex<Vec<(String, String, rhai::Map)>>> =
             Arc::new(Mutex::new(Vec::new()));
-
-        let mut engine = Engine::new();
-        engine.set_max_operations(200_000);
-        engine.set_max_call_levels(32);
+        let state: StateStore = Arc::new(Mutex::new(std::collections::BTreeMap::new()));
+        let mut engine = build_engine(&state);
 
         let registrations = Arc::clone(&registered);
         engine.register_fn(
@@ -99,8 +124,14 @@ impl ExtensionHost {
             .compile(source)
             .map_err(|e| anyhow!("parse error in {name}: {e}"))?;
 
-        let has_on_tool_call = ast.iter_functions().any(|f| f.name == "on_tool_call");
-        let has_on_tool_result = ast.iter_functions().any(|f| f.name == "on_tool_result");
+        let has_fn = |name: &str| ast.iter_functions().any(|f| f.name == name);
+        let has_on_tool_call = has_fn("on_tool_call");
+        let has_on_tool_result = has_fn("on_tool_result");
+        let has_on_context = has_fn("on_context");
+        let has_on_should_stop = has_fn("on_should_stop");
+        let has_on_steering = has_fn("on_steering");
+        let has_on_follow_up = has_fn("on_follow_up");
+        let has_on_event = has_fn("on_event");
 
         let mut scope = Scope::new();
         engine
@@ -131,10 +162,16 @@ impl ExtensionHost {
 
         self.extensions.push(Mutex::new(Extension {
             path: PathBuf::from(name),
+            engine,
             ast,
             scope,
             has_on_tool_call,
             has_on_tool_result,
+            has_on_context,
+            has_on_should_stop,
+            has_on_steering,
+            has_on_follow_up,
+            has_on_event,
         }));
         Ok(())
     }
@@ -177,6 +214,42 @@ impl ExtensionHost {
                 host.run_on_tool_result(id, name, result)
             }));
         }
+        let has_context = self
+            .extensions
+            .iter()
+            .any(|e| e.lock().unwrap().has_on_context);
+        if has_context {
+            let host = Arc::clone(self);
+            hooks.transform_context = Some(Arc::new(move |messages| {
+                host.run_on_context(messages)
+            }));
+        }
+        let has_stop = self
+            .extensions
+            .iter()
+            .any(|e| e.lock().unwrap().has_on_should_stop);
+        if has_stop {
+            let host = Arc::clone(self);
+            hooks.should_stop_after_turn = Some(Arc::new(move |ctx| {
+                host.run_on_should_stop(ctx)
+            }));
+        }
+        let has_steering = self
+            .extensions
+            .iter()
+            .any(|e| e.lock().unwrap().has_on_steering);
+        if has_steering {
+            let host = Arc::clone(self);
+            hooks.get_steering_messages = Some(Arc::new(move || host.run_on_steering()));
+        }
+        let has_follow = self
+            .extensions
+            .iter()
+            .any(|e| e.lock().unwrap().has_on_follow_up);
+        if has_follow {
+            let host = Arc::clone(self);
+            hooks.get_follow_up_messages = Some(Arc::new(move || host.run_on_follow_up()));
+        }
         hooks
     }
 
@@ -187,9 +260,8 @@ impl ExtensionHost {
                 continue;
             }
             let dynamic_args = rhai::serde::to_dynamic(args).unwrap_or(Dynamic::UNIT);
-            let engine = self.engine.lock().unwrap();
             let ext = &mut *ext;
-            let result: Result<Dynamic, _> = engine.call_fn(
+            let result: Result<Dynamic, _> = ext.engine.call_fn(
                 &mut ext.scope,
                 &ext.ast,
                 "on_tool_call",
@@ -248,9 +320,8 @@ impl ExtensionHost {
                     rhai::serde::to_dynamic(d).unwrap_or(Dynamic::UNIT),
                 );
             }
-            let engine = self.engine.lock().unwrap();
             let ext = &mut *ext;
-            let call_result: Result<Dynamic, _> = engine.call_fn(
+            let call_result: Result<Dynamic, _> = ext.engine.call_fn(
                 &mut ext.scope,
                 &ext.ast,
                 "on_tool_result",
@@ -293,6 +364,253 @@ impl ExtensionHost {
             .map(|e| e.lock().unwrap().path.display().to_string())
             .collect()
     }
+
+    pub fn listener(self: &Arc<Self>) -> Option<pirs_agent::Emit> {
+        let any = self
+            .extensions
+            .iter()
+            .any(|e| e.lock().unwrap().has_on_event);
+        if !any {
+            return None;
+        }
+        let host = Arc::clone(self);
+        Some(Arc::new(move |event: pirs_agent::AgentEvent| {
+            host.dispatch_event(&event);
+        }))
+    }
+
+    fn call_extension(
+        &self,
+        ext_index: usize,
+        fn_name: &str,
+        args: impl rhai::FuncArgs + Send,
+    ) -> Result<Dynamic, String> {
+        let mut guard = self.extensions[ext_index].lock().unwrap();
+        let ext = &mut *guard;
+        ext.engine
+            .call_fn(&mut ext.scope, &ext.ast, fn_name, args)
+            .map_err(|e| e.to_string())
+    }
+
+    fn for_each_with(&self, flag: ExtensionFlag, mut f: impl FnMut(&Self, usize)) {
+        for (i, ext) in self.extensions.iter().enumerate() {
+            let has = {
+                let e = ext.lock().unwrap();
+                match flag {
+                    ExtensionFlag::Context => e.has_on_context,
+                    ExtensionFlag::ShouldStop => e.has_on_should_stop,
+                    ExtensionFlag::Steering => e.has_on_steering,
+                    ExtensionFlag::FollowUp => e.has_on_follow_up,
+                    ExtensionFlag::Event => e.has_on_event,
+                }
+            };
+            if has {
+                f(self, i);
+            }
+        }
+    }
+
+    fn run_on_context(&self, messages: Vec<pirs_ai::Message>) -> Vec<pirs_ai::Message> {
+        let mut current = messages;
+        self.for_each_with(ExtensionFlag::Context, |host, i| {
+            let json = serde_json::to_value(&current).unwrap_or_else(|_| Value::Array(vec![]));
+            let arg = rhai::serde::to_dynamic(&json).unwrap_or(Dynamic::UNIT);
+            match host.call_extension(i, "on_context", (arg,)) {
+                Ok(d) if d.is_unit() => {}
+                Ok(d) => {
+                    let parsed: Result<Value, _> = rhai::serde::from_dynamic(&d);
+                    match parsed {
+                        Ok(v) => match serde_json::from_value::<Vec<pirs_ai::Message>>(v) {
+                            Ok(msgs) => current = msgs,
+                            Err(e) => tracing::warn!(
+                                "on_context returned invalid messages: {e}"
+                            ),
+                        },
+                        Err(e) => tracing::warn!("on_context returned non-JSON value: {e}"),
+                    }
+                }
+                Err(e) => tracing::warn!("on_context failed: {e}"),
+            }
+        });
+        current
+    }
+
+    fn run_on_should_stop(&self, ctx: &pirs_ai::Context) -> bool {
+        let mut stop = false;
+        self.for_each_with(ExtensionFlag::ShouldStop, |host, i| {
+            if stop {
+                return;
+            }
+            let json = serde_json::to_value(&ctx.messages)
+                .unwrap_or_else(|_| Value::Array(vec![]));
+            let mut map = rhai::Map::new();
+            map.insert(
+                "messages".into(),
+                rhai::serde::to_dynamic(&json).unwrap_or(Dynamic::UNIT),
+            );
+            match host.call_extension(i, "on_should_stop", (Dynamic::from_map(map),)) {
+                Ok(d) => {
+                    stop = d.as_bool().unwrap_or(false);
+                }
+                Err(e) => tracing::warn!("on_should_stop failed: {e}"),
+            }
+        });
+        stop
+    }
+
+    fn run_on_steering(&self) -> Vec<pirs_ai::Message> {
+        let mut out = Vec::new();
+        self.for_each_with(ExtensionFlag::Steering, |host, i| {
+            match host.call_extension(i, "on_steering", ()) {
+                Ok(d) => out.extend(dynamic_to_messages(&d)),
+                Err(e) => tracing::warn!("on_steering failed: {e}"),
+            }
+        });
+        out
+    }
+
+    fn run_on_follow_up(&self) -> Vec<pirs_ai::Message> {
+        let mut out = Vec::new();
+        self.for_each_with(ExtensionFlag::FollowUp, |host, i| {
+            match host.call_extension(i, "on_follow_up", ()) {
+                Ok(d) => out.extend(dynamic_to_messages(&d)),
+                Err(e) => tracing::warn!("on_follow_up failed: {e}"),
+            }
+        });
+        out
+    }
+
+    fn dispatch_event(&self, event: &pirs_agent::AgentEvent) {
+        let (ty, data) = event_to_rhai(event);
+        self.for_each_with(ExtensionFlag::Event, |host, i| {
+            if let Err(e) =
+                host.call_extension(i, "on_event", (ty.clone(), data.clone()))
+            {
+                tracing::warn!("on_event failed: {e}");
+            }
+        });
+    }
+}
+
+enum ExtensionFlag {
+    Context,
+    ShouldStop,
+    Steering,
+    FollowUp,
+    Event,
+}
+
+fn dynamic_to_messages(d: &Dynamic) -> Vec<pirs_ai::Message> {
+    if d.is_unit() {
+        return vec![];
+    }
+    if d.is::<String>() {
+        return vec![pirs_ai::Message::user(d.clone().cast::<String>())];
+    }
+    let value: Value = match rhai::serde::from_dynamic(d) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+    match value {
+        Value::Array(items) => items.into_iter().filter_map(value_to_message).collect(),
+        single => value_to_message(single).into_iter().collect(),
+    }
+}
+
+fn value_to_message(v: Value) -> Option<pirs_ai::Message> {
+    match &v {
+        Value::String(s) => Some(pirs_ai::Message::user(s.clone())),
+        _ => serde_json::from_value(v).ok(),
+    }
+}
+
+fn event_to_rhai(event: &pirs_agent::AgentEvent) -> (String, Dynamic) {
+    use pirs_agent::AgentEvent as E;
+    let mut map = rhai::Map::new();
+    let ty = match event {
+        E::AgentStart => "agent_start",
+        E::AgentEnd { messages } => {
+            map.insert("numMessages".into(), (messages.len() as i64).into());
+            "agent_end"
+        }
+        E::TurnStart => "turn_start",
+        E::TurnEnd {
+            message,
+            tool_results,
+        } => {
+            map.insert("text".into(), message.text().into());
+            map.insert(
+                "stopReason".into(),
+                format!("{:?}", message.stop_reason).into(),
+            );
+            map.insert(
+                "numToolResults".into(),
+                (tool_results.len() as i64).into(),
+            );
+            "turn_end"
+        }
+        E::MessageStart { message } => {
+            map.insert("role".into(), message_role(message).into());
+            "message_start"
+        }
+        E::MessageUpdate { message } => {
+            map.insert("text".into(), message.text().into());
+            "message_update"
+        }
+        E::MessageEnd { message } => {
+            map.insert("role".into(), message_role(message).into());
+            "message_end"
+        }
+        E::ToolExecutionStart {
+            tool_call_id,
+            tool_name,
+            args,
+        } => {
+            map.insert("id".into(), tool_call_id.clone().into());
+            map.insert("name".into(), tool_name.clone().into());
+            map.insert(
+                "args".into(),
+                rhai::serde::to_dynamic(args).unwrap_or(Dynamic::UNIT),
+            );
+            "tool_execution_start"
+        }
+        E::ToolExecutionUpdate {
+            tool_call_id,
+            tool_name,
+            partial,
+        } => {
+            map.insert("id".into(), tool_call_id.clone().into());
+            map.insert("name".into(), tool_name.clone().into());
+            map.insert("partial".into(), partial.clone().into());
+            "tool_execution_update"
+        }
+        E::ToolExecutionEnd {
+            tool_call_id,
+            tool_name,
+            result,
+        } => {
+            map.insert("id".into(), tool_call_id.clone().into());
+            map.insert("name".into(), tool_name.clone().into());
+            map.insert("isError".into(), result.is_error.into());
+            let text: String = result
+                .content
+                .iter()
+                .filter_map(|b| b.as_text())
+                .collect::<Vec<_>>()
+                .join("\n");
+            map.insert("text".into(), text.into());
+            "tool_execution_end"
+        }
+    };
+    (ty.to_string(), Dynamic::from_map(map))
+}
+
+fn message_role(m: &pirs_ai::Message) -> &'static str {
+    match m {
+        pirs_ai::Message::User(_) => "user",
+        pirs_ai::Message::Assistant(_) => "assistant",
+        pirs_ai::Message::ToolResult(_) => "toolResult",
+    }
 }
 
 impl Default for ExtensionHost {
@@ -332,10 +650,9 @@ impl AgentTool for RhaiTool {
         let output = tokio::task::spawn_blocking(move || {
             let mut ext_guard = host.extensions[ext_index].lock().unwrap();
             let ext = &mut *ext_guard;
-            let engine = host.engine.lock().unwrap();
             let dynamic_args = rhai::serde::to_dynamic(&args).unwrap_or(Dynamic::UNIT);
             let result: Result<Dynamic, _> =
-                engine.call_fn(&mut ext.scope, &ext.ast, &fn_name, (dynamic_args,));
+                ext.engine.call_fn(&mut ext.scope, &ext.ast, &fn_name, (dynamic_args,));
             result.map_err(|e| anyhow!("{e}"))
         })
         .await??;
