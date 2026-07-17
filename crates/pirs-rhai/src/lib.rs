@@ -69,6 +69,12 @@ fn build_engine(state: &StateStore) -> Engine {
     engine.register_fn("state_del", move |key: &str| {
         del_state.lock().unwrap().remove(key);
     });
+    engine.register_fn("str_join", |arr: rhai::Array, sep: &str| -> String {
+        arr.iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+            .join(sep)
+    });
     engine.register_fn("now_millis", || -> rhai::INT {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

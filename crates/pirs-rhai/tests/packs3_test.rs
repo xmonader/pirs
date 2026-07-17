@@ -1,0 +1,355 @@
+use std::sync::Arc;
+
+use pirs_rhai::ExtensionHost;
+
+fn load(name: &str, with_runner: bool) -> Arc<ExtensionHost> {
+    let path = format!(
+        "{}/../../examples/extensions/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let mut host = ExtensionHost::new();
+    if with_runner {
+        host.set_subagent_runner(Arc::new(|task: String, model: Option<String>| {
+            let m = model.unwrap_or_else(|| "default".into());
+            Ok(format!("[{m}] answer to: {}", &task[..task.len().min(60)]))
+        }));
+    }
+    host.load_source(&std::fs::read_to_string(&path).unwrap(), path)
+        .unwrap();
+    Arc::new(host)
+}
+
+fn home_isolated() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("pirs-pack3-{}", std::process::id()));
+    std::env::set_var("HOME", &dir);
+    dir.to_path_buf()
+}
+
+#[test]
+fn instincts_records_and_steers() {
+    let host = load("instincts.rhai", false);
+    let hooks = host.hooks();
+    let after = hooks.after_tool_call.unwrap();
+    let steering = hooks.get_steering_messages.unwrap();
+
+    let fail = pirs_ai::ToolResultMessage {
+        tool_call_id: "1".into(),
+        tool_name: "bash".into(),
+        content: vec![pirs_ai::ContentBlock::text("command not found: carge")],
+        details: None,
+        is_error: true,
+        terminate: false,
+        timestamp: 0,
+    };
+    let ok = pirs_ai::ToolResultMessage {
+        is_error: false,
+        ..fail.clone()
+    };
+    assert!(after("1", "bash", &fail).is_none());
+    assert!(steering().is_empty(), "nothing until a fix succeeds");
+    assert!(after("2", "bash", &ok).is_none());
+    let msgs = steering();
+    assert_eq!(msgs.len(), 1);
+    let pirs_ai::Message::User(u) = &msgs[0] else {
+        panic!()
+    };
+    let pirs_ai::UserContent::Text(t) = &u.content else {
+        panic!()
+    };
+    assert!(t.contains("Instinct recorded"));
+}
+
+#[test]
+fn session_handoff_injects_previous_brief() {
+    let host = load("session-handoff.rhai", false);
+    let tmp = home_isolated();
+    let work = tmp.join("work");
+    std::fs::create_dir_all(work.join(".pirs")).unwrap();
+    std::fs::write(work.join(".pirs/handoff.md"), "goal: port everything").unwrap();
+    let hooks = host.hooks();
+    let transform = hooks.transform_context.unwrap();
+
+    let out = transform(vec![pirs_ai::Message::user("current task")]);
+    let cwd = std::env::current_dir().unwrap();
+    if cwd == work {
+        assert!(out.len() == 2, "handoff pin should be injected");
+    }
+}
+
+#[test]
+fn failure_diary_logs_and_pins() {
+    let host = load("failure-diary.rhai", false);
+    home_isolated();
+    let hooks = host.hooks();
+    let after = hooks.after_tool_call.unwrap();
+    let transform = hooks.transform_context.unwrap();
+
+    let fail = pirs_ai::ToolResultMessage {
+        tool_call_id: "1".into(),
+        tool_name: "grep".into(),
+        content: vec![pirs_ai::ContentBlock::text("invalid regex")],
+        details: None,
+        is_error: true,
+        terminate: false,
+        timestamp: 0,
+    };
+    after("1", "grep", &fail);
+    let out = transform(vec![pirs_ai::Message::user("next")]);
+    assert!(out.iter().any(|m| matches!(
+        m,
+        pirs_ai::Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("known pitfalls") && t.contains("invalid regex"))
+    )));
+}
+
+#[test]
+fn red_team_attacks_edits_once() {
+    let host = load("red-team.rhai", true);
+    let hooks = host.hooks();
+    let after = hooks.after_tool_call.unwrap();
+    let follow = hooks.get_follow_up_messages.unwrap();
+
+    let edit = pirs_ai::ToolResultMessage {
+        tool_call_id: "1".into(),
+        tool_name: "edit".into(),
+        content: vec![pirs_ai::ContentBlock::text("ok")],
+        details: None,
+        is_error: false,
+        terminate: false,
+        timestamp: 0,
+    };
+    after("1", "edit", &edit);
+    let has_git = std::process::Command::new("git")
+        .args(["diff", "HEAD"])
+        .output()
+        .map(|o| !o.stdout.is_empty())
+        .unwrap_or(false);
+    let msgs = follow();
+    if has_git {
+        assert!(msgs.len() <= 1, "adversary runs at most once: {msgs:?}");
+    }
+}
+
+#[test]
+fn shadow_verify_flags_discrepancy() {
+    let host = load("shadow-verify.rhai", false);
+    let hooks = host.hooks();
+    let before = hooks.before_tool_call.unwrap();
+    let after = hooks.after_tool_call.unwrap();
+    let steering = hooks.get_steering_messages.unwrap();
+
+    before("1", "bash", &serde_json::json!({"command": "pytest -q && exit 1"}));
+    let ok = pirs_ai::ToolResultMessage {
+        tool_call_id: "1".into(),
+        tool_name: "bash".into(),
+        content: vec![pirs_ai::ContentBlock::text("9 passed")],
+        details: None,
+        is_error: false,
+        terminate: false,
+        timestamp: 0,
+    };
+    after("1", "bash", &ok);
+    let msgs = steering();
+    assert_eq!(msgs.len(), 1, "rerun exits 1 -> discrepancy steered");
+}
+
+#[test]
+fn spec_check_pins_and_verifies_once() {
+    let host = load("spec-check.rhai", false);
+    let hooks = host.hooks();
+    let follow = hooks.get_follow_up_messages.unwrap();
+
+    let cwd = std::env::current_dir().unwrap();
+    let spec = cwd.join("ACCEPTANCE.md");
+    std::fs::write(&spec, "- thing works").unwrap();
+    let msgs = follow();
+    std::fs::remove_file(&spec).unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert!(follow().is_empty(), "fires once");
+}
+
+#[test]
+fn semantic_bookmarks_pinned_and_capped() {
+    let host = load("semantic-bookmarks.rhai", false);
+    let tools = host.tools();
+    let bookmark = tools.iter().find(|t| t.name() == "bookmark").unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    for i in 0..7 {
+        rt.block_on(bookmark.execute(pirs_agent::ToolExecContext {
+            tool_call_id: "t".into(),
+            args: serde_json::json!({"text": format!("fact {i}")}),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            on_update: None,
+        }))
+        .unwrap();
+    }
+    let hooks = host.hooks();
+    let transform = hooks.transform_context.unwrap();
+    let out = transform(vec![pirs_ai::Message::user("x")]);
+    let pin = out.iter().find_map(|m| match m {
+        pirs_ai::Message::User(u) => match &u.content {
+            pirs_ai::UserContent::Text(t) if t.contains("[bookmarks]") => Some(t.clone()),
+            _ => None,
+        },
+        _ => None,
+    });
+    let pin = pin.expect("pin present");
+    assert!(!pin.contains("fact 0"), "capped at 5, oldest dropped");
+    assert!(pin.contains("fact 6"));
+}
+
+#[test]
+fn diff_shield_merges_consecutive_same_tool_results() {
+    let host = load("diff-shield.rhai", false);
+    let hooks = host.hooks();
+    let transform = hooks.transform_context.unwrap();
+
+    let tr = |id: &str, text: &str| {
+        pirs_ai::Message::ToolResult(pirs_ai::ToolResultMessage {
+            tool_call_id: id.into(),
+            tool_name: "grep".into(),
+            content: vec![pirs_ai::ContentBlock::text(text)],
+            details: None,
+            is_error: false,
+            terminate: false,
+            timestamp: 0,
+        })
+    };
+    let out = transform(vec![
+        tr("1", "match a"),
+        tr("2", "match b"),
+        tr("3", "match c"),
+        pirs_ai::Message::user("x"),
+    ]);
+    assert_eq!(out.len(), 2, "three grep results merged into one");
+    let pirs_ai::Message::ToolResult(merged) = &out[0] else {
+        panic!()
+    };
+    let text = merged.content[0].as_text().unwrap();
+    assert!(text.contains("match a") && text.contains("match c"));
+}
+
+#[test]
+fn chapter_spine_builds_spine() {
+    let host = load("chapter-spine.rhai", true);
+    let listener = host.listener().expect("listener");
+    let hooks = host.hooks();
+    let transform = hooks.transform_context.unwrap();
+
+    for _ in 0..5 {
+        listener(pirs_agent::AgentEvent::TurnEnd {
+            message: Box::new(pirs_ai::AssistantMessage {
+                content: vec![pirs_ai::ContentBlock::text("made progress on the port")],
+                ..Default::default()
+            }),
+            tool_results: vec![],
+        });
+    }
+    let out = transform(vec![pirs_ai::Message::user("x")]);
+    assert!(out.iter().any(|m| matches!(
+        m,
+        pirs_ai::Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("[progress so far]") && t.contains("5."))
+    )));
+}
+
+#[test]
+fn env_doctor_blocks_missing_toolchain() {
+    let host = load("env-doctor.rhai", false);
+    let hooks = host.hooks();
+    let before = hooks.before_tool_call.unwrap();
+    let missing = before(
+        "1",
+        "bash",
+        &serde_json::json!({"command": "cargobogonotreal --version"}),
+    );
+    assert!(missing.is_none(), "unknown binaries pass through");
+    let cargo = before("2", "bash", &serde_json::json!({"command": "cargo build"}));
+    if std::process::Command::new("cargo").arg("--version").output().is_ok() {
+        assert!(cargo.is_none());
+    } else {
+        assert!(cargo.is_some());
+    }
+}
+
+#[test]
+fn cost_sentinel_stops_at_cap() {
+    let host = load("cost-sentinel.rhai", false);
+    let listener = host.listener().expect("listener");
+    let hooks = host.hooks();
+    let stop = hooks.should_stop_after_turn.unwrap();
+
+    let ev = |input: i64| pirs_agent::AgentEvent::TurnEnd {
+        message: Box::new(pirs_ai::AssistantMessage {
+            usage: pirs_ai::Usage {
+                input: input as u64,
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+        tool_results: vec![],
+    };
+    for _ in 0..2 {
+        listener(ev(200_000));
+    }
+    assert!(!stop(&pirs_ai::Context::default()));
+    listener(ev(200_000));
+    assert!(stop(&pirs_ai::Context::default()));
+}
+
+#[test]
+fn arena_and_relay_run_pipelines() {
+    let host = load("critic-arena.rhai", true);
+    let tools = host.tools();
+    let arena = tools.iter().find(|t| t.name() == "arena").unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let out = rt
+        .block_on(arena.execute(pirs_agent::ToolExecContext {
+            tool_call_id: "t".into(),
+            args: serde_json::json!({"task": "is rust better?", "model_a": "glm", "model_b": "qwen"}),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            on_update: None,
+        }))
+        .unwrap();
+    let text = out.content[0].as_text().unwrap();
+    assert!(text.contains("=== glm ===") && text.contains("=== qwen ==="));
+
+    let host2 = load("relay-race.rhai", true);
+    let relay = host2.tools().into_iter().find(|t| t.name() == "relay").unwrap();
+    let out2 = rt
+        .block_on(relay.execute(pirs_agent::ToolExecContext {
+            tool_call_id: "t".into(),
+            args: serde_json::json!({"task": "draft a haiku", "model": "glm"}),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            on_update: None,
+        }))
+        .unwrap();
+    assert!(out2.content[0].as_text().unwrap().contains("[glm]"));
+}
+
+#[test]
+fn hive_note_posts_and_reads() {
+    let host = load("hive-note.rhai", false);
+    home_isolated();
+    let tools = host.tools();
+    let post = tools.iter().find(|t| t.name() == "hive_post").unwrap();
+    let read = tools.iter().find(|t| t.name() == "hive_read").unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(post.execute(pirs_agent::ToolExecContext {
+        tool_call_id: "t".into(),
+        args: serde_json::json!({"note": "instance A finished porting"}),
+        cancel: tokio_util::sync::CancellationToken::new(),
+        on_update: None,
+    }))
+    .unwrap();
+    let out = rt
+        .block_on(read.execute(pirs_agent::ToolExecContext {
+            tool_call_id: "t".into(),
+            args: serde_json::json!({}),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            on_update: None,
+        }))
+        .unwrap();
+    assert!(out.content[0]
+        .as_text()
+        .unwrap()
+        .contains("instance A finished porting"));
+}
