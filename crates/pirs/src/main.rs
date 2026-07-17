@@ -495,22 +495,37 @@ async fn main() -> anyhow::Result<()> {
             agent.subscribe(l);
         }
     }
-    let printed = Arc::new(Mutex::new(0usize));
-    {
+    let printed = Arc::new(Mutex::new((0usize, 0usize)));
+    if cli.mode == "repl" {
         let p = Arc::clone(&printer);
         let printed = Arc::clone(&printed);
         agent.subscribe(Arc::new(move |event: AgentEvent| {
             match &event {
                 AgentEvent::MessageStart { message } if message.is_assistant() => {
-                    *printed.lock().unwrap() = 0;
+                    *printed.lock().unwrap() = (0, 0);
                 }
                 AgentEvent::MessageUpdate { message } => {
                     let text = message.text();
+                    let thinking: String = message
+                        .content
+                        .iter()
+                        .filter_map(|b| match b {
+                            pirs_ai::ContentBlock::Thinking { thinking, .. } => {
+                                Some(thinking.as_str())
+                            }
+                            _ => None,
+                        })
+                        .collect();
                     let mut n = printed.lock().unwrap();
-                    if text.len() > *n {
-                        print!("{}", &text[*n..]);
+                    if thinking.len() > n.1 {
+                        print!("\x1b[2;3m{}\x1b[0m", &thinking[n.1..]);
                         let _ = std::io::stdout().flush();
-                        *n = text.len();
+                        n.1 = thinking.len();
+                    }
+                    if text.len() > n.0 {
+                        print!("{}", &text[n.0..]);
+                        let _ = std::io::stdout().flush();
+                        n.0 = text.len();
                     }
                 }
                 _ => p.event(event),

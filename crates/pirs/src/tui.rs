@@ -246,7 +246,29 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
             continue;
         }
         app.dirty = false;
+        if std::env::var("PIRS_TUI_DEBUG").is_ok() {
+            let dump = format!(
+                "lines={} scroll={} live={:?} running={} input={:?}\n",
+                app.lines.len(),
+                app.scroll,
+                app.live,
+                app.running,
+                app.input
+            );
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/tui_debug.log")
+                .and_then(|mut f| std::io::Write::write_all(&mut f, dump.as_bytes()));
+        }
         terminal.draw(|frame| {
+            // Leave the last row unused: writing to the bottom-right corner
+            // cell scrolls the terminal and corrupts every subsequent frame.
+            let area = frame.area();
+            let area = ratatui::layout::Rect {
+                height: area.height.saturating_sub(1),
+                ..area
+            };
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -254,17 +276,21 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                     Constraint::Length(1),
                     Constraint::Length(3),
                 ])
-                .split(frame.area());
+                .split(area);
 
-            let vh = chunks[0].height;
+            // The block's top border consumes one row of chunks[0]; Paragraph
+            // does NOT clip wrapped text vertically, so the window must fit
+            // the *inner* height or rows spill into the status/input rows.
+            let vh = chunks[0].height.saturating_sub(1);
             app.viewport_height = vh;
-            let max_top = app.lines.len().saturating_sub(vh as usize);
-            let top = max_top.saturating_sub(app.scroll as usize) as u16;
-            let text: Vec<Line> = app.lines.clone();
-            let convo = Paragraph::new(text)
+            let inner_w = chunks[0].width.saturating_sub(2).max(1) as usize;
+            let total_rows = wrapped_rows(&app.lines, inner_w);
+            let max_skip_rows = total_rows.saturating_sub(vh as usize);
+            let skip_rows = max_skip_rows.saturating_sub(app.scroll as usize);
+            let visible = window_by_rows(&app.lines, inner_w, skip_rows, vh as usize);
+            let convo = Paragraph::new(visible)
                 .block(Block::default().borders(Borders::TOP).title("pirs"))
-                .wrap(Wrap { trim: false })
-                .scroll((top, 0));
+                .wrap(Wrap { trim: false });
             frame.render_widget(convo, chunks[0]);
 
             const FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -274,8 +300,11 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                 String::new()
             };
             app.tick = app.tick.wrapping_add(1);
-            let mut status = format!("{}{}{}", app.status, spinner, app.usage_summary);
-            status.truncate(chunks[1].width as usize);
+            let width = chunks[1].width as usize;
+            let status: String = format!("{}{}{}", app.status, spinner, app.usage_summary)
+                .chars()
+                .take(width)
+                .collect();
             frame.render_widget(
                 Paragraph::new(Span::styled(status, dim())),
                 chunks[1],
@@ -305,6 +334,47 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+fn line_width(line: &Line) -> usize {
+    line.spans
+        .iter()
+        .map(|s| unicode_width::UnicodeWidthStr::width(s.content.as_ref()))
+        .sum()
+}
+
+fn wrapped_rows(lines: &[Line], width: usize) -> usize {
+    lines
+        .iter()
+        .map(|l| (line_width(l) / width) + 1)
+        .sum()
+}
+
+fn window_by_rows(
+    lines: &[Line<'static>],
+    width: usize,
+    skip_rows: usize,
+    take_rows: usize,
+) -> Vec<Line<'static>> {
+    let mut out: Vec<Line> = Vec::new();
+    let mut skipped = 0usize;
+    let mut budget = take_rows;
+    for line in lines {
+        let rows = (line_width(line) / width) + 1;
+        if skipped + rows <= skip_rows {
+            skipped += rows;
+            continue;
+        }
+        if budget == 0 {
+            break;
+        }
+        if rows > budget {
+            break;
+        }
+        budget -= rows;
+        out.push(line.clone());
+    }
+    out
 }
 
 fn thinking_lines(a: &pirs_ai::AssistantMessage) -> Vec<Line<'static>> {
