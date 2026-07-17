@@ -74,7 +74,6 @@ async fn run_command(
         .stderr(std::process::Stdio::piped());
     #[cfg(unix)]
     {
-        use std::os::unix::process::CommandExt;
         child.process_group(0);
     }
     let mut child = child.spawn()?;

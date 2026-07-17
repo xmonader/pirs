@@ -27,7 +27,7 @@ anyhow = "1"
 futures = "0.3"
 futures-util = "0.3"
 rhai = { version = "1", features = ["sync", "serde", "metadata"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 rustyline = "15"
 regex = "1"
 ignore = "0.4"

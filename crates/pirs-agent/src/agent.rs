@@ -114,6 +114,17 @@ impl Agent {
         self.cancel.cancel();
     }
 
+    pub fn cancel_handle(&self) -> CancellationToken {
+        self.cancel.clone()
+    }
+
+    pub fn steer_sender(&self) -> impl Fn(Message) + Send + 'static {
+        let queue = Arc::clone(&self.steering);
+        move |msg: Message| {
+            queue.lock().unwrap().push_back(msg);
+        }
+    }
+
     pub async fn prompt(&mut self, text: impl Into<String>) -> Result<Vec<Message>, AgentError> {
         self.run(Some(Message::user(text))).await
     }

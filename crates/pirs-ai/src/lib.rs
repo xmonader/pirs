@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod openai;
 pub mod sse;
+pub use openai::OpenAiCompat;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

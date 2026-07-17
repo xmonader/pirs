@@ -18,7 +18,6 @@ pub struct Extension {
     pub path: PathBuf,
     ast: AST,
     scope: Scope<'static>,
-    registered_tools: Vec<String>,
     has_on_tool_call: bool,
     has_on_tool_result: bool,
 }
@@ -131,12 +130,6 @@ impl ExtensionHost {
             path: PathBuf::from(name),
             ast,
             scope,
-            registered_tools: self
-                .tool_registry
-                .iter()
-                .filter(|t| t.ext == ext_index)
-                .map(|t| t.name.clone())
-                .collect(),
             has_on_tool_call,
             has_on_tool_result,
         }));
