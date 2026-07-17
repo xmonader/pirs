@@ -12,6 +12,7 @@ const PAGE: &str = include_str!("../assets/serve.html");
 
 pub struct ServeOptions {
     pub agent: Agent,
+    #[allow(dead_code)]
     pub host: Option<Arc<pirs_rhai::ExtensionHost>>,
     pub port: u16,
     pub bind: String,
