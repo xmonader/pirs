@@ -11,12 +11,14 @@ use serde_json::{json, Value};
 
 struct MockProvider {
     scripted: Mutex<VecDeque<AssistantMessage>>,
+    seen: Arc<Mutex<Vec<Context>>>,
 }
 
 impl MockProvider {
     fn new(messages: Vec<AssistantMessage>) -> Self {
         MockProvider {
             scripted: Mutex::new(messages.into()),
+            seen: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -26,10 +28,15 @@ impl LlmProvider for MockProvider {
     async fn stream(
         &self,
         _model: &str,
-        _context: &Context,
+        context: &Context,
         _options: &CompletionOptions,
         _cancel: tokio_util::sync::CancellationToken,
     ) -> futures::stream::BoxStream<'static, StreamEvent> {
+        self.seen.lock().unwrap().push(Context {
+            system_prompt: context.system_prompt.clone(),
+            messages: context.messages.clone(),
+            tools: vec![],
+        });
         let msg = self
             .scripted
             .lock()
@@ -271,4 +278,64 @@ async fn error_stop_reason_ends_run() {
     let new = agent.prompt("go").await.unwrap();
     let last = new.last().unwrap();
     assert!(matches!(last, Message::Assistant(a) if a.stop_reason == StopReason::Error));
+}
+
+#[tokio::test]
+async fn auto_compaction_fires_on_threshold() {
+    use pirs_agent::compaction::{CompactionConfig, SUMMARY_PREFIX};
+
+    let mut turn1 = tool_call_msg("c1", "echo", json!({"text": "hi"}));
+    turn1.usage = pirs_ai::Usage {
+        input: 90_000,
+        ..Default::default()
+    };
+    let provider = MockProvider::new(vec![
+        turn1,
+        text_msg("SUMMARY: user wants a ported loop"),
+        text_msg("continuing"),
+    ]);
+    let seen = Arc::clone(&provider.seen);
+    let mut agent = make_agent(provider, vec![Arc::new(EchoTool)]).with_compaction(Some(
+        CompactionConfig {
+            context_window: 100_000,
+            reserve_tokens: 16_000,
+            keep_recent_tokens: 10,
+        },
+    ));
+    agent.messages = vec![
+        Message::user("old task"),
+        Message::Assistant(text_msg("did some earlier work")),
+        Message::user("carry on"),
+    ];
+    agent.prompt("go").await.unwrap();
+
+    let calls = seen.lock().unwrap();
+    assert_eq!(calls.len(), 3, "turn1 + summarize + turn2");
+
+    let summary_call = &calls[1];
+    assert!(summary_call
+        .system_prompt
+        .as_deref()
+        .unwrap_or("")
+        .contains("summarizing a conversation"));
+
+    let turn2_call = &calls[2];
+    let first = &turn2_call.messages[0];
+    assert!(matches!(first, Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains(SUMMARY_PREFIX) && t.contains("SUMMARY: user wants a ported loop"))));
+
+    assert!(agent.messages.iter().any(|m| matches!(
+        m,
+        Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains(SUMMARY_PREFIX))
+    )));
+}
+
+#[tokio::test]
+async fn no_compaction_below_threshold() {
+    let provider = MockProvider::new(vec![text_msg("fine")]);
+    let seen = Arc::clone(&provider.seen);
+    let mut agent = make_agent(provider, vec![]).with_compaction(Some(
+        pirs_agent::compaction::CompactionConfig::default(),
+    ));
+    agent.prompt("go").await.unwrap();
+    assert_eq!(seen.lock().unwrap().len(), 1);
 }

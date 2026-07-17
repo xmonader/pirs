@@ -601,6 +601,22 @@ fn event_to_rhai(event: &pirs_agent::AgentEvent) -> (String, Dynamic) {
             map.insert("text".into(), text.into());
             "tool_execution_end"
         }
+        E::CompactionStart { reason } => {
+            map.insert("reason".into(), reason.clone().into());
+            "compaction_start"
+        }
+        E::CompactionEnd {
+            reason,
+            aborted,
+            error_message,
+        } => {
+            map.insert("reason".into(), reason.clone().into());
+            map.insert("aborted".into(), (*aborted).into());
+            if let Some(e) = error_message {
+                map.insert("errorMessage".into(), e.clone().into());
+            }
+            "compaction_end"
+        }
     };
     (ty.to_string(), Dynamic::from_map(map))
 }

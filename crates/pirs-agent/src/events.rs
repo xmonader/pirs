@@ -26,6 +26,8 @@ pub enum AgentEvent {
     ToolExecutionStart { tool_call_id: String, tool_name: String, args: Value },
     ToolExecutionUpdate { tool_call_id: String, tool_name: String, partial: String },
     ToolExecutionEnd { tool_call_id: String, tool_name: String, result: Box<ToolResultMessage> },
+    CompactionStart { reason: String },
+    CompactionEnd { reason: String, aborted: bool, error_message: Option<String> },
 }
 
 #[derive(Debug, Clone, Default)]

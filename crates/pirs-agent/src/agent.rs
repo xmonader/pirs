@@ -6,6 +6,7 @@ use pirs_ai::{CompletionOptions, Context, LlmProvider, Message};
 use tokio_util::sync::CancellationToken;
 
 use crate::agent_loop::{run_agent_loop, LoopConfig};
+use crate::compaction::{compact_messages, CompactionConfig};
 use crate::events::{AgentEvent, Emit, Hooks};
 use crate::tool::{AgentTool, ExecutionMode};
 
@@ -32,6 +33,7 @@ pub struct Agent {
     pub messages: Vec<Message>,
     completion: CompletionOptions,
     tool_execution: ExecutionMode,
+    pub compaction: Option<CompactionConfig>,
     hooks: Hooks,
     listeners: Vec<Emit>,
     steering: Arc<Mutex<VecDeque<Message>>>,
@@ -52,6 +54,7 @@ impl Agent {
             messages: Vec::new(),
             completion: CompletionOptions::default(),
             tool_execution: ExecutionMode::Parallel,
+            compaction: Some(CompactionConfig::default()),
             hooks: Hooks::default(),
             listeners: Vec::new(),
             steering: Arc::new(Mutex::new(VecDeque::new())),
@@ -81,6 +84,37 @@ impl Agent {
     pub fn with_tool_execution(mut self, mode: ExecutionMode) -> Self {
         self.tool_execution = mode;
         self
+    }
+
+    pub fn with_compaction(mut self, config: Option<CompactionConfig>) -> Self {
+        self.compaction = config;
+        self
+    }
+
+    pub fn compaction_enabled(&self) -> bool {
+        self.compaction.is_some()
+    }
+
+    pub async fn compact_now(&mut self) -> bool {
+        let Some(cfg) = self.compaction.clone() else {
+            return false;
+        };
+        let listeners = self.listeners.clone();
+        let emit: Emit = Arc::new(move |event: AgentEvent| {
+            for l in &listeners {
+                l(event.clone());
+            }
+        });
+        let provider = Arc::clone(&self.provider);
+        compact_messages(
+            &provider,
+            &self.model,
+            &mut self.messages,
+            &cfg,
+            &emit,
+            self.cancel.clone(),
+        )
+        .await
     }
 
     pub fn with_hooks(mut self, hooks: Hooks) -> Self {
@@ -212,6 +246,7 @@ impl Agent {
             completion: self.completion.clone(),
             tool_execution: self.tool_execution,
             hooks,
+            compaction: self.compaction.clone(),
         };
 
         let tools = self.tools.clone();

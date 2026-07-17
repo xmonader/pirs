@@ -71,7 +71,8 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         .with_system_prompt(system)
         .with_tools(tools)
         .with_completion(completion)
-        .with_hooks(hooks);
+        .with_hooks(hooks)
+        .with_compaction(Some(pirs_agent::compaction::CompactionConfig::default()));
 
     let session_path = session::session_path(cwd)?;
     let session_id = session_path
@@ -257,7 +258,7 @@ async fn handle_command(
                     "followUpMode": queue_mode_name(actor.follow_up_mode),
                     "sessionFile": actor.session_path.to_string_lossy(),
                     "sessionId": actor.session_id,
-                    "autoCompactionEnabled": false,
+                    "autoCompactionEnabled": actor.agent.compaction_enabled(),
                     "messageCount": actor.agent.messages.len(),
                     "pendingMessageCount": 0,
                 })),

@@ -8,6 +8,7 @@ use pirs_ai::{
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
+use crate::compaction::{compact_messages, last_input_tokens, should_compact, CompactionConfig};
 use crate::events::{AgentEvent, Emit, Hooks, ToolResultPatch};
 use crate::tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext};
 use crate::validate::{coerce_args, validate_args};
@@ -17,6 +18,7 @@ pub struct LoopConfig {
     pub completion: CompletionOptions,
     pub tool_execution: ExecutionMode,
     pub hooks: Hooks,
+    pub compaction: Option<CompactionConfig>,
 }
 
 pub struct ToolCallData {
@@ -131,6 +133,23 @@ pub async fn run_agent_loop(
                 message: Box::new(assistant.clone()),
                 tool_results: results.clone(),
             });
+
+            if let Some(cfg) = &config.compaction {
+                if last_input_tokens(&context.messages)
+                    .map(|t| should_compact(t, cfg))
+                    .unwrap_or(false)
+                {
+                    compact_messages(
+                        provider,
+                        &config.model,
+                        &mut context.messages,
+                        cfg,
+                        emit,
+                        cancel.clone(),
+                    )
+                    .await;
+                }
+            }
 
             let batch_terminate =
                 !results.is_empty() && results.iter().all(|r| r.terminate);

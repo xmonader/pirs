@@ -46,6 +46,14 @@ struct Cli {
     /// Retry failed/rate-limited requests up to N times
     #[arg(long, default_value = "0")]
     max_retries: u32,
+
+    /// Disable automatic context compaction
+    #[arg(long)]
+    no_compaction: bool,
+
+    /// Model context window in tokens (drives compaction threshold)
+    #[arg(long, default_value = "128000")]
+    context_window: u64,
 }
 
 struct Printer {
@@ -205,11 +213,21 @@ async fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
+    let compaction = if cli.no_compaction {
+        None
+    } else {
+        Some(pirs_agent::compaction::CompactionConfig {
+            context_window: cli.context_window,
+            ..Default::default()
+        })
+    };
+
     let mut agent = Agent::new(provider, &cli.model)
         .with_system_prompt(system)
         .with_tools(tools)
         .with_completion(completion)
-        .with_hooks(hooks);
+        .with_hooks(hooks)
+        .with_compaction(compaction);
 
     let session_path = session::session_path(&cwd)?;
     if cli.resume {
@@ -334,7 +352,7 @@ async fn repl(
                 }
                 let _ = rl.add_history_entry(line);
                 if line.starts_with('/') {
-                    match handle_command(line, agent, session_path) {
+                    match handle_command(line, agent, session_path).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(e) => {
@@ -390,7 +408,7 @@ async fn run_local_bash(cmd: &str, cwd: &Path, record: bool, agent: &mut Agent) 
     }
 }
 
-fn handle_command(line: &str, agent: &mut Agent, session_path: &Path) -> anyhow::Result<bool> {
+async fn handle_command(line: &str, agent: &mut Agent, session_path: &Path) -> anyhow::Result<bool> {
     let mut parts = line.splitn(2, ' ');
     let cmd = parts.next().unwrap_or("");
     let arg = parts.next().unwrap_or("").trim();
@@ -412,6 +430,15 @@ fn handle_command(line: &str, agent: &mut Agent, session_path: &Path) -> anyhow:
             } else {
                 agent.model = arg.to_string();
                 println!("model set to {arg}");
+            }
+        }
+        "/compact" => {
+            println!("compacting...");
+            let done = agent.compact_now().await;
+            if done {
+                println!("compacted ({} messages now)", agent.messages.len());
+            } else {
+                println!("nothing to compact (or compaction disabled)");
             }
         }
         "/export" => {
