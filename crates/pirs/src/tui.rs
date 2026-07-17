@@ -25,6 +25,10 @@ struct App {
     lines: Vec<Line<'static>>,
     input: String,
     running: bool,
+    live: Option<usize>,
+    tick: u64,
+    dirty: bool,
+    last_live_refresh: std::time::Instant,
     steer_queue: Arc<Mutex<Vec<String>>>,
     /// Lines scrolled up from the bottom (0 = pinned to bottom).
     scroll: u16,
@@ -40,6 +44,7 @@ impl App {
     fn push_line(&mut self, line: Line<'static>) {
         self.lines.push(line);
         self.scroll = 0;
+        self.dirty = true;
     }
 
     fn push_text(&mut self, style: Style, text: impl Into<String>) {
@@ -106,6 +111,10 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         lines: Vec::new(),
         input: String::new(),
         running: false,
+        live: None,
+        tick: 0,
+        dirty: true,
+        last_live_refresh: std::time::Instant::now(),
         steer_queue,
         scroll: 0,
         viewport_height: 10,
@@ -148,6 +157,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         }
         while let Ok(ok) = done_rx.try_recv() {
             app.running = false;
+            app.dirty = true;
             let report = {
                 let a = agent.lock().await;
                 a.usage_report()
@@ -167,6 +177,75 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
             }
         }
 
+        let maybe_event = tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            futures::StreamExt::next(&mut events),
+        )
+        .await;
+        if let Ok(Some(Ok(Event::Key(KeyEvent {
+            code, modifiers, ..
+        })))) = maybe_event
+        {
+            app.dirty = true;
+            match (code, modifiers) {
+                (KeyCode::Char('d'), KeyModifiers::CONTROL) => break,
+                (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                    if app.running {
+                        app.cancel.cancel();
+                        app.push_text(dim(), "[cancel requested]");
+                    } else {
+                        break;
+                    }
+                }
+                (KeyCode::Enter, _) => {
+                    let text = app.input.trim().to_string();
+                    app.input.clear();
+                    if !text.is_empty() {
+                        let approval_question = app.pending_approval.lock().unwrap().take();
+                        if approval_question.is_some() {
+                            let _ = app.approval_answer.send(text.clone());
+                            continue;
+                        }
+                        if text == "/quit" {
+                            break;
+                        }
+                        app.push_text(user_style(), format!("> {text}"));
+                        if app.running {
+                            app.steer_queue.lock().unwrap().push(text);
+                        } else {
+                            app.running = true;
+                            let _ = prompt_tx.send(text);
+                        }
+                    }
+                }
+                (KeyCode::Char(c), KeyModifiers::NONE)
+                | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
+                    app.input.push(c);
+                }
+                (KeyCode::Backspace, _) => {
+                    app.input.pop();
+                }
+                (KeyCode::PageUp, _) => {
+                    let max = app
+                        .lines
+                        .len()
+                        .saturating_sub(app.viewport_height as usize)
+                        .min(u16::MAX as usize) as u16;
+                    app.scroll = (app.scroll + 10).min(max);
+                }
+                (KeyCode::PageDown, _) => {
+                    app.scroll = app.scroll.saturating_sub(10);
+                }
+                _ => {}
+            }
+        } else if app.running {
+            app.dirty = true;
+        }
+
+        if !app.dirty {
+            continue;
+        }
+        app.dirty = false;
         terminal.draw(|frame| {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -188,7 +267,13 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                 .scroll((top, 0));
             frame.render_widget(convo, chunks[0]);
 
-            let spinner = if app.running { " ⠋running" } else { "" };
+            const FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            let spinner = if app.running {
+                format!(" {} running", FRAMES[(app.tick / 2 % 10) as usize])
+            } else {
+                String::new()
+            };
+            app.tick = app.tick.wrapping_add(1);
             let mut status = format!("{}{}{}", app.status, spinner, app.usage_summary);
             status.truncate(chunks[1].width as usize);
             frame.render_widget(
@@ -198,87 +283,20 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
 
             let (input_title, input_style) = if app.pending_approval.lock().unwrap().is_some() {
                 ("approval [y/n/a]", error_style())
-            } else if app.running {
-                ("steer", tool_style())
             } else {
-                ("input", user_style())
+                ("input (steers while running)", user_style())
             };
             let input = Paragraph::new(app.input.as_str())
                 .block(Block::default().borders(Borders::ALL).title(input_title))
                 .style(input_style);
             frame.render_widget(input, chunks[2]);
-            frame.set_cursor_position((
-                chunks[2].x + 1 + unicode_width::UnicodeWidthStr::width(app.input.as_str()) as u16,
-                chunks[2].y + 1,
-            ));
+            let cursor_x = (chunks[2].x + 1
+                + unicode_width::UnicodeWidthStr::width(app.input.as_str()) as u16)
+                .min(chunks[2].x + chunks[2].width.saturating_sub(2));
+            frame.set_cursor_position((cursor_x, chunks[2].y + 1));
         })?;
-
-        let maybe_event = tokio::time::timeout(
-            std::time::Duration::from_millis(50),
-            futures::StreamExt::next(&mut events),
-        )
-        .await;
-        let event = match maybe_event {
-            Ok(Some(Ok(event))) => event,
-            _ => continue,
-        };
-        if let Event::Key(KeyEvent {
-            code, modifiers, ..
-        }) = event
-        {
-            match (code, modifiers) {
-                (KeyCode::Char('d'), KeyModifiers::CONTROL) => break,
-                (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-                    if app.running {
-                        app.cancel.cancel();
-                        app.push_text(dim(), "[cancel requested]");
-                    } else {
-                        break;
-                    }
-                }
-                (KeyCode::Enter, _) => {
-                    let text = app.input.trim().to_string();
-                    app.input.clear();
-                    if text.is_empty() {
-                        continue;
-                    }
-                    let approval_question = app.pending_approval.lock().unwrap().take();
-                    if let Some(_q) = approval_question {
-                        let _ = app.approval_answer.send(text.clone());
-                        continue;
-                    }
-                    if text == "/quit" {
-                        break;
-                    }
-                    app.push_text(user_style(), format!("> {text}"));
-                    if app.running {
-                        app.steer_queue.lock().unwrap().push(text);
-                    } else {
-                        app.running = true;
-                        let _ = prompt_tx.send(text);
-                    }
-                }
-                (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
-                    app.input.push(c);
-                }
-                (KeyCode::Backspace, _) => {
-                    app.input.pop();
-                }
-                (KeyCode::PageUp, _) => {
-                    let max = app
-                        .lines
-                        .len()
-                        .saturating_sub(app.viewport_height as usize)
-                        .min(u16::MAX as usize) as u16;
-                    app.scroll = (app.scroll + 10).min(max);
-                }
-                (KeyCode::PageDown, _) => {
-                    app.scroll = app.scroll.saturating_sub(10);
-                }
-                _ => {}
-            }
-        }
     }
+
 
     restore_terminal()?;
     if let Some(h) = &opts.host {
@@ -289,11 +307,76 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn thinking_lines(a: &pirs_ai::AssistantMessage) -> Vec<Line<'static>> {
+    const MAX: usize = 10;
+    let style = Style::default()
+        .fg(Color::DarkGray)
+        .add_modifier(Modifier::ITALIC);
+    let all: Vec<Line<'static>> = a
+        .content
+        .iter()
+        .filter_map(|b| match b {
+            pirs_ai::ContentBlock::Thinking { thinking, .. } if !thinking.trim().is_empty() => {
+                Some(thinking)
+            }
+            _ => None,
+        })
+        .flat_map(|t| {
+            t.lines()
+                .map(|l| Line::from(Span::styled(format!("thinking: {l}"), style)))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let all_len = all.len();
+    if all_len > MAX {
+        let mut out = vec![Line::from(Span::styled(
+            format!("thinking: … ({} lines)", all_len),
+            dim(),
+        ))];
+        out.extend(all.into_iter().skip(all_len.saturating_sub(MAX)));
+        return out;
+    }
+    all
+}
+
+
 fn apply_agent_event(app: &mut App, event: AgentEvent) {
     match event {
-        AgentEvent::MessageUpdate { .. } => {}
+        AgentEvent::MessageStart { message } => {
+            if message.is_assistant() {
+                app.live = Some(app.lines.len());
+            }
+        }
+        AgentEvent::MessageUpdate { message } => {
+            if let Some(idx) = app.live {
+                if app.last_live_refresh.elapsed() < std::time::Duration::from_millis(120) {
+                    return;
+                }
+                app.last_live_refresh = std::time::Instant::now();
+                app.lines.truncate(idx);
+                let mut preview: Vec<Line> = thinking_lines(&message);
+                for l in message.text().lines() {
+                    preview.push(Line::from(Span::styled(l.to_string(), assistant_style())));
+                }
+                if preview.len() > 8 {
+                    let start = preview.len() - 8;
+                    app.lines.push(Line::from(Span::styled("…", dim())));
+                    app.lines.extend(preview.drain(start..));
+                } else {
+                    app.lines.extend(preview);
+                }
+                app.scroll = 0;
+                app.dirty = true;
+            }
+        }
         AgentEvent::MessageEnd { message } => {
             if let Message::Assistant(a) = *message {
+                if let Some(idx) = app.live.take() {
+                    app.lines.truncate(idx);
+                }
+                for line in thinking_lines(&a) {
+                    app.lines.push(line);
+                }
                 let text = a.text();
                 if !text.trim().is_empty() {
                     app.push_text(assistant_style(), text);
