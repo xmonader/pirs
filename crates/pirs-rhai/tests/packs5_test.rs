@@ -43,8 +43,14 @@ fn critic_spawns_background_review_after_n_edits() {
     for _ in 0..3 {
         after("1", "edit", &edit);
     }
-    std::thread::sleep(std::time::Duration::from_millis(200));
-    let msgs = steering();
+    let mut msgs = Vec::new();
+    for _ in 0..30 {
+        msgs = steering();
+        if !msgs.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
     assert_eq!(msgs.len(), 1, "critic verdict should steer: {msgs:?}");
 }
 
