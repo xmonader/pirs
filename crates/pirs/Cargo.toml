@@ -22,6 +22,10 @@ async-trait = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 rustyline = { workspace = true }
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+unicode-width = "0.2"
+futures = "0.3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 

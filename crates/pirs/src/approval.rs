@@ -82,11 +82,13 @@ fn summarize(tool: &str, args: &Value) -> String {
         .unwrap_or_else(|| args.to_string().chars().take(100).collect())
 }
 
+pub type Prompter = Arc<dyn Fn(&str) -> String + Send + Sync>;
+
 pub struct ApprovalGate {
     mode: Arc<Mutex<ApprovalMode>>,
     remembered: Arc<Mutex<HashSet<String>>>,
     cwd: PathBuf,
-    prompter: Arc<dyn Fn(&str) -> String + Send + Sync>,
+    prompter: Arc<Mutex<Prompter>>,
 }
 
 impl ApprovalGate {
@@ -95,19 +97,23 @@ impl ApprovalGate {
             mode: Arc::new(Mutex::new(mode)),
             remembered: Arc::new(Mutex::new(HashSet::new())),
             cwd,
-            prompter: Arc::new(|question| {
+            prompter: Arc::new(Mutex::new(Arc::new(|question| {
                 eprint!("{question}");
                 let _ = std::io::stderr().flush();
                 let mut line = String::new();
                 let _ = std::io::stdin().read_line(&mut line);
                 line.trim().to_string()
-            }),
+            }))),
         }
     }
 
+    pub fn set_prompter(&self, f: impl Fn(&str) -> String + Send + Sync + 'static) {
+        *self.prompter.lock().unwrap() = Arc::new(f);
+    }
+
     #[cfg(test)]
-    pub fn with_prompter(mut self, f: impl Fn(&str) -> String + Send + Sync + 'static) -> Self {
-        self.prompter = Arc::new(f);
+    pub fn with_prompter(self, f: impl Fn(&str) -> String + Send + Sync + 'static) -> Self {
+        self.set_prompter(f);
         self
     }
 
@@ -140,7 +146,8 @@ impl ApprovalGate {
                 "\n[approval] {tool}: {}\nallow? [y]es / [n]o / [a]lways {bucket}: ",
                 summarize(tool, args)
             );
-            match prompter(&question).as_str() {
+            let answer = (prompter.lock().unwrap())(&question);
+            match answer.as_str() {
                 "y" | "yes" => None,
                 "a" | "always" => {
                     remembered.lock().unwrap().insert(bucket);

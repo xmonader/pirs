@@ -10,6 +10,7 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
 mod approval;
+mod tui;
 mod discovery;
 mod session;
 mod system_prompt;
@@ -229,8 +230,8 @@ async fn main() -> anyhow::Result<()> {
         })
         .await;
     }
-    if cli.mode != "repl" {
-        bail!("unknown mode: {} (expected repl|rpc)", cli.mode);
+    if cli.mode != "repl" && cli.mode != "tui" {
+        bail!("unknown mode: {} (expected repl|rpc|tui)", cli.mode);
     }
 
     let provider: Arc<dyn pirs_ai::LlmProvider> = if cli.provider == "anthropic" {
@@ -455,7 +456,7 @@ async fn main() -> anyhow::Result<()> {
     if approval_mode == approval::ApprovalMode::Yolo {
         eprintln!("[WARNING: yolo mode — no approvals, no policy hooks. All tool calls execute.]");
     }
-    let gate = approval::ApprovalGate::new(approval_mode, cwd.clone());
+    let gate = std::sync::Arc::new(approval::ApprovalGate::new(approval_mode, cwd.clone()));
     if approval_mode == approval::ApprovalMode::Ask {
         hooks.before_tool_call = Some(gate.hook());
     }
@@ -515,6 +516,18 @@ async fn main() -> anyhow::Result<()> {
                 _ => p.event(event),
             }
         }));
+    }
+
+    if cli.mode == "tui" {
+        return tui::run(tui::TuiOptions {
+            agent,
+            host,
+            session_path,
+            approval_mode,
+            approval_gate: Some(gate),
+            cwd,
+        })
+        .await;
     }
 
     if let Some(prompt) = cli.prompt.take() {
