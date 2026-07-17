@@ -9,6 +9,7 @@ use pirs_ai::{CompletionOptions, Message, OpenAiCompat};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
+mod approval;
 mod discovery;
 mod session;
 mod system_prompt;
@@ -47,6 +48,10 @@ struct Cli {
     /// Disable MCP server connections (.mcp.json)
     #[arg(long)]
     no_mcp: bool,
+
+    /// Approval mode: auto (no prompts), ask (inline y/n for sensitive ops), yolo (no prompts, no policy hooks — dangerous)
+    #[arg(long, env = "PIRS_APPROVAL", default_value = "auto")]
+    approval: String,
 
     /// Retry failed/rate-limited requests up to N times
     #[arg(long, default_value = "0")]
@@ -296,13 +301,20 @@ async fn main() -> anyhow::Result<()> {
         }
         tools.extend(h.tools());
         let ext_hooks = h.hooks();
-        policy_hooks = match (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
+        let yolo = approval::ApprovalMode::parse(&cli.approval) == Some(approval::ApprovalMode::Yolo);
+        policy_hooks = if yolo {
+            None
+        } else {
+            match (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
             (Some(b), Some(a)) => Some((b.clone(), a.clone())),
             _ => None,
+            }
         };
         *policy_slot.lock().unwrap() = policy_hooks.clone();
-        hooks.before_tool_call = ext_hooks.before_tool_call;
-        hooks.after_tool_call = ext_hooks.after_tool_call;
+        if !yolo {
+            hooks.before_tool_call = ext_hooks.before_tool_call;
+            hooks.after_tool_call = ext_hooks.after_tool_call;
+        }
         hooks.transform_context = ext_hooks.transform_context;
         hooks.should_stop_after_turn = ext_hooks.should_stop_after_turn;
         hooks.get_steering_messages = ext_hooks.get_steering_messages;
@@ -400,6 +412,19 @@ async fn main() -> anyhow::Result<()> {
         pirs_agent::ExecutionMode::Parallel
     };
 
+    let approval_mode = approval::ApprovalMode::parse(&cli.approval)
+        .unwrap_or_else(|| {
+            eprintln!("[unknown approval mode '{}', using auto]", cli.approval);
+            approval::ApprovalMode::Auto
+        });
+    if approval_mode == approval::ApprovalMode::Yolo {
+        eprintln!("[WARNING: yolo mode — no approvals, no policy hooks. All tool calls execute.]");
+    }
+    let gate = approval::ApprovalGate::new(approval_mode, cwd.clone());
+    if approval_mode == approval::ApprovalMode::Ask {
+        hooks.before_tool_call = Some(gate.hook());
+    }
+
     let mut agent = Agent::new(provider, &cli.model)
         .with_system_prompt(system)
         .with_tools(tools)
@@ -408,6 +433,7 @@ async fn main() -> anyhow::Result<()> {
         .with_compaction(compaction)
         .with_visible_tools(visible)
         .with_tool_execution(execution);
+    let approval_shared = gate.shared_mode();
 
     let session_path = session::session_path(&cwd)?;
     if cli.resume {
@@ -450,13 +476,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if let Some(prompt) = cli.prompt.take() {
-        run_turn(&mut agent, &prompt, &printer, &session_path).await?;
+        run_turn(&mut agent, &prompt, &printer, &session_path, approval_mode).await?;
         eprintln!();
         print_usage(&agent.usage_report());
         return Ok(());
     }
 
-    repl(&mut agent, &printer, &session_path, &cwd, host.as_ref(), &file_commands).await
+    repl(&mut agent, &printer, &session_path, &cwd, host.as_ref(), &file_commands, approval_shared).await
 }
 
 async fn run_turn(
@@ -464,9 +490,14 @@ async fn run_turn(
     input: &str,
     _printer: &Arc<Printer>,
     session_path: &Path,
+    approval_mode: approval::ApprovalMode,
 ) -> anyhow::Result<()> {
     let cancel = agent.cancel_handle();
-    let steer_handle = SteerHandle::start(agent);
+    let steer_handle = if approval_mode == approval::ApprovalMode::Ask {
+        None
+    } else {
+        Some(SteerHandle::start(agent))
+    };
 
     let mut run = std::pin::pin!(agent.prompt(input));
     let result = loop {
@@ -477,7 +508,9 @@ async fn run_turn(
             }
         }
     };
-    steer_handle.stop();
+    if let Some(h) = steer_handle {
+        h.stop();
+    }
 
     let new_messages = result?;
     session::append(session_path, &new_messages)?;
@@ -524,6 +557,7 @@ async fn repl(
     cwd: &Path,
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
     file_commands: &[discovery::FileCommand],
+    approval_shared: std::sync::Arc<std::sync::Mutex<approval::ApprovalMode>>,
 ) -> anyhow::Result<()> {
     let mut rl = DefaultEditor::new()?;
     println!("pirs — pi agent harness, Rust port. /help for commands, Ctrl-D to quit.");
@@ -536,7 +570,7 @@ async fn repl(
                 }
                 let _ = rl.add_history_entry(line);
                 if line.starts_with('/') {
-                    match handle_command(line, agent, session_path, host, file_commands, printer).await {
+                    match handle_command(line, agent, session_path, host, file_commands, printer, &approval_shared).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(e) => {
@@ -553,7 +587,8 @@ async fn repl(
                     run_local_bash(cmd, cwd, true, agent).await;
                     continue;
                 }
-                if let Err(e) = run_turn(agent, line, printer, session_path).await {
+                let mode = *approval_shared.lock().unwrap();
+                if let Err(e) = run_turn(agent, line, printer, session_path, mode).await {
                     eprintln!("[error: {e}]");
                 }
             }
@@ -599,6 +634,7 @@ async fn handle_command(
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
     file_commands: &[discovery::FileCommand],
     printer: &Arc<Printer>,
+    approval_shared: &std::sync::Arc<std::sync::Mutex<approval::ApprovalMode>>,
 ) -> anyhow::Result<bool> {
     let mut parts = line.splitn(2, ' ');
     let cmd = parts.next().unwrap_or("");
@@ -628,6 +664,16 @@ async fn handle_command(
         }
         "/usage" => {
             print_usage(&agent.usage_report());
+        }
+        "/approval" => {
+            if arg.is_empty() {
+                println!("approval mode: {}", approval_shared.lock().unwrap().name());
+            } else if let Some(m) = approval::ApprovalMode::parse(arg) {
+                *approval_shared.lock().unwrap() = m;
+                println!("approval mode set to {}", m.name());
+            } else {
+                println!("usage: /approval <auto|ask|yolo>");
+            }
         }
         "/compact" => {
             println!("compacting...");
@@ -664,7 +710,8 @@ async fn handle_command(
                 let cmd_name = other.trim_start_matches('/');
                 if let Some(fc) = file_commands.iter().find(|c| c.name == cmd_name) {
                     let prompt = discovery::expand_command(fc, arg);
-                    if let Err(e) = run_turn(agent, &prompt, printer, session_path).await {
+                    let mode = *approval_shared.lock().unwrap();
+                    if let Err(e) = run_turn(agent, &prompt, printer, session_path, mode).await {
                         eprintln!("[error: {e}]");
                     }
                 } else {
