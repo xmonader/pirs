@@ -1,29 +1,20 @@
 [package]
-name = "pirs"
+name = "pirs-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "pirs"
-path = "src/main.rs"
-
 [dependencies]
-pirs-ai = { workspace = true }
 pirs-agent = { workspace = true }
-pirs-tools = { workspace = true }
-pirs-rhai = { workspace = true }
-pirs-mcp = { workspace = true }
+pirs-ai = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
-clap = { workspace = true }
-rustyline = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+tokio-util = { workspace = true }

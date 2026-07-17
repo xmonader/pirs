@@ -14,6 +14,7 @@ pub struct OpenAiCompat {
     provider_name: String,
     client: reqwest::Client,
     max_retries: u32,
+    cache_key: Option<String>,
 }
 
 impl OpenAiCompat {
@@ -29,7 +30,17 @@ impl OpenAiCompat {
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new()),
             max_retries: 0,
+            cache_key: None,
         }
+    }
+
+    /// Sent as prompt_cache_key, but only to api.openai.com (other gateways
+    /// may reject unknown fields — same gating as pi).
+    pub fn with_cache_key(mut self, key: impl Into<String>) -> Self {
+        if self.base_url.contains("api.openai.com") {
+            self.cache_key = Some(key.into());
+        }
+        self
     }
 
     pub fn with_provider_name(mut self, name: impl Into<String>) -> Self {
@@ -57,7 +68,10 @@ impl LlmProvider for OpenAiCompat {
         let url = format!("{}/chat/completions", self.base_url);
         let provider = self.provider_name.clone();
         let max_retries = self.max_retries;
-        let body = build_request_body(model, context, options);
+        let mut body = build_request_body(model, context, options);
+        if let Some(key) = &self.cache_key {
+            body["prompt_cache_key"] = serde_json::Value::String(key.clone());
+        }
         let options = options.clone();
         let model_name = model.to_string();
 

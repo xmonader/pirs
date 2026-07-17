@@ -73,6 +73,20 @@ Scripts can also spawn fresh-context sub-agents themselves: `run_subagent(task, 
 
 rhai gotchas (pinned by tests): interpolation only in backtick strings `` `${x}` ``; string methods like `trim()` mutate in place; no `let mut`; arrays have no `join` — use `str_join(arr, sep)` or a loop; array property access clones (write whole entries back); `const` doesn't resolve inside nested closures.
 
+## MCP servers
+
+pirs is an MCP client (stdio transport). Declare servers in `.mcp.json` (project) or `~/.pirs/mcp.json`, Claude-Code format:
+
+```json
+{
+  "mcpServers": {
+    "fs": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"] }
+  }
+}
+```
+
+Server tools appear as `mcp_<server>_<tool>` and are full citizens: schema validation, policy hooks (guardrails apply), usage accounting. `--no-mcp` disables. HTTP transport is not yet supported (stdio only). Prompt caching: `prompt_cache_key` is sent to api.openai.com; the usage line reports cache hit rate.
+
 ## Skills & commands (.claude / .agents / .pirs)
 
 Standard conventions are honored at startup, project dir first then `$HOME`:
@@ -102,6 +116,7 @@ pirs-orchestrator stop <id>
 | `pirs-tools` | `bash`, `read`, `edit`, `write`, `grep`, `find`, `ls` |
 | `pirs-rhai` | rhai extension host: script tools, tool policy, loop hooks |
 | `pirs` | CLI (`--mode repl\|rpc`) |
+| `pirs-mcp` | MCP stdio client: JSON-RPC lifecycle, `mcp_*` tool adapter |
 | `pirs-orchestrator` | daemon + CLI for spawning/managing headless instances |
 
 ## Development

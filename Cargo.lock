@@ -1105,6 +1105,7 @@ dependencies = [
  "clap",
  "pirs-agent",
  "pirs-ai",
+ "pirs-mcp",
  "pirs-rhai",
  "pirs-tools",
  "rustyline",
@@ -1143,6 +1144,23 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "pirs-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pirs-agent",
+ "pirs-ai",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",

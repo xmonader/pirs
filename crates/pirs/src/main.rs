@@ -44,6 +44,10 @@ struct Cli {
     #[arg(long)]
     no_extensions: bool,
 
+    /// Disable MCP server connections (.mcp.json)
+    #[arg(long)]
+    no_mcp: bool,
+
     /// Retry failed/rate-limited requests up to N times
     #[arg(long, default_value = "0")]
     max_retries: u32,
@@ -132,12 +136,18 @@ impl Default for Printer {
 
 fn print_usage(report: &pirs_agent::usage::UsageReport) {
     let total = report.grand_total();
+    let hit_rate = if total.input + total.cache_read > 0 {
+        100.0 * total.cache_read as f64 / (total.input + total.cache_read) as f64
+    } else {
+        0.0
+    };
     eprintln!(
-        "[usage: {} api calls + {} delegate sub-agents | input {} (cached {}) | output {} | reasoning {} | total {}]",
+        "[usage: {} api calls + {} delegate sub-agents | input {} (cached {}, {:.0}%) | output {} | reasoning {} | total {}]",
         report.calls.len() - report.delegate_calls(),
         report.delegate_calls(),
         total.input,
         total.cache_read,
+        hit_rate,
         total.output,
         total.reasoning,
         total.total_tokens,
@@ -203,7 +213,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let provider = Arc::new(
-        OpenAiCompat::new(cli.base_url.clone()).with_max_retries(cli.max_retries),
+        OpenAiCompat::new(cli.base_url.clone())
+            .with_max_retries(cli.max_retries)
+            .with_cache_key(format!("pirs-{}-{}", std::process::id(), cli.model)),
     );
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
@@ -297,6 +309,22 @@ async fn main() -> anyhow::Result<()> {
         hooks.get_follow_up_messages = ext_hooks.get_follow_up_messages;
         Some(h)
     };
+
+    if !cli.no_mcp {
+        let mcp = pirs_mcp::load_servers(&cwd).await;
+        for err in &mcp.errors {
+            eprintln!("[mcp error] {err}");
+        }
+        if !mcp.handles.is_empty() {
+            let names: Vec<String> = mcp
+                .handles
+                .iter()
+                .map(|h| h.name.clone())
+                .collect();
+            eprintln!("[mcp: {} ({} tools)]", names.join(", "), mcp.tools.len());
+        }
+        tools.extend(mcp.tools);
+    }
 
     let skills = discovery::discover_skills(&cwd);
     let file_commands = discovery::discover_commands(&cwd);

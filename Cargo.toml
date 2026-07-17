@@ -7,6 +7,7 @@ members = [
     "crates/pirs-rhai",
     "crates/pirs",
     "crates/pirs-orchestrator",
+    "crates/pirs-mcp",
 ]
 
 [workspace.package]
@@ -41,3 +42,4 @@ pirs-ai = { path = "crates/pirs-ai" }
 pirs-agent = { path = "crates/pirs-agent" }
 pirs-tools = { path = "crates/pirs-tools" }
 pirs-rhai = { path = "crates/pirs-rhai" }
+pirs-mcp = { path = "crates/pirs-mcp" }
