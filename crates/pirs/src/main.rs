@@ -232,6 +232,15 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let mut system = system_prompt::build_system_prompt(&cwd, &tools);
+    if let Some(h) = &host {
+        let cmds = h.commands();
+        if !cmds.is_empty() {
+            system.push_str("\nCustom commands (from extensions):\n");
+            for (name, desc) in &cmds {
+                system.push_str(&format!("- /{name}: {desc}\n"));
+            }
+        }
+    }
     if let Some(ctx) = system_prompt::read_project_context(&cwd) {
         system.push_str(&ctx);
     }
@@ -343,7 +352,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    repl(&mut agent, &printer, &session_path, &cwd).await
+    repl(&mut agent, &printer, &session_path, &cwd, host.as_ref()).await
 }
 
 async fn run_turn(
@@ -409,6 +418,7 @@ async fn repl(
     printer: &Arc<Printer>,
     session_path: &Path,
     cwd: &Path,
+    host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
 ) -> anyhow::Result<()> {
     let mut rl = DefaultEditor::new()?;
     println!("pirs — pi agent harness, Rust port. /help for commands, Ctrl-D to quit.");
@@ -421,7 +431,7 @@ async fn repl(
                 }
                 let _ = rl.add_history_entry(line);
                 if line.starts_with('/') {
-                    match handle_command(line, agent, session_path).await {
+                    match handle_command(line, agent, session_path, host).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(e) => {
@@ -477,7 +487,12 @@ async fn run_local_bash(cmd: &str, cwd: &Path, record: bool, agent: &mut Agent) 
     }
 }
 
-async fn handle_command(line: &str, agent: &mut Agent, session_path: &Path) -> anyhow::Result<bool> {
+async fn handle_command(
+    line: &str,
+    agent: &mut Agent,
+    session_path: &Path,
+    host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
+) -> anyhow::Result<bool> {
     let mut parts = line.splitn(2, ' ');
     let cmd = parts.next().unwrap_or("");
     let arg = parts.next().unwrap_or("").trim();
@@ -522,7 +537,23 @@ async fn handle_command(line: &str, agent: &mut Agent, session_path: &Path) -> a
                 .with_context(|| format!("failed to export to {}", dest.display()))?;
             println!("exported to {}", dest.display());
         }
-        other => println!("unknown command: {other}"),
+        other => {
+            let cmd_name = other.trim_start_matches('/');
+            let mut handled = false;
+            if let Some(h) = host {
+                if h.commands().iter().any(|(n, _)| n == cmd_name) {
+                    match h.run_command(cmd_name, arg) {
+                        Ok(out) if !out.is_empty() => println!("{out}"),
+                        Ok(_) => {}
+                        Err(e) => eprintln!("[command error: {e}]"),
+                    }
+                    handled = true;
+                }
+            }
+            if !handled {
+                println!("unknown command: {other}");
+            }
+        }
     }
     Ok(false)
 }

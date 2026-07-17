@@ -14,6 +14,12 @@ pub struct RegisteredTool {
     ext: usize,
 }
 
+pub struct RegisteredCommand {
+    pub name: String,
+    pub description: String,
+    ext: usize,
+}
+
 pub struct Extension {
     pub path: PathBuf,
     engine: Engine,
@@ -31,6 +37,7 @@ pub struct Extension {
 pub struct ExtensionHost {
     extensions: Vec<Mutex<Extension>>,
     tool_registry: Vec<RegisteredTool>,
+    command_registry: Vec<RegisteredCommand>,
     pub load_errors: Vec<String>,
 }
 
@@ -57,6 +64,29 @@ fn build_engine(state: &StateStore) -> Engine {
     let del_state = Arc::clone(state);
     engine.register_fn("state_del", move |key: &str| {
         del_state.lock().unwrap().remove(key);
+    });
+    engine.register_fn("now_millis", || -> rhai::INT {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as rhai::INT)
+            .unwrap_or(0)
+    });
+    engine.register_fn("fs_append", |path: &str, content: &str| -> bool {
+        use std::io::Write;
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            if std::fs::create_dir_all(parent).is_err() {
+                return false;
+            }
+        }
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut f| f.write_all(content.as_bytes()))
+            .is_ok()
+    });
+    engine.register_fn("fs_read", |path: &str| -> String {
+        std::fs::read_to_string(path).unwrap_or_default()
     });
     engine.register_fn("exec", |command: &str| -> rhai::Map {
         exec_impl(command, 30)
@@ -147,6 +177,7 @@ impl ExtensionHost {
         ExtensionHost {
             extensions: Vec::new(),
             tool_registry: Vec::new(),
+            command_registry: Vec::new(),
             load_errors: Vec::new(),
         }
     }
@@ -188,6 +219,8 @@ impl ExtensionHost {
         let ext_index = self.extensions.len();
         let registered: Arc<Mutex<Vec<(String, String, rhai::Map)>>> =
             Arc::new(Mutex::new(Vec::new()));
+        let registered_cmds: Arc<Mutex<Vec<(String, String)>>> =
+            Arc::new(Mutex::new(Vec::new()));
         let state: StateStore = Arc::new(Mutex::new(std::collections::BTreeMap::new()));
         let mut engine = build_engine(&state);
 
@@ -199,6 +232,16 @@ impl ExtensionHost {
                     .lock()
                     .unwrap()
                     .push((name.to_string(), description.to_string(), schema));
+            },
+        );
+        let cmd_registrations = Arc::clone(&registered_cmds);
+        engine.register_fn(
+            "register_command",
+            move |name: &str, description: &str| {
+                cmd_registrations
+                    .lock()
+                    .unwrap()
+                    .push((name.to_string(), description.to_string()));
             },
         );
 
@@ -238,6 +281,20 @@ impl ExtensionHost {
                 name: tool_name.clone(),
                 description,
                 schema,
+                ext: ext_index,
+            });
+        }
+
+        for (cmd_name, description) in registered_cmds.lock().unwrap().clone() {
+            let fn_name = format!("cmd_{cmd_name}");
+            if !ast.iter_functions().any(|f| f.name == fn_name) {
+                return Err(anyhow!(
+                    "{name}: register_command(\"{cmd_name}\") requires a function `fn {fn_name}(args)`"
+                ));
+            }
+            self.command_registry.push(RegisteredCommand {
+                name: cmd_name,
+                description,
                 ext: ext_index,
             });
         }
@@ -440,6 +497,28 @@ impl ExtensionHost {
         None
     }
 
+    pub fn commands(&self) -> Vec<(String, String)> {
+        self.command_registry
+            .iter()
+            .map(|c| (c.name.clone(), c.description.clone()))
+            .collect()
+    }
+
+    pub fn run_command(&self, name: &str, args: &str) -> Result<String, String> {
+        let Some(cmd) = self.command_registry.iter().find(|c| c.name == name) else {
+            return Err(format!("unknown command: {name}"));
+        };
+        let fn_name = format!("cmd_{name}");
+        let result = self.call_extension(cmd.ext, &fn_name, (args.to_string(),))?;
+        Ok(if result.is_unit() {
+            String::new()
+        } else if result.is::<String>() {
+            result.cast::<String>()
+        } else {
+            result.to_string()
+        })
+    }
+
     pub fn extension_names(&self) -> Vec<String> {
         self.extensions
             .iter()
@@ -613,6 +692,12 @@ fn event_to_rhai(event: &pirs_agent::AgentEvent) -> (String, Dynamic) {
         E::AgentStart => "agent_start",
         E::AgentEnd { messages } => {
             map.insert("numMessages".into(), (messages.len() as i64).into());
+            let report = pirs_agent::usage::usage_report(messages, pirs_ai::Usage::default());
+            let total = report.grand_total();
+            map.insert("inputTokens".into(), (total.input as i64).into());
+            map.insert("cacheReadTokens".into(), (total.cache_read as i64).into());
+            map.insert("outputTokens".into(), (total.output as i64).into());
+            map.insert("totalTokens".into(), (total.total_tokens as i64).into());
             "agent_end"
         }
         E::TurnStart => "turn_start",
@@ -629,6 +714,12 @@ fn event_to_rhai(event: &pirs_agent::AgentEvent) -> (String, Dynamic) {
                 "numToolResults".into(),
                 (tool_results.len() as i64).into(),
             );
+            map.insert("inputTokens".into(), (message.usage.input as i64).into());
+            map.insert(
+                "cacheReadTokens".into(),
+                (message.usage.cache_read as i64).into(),
+            );
+            map.insert("outputTokens".into(), (message.usage.output as i64).into());
             "turn_end"
         }
         E::MessageStart { message } => {
