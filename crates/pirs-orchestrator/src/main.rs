@@ -23,6 +23,9 @@ enum Command {
         cwd: Option<String>,
         #[arg(long)]
         label: Option<String>,
+        /// Extra env var for the instance (KEY=VAL), repeatable
+        #[arg(long = "env", value_name = "KEY=VAL")]
+        env: Vec<String>,
     },
     /// Show one instance
     Status { instance_id: String },
@@ -49,12 +52,24 @@ async fn main() -> anyhow::Result<()> {
             pirs_orchestrator::server::serve(supervisor).await
         }
         Command::List => one_shot(&IpcRequest::List).await,
-        Command::Spawn { cwd, label } => {
+        Command::Spawn { cwd, label, env } => {
             let cwd = match cwd {
                 Some(c) => c,
                 None => std::env::current_dir()?.to_string_lossy().to_string(),
             };
-            one_shot(&IpcRequest::Spawn { cwd, label }).await
+            let env = if env.is_empty() {
+                None
+            } else {
+                let mut map = std::collections::HashMap::new();
+                for kv in env {
+                    let Some((k, v)) = kv.split_once('=') else {
+                        bail!("--env expects KEY=VAL, got: {kv}");
+                    };
+                    map.insert(k.to_string(), v.to_string());
+                }
+                Some(map)
+            };
+            one_shot(&IpcRequest::Spawn { cwd, label, env }).await
         }
         Command::Status { instance_id } => {
             one_shot(&IpcRequest::Status { instance_id }).await

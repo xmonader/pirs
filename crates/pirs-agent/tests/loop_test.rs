@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 struct MockProvider {
     scripted: Mutex<VecDeque<AssistantMessage>>,
     seen: Arc<Mutex<Vec<Context>>>,
+    seen_models: Arc<Mutex<Vec<String>>>,
 }
 
 impl MockProvider {
@@ -19,6 +20,7 @@ impl MockProvider {
         MockProvider {
             scripted: Mutex::new(messages.into()),
             seen: Arc::new(Mutex::new(Vec::new())),
+            seen_models: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -37,6 +39,7 @@ impl LlmProvider for MockProvider {
             messages: context.messages.clone(),
             tools: vec![],
         });
+        self.seen_models.lock().unwrap().push(_model.to_string());
         let msg = self
             .scripted
             .lock()
@@ -397,6 +400,34 @@ async fn tool_diet_blocks_hidden_tool_until_loaded() {
 }
 
 #[tokio::test]
+async fn delegate_model_override_routes_subagent() {
+    use pirs_agent::delegate::DelegateTool;
+
+    let provider = Arc::new(MockProvider::new(vec![
+        tool_call_msg(
+            "c1",
+            "delegate",
+            json!({"task": "easy step", "model": "weak-model"}),
+        ),
+        text_msg("weak answer"),
+        text_msg("planner done"),
+    ]));
+    let seen_models = Arc::clone(&provider.seen_models);
+
+    let delegate = DelegateTool::new(
+        provider.clone(),
+        "strong-model",
+        CompletionOptions::default(),
+        || vec![Arc::new(EchoTool)],
+    );
+    let mut agent = Agent::new(provider, "strong-model").with_tools(vec![delegate]);
+    agent.prompt("plan").await.unwrap();
+
+    let models = seen_models.lock().unwrap().clone();
+    assert_eq!(models, vec!["strong-model", "weak-model", "strong-model"]);
+}
+
+#[tokio::test]
 async fn delegate_runs_subagent_with_fresh_context() {
     use pirs_agent::delegate::DelegateTool;
 
@@ -411,6 +442,7 @@ async fn delegate_runs_subagent_with_fresh_context() {
             .into(),
         ),
         seen: Arc::clone(&shared_seen),
+        seen_models: Arc::new(Mutex::new(Vec::new())),
     });
 
     let delegate = DelegateTool::new(

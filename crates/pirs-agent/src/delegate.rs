@@ -50,6 +50,10 @@ impl AgentTool for DelegateTool {
                 "task": {
                     "type": "string",
                     "description": "Complete, self-contained instructions for the sub-agent. It cannot see this conversation."
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Optional model id override for the sub-agent (e.g. a cheaper/faster model for simple steps). Defaults to the current model."
                 }
             },
             "required": ["task"]
@@ -72,9 +76,17 @@ impl AgentTool for DelegateTool {
             anyhow::bail!("delegate requires a non-empty task");
         }
 
-        ctx.emit_update(format!("sub-agent started: {task}"));
+        let model = ctx
+            .args
+            .get("model")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| self.model.clone());
 
-        let mut agent = Agent::new(Arc::clone(&self.provider), &self.model)
+        ctx.emit_update(format!("sub-agent started ({model}): {task}"));
+
+        let mut agent = Agent::new(Arc::clone(&self.provider), &model)
             .with_tools((self.make_tools)())
             .with_completion(self.completion.clone())
             .with_compaction(None);

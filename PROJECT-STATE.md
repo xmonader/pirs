@@ -1,7 +1,7 @@
 # PROJECT-STATE
 
 ## Current State
-- Done: pi core port (provider, loop, tools, rhai ext, CLI) + rpc mode + orchestrator + weak-model hardening wave: auto-compaction (+/compact), retry of empty/error completions, tool diet (use_tool) + --sequential, delegate sub-agents, corrective error phrasing, rhai exec() + weak-model.rhai pack (loop detector, verify-after-edit, plan pinning). 89 tests green, clippy clean. Repo: github.com/xmonader/pirs.
+- Done: pi core port (provider, loop, tools, rhai ext, CLI) + rpc mode + orchestrator + weak-model hardening wave (compaction, retry, diet, delegate, phrasing, exec, pack) + multi-model: delegate model override, orchestrator spawn --env. Live proof: strong planner -> delegate(model=weak) -> weak executor (no history leak) -> strong synthesis. 90 tests green, clippy clean. Repo: github.com/xmonader/pirs.
 - Next: ratatui TUI; Anthropic provider; model-aware tokenizer for compaction; skills; MCP. Rhai gotchas pinned in tests: backtick ${} interpolation only, trim() mutates in place, call_fn needs statements cleared.
 - Blocked: nothing.
 

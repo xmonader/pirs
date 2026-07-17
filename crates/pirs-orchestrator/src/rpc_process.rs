@@ -24,9 +24,16 @@ pub struct RpcProcess {
 }
 
 impl RpcProcess {
-    pub async fn spawn(cwd: &Path) -> anyhow::Result<Arc<Self>> {
+    pub async fn spawn(
+        cwd: &Path,
+        env: Option<&std::collections::HashMap<String, String>>,
+    ) -> anyhow::Result<Arc<Self>> {
         let bin = resolve_pirs_binary()?;
-        let mut child = Command::new(&bin)
+        let mut cmd = Command::new(&bin);
+        if let Some(env) = env {
+            cmd.envs(env);
+        }
+        let mut child = cmd
             .arg("--mode")
             .arg("rpc")
             .current_dir(cwd)

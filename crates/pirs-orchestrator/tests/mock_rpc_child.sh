@@ -4,7 +4,7 @@ while IFS= read -r line; do
   ty=$(echo "$parsed" | cut -d' ' -f1); id=$(echo "$parsed" | cut -d' ' -f2)
   case "$ty" in
     get_state)
-      echo "{\"id\":\"$id\",\"type\":\"response\",\"command\":\"get_state\",\"success\":true,\"data\":{\"sessionId\":\"fake-sid-123\",\"sessionFile\":\"/tmp/fake.jsonl\",\"model\":{\"id\":\"fake-model\",\"provider\":\"openai\"},\"isStreaming\":false}}" ;;
+      echo "{\"id\":\"$id\",\"type\":\"response\",\"command\":\"get_state\",\"success\":true,\"data\":{\"sessionId\":\"${PIRS_TEST_VAR:-fake-sid-123}\",\"sessionFile\":\"/tmp/fake.jsonl\",\"model\":{\"id\":\"fake-model\",\"provider\":\"openai\"},\"isStreaming\":false}}" ;;
     get_messages)
       echo "{\"id\":\"$id\",\"type\":\"response\",\"command\":\"get_messages\",\"success\":true,\"data\":{\"messages\":[]}}" ;;
     *)

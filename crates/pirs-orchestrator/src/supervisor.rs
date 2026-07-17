@@ -49,7 +49,12 @@ impl Supervisor {
         Ok(())
     }
 
-    pub async fn spawn(&self, cwd: &str, label: Option<String>) -> anyhow::Result<InstanceRecord> {
+    pub async fn spawn(
+        &self,
+        cwd: &str,
+        label: Option<String>,
+        env: Option<std::collections::HashMap<String, String>>,
+    ) -> anyhow::Result<InstanceRecord> {
         let mut record = InstanceRecord {
             id: uuid::Uuid::new_v4().to_string(),
             status: InstanceStatus::Starting,
@@ -61,7 +66,7 @@ impl Supervisor {
         };
         storage::upsert_instance(record.clone())?;
 
-        let result = self.start_process(&mut record).await;
+        let result = self.start_process(&mut record, env.as_ref()).await;
         match result {
             Ok(()) => {
                 record.status = InstanceStatus::Online;
@@ -83,8 +88,12 @@ impl Supervisor {
         }
     }
 
-    async fn start_process(&self, record: &mut InstanceRecord) -> anyhow::Result<()> {
-        let process = RpcProcess::spawn(std::path::Path::new(&record.cwd)).await?;
+    async fn start_process(
+        &self,
+        record: &mut InstanceRecord,
+        env: Option<&std::collections::HashMap<String, String>>,
+    ) -> anyhow::Result<()> {
+        let process = RpcProcess::spawn(std::path::Path::new(&record.cwd), env).await?;
         let id = record.id.clone();
         let live = Arc::clone(&self.live);
         let exit = process.on_exit();

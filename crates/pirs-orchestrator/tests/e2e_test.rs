@@ -30,6 +30,10 @@ async fn orchestrator_end_to_end_over_uds() {
         encode_message(&IpcRequest::Spawn {
             cwd,
             label: Some("test".into()),
+            env: Some(std::collections::HashMap::from([(
+                "PIRS_TEST_VAR".to_string(),
+                "env-reached-child".to_string(),
+            )])),
         })
         .trim(),
     )
@@ -40,7 +44,7 @@ async fn orchestrator_end_to_end_over_uds() {
     assert_eq!(v["ok"], true);
     let id = v["instance"]["id"].as_str().unwrap().to_string();
     assert_eq!(v["instance"]["status"], "online");
-    assert_eq!(v["instance"]["sessionId"], "fake-sid-123");
+    assert_eq!(v["instance"]["sessionId"], "env-reached-child");
 
     // list
     let resp = client::send_ipc_request(encode_message(&IpcRequest::List).trim())

@@ -124,7 +124,7 @@ async fn handle_connection(stream: UnixStream, supervisor: Arc<Supervisor>) -> a
 
 async fn handle_request(request: IpcRequest, supervisor: &Arc<Supervisor>) -> IpcResponse {
     match request {
-        IpcRequest::Spawn { cwd, label } => match supervisor.spawn(&cwd, label).await {
+        IpcRequest::Spawn { cwd, label, env } => match supervisor.spawn(&cwd, label, env).await {
             Ok(instance) => IpcResponse::SpawnResult {
                 ok: true,
                 instance: Some(instance),
