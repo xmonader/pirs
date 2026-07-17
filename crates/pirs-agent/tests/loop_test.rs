@@ -395,3 +395,44 @@ async fn tool_diet_blocks_hidden_tool_until_loaded() {
     ));
     assert!(worked, "tool should work after use_tool loads it");
 }
+
+#[tokio::test]
+async fn delegate_runs_subagent_with_fresh_context() {
+    use pirs_agent::delegate::DelegateTool;
+
+    let shared_seen: Arc<Mutex<Vec<Context>>> = Arc::new(Mutex::new(Vec::new()));
+    let provider = Arc::new(MockProvider {
+        scripted: Mutex::new(
+            vec![
+                tool_call_msg("c1", "delegate", json!({"task": "count words in 'a b c'"})),
+                text_msg("3 words"),
+                text_msg("final: 3 words"),
+            ]
+            .into(),
+        ),
+        seen: Arc::clone(&shared_seen),
+    });
+
+    let delegate = DelegateTool::new(
+        provider.clone(),
+        "mock-model",
+        CompletionOptions::default(),
+        || vec![Arc::new(EchoTool)],
+    );
+    let mut agent = Agent::new(provider, "mock-model").with_tools(vec![delegate]);
+    let new = agent.prompt("go").await.unwrap();
+
+    let delegated = new.iter().any(|m| matches!(
+        m,
+        Message::ToolResult(r) if !r.is_error && r.tool_name == "delegate" && r.content[0].as_text() == Some("3 words")
+    ));
+    assert!(delegated, "delegate result should be the sub-agent's answer");
+
+    let calls = shared_seen.lock().unwrap();
+    assert_eq!(calls.len(), 3, "main turn1 + sub-agent turn + main turn2");
+    let sub_ctx = &calls[1];
+    assert!(
+        !sub_ctx.messages.iter().any(|m| matches!(m, Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t == "go"))),
+        "sub-agent must not see the main conversation"
+    );
+}

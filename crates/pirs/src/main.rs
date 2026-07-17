@@ -230,6 +230,25 @@ async fn main() -> anyhow::Result<()> {
         })
     };
 
+    {
+        let delegate_provider = std::sync::Arc::new(
+            pirs_ai::OpenAiCompat::new(cli.base_url.clone()).with_max_retries(cli.max_retries),
+        );
+        let delegate_completion = CompletionOptions {
+            api_key: cli.api_key.clone().or_else(|| std::env::var("OPENAI_API_KEY").ok()),
+            ..Default::default()
+        };
+        let delegate_model = cli.model.clone();
+        let delegate_cwd = cwd.clone();
+        let delegate = pirs_agent::delegate::DelegateTool::new(
+            delegate_provider,
+            delegate_model,
+            delegate_completion,
+            move || pirs_tools::default_tools(delegate_cwd.clone()),
+        );
+        tools.push(delegate);
+    }
+
     let (visible, mut tools) = if cli.tool_diet {
         let set: pirs_agent::agent_loop::VisibleTools = std::sync::Arc::new(
             std::sync::Mutex::new(pirs_agent::use_tool::UseTool::default_visible()),
