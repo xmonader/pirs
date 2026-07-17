@@ -8,7 +8,7 @@ register_tool("word_count", "Count words in a string", #{
 
 fn tool_word_count(args) {
     let n = args.text.split(" ").filter(|w| w != "").len();
-    "#{n} words"
+    `${n} words`
 }
 
 fn on_tool_call(id, name, args) {
