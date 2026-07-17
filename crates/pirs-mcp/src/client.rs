@@ -14,7 +14,7 @@ const PROTOCOL_VERSION: &str = "2025-03-26";
 
 type PendingMap = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>>;
 
-pub struct McpClient {
+pub struct StdioClient {
     stdin: tokio::sync::Mutex<tokio::process::ChildStdin>,
     pending: PendingMap,
     next_id: AtomicU64,
@@ -22,13 +22,7 @@ pub struct McpClient {
     child: tokio::sync::Mutex<Child>,
 }
 
-pub struct ServerSpec {
-    pub name: String,
-    pub command: String,
-    pub args: Vec<String>,
-    pub env: HashMap<String, String>,
-    pub cwd: Option<String>,
-}
+
 
 #[derive(Debug, Clone)]
 pub struct McpToolDef {
@@ -43,21 +37,21 @@ pub struct CallResult {
     pub is_error: bool,
 }
 
-impl McpClient {
-    pub async fn spawn(spec: &ServerSpec) -> anyhow::Result<Arc<Self>> {
-        let mut cmd = Command::new(&spec.command);
-        cmd.args(&spec.args)
-            .envs(&spec.env)
+impl StdioClient {
+    pub async fn spawn(name: &str, command: &str, args: &[String], env: &HashMap<String, String>, cwd: Option<&str>) -> anyhow::Result<Arc<Self>> {
+        let mut cmd = Command::new(command);
+        cmd.args(args)
+            .envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        if let Some(cwd) = &spec.cwd {
+        if let Some(cwd) = cwd {
             cmd.current_dir(cwd);
         }
         let mut child = cmd
             .spawn()
-            .with_context(|| format!("failed to spawn MCP server '{}'", spec.name))?;
+            .with_context(|| format!("failed to spawn MCP server '{name}'"))?;
 
         let stdin = child.stdin.take().context("no stdin on MCP server")?;
         let stdout = child.stdout.take().context("no stdout on MCP server")?;
@@ -118,7 +112,7 @@ impl McpClient {
             });
         }
 
-        let client = Arc::new(McpClient {
+        let client = Arc::new(StdioClient {
             stdin: tokio::sync::Mutex::new(stdin),
             pending,
             next_id: AtomicU64::new(1),
@@ -274,5 +268,37 @@ impl McpClient {
 
     pub fn stderr_tail(&self) -> String {
         self.stderr.lock().unwrap().clone()
+    }
+}
+
+pub enum Client {
+    Stdio(Arc<StdioClient>),
+    Http(Arc<crate::http::HttpClient>),
+    LegacySse(Arc<crate::http::LegacySseClient>),
+}
+
+impl Client {
+    pub async fn list_tools(&self) -> anyhow::Result<Vec<McpToolDef>> {
+        match self {
+            Client::Stdio(c) => c.list_tools().await,
+            Client::Http(c) => c.list_tools().await,
+            Client::LegacySse(c) => c.list_tools().await,
+        }
+    }
+
+    pub async fn call_tool(&self, name: &str, arguments: Value) -> anyhow::Result<CallResult> {
+        match self {
+            Client::Stdio(c) => c.call_tool(name, arguments).await,
+            Client::Http(c) => c.call_tool(name, arguments).await,
+            Client::LegacySse(c) => c.call_tool(name, arguments).await,
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        match self {
+            Client::Stdio(c) => c.shutdown().await,
+            Client::Http(c) => c.shutdown().await,
+            Client::LegacySse(c) => c.shutdown().await,
+        }
     }
 }

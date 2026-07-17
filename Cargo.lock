@@ -1156,8 +1156,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "futures-util",
  "pirs-agent",
  "pirs-ai",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",

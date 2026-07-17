@@ -1,19 +1,23 @@
-use pirs_mcp::client::{McpClient, ServerSpec};
+use pirs_mcp::client::StdioClient;
 use std::collections::HashMap;
 
-fn spec() -> ServerSpec {
-    ServerSpec {
-        name: "echo".into(),
-        command: "python3".into(),
-        args: vec![format!("{}/mcp_echo.py", env!("CARGO_MANIFEST_DIR"),).replace("crates/pirs-mcp", "crates/pirs-mcp/tests")],
-        env: HashMap::new(),
-        cwd: None,
-    }
+fn script() -> String {
+    format!("{}/tests/mcp_echo.py", env!("CARGO_MANIFEST_DIR"))
+}
+
+async fn spawn() -> std::sync::Arc<StdioClient> {
+    StdioClient::spawn("echo", "python3", &[script()], &HashMap::new(), None)
+        .await
+        .unwrap()
+}
+
+async fn spawn_facade() -> std::sync::Arc<pirs_mcp::client::Client> {
+    std::sync::Arc::new(pirs_mcp::client::Client::Stdio(spawn().await))
 }
 
 #[tokio::test]
 async fn initialize_list_and_call() {
-    let client = McpClient::spawn(&spec()).await.unwrap();
+    let client = spawn().await;
     let tools = client.list_tools().await.unwrap();
     assert_eq!(tools.len(), 3);
     assert_eq!(tools[0].name, "echo");
@@ -37,7 +41,7 @@ async fn initialize_list_and_call() {
 
 #[tokio::test]
 async fn error_result_maps_is_error() {
-    let client = McpClient::spawn(&spec()).await.unwrap();
+    let client = spawn().await;
     let fail = client.call_tool("fail", serde_json::json!({})).await.unwrap();
     assert!(fail.is_error);
     assert_eq!(fail.content[0].as_text().unwrap(), "intentional failure");
@@ -46,7 +50,7 @@ async fn error_result_maps_is_error() {
 
 #[tokio::test]
 async fn unknown_tool_returns_error() {
-    let client = McpClient::spawn(&spec()).await.unwrap();
+    let client = spawn().await;
     let err = client.call_tool("nope", serde_json::json!({})).await.unwrap_err();
     assert!(err.to_string().contains("unknown tool"));
     client.shutdown().await;
@@ -54,7 +58,7 @@ async fn unknown_tool_returns_error() {
 
 #[tokio::test]
 async fn mcp_tool_as_agent_tool() {
-    let client = McpClient::spawn(&spec()).await.unwrap();
+    let client = spawn_facade().await;
     let defs = client.list_tools().await.unwrap();
     let tool: std::sync::Arc<dyn pirs_agent::AgentTool> = pirs_mcp::tool::McpTool::new("echo-srv", defs[0].clone(), client);
     assert_eq!(tool.name(), "mcp_echo-srv_echo");
@@ -72,14 +76,7 @@ async fn mcp_tool_as_agent_tool() {
 
 #[tokio::test]
 async fn spawn_failure_is_reported() {
-    let spec = ServerSpec {
-        name: "missing".into(),
-        command: "/nonexistent/binary".into(),
-        args: vec![],
-        env: HashMap::new(),
-        cwd: None,
-    };
-    match McpClient::spawn(&spec).await {
+    match StdioClient::spawn("missing", "/nonexistent/binary", &[], &HashMap::new(), None).await {
         Ok(_) => panic!("spawn should fail"),
         Err(e) => assert!(e.to_string().contains("failed to spawn MCP server")),
     }

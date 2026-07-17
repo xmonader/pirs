@@ -85,7 +85,20 @@ pirs is an MCP client (stdio transport). Declare servers in `.mcp.json` (project
 }
 ```
 
-Server tools appear as `mcp_<server>_<tool>` and are full citizens: schema validation, policy hooks (guardrails apply), usage accounting. `--no-mcp` disables. HTTP transport is not yet supported (stdio only). Prompt caching: `prompt_cache_key` is sent to api.openai.com; the usage line reports cache hit rate.
+Remote servers work too — streamable HTTP (any `url`) and legacy HTTP+SSE (`url` ending in `/sse` or `"type": "sse"`), with `headers` for auth and `${ENV_VAR}` interpolation in url/headers/args/env:
+
+```json
+{
+  "mcpServers": {
+    "marketplace-srv": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+Server tools appear as `mcp_<server>_<tool>` and are full citizens: schema validation, policy hooks (guardrails apply), usage accounting. `--no-mcp` disables. Prompt caching: `prompt_cache_key` is sent to api.openai.com; the usage line reports cache hit rate.
 
 ## Skills & commands (.claude / .agents / .pirs)
 

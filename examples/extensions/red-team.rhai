@@ -15,7 +15,9 @@ fn on_follow_up() {
     }
     state_set("needs_attack", false);
     let diff = exec("git diff HEAD 2>/dev/null | head -c 12000", 15).output;
-    if diff.trim() == "" {
+    let dtrim = diff;
+    dtrim.trim();
+    if dtrim == "" {
         return ();
     }
     let findings = run_subagent(`${ATTACK_PROMPT}\n\n${diff}`);

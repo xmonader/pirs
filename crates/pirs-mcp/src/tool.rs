@@ -4,17 +4,17 @@ use async_trait::async_trait;
 use pirs_agent::{AgentTool, ToolExecContext, ToolOutput};
 use serde_json::Value;
 
-use crate::client::{McpClient, McpToolDef};
+use crate::client::{Client, McpToolDef};
 
 pub struct McpTool {
     server_name: String,
     def: McpToolDef,
-    client: Arc<McpClient>,
+    client: Arc<Client>,
     full_name: String,
 }
 
 impl McpTool {
-    pub fn new(server_name: &str, def: McpToolDef, client: Arc<McpClient>) -> Arc<Self> {
+    pub fn new(server_name: &str, def: McpToolDef, client: Arc<Client>) -> Arc<Self> {
         Arc::new(McpTool {
             full_name: format!("mcp_{}_{}", sanitize(server_name), sanitize(&def.name)),
             server_name: server_name.to_string(),

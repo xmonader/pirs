@@ -305,11 +305,13 @@ impl ExtensionHost {
 
         let declared = registered.lock().unwrap().clone();
 
+        let has_dispatch = ast.iter_functions().any(|f| f.name == "tool_dispatch");
         for (tool_name, description, schema_map) in declared {
             let fn_name = format!("tool_{tool_name}");
-            if !ast.iter_functions().any(|f| f.name == fn_name) {
+            let has_named = ast.iter_functions().any(|f| f.name == fn_name);
+            if !has_named && !has_dispatch {
                 return Err(anyhow!(
-                    "{name}: register_tool(\"{tool_name}\") requires a function `fn {fn_name}(args)`"
+                    "{name}: register_tool(\"{tool_name}\") requires `fn {fn_name}(args)` or a `fn tool_dispatch(name, args)` fallback"
                 ));
             }
             let schema = rhai::serde::from_dynamic(&Dynamic::from_map(schema_map))
@@ -877,8 +879,18 @@ impl AgentTool for RhaiTool {
             let mut ext_guard = host.extensions[ext_index].lock().unwrap();
             let ext = &mut *ext_guard;
             let dynamic_args = rhai::serde::to_dynamic(&args).unwrap_or(Dynamic::UNIT);
-            let result: Result<Dynamic, _> =
-                ext.engine.call_fn(&mut ext.scope, &ext.ast, &fn_name, (dynamic_args,));
+            let result: Result<Dynamic, _> = if ext.ast.iter_functions().any(|f| f.name == fn_name)
+            {
+                ext.engine
+                    .call_fn(&mut ext.scope, &ext.ast, &fn_name, (dynamic_args,))
+            } else {
+                ext.engine.call_fn(
+                    &mut ext.scope,
+                    &ext.ast,
+                    "tool_dispatch",
+                    (fn_name.trim_start_matches("tool_").to_string(), dynamic_args),
+                )
+            };
             result.map_err(|e| anyhow!("{e}"))
         })
         .await??;
