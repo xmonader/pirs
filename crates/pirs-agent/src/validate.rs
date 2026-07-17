@@ -17,10 +17,19 @@ pub fn coerce_args(schema: &Value, args: &Value) -> Value {
     let mut out = obj.clone();
     for (key, value) in obj.iter() {
         let Some(prop_schema) = props.get(key) else { continue };
-        let Some(expected) = prop_schema.get("type").and_then(|t| t.as_str()) else {
+        let expected = match prop_schema.get("type") {
+            Some(Value::String(t)) => Some(t.clone()),
+            Some(Value::Array(types)) => types
+                .iter()
+                .filter_map(|t| t.as_str())
+                .find(|t| *t != "null")
+                .map(|t| t.to_string()),
+            _ => None,
+        };
+        let Some(expected) = expected else {
             continue;
         };
-        let coerced = match (expected, value) {
+        let coerced = match (expected.as_str(), value) {
             ("integer", Value::String(s)) => s
                 .trim()
                 .parse::<i64>()
@@ -58,6 +67,16 @@ mod tests {
         let schema = json!({"type":"object","properties":{"timeout":{"type":"integer"}}});
         let args = json!({"timeout": "30"});
         assert_eq!(coerce_args(&schema, &args), json!({"timeout": 30}));
+    }
+
+    #[test]
+    fn coerce_nullable_type_arrays() {
+        let schema = json!({"type":"object","properties":{
+            "limit":{"type":["integer","null"]},
+            "path":{"type":"string"}
+        }});
+        let args = json!({"limit": "60", "path": "f.rs"});
+        assert_eq!(coerce_args(&schema, &args), json!({"limit": 60, "path": "f.rs"}));
     }
 
     #[test]
