@@ -57,11 +57,7 @@ impl AgentTool for FindTool {
         builder.add(globset::Glob::new(&args.pattern).with_context(|| {
             format!("invalid glob pattern: {}", args.pattern)
         })?);
-        if args.pattern.contains('/') {
-            builder.add(globset::Glob::new(&format!("**/{}", args.pattern))?);
-        } else {
-            builder.add(globset::Glob::new(&format!("**/{0}", args.pattern))?);
-        }
+        builder.add(globset::Glob::new(&format!("**/{}", args.pattern))?);
         let set = builder.build()?;
 
         let mut walker = ignore::WalkBuilder::new(&root);

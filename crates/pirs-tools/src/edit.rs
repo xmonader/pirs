@@ -74,7 +74,7 @@ impl AgentTool for EditTool {
             }
             let span = locate(&body, &op.old_text)
                 .ok_or_else(|| not_found_error(&body, &op.old_text))?;
-            if &body[span.0..span.1] == op.new_text {
+            if body[span.0..span.1] == op.new_text {
                 bail!("newText is identical to the matched text; no change");
             }
             spans.push((span.0, span.1, op.new_text.clone()));

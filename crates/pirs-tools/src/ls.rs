@@ -52,10 +52,10 @@ impl AgentTool for LsTool {
         let limit = args.limit.unwrap_or(500);
 
         let mut entries: Vec<String> = Vec::new();
-        let mut read = std::fs::read_dir(&path)
+        let read = std::fs::read_dir(&path)
             .with_context(|| format!("failed to list {}", path.display()))?;
         let mut items: Vec<(String, bool)> = Vec::new();
-        while let Some(entry) = read.next() {
+        for entry in read {
             let entry = entry?;
             let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
             let name = entry.file_name().to_string_lossy().to_string();

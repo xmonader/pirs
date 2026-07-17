@@ -24,7 +24,7 @@ pub fn coerce_args(schema: &Value, args: &Value) -> Value {
             ("integer", Value::String(s)) => s
                 .trim()
                 .parse::<i64>()
-                .map(|n| Value::from(n))
+                .map(Value::from)
                 .unwrap_or_else(|_| value.clone()),
             ("number", Value::String(s)) => s
                 .trim()

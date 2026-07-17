@@ -59,10 +59,16 @@ impl LlmProvider for OpenAiCompat {
         let model_name = model.to_string();
 
         tokio::spawn(async move {
-            run_request(
-                client, url, provider, model_name, body, options, cancel, tx, max_retries,
-            )
-            .await;
+            let job = RequestJob {
+                client,
+                url,
+                provider,
+                model: model_name,
+                body,
+                options,
+                max_retries,
+            };
+            run_request(job, cancel, tx).await;
         });
 
         Box::pin(futures_util::stream::poll_fn(
@@ -71,17 +77,30 @@ impl LlmProvider for OpenAiCompat {
     }
 }
 
-async fn run_request(
+struct RequestJob {
     client: reqwest::Client,
     url: String,
     provider: String,
     model: String,
     body: Value,
     options: CompletionOptions,
+    max_retries: u32,
+}
+
+async fn run_request(
+    job: RequestJob,
     cancel: tokio_util::sync::CancellationToken,
     tx: tokio::sync::mpsc::Sender<StreamEvent>,
-    max_retries: u32,
 ) {
+    let RequestJob {
+        client,
+        url,
+        provider,
+        model,
+        body,
+        options,
+        max_retries,
+    } = job;
     let mut attempt = 0u32;
     let response = loop {
         let mut req = client.post(&url).json(&body);

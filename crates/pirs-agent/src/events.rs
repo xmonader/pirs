@@ -4,6 +4,13 @@ use pirs_ai::{AssistantMessage, ContentBlock, Message, ToolResultMessage};
 use serde_json::Value;
 
 pub type Emit = Arc<dyn Fn(AgentEvent) + Send + Sync>;
+pub type BeforeToolCallHook = Arc<dyn Fn(&str, &str, &Value) -> Option<String> + Send + Sync>;
+pub type AfterToolCallHook =
+    Arc<dyn Fn(&str, &str, &ToolResultMessage) -> Option<ToolResultPatch> + Send + Sync>;
+pub type TransformContextHook = Arc<dyn Fn(Vec<Message>) -> Vec<Message> + Send + Sync>;
+pub type ShouldStopHook = Arc<dyn Fn(&pirs_ai::Context) -> bool + Send + Sync>;
+pub type MessageSourceHook = Arc<dyn Fn() -> Vec<Message> + Send + Sync>;
+pub type ApiKeyHook = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
 #[derive(Debug, Clone)]
 pub enum AgentEvent {
@@ -29,15 +36,13 @@ pub struct ToolResultPatch {
 
 #[derive(Default, Clone)]
 pub struct Hooks {
-    pub before_tool_call:
-        Option<Arc<dyn Fn(&str, &str, &Value) -> Option<String> + Send + Sync>>,
-    pub after_tool_call:
-        Option<Arc<dyn Fn(&str, &str, &ToolResultMessage) -> Option<ToolResultPatch> + Send + Sync>>,
-    pub transform_context: Option<Arc<dyn Fn(Vec<Message>) -> Vec<Message> + Send + Sync>>,
-    pub should_stop_after_turn: Option<Arc<dyn Fn(&pirs_ai::Context) -> bool + Send + Sync>>,
-    pub get_steering_messages: Option<Arc<dyn Fn() -> Vec<Message> + Send + Sync>>,
-    pub get_follow_up_messages: Option<Arc<dyn Fn() -> Vec<Message> + Send + Sync>>,
-    pub get_api_key: Option<Arc<dyn Fn() -> Option<String> + Send + Sync>>,
+    pub before_tool_call: Option<BeforeToolCallHook>,
+    pub after_tool_call: Option<AfterToolCallHook>,
+    pub transform_context: Option<TransformContextHook>,
+    pub should_stop_after_turn: Option<ShouldStopHook>,
+    pub get_steering_messages: Option<MessageSourceHook>,
+    pub get_follow_up_messages: Option<MessageSourceHook>,
+    pub get_api_key: Option<ApiKeyHook>,
 }
 
 impl Hooks {

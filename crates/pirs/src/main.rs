@@ -100,12 +100,6 @@ impl Printer {
         }
     }
 
-    fn stream_delta(&self) -> impl Fn(&str) + '_ {
-        move |s: &str| {
-            print!("{s}");
-            let _ = std::io::stdout().flush();
-        }
-    }
 }
 
 impl Default for Printer {
@@ -184,8 +178,10 @@ async fn main() -> anyhow::Result<()> {
         system.push_str(&ctx);
     }
 
-    let mut completion = CompletionOptions::default();
-    completion.api_key = Some(api_key);
+    let completion = CompletionOptions {
+        api_key: Some(api_key),
+        ..Default::default()
+    };
 
     let mut agent = Agent::new(provider, &cli.model)
         .with_system_prompt(system)

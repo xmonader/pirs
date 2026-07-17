@@ -6,7 +6,9 @@ pub use openai::OpenAiCompat;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum StopReason {
+    #[default]
     Stop,
     Length,
     ToolUse,
@@ -14,11 +16,6 @@ pub enum StopReason {
     Aborted,
 }
 
-impl Default for StopReason {
-    fn default() -> Self {
-        StopReason::Stop
-    }
-}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]

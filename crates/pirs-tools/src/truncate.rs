@@ -16,14 +16,12 @@ pub fn head(content: &str, offset: usize, limit: usize) -> Window {
     let total_lines = content.lines().count();
     let mut text = String::new();
     let mut end_line = offset - 1;
-    let mut count = 0;
-    for (i, line) in content.lines().enumerate().skip(offset - 1) {
+    for (count, (i, line)) in content.lines().enumerate().skip(offset - 1).enumerate() {
         if count >= limit || text.len() + line.len() + 1 > MAX_BYTES {
             break;
         }
         text.push_str(line);
         text.push('\n');
-        count += 1;
         end_line = i + 1;
     }
     Window {
