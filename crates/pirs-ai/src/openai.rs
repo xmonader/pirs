@@ -24,7 +24,10 @@ impl OpenAiCompat {
                 .trim_end_matches('/')
                 .to_string(),
             provider_name: "openai".to_string(),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .user_agent(concat!("pirs/", env!("CARGO_PKG_VERSION")))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
             max_retries: 0,
         }
     }
