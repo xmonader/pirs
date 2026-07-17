@@ -12,7 +12,7 @@ fn on_event(ty, data) {
     }
     let snippet = data.text;
     if snippet.len() > 400 {
-        snippet = snippet.sub(0, 400);
+        snippet = snippet.sub_string(0, 400);
     }
     let title = run_subagent(
         `Write a single-line chapter title (max 12 words) summarizing this progress, no preamble:\n${snippet}`

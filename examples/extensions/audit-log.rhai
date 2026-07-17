@@ -21,7 +21,7 @@ fn on_tool_call(id, name, args) {
 fn on_tool_result(id, name, result) {
     let text = result.text;
     if text.len() > 500 {
-        text = text.sub(0, 500) + "...";
+        text = text.sub_string(0, 500) + "...";
     }
     let entry = #{
         ts: now_millis(),

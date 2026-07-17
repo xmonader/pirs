@@ -12,7 +12,7 @@ fn on_tool_result(id, name, result) {
     }
     let text = result.text;
     if text.len() > 300 {
-        text = text.sub(0, 300);
+        text = text.sub_string(0, 300);
     }
     let entry = #{ ts: now_millis(), tool: name, text: text };
     fs_append(diary_path(), entry.to_json() + "\n");

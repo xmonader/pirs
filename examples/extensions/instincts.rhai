@@ -10,7 +10,7 @@ fn on_tool_result(id, name, result) {
     if result.isError {
         let text = result.text;
         if text.len() > 300 {
-            text = text.sub(0, 300);
+            text = text.sub_string(0, 300);
         }
         state_set("last_failure", #{ tool: name, text: text });
         return ();
