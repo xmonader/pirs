@@ -47,6 +47,45 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     for err in &host.load_errors {
         eprintln!("[extension error] {err}");
     }
+    let runner_provider = std::sync::Arc::clone(&provider);
+    let runner_completion = CompletionOptions {
+        api_key: Some(opts.api_key.clone()),
+        ..Default::default()
+    };
+    let runner_model = opts.model.clone();
+    let runner_cwd = cwd.clone();
+    host.set_subagent_runner(std::sync::Arc::new(
+        move |task: String, model: Option<String>| {
+            let provider = std::sync::Arc::clone(&runner_provider);
+            let completion = runner_completion.clone();
+            let cwd = runner_cwd.clone();
+            let model = model.unwrap_or_else(|| runner_model.clone());
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| e.to_string())?;
+                rt.block_on(async move {
+                    let mut agent = pirs_agent::Agent::new(provider, &model)
+                        .with_tools(pirs_tools::default_tools(cwd))
+                        .with_completion(completion)
+                        .with_compaction(None);
+                    let new = agent.prompt(&task).await.map_err(|e| e.to_string())?;
+                    new.iter()
+                        .rev()
+                        .find_map(|m| match m {
+                            pirs_ai::Message::Assistant(a) if !a.text().trim().is_empty() => {
+                                Some(a.text())
+                            }
+                            _ => None,
+                        })
+                        .ok_or_else(|| "sub-agent produced no answer".to_string())
+                })
+            })
+            .join()
+            .unwrap_or_else(|_| Err("sub-agent thread panicked".to_string()))
+        },
+    ));
     let host = Arc::new(host);
     tools.extend(host.tools());
     let ext_hooks = host.hooks();

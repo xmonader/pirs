@@ -34,10 +34,14 @@ pub struct Extension {
     has_on_event: bool,
 }
 
+pub type SubagentRunner =
+    Arc<dyn Fn(String, Option<String>) -> Result<String, String> + Send + Sync>;
+
 pub struct ExtensionHost {
     extensions: Vec<Mutex<Extension>>,
     tool_registry: Vec<RegisteredTool>,
     command_registry: Vec<RegisteredCommand>,
+    subagent_runner: Mutex<Option<SubagentRunner>>,
     pub load_errors: Vec<String>,
 }
 
@@ -178,8 +182,19 @@ impl ExtensionHost {
             extensions: Vec::new(),
             tool_registry: Vec::new(),
             command_registry: Vec::new(),
+            subagent_runner: Mutex::new(None),
             load_errors: Vec::new(),
         }
+    }
+
+    /// Wire the ability for scripts to spawn fresh-context sub-agents.
+    /// Must be called before load_script for scripts that use run_subagent.
+    pub fn set_subagent_runner(&mut self, runner: SubagentRunner) {
+        *self.subagent_runner.lock().unwrap() = Some(runner);
+    }
+
+    pub fn has_subagent_runner(&self) -> bool {
+        self.subagent_runner.lock().unwrap().is_some()
     }
 
     pub fn load_default_dirs(&mut self, cwd: &Path) {
@@ -244,6 +259,22 @@ impl ExtensionHost {
                     .push((name.to_string(), description.to_string()));
             },
         );
+
+        if let Some(runner) = self.subagent_runner.lock().unwrap().clone() {
+            let r1 = Arc::clone(&runner);
+            engine.register_fn("run_subagent", move |task: &str| -> String {
+                match r1(task.to_string(), None) {
+                    Ok(answer) => answer,
+                    Err(e) => format!("sub-agent error: {e}"),
+                }
+            });
+            engine.register_fn("run_subagent", move |task: &str, model: &str| -> String {
+                match runner(task.to_string(), Some(model.to_string())) {
+                    Ok(answer) => answer,
+                    Err(e) => format!("sub-agent error: {e}"),
+                }
+            });
+        }
 
         let ast = engine
             .compile(source)
