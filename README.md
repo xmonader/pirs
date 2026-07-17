@@ -74,6 +74,14 @@ Shipped packs in `examples/extensions/`:
 | `critic-arena.rhai` | same task on two models, you judge the answers |
 | `relay-race.rhai` | draft→critique→finalize pipeline as one tool |
 | `hive-note.rhai` | shared blackboard for multi-instance coordination |
+| `critic.rhai` | interleaved mid-run diff review via background sub-agent (steers corrections) |
+| `approval2.rhai` | semantic blast-radius: sub-agent judges risky commands against the environment |
+| `skill-crystallizer.rhai` | distills successful runs into reusable SKILL.md files (self-improving) |
+| `rollback.rhai` | commit-tree snapshots per turn, /undo N rewinds files |
+| `swarm.rhai` | work-packet queue over the hive for multi-instance fleets |
+| `goal.rhai` | session goals: pinned, compaction-proof, verified, persisted |
+
+Loop features: `--cascade <draft_model>` drafts each turn on a cheap model and escalates only when the judge rejects it; `spawn_subagent(task, model, tag)` + `inbox()` let scripts run background sub-agents.
 
 Scripts can also spawn fresh-context sub-agents themselves: `run_subagent(task, model?)`.
 
