@@ -26,6 +26,23 @@ fn ok_runner() -> Runner {
 
 #[test]
 fn critic_spawns_background_review_after_n_edits() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let tmp = std::env::temp_dir().join(format!("pirs-critic-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::process::Command::new("git").args(["init", "-q"]).current_dir(&tmp).output().unwrap();
+    std::fs::write(tmp.join("f.txt"), "v1
+").unwrap();
+    std::process::Command::new("git").args(["add", "-A"]).current_dir(&tmp).output().unwrap();
+    std::process::Command::new("git")
+        .args(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::fs::write(tmp.join("f.txt"), "v2
+").unwrap();
+    let old_cwd = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&tmp).unwrap();
+
     let host = load("critic.rhai", Some(ok_runner()));
     let hooks = host.hooks();
     let after = hooks.after_tool_call.unwrap();
@@ -52,6 +69,7 @@ fn critic_spawns_background_review_after_n_edits() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert_eq!(msgs.len(), 1, "critic verdict should steer: {msgs:?}");
+    std::env::set_current_dir(old_cwd).unwrap();
 }
 
 #[test]
