@@ -14,6 +14,7 @@ mod auth;
 mod blame;
 mod discovery;
 mod pack;
+mod replay;
 mod rpc_mode;
 mod serve;
 mod session;
@@ -27,8 +28,11 @@ mod tui;
     about = "Rust port of the pi coding agent, extensible via rhai"
 )]
 struct Cli {
-    /// One-shot prompt; if omitted, starts the interactive REPL
-    prompt: Option<String>,
+    /// One-shot prompt; if omitted, starts the interactive REPL.
+    /// Collects all trailing args so pseudo-subcommands work unquoted
+    /// (`pirs blame src/main.rs:42`, `pirs pack install <url> --yes`).
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    prompt: Vec<String>,
 
     /// Run mode: interactive REPL or headless JSONL-over-stdio RPC
     #[arg(long, default_value = "repl")]
@@ -262,10 +266,24 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let mut cli = Cli::parse();
+    // Flatten trailing args into the single prompt string the rest of main
+    // (and the pseudo-subcommands) expect.
+    let cli = Cli {
+        prompt: {
+            let parts = std::mem::take(&mut cli.prompt);
+            if parts.is_empty() {
+                Vec::new()
+            } else {
+                vec![parts.join(" ")]
+            }
+        },
+        ..cli
+    };
 
     if let Some(dir) = cli
         .prompt
-        .clone()
+        .first()
+        .cloned()
         .filter(|p| p == "trust" || p.starts_with("trust "))
     {
         let arg = dir.trim_start_matches("trust").trim().to_string();
@@ -284,7 +302,72 @@ async fn main() -> anyhow::Result<()> {
     }
     if let Some(spec) = cli
         .prompt
-        .clone()
+        .first()
+        .cloned()
+        .filter(|p| p == "replay" || p.starts_with("replay "))
+    {
+        // pirs replay <session.jsonl> [--model X]
+        let args: Vec<&str> = spec
+            .trim_start_matches("replay")
+            .split_whitespace()
+            .collect();
+        let Some(file) = args.first().copied() else {
+            anyhow::bail!("usage: pirs replay <session.jsonl> [--model X]");
+        };
+        let live_model = args
+            .windows(2)
+            .find(|w| w[0] == "--model")
+            .map(|w| w[1].to_string());
+        let tape = replay::load_cassette(std::path::Path::new(file))?;
+        let cwd = std::env::current_dir()?;
+        let diverged = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let live = live_model.is_some();
+
+        let model = live_model.clone().unwrap_or_else(|| "replay".to_string());
+        let provider: Arc<dyn pirs_ai::LlmProvider> = if live {
+            if cli.provider == "anthropic" {
+                Arc::new(pirs_ai::AnthropicClient::new(cli.base_url.clone()))
+            } else {
+                Arc::new(OpenAiCompat::new(cli.base_url.clone()))
+            }
+        } else {
+            Arc::new(replay::ReplayProvider::new(&tape))
+        };
+        let tools: Vec<Arc<dyn pirs_agent::AgentTool>> = pirs_tools::default_tools(cwd)
+            .into_iter()
+            .map(|t| {
+                Arc::new(replay::CassetteTool::wrap(
+                    t,
+                    &tape,
+                    live,
+                    std::sync::Arc::clone(&diverged),
+                )) as Arc<dyn pirs_agent::AgentTool>
+            })
+            .collect();
+        let mut agent = Agent::new(provider, &model).with_tools(tools);
+        let produced = replay::run_replay(&mut agent, &tape).await;
+        let report = replay::compare(&replay::expected_of(&tape), &produced);
+        match report.divergence {
+            None => {
+                println!("replay: {} messages matched", report.matched);
+                return Ok(());
+            }
+            Some(d) => {
+                eprintln!(
+                    "replay diverged at message {}: expected {}, got {}",
+                    d.index, d.expected, d.actual
+                );
+                if let Some(t) = diverged.lock().unwrap().as_ref() {
+                    eprintln!("first tool divergence: {t}");
+                }
+                std::process::exit(if live { 2 } else { 1 });
+            }
+        }
+    }
+    if let Some(spec) = cli
+        .prompt
+        .first()
+        .cloned()
         .filter(|p| p.starts_with("pack install "))
     {
         // pirs pack install <git-url> [--pin <ref>] [--yes] [--force]
@@ -346,7 +429,8 @@ async fn main() -> anyhow::Result<()> {
     }
     if let Some(spec) = cli
         .prompt
-        .clone()
+        .first()
+        .cloned()
         .filter(|p| p == "blame" || p.starts_with("blame "))
     {
         let arg = spec.trim_start_matches("blame").trim().to_string();
@@ -361,7 +445,7 @@ async fn main() -> anyhow::Result<()> {
     }
     let cwd = std::env::current_dir()?;
 
-    if cli.prompt.as_deref() == Some("login") || cli.mode == "login" {
+    if cli.prompt.first().map(|s| s.as_str()) == Some("login") || cli.mode == "login" {
         let provider = if cli.provider == "anthropic" {
             "anthropic"
         } else {
@@ -859,7 +943,7 @@ async fn main() -> anyhow::Result<()> {
         .await;
     }
 
-    if let Some(prompt) = cli.prompt.take() {
+    if let Some(prompt) = cli.prompt.first().cloned() {
         run_turn(
             &mut agent,
             &prompt,
