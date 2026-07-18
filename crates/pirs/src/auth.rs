@@ -68,6 +68,7 @@ mod tests {
 
     #[test]
     fn set_get_roundtrip() {
+        let _guard = crate::TEST_ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
         set("anthropic", "sk-test-123").unwrap();
@@ -85,6 +86,7 @@ mod tests {
 
     #[test]
     fn resolve_order() {
+        let _guard = crate::TEST_ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
         std::env::remove_var("PIRS_TEST_KEY");

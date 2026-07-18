@@ -221,6 +221,7 @@ mod tests {
 
     #[test]
     fn discovers_skills_and_commands() {
+        let _guard = crate::TEST_ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         let skill_dir = dir.path().join(".claude/skills/review");
         std::fs::create_dir_all(&skill_dir).unwrap();

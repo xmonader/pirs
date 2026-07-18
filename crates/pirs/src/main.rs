@@ -212,6 +212,9 @@ fn summarize_args(tool: &str, args: &serde_json::Value) -> String {
         .unwrap_or_default()
 }
 
+#[cfg(test)]
+pub(crate) static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
