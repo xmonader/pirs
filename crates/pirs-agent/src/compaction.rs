@@ -203,6 +203,10 @@ pub async fn compact_messages(
     let Some(cut) = find_cut_point(messages, config.keep_recent_tokens) else {
         return false;
     };
+    // Demote, don't destroy: the dropped range goes to searchable storage.
+    if let Some(mem) = crate::memory::global() {
+        mem.add_messages(&messages[..cut]);
+    }
     emit(AgentEvent::CompactionStart {
         reason: "threshold".into(),
     });
@@ -329,5 +333,88 @@ mod tests {
         let t = transcript_text(&msgs);
         assert!(t.contains("[called bash with {\"command\":\"ls\"}]"));
         assert!(t.contains("Tool(x): file.txt"));
+    }
+}
+
+#[cfg(test)]
+mod demote_tests {
+    use super::*;
+    use async_trait::async_trait;
+    use std::sync::Arc;
+
+    struct SummaryProvider;
+
+    #[async_trait]
+    impl LlmProvider for SummaryProvider {
+        async fn stream(
+            &self,
+            _model: &str,
+            _context: &Context,
+            _options: &pirs_ai::CompletionOptions,
+            _cancel: CancellationToken,
+        ) -> futures::stream::BoxStream<'static, StreamEvent> {
+            Box::pin(futures::stream::iter(vec![
+                StreamEvent::TextDelta("summary of old turns".to_string()),
+                StreamEvent::Done(Box::new(AssistantMessage {
+                    stop_reason: StopReason::Stop,
+                    ..Default::default()
+                })),
+            ]))
+        }
+    }
+
+    /// Compaction demotes the dropped range into the memory store instead of
+    /// destroying it.
+    #[tokio::test]
+    async fn dropped_range_is_searchable_after_compaction() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = crate::memory::init_global(&tmp.path().join("m.db")).unwrap();
+
+        // Enough small messages to exceed keep_recent_tokens.
+        let mut messages = Vec::new();
+        for i in 0..40 {
+            messages.push(Message::user(format!("question {i} about zebra-{i}")));
+            messages.push(Message::Assistant(AssistantMessage {
+                content: vec![ContentBlock::text(format!("answer {i}"))],
+                usage: pirs_ai::Usage {
+                    input: 10,
+                    ..Default::default()
+                },
+                ..Default::default()
+            }));
+        }
+        let cfg = CompactionConfig {
+            context_window: 1_000,
+            reserve_tokens: 100,
+            keep_recent_tokens: 50,
+        };
+        let emit: crate::events::Emit = std::sync::Arc::new(|_| {});
+        let provider: Arc<dyn LlmProvider> = Arc::new(SummaryProvider);
+        let usage = std::sync::Arc::new(std::sync::Mutex::new(pirs_ai::Usage::default()));
+        let compacted = compact_messages(
+            &provider,
+            "m",
+            &mut messages,
+            &cfg,
+            &emit,
+            CancellationToken::new(),
+            &usage,
+        )
+        .await;
+        assert!(compacted);
+        let first_is_summary = matches!(
+            &messages[0],
+            Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("summary of old turns"))
+        );
+        assert!(first_is_summary, "summary message not spliced in");
+
+        // An early-turn token that was compacted away is still retrievable.
+        let hits = store.search("zebra-1 ", 10);
+        assert!(
+            hits.iter().any(|h| h.snippet.contains("zebra-1")),
+            "dropped message not in memory: {hits:?}"
+        );
+        // Prevent cross-test pollution of the process global.
+        crate::memory::clear_global_for_tests();
     }
 }

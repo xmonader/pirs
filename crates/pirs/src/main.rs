@@ -701,6 +701,9 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or_else(|| "unknown".to_string()),
         &cli.model,
     );
+    if let Err(e) = pirs_agent::memory::init_global(&cwd.join(".pirs").join("memory.db")) {
+        eprintln!("[memory disabled: {e}]");
+    }
     if cli.resume {
         match session::load_latest(&cwd) {
             Ok((path, messages)) => {
