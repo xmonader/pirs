@@ -229,7 +229,7 @@ pub fn spawn_bash_job(
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
-    let mut child = cmd.spawn()?;
+    let child = cmd.spawn()?;
     {
         let mut j = job.lock().unwrap();
         j.pid = Some(child.id());
@@ -333,7 +333,7 @@ impl AgentTool for JobWaitTool {
         let args: JobWaitArgs = serde_json::from_value(ctx.args)?;
         let timeout = std::time::Duration::from_secs(args.timeout.unwrap_or(300));
         match jobs::registry().wait(args.id, timeout).await {
-            Some(status) => {
+            Some(_status) => {
                 let job = jobs::registry()
                     .get(args.id)
                     .ok_or_else(|| anyhow::anyhow!("no such job"))?;
