@@ -203,6 +203,40 @@ impl Graph {
             .unwrap_or_default()
     }
 
+    /// Names of test functions that directly call a symbol defined in `path`.
+    /// Deliberately shallow (direct callers only): transitive closure over a
+    /// name-based graph explodes until you're re-running half the suite. A
+    /// symbol counts as a test when its name starts with `test` or it lives
+    /// in a `tests/` path or a `*_test.rs` file.
+    pub fn affected_tests(&self, path: &Path) -> Vec<String> {
+        fn is_test(s: &Symbol) -> bool {
+            s.name.starts_with("test")
+                || s.file.components().any(|c| c.as_os_str() == "tests")
+                || s.file
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .map(|f| f.ends_with("_test.rs"))
+                    .unwrap_or(false)
+        }
+        let mut out: Vec<String> = self
+            .file_symbols(path)
+            .into_iter()
+            .flat_map(|s| self.callers(&s.name))
+            .filter(|c| is_test(c))
+            .map(|c| c.name.clone())
+            .collect();
+        // Tests defined in the edited file itself are always affected.
+        out.extend(
+            self.file_symbols(path)
+                .into_iter()
+                .filter(|s| is_test(s))
+                .map(|s| s.name.clone()),
+        );
+        out.sort();
+        out.dedup();
+        out
+    }
+
     pub fn top(&self, n: usize) -> Vec<(&Symbol, f64)> {
         let mut scored: Vec<(&Symbol, f64)> = self
             .symbols

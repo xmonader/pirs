@@ -121,3 +121,38 @@ fn file_symbols_map() {
     assert!(names.contains(&"boot"));
     assert!(names.contains(&"Server"));
 }
+
+#[test]
+fn affected_tests_direct_callers_and_same_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    std::fs::create_dir_all(src.join("tests")).unwrap();
+    std::fs::write(
+        src.join("lib.rs"),
+        r#"
+fn parse_config() -> u32 { 42 }
+fn helper() { parse_config(); }
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        src.join("tests").join("config_test.rs"),
+        r#"
+fn test_parse_config() { parse_config(); }
+fn unrelated_helper() {}
+"#,
+    )
+    .unwrap();
+    let graph = Graph::build(dir.path());
+
+    let hit = graph.affected_tests(&src.join("lib.rs"));
+    assert!(hit.iter().any(|t| t == "test_parse_config"), "{hit:?}");
+    assert!(!hit.iter().any(|t| t == "unrelated_helper"), "{hit:?}");
+
+    // Editing the test file itself marks its own tests affected.
+    let own = graph.affected_tests(&src.join("tests").join("config_test.rs"));
+    assert!(own.iter().any(|t| t == "test_parse_config"), "{own:?}");
+
+    // A file with no graph symbols yields nothing, not a panic.
+    assert!(graph.affected_tests(&src.join("nope.rs")).is_empty());
+}

@@ -75,6 +75,20 @@ pub fn set_session_meta(session_id: &str, model: &str) {
     *SESSION_META.write().unwrap() = (session_id.to_string(), model.to_string());
 }
 
+/// Query functions contributed by the embedding application (e.g. the CLI
+/// exposes the code graph). Each becomes a rhai fn `name(path) -> [String]`.
+/// Register before loading extensions.
+type QueryFn = std::sync::Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>;
+static QUERY_FNS: std::sync::RwLock<Vec<(String, QueryFn)>> = std::sync::RwLock::new(Vec::new());
+
+/// Register a host query fn available to all subsequently-loaded extensions.
+pub fn register_query_fn(name: &str, f: impl Fn(&str) -> Vec<String> + Send + Sync + 'static) {
+    QUERY_FNS
+        .write()
+        .unwrap()
+        .push((name.to_string(), std::sync::Arc::new(f)));
+}
+
 fn build_engine(state: &StateStore) -> Engine {
     let mut engine = Engine::new();
     engine.set_max_operations(200_000);
@@ -144,6 +158,12 @@ fn build_engine(state: &StateStore) -> Engine {
     engine.register_fn("agent_model", || -> String {
         SESSION_META.read().unwrap().1.clone()
     });
+    for (name, f) in QUERY_FNS.read().unwrap().iter() {
+        let f = std::sync::Arc::clone(f);
+        engine.register_fn(name, move |path: &str| -> rhai::Array {
+            f(path).into_iter().map(Dynamic::from).collect()
+        });
+    }
     engine.register_fn("now_millis", || -> rhai::INT {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

@@ -419,6 +419,15 @@ async fn main() -> anyhow::Result<()> {
         None
     } else {
         let mut h = pirs_rhai::ExtensionHost::new();
+        if let Some(g) = &graph {
+            let g = std::sync::Arc::clone(g);
+            let cwd_q = cwd.clone();
+            pirs_rhai::register_query_fn("graph_affected_tests", move |path| {
+                let p = std::path::PathBuf::from(path);
+                let abs = if p.is_absolute() { p } else { cwd_q.join(p) };
+                g.get().affected_tests(&abs)
+            });
+        }
         h.set_subagent_runner(subagent::build_subagent_runner(
             std::sync::Arc::clone(&provider),
             CompletionOptions {
