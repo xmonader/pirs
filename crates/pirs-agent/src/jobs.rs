@@ -19,6 +19,7 @@ pub struct Job {
     pub id: u64,
     pub kind: JobKind,
     pub description: String,
+    pub group: Option<String>,
     pub status: JobStatus,
     pub output_path: PathBuf,
     pub started_at: u64,
@@ -96,6 +97,7 @@ impl JobRegistry {
             id,
             kind,
             description,
+            group: None,
             status: JobStatus::Running,
             output_path,
             started_at: pirs_ai::now_millis(),
@@ -150,6 +152,12 @@ impl JobRegistry {
         }
     }
 
+    pub fn set_group(&self, id: u64, group: impl Into<String>) {
+        if let Some(job) = self.jobs.lock().unwrap().get(&id) {
+            job.lock().unwrap().group = Some(group.into());
+        }
+    }
+
     pub fn set_progress_handle(&self, id: u64, progress: Arc<Mutex<String>>) {
         if let Some(job) = self.jobs.lock().unwrap().get(&id) {
             job.lock().unwrap().progress = Some(progress);
@@ -184,7 +192,13 @@ impl JobRegistry {
             .lock()
             .unwrap()
             .values()
-            .map(|j| j.lock().unwrap().status_line())
+            .map(|j| {
+                let job = j.lock().unwrap();
+                match &job.group {
+                    Some(g) => format!("[{g}] {}", job.status_line()),
+                    None => job.status_line(),
+                }
+            })
             .collect()
     }
 }

@@ -49,6 +49,22 @@ pub struct ExtensionHost {
 
 type StateStore = Arc<Mutex<std::collections::BTreeMap<String, Dynamic>>>;
 
+fn cache_path_for(key: &str) -> std::path::PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let mut name = String::new();
+    for c in key.chars() {
+        name.push(if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+            c
+        } else {
+            '_'
+        });
+    }
+    std::path::Path::new(&home)
+        .join(".pirs")
+        .join("cache")
+        .join(format!("{name}.json"))
+}
+
 fn build_engine(state: &StateStore) -> Engine {
     let mut engine = Engine::new();
     engine.set_max_operations(200_000);
@@ -76,6 +92,27 @@ fn build_engine(state: &StateStore) -> Engine {
             .map(|d| d.to_string())
             .collect::<Vec<_>>()
             .join(sep)
+    });
+    engine.register_fn("cache_get", |key: &str| -> Dynamic {
+        let path = cache_path_for(key);
+        match std::fs::read_to_string(path) {
+            Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                Ok(v) => rhai::serde::to_dynamic(&v).unwrap_or(Dynamic::UNIT),
+                Err(_) => Dynamic::UNIT,
+            },
+            Err(_) => Dynamic::UNIT,
+        }
+    });
+    engine.register_fn("cache_put", |key: &str, value: Dynamic| -> bool {
+        let path = cache_path_for(key);
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let json: serde_json::Value = match rhai::serde::from_dynamic(&value) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        std::fs::write(path, json.to_string()).is_ok()
     });
     engine.register_fn("sha256_hex", |data: &str| -> String {
         use sha2::Digest;
@@ -301,7 +338,8 @@ impl ExtensionHost {
             },
         );
 
-        if let Some(runner) = self.subagent_runner.lock().unwrap().clone() {
+        let runner_opt = self.subagent_runner.lock().unwrap().clone();
+        if let Some(runner) = runner_opt.clone() {
             let r1 = Arc::clone(&runner);
             engine.register_fn("run_subagent", move |task: &str| -> String {
                 match r1(task.to_string(), None) {
@@ -331,10 +369,20 @@ impl ExtensionHost {
                         Some(model.to_string())
                     };
                     let tag = tag.to_string();
+                    let (job_id, _job) = pirs_agent::jobs::registry().register(
+                        pirs_agent::jobs::JobKind::Agent,
+                        task.chars().take(60).collect(),
+                        std::env::temp_dir().join("pirs-subagent.log"),
+                        None,
+                    );
+                    pirs_agent::jobs::registry().set_group(job_id, tag.clone());
                     let tag2 = tag.clone();
                     std::thread::spawn(move || {
                         let result = runner(task, model)
                             .unwrap_or_else(|e| format!("sub-agent error: {e}"));
+                        let status = if result.starts_with("sub-agent error") { 1 } else { 0 };
+                        pirs_agent::jobs::registry()
+                            .set_status(job_id, pirs_agent::jobs::JobStatus::Exited(status));
                         inbox.lock().unwrap().push((tag, result));
                     });
                     tag2
@@ -376,6 +424,24 @@ impl ExtensionHost {
 
         let mut ast = ast;
         ast.clear_statements();
+        if let Some(pm_runner) = runner_opt {
+            let pm_ast = ast.clone();
+            let pm_state = Arc::clone(&state);
+            engine.register_fn(
+                "parallel_map",
+                move |items: rhai::Array, concurrency: rhai::INT, fn_name: &str, model: &str| -> rhai::Array {
+                    parallel_map_impl(
+                        pm_ast.clone(),
+                        pm_state.clone(),
+                        pm_runner.clone(),
+                        items,
+                        concurrency.max(1) as usize,
+                        fn_name,
+                        model,
+                    )
+                },
+            );
+        }
 
         let declared = registered.lock().unwrap().clone();
 
@@ -762,6 +828,79 @@ impl ExtensionHost {
             }
         });
     }
+}
+
+fn worker_engine(state: &StateStore, runner: &SubagentRunner) -> Engine {
+    let mut engine = build_engine(state);
+    let r1 = runner.clone();
+    engine.register_fn("run_subagent", move |task: &str| -> String {
+        match r1(task.to_string(), None) {
+            Ok(a) => a,
+            Err(e) => format!("sub-agent error: {e}"),
+        }
+    });
+    let r2 = runner.clone();
+    engine.register_fn("run_subagent", move |task: &str, model: &str| -> String {
+        match r2(task.to_string(), Some(model.to_string())) {
+            Ok(a) => a,
+            Err(e) => format!("sub-agent error: {e}"),
+        }
+    });
+    engine
+}
+
+fn parallel_map_impl(
+    ast: AST,
+    state: StateStore,
+    runner: SubagentRunner,
+    items: rhai::Array,
+    concurrency: usize,
+    fn_name: &str,
+    model: &str,
+) -> rhai::Array {
+    let mut results: Vec<Dynamic> = vec![Dynamic::UNIT; items.len()];
+    let mut idx = 0usize;
+    while idx < items.len() {
+        let end = (idx + concurrency).min(items.len());
+        let mut handles = Vec::new();
+        for (i, item) in items[idx..end].iter().enumerate() {
+            let ast = ast.clone();
+            let state = state.clone();
+            let runner = runner.clone();
+            let item = item.clone();
+            let fn_name = fn_name.to_string();
+            let model = if model.is_empty() {
+                None
+            } else {
+                Some(model.to_string())
+            };
+            handles.push((
+                idx + i,
+                std::thread::spawn(move || {
+                    if fn_name.is_empty() {
+                        match runner(item.to_string(), model) {
+                            Ok(answer) => Dynamic::from(answer),
+                            Err(e) => Dynamic::from(format!("sub-agent error: {e}")),
+                        }
+                    } else {
+                        let engine = worker_engine(&state, &runner);
+                        let mut scope = Scope::new();
+                        match engine
+                            .call_fn::<Dynamic>(&mut scope, &ast, &fn_name, (item,))
+                        {
+                            Ok(d) => d,
+                            Err(e) => Dynamic::from(format!("__error__: {e}")),
+                        }
+                    }
+                }),
+            ));
+        }
+        for (i, h) in handles {
+            results[i] = h.join().unwrap_or_else(|_| Dynamic::from("worker panicked"));
+        }
+        idx = end;
+    }
+    results
 }
 
 enum ExtensionFlag {
