@@ -50,7 +50,11 @@ function refreshState() {
 }
 setInterval(refreshState, 2000);
 
-const TOKEN = "__PIRS_TOKEN__";
+let TOKEN = "__PIRS_TOKEN__";
+if (!TOKEN) {
+  TOKEN = localStorage.getItem('pirs-token') || prompt('pirs auth token:') || '';
+  localStorage.setItem('pirs-token', TOKEN);
+}
 const authInit = { headers: { Authorization: `Bearer ${TOKEN}` } };
 const es = new EventSource(`/events?token=${encodeURIComponent(TOKEN)}`);
 es.onmessage = (e) => {

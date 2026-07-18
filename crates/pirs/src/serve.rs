@@ -90,7 +90,8 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
         });
     }
 
-    if !matches!(opts.bind.as_str(), "127.0.0.1" | "localhost" | "::1") && !opts.allow_external {
+    let loopback = matches!(opts.bind.as_str(), "127.0.0.1" | "localhost" | "::1");
+    if !loopback && !opts.allow_external {
         anyhow::bail!(
             "refusing to bind {} without --serve-external (and set --serve-token for auth)",
             opts.bind
@@ -109,6 +110,7 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
             prompts: prompt_tx.clone(),
             agent: Arc::clone(&agent),
             token: opts.token.clone(),
+            embed_token: loopback,
         };
         tokio::spawn(async move {
             if let Err(e) = handle_connection(stream, state).await {
@@ -124,10 +126,43 @@ struct AppState {
     prompts: tokio::sync::mpsc::UnboundedSender<String>,
     agent: Arc<tokio::sync::Mutex<Agent>>,
     token: String,
+    /// Embed the auth token in the served page. Only safe when loopback-bound;
+    /// on external binds the page must prompt for the token instead.
+    embed_token: bool,
 }
 
-async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> anyhow::Result<()> {
-    let (read, mut write) = stream.into_split();
+/// Compare an Authorization header value against the expected token. The
+/// scheme is case-insensitive per RFC 9110; the token itself is compared in
+/// constant time.
+fn bearer_matches(authorization: &str, token: &str) -> bool {
+    let Some((scheme, value)) = authorization.split_once(' ') else {
+        return false;
+    };
+    if !scheme.eq_ignore_ascii_case("bearer") {
+        return false;
+    }
+    constant_time_eq(value.trim().as_bytes(), token.as_bytes())
+}
+
+/// Extract a query parameter from a request path (minimal parser; values are
+/// percent-decoded only for the token's alphabet, which needs no decoding).
+fn query_param(path: &str, key: &str) -> Option<String> {
+    let query = path.split_once('?')?.1;
+    for pair in query.split('&') {
+        if let Some((k, v)) = pair.split_once('=') {
+            if k == key {
+                return Some(v.to_string());
+            }
+        }
+    }
+    None
+}
+
+async fn handle_connection<S>(stream: S, state: AppState) -> anyhow::Result<()>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let (read, mut write) = tokio::io::split(stream);
     let mut reader = BufReader::new(read);
     let mut request_line = String::new();
     reader.read_line(&mut request_line).await?;
@@ -150,19 +185,24 @@ async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> an
         if line.trim().is_empty() {
             break;
         }
-        let lower = line.to_ascii_lowercase();
-        if let Some(rest) = lower.strip_prefix("content-length:") {
-            content_length = rest.trim().parse().unwrap_or(0);
-            if content_length > 8 * 1024 * 1024 {
-                respond(&mut write, 413, "text/plain", "body too large").await?;
-                return Ok(());
+        // Header names are case-insensitive; values are case-sensitive. Split
+        // at the first ':' and lowercase only the name (previously the whole
+        // line was lowercased, which corrupted bearer tokens and made every
+        // authenticated write fail).
+        if let Some((name, value)) = line.split_once(':') {
+            let value = value.trim();
+            match name.trim().to_ascii_lowercase().as_str() {
+                "content-length" => {
+                    content_length = value.parse().unwrap_or(0);
+                    if content_length > 8 * 1024 * 1024 {
+                        respond(&mut write, 413, "text/plain", "body too large").await?;
+                        return Ok(());
+                    }
+                }
+                "authorization" => authorization = value.to_string(),
+                "origin" => origin = value.to_ascii_lowercase(),
+                _ => {}
             }
-        }
-        if let Some(rest) = lower.strip_prefix("authorization:") {
-            authorization = rest.trim().to_string();
-        }
-        if let Some(rest) = lower.strip_prefix("origin:") {
-            origin = rest.trim().to_string();
         }
     }
 
@@ -182,8 +222,7 @@ async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> an
             .await?;
             return Ok(());
         }
-        let expected = format!("Bearer {}", state.token);
-        if !constant_time_eq(authorization.as_bytes(), expected.as_bytes()) {
+        if !bearer_matches(&authorization, &state.token) {
             respond(
                 &mut write,
                 403,
@@ -195,12 +234,23 @@ async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> an
         }
     }
 
-    match (method, path) {
+    let route = path.split('?').next().unwrap_or("/");
+    match (method, route) {
         ("GET", "/") | ("GET", "/index.html") => {
-            let page = PAGE.replace("__PIRS_TOKEN__", &state.token);
+            let embedded = if state.embed_token { &state.token } else { "" };
+            let page = PAGE.replace("__PIRS_TOKEN__", embedded);
             respond(&mut write, 200, "text/html; charset=utf-8", &page).await?;
         }
         ("GET", "/events") => {
+            // EventSource cannot set headers, so the token arrives as a query
+            // parameter. It must still be validated.
+            let ok = query_param(path, "token")
+                .map(|t| constant_time_eq(t.as_bytes(), state.token.as_bytes()))
+                .unwrap_or(false);
+            if !ok {
+                respond(&mut write, 403, "text/plain", "missing or invalid token").await?;
+                return Ok(());
+            }
             write
                 .write_all(b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncache-control: no-cache\r\nconnection: close\r\n\r\n")
                 .await?;
@@ -261,15 +311,19 @@ async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> an
     Ok(())
 }
 
-async fn respond(
-    write: &mut tokio::net::tcp::OwnedWriteHalf,
+async fn respond<W: tokio::io::AsyncWrite + Unpin>(
+    write: &mut W,
     status: u16,
     content_type: &str,
     body: &str,
 ) -> anyhow::Result<()> {
     let status_text = match status {
         200 => "200 OK",
+        400 => "400 Bad Request",
+        403 => "403 Forbidden",
         404 => "404 Not Found",
+        413 => "413 Content Too Large",
+        431 => "431 Request Header Fields Too Large",
         _ => "500 Internal Server Error",
     };
     write
@@ -305,6 +359,16 @@ fn role_of(m: &Message) -> &'static str {
     }
 }
 
+fn thinking_of(a: &pirs_ai::AssistantMessage) -> String {
+    a.content
+        .iter()
+        .filter_map(|b| match b {
+            pirs_ai::ContentBlock::Thinking { thinking, .. } => Some(thinking.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
 fn text_of(m: &Message) -> String {
     match m {
         Message::User(u) => match &u.content {
@@ -325,12 +389,142 @@ fn text_of(m: &Message) -> String {
     }
 }
 
-fn thinking_of(a: &pirs_ai::AssistantMessage) -> String {
-    a.content
-        .iter()
-        .filter_map(|b| match b {
-            pirs_ai::ContentBlock::Thinking { thinking, .. } => Some(thinking.as_str()),
-            _ => None,
-        })
-        .collect()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bearer_matches_mixed_case_token() {
+        // Regression: the header value must NOT be lowercased before compare —
+        // mixed-case tokens used to 403 every authenticated write.
+        assert!(bearer_matches("Bearer AbCdEf123", "AbCdEf123"));
+        assert!(bearer_matches("bearer AbCdEf123", "AbCdEf123"));
+        assert!(bearer_matches("BEARER AbCdEf123", "AbCdEf123"));
+        assert!(!bearer_matches("Bearer abcdef123", "AbCdEf123"));
+        assert!(!bearer_matches("Bearer AbCdEf12", "AbCdEf123"));
+        assert!(!bearer_matches("AbCdEf123", "AbCdEf123"));
+        assert!(!bearer_matches("", "AbCdEf123"));
+    }
+
+    #[test]
+    fn query_param_extracts_token() {
+        assert_eq!(
+            query_param("/events?token=abc123", "token"),
+            Some("abc123".to_string())
+        );
+        assert_eq!(
+            query_param("/events?x=1&token=t", "token"),
+            Some("t".into())
+        );
+        assert_eq!(query_param("/events", "token"), None);
+        assert_eq!(query_param("/events?tok=abc", "token"), None);
+    }
+
+    struct StubProvider;
+
+    #[async_trait::async_trait]
+    impl pirs_ai::LlmProvider for StubProvider {
+        async fn stream(
+            &self,
+            _model: &str,
+            _context: &pirs_ai::Context,
+            _options: &pirs_ai::CompletionOptions,
+            _cancel: tokio_util::sync::CancellationToken,
+        ) -> futures::stream::BoxStream<'static, pirs_ai::StreamEvent> {
+            Box::pin(futures::stream::empty())
+        }
+    }
+
+    fn test_state(token: &str) -> (AppState, tokio::sync::mpsc::UnboundedReceiver<String>) {
+        let (events, _) = tokio::sync::broadcast::channel(8);
+        let (prompts, rx) = tokio::sync::mpsc::unbounded_channel();
+        let agent = Agent::new(std::sync::Arc::new(StubProvider), "stub");
+        (
+            AppState {
+                events,
+                prompts,
+                agent: std::sync::Arc::new(tokio::sync::Mutex::new(agent)),
+                token: token.to_string(),
+                embed_token: true,
+            },
+            rx,
+        )
+    }
+
+    async fn raw_request(state: AppState, request: &str) -> String {
+        let (client, server) = tokio::io::duplex(4096);
+        let (mut cr, mut cw) = tokio::io::split(client);
+        let server_task = tokio::spawn(handle_connection(server, state));
+        cw.write_all(request.as_bytes()).await.unwrap();
+        cw.shutdown().await.unwrap();
+        let mut resp = String::new();
+        tokio::io::AsyncReadExt::read_to_string(&mut cr, &mut resp)
+            .await
+            .unwrap();
+        let _ = server_task.await;
+        resp
+    }
+
+    /// For streaming endpoints (SSE never closes): read just the status line.
+    async fn raw_request_status(state: AppState, request: &str) -> String {
+        let (client, server) = tokio::io::duplex(4096);
+        let (mut cr, mut cw) = tokio::io::split(client);
+        tokio::spawn(handle_connection(server, state));
+        cw.write_all(request.as_bytes()).await.unwrap();
+        let mut line = String::new();
+        tokio::io::AsyncBufReadExt::read_line(&mut tokio::io::BufReader::new(&mut cr), &mut line)
+            .await
+            .unwrap();
+        line
+    }
+
+    /// Regression: an authorized POST must NOT 403. The header parser used to
+    /// lowercase the header VALUE, so any mixed-case token failed the compare
+    /// and every authenticated write was rejected.
+    #[tokio::test]
+    async fn authorized_post_prompt_returns_200() {
+        let (state, mut rx) = test_state("tokEn123");
+        let resp = raw_request(
+            state,
+            "POST /prompt HTTP/1.1\r\nhost: x\r\nauthorization: Bearer tokEn123\r\ncontent-length: 13\r\n\r\n{\"text\":\"hi\"}",
+        )
+        .await;
+        assert!(
+            resp.starts_with("HTTP/1.1 200"),
+            "got: {}",
+            &resp[..resp.len().min(120)]
+        );
+        assert_eq!(rx.try_recv().ok().as_deref(), Some("hi"));
+    }
+
+    #[tokio::test]
+    async fn wrong_token_post_returns_403() {
+        let (state, _rx) = test_state("tokEn123");
+        let resp = raw_request(
+            state,
+            "POST /prompt HTTP/1.1\r\nhost: x\r\nauthorization: Bearer wrong\r\ncontent-length: 13\r\n\r\n{\"text\":\"hi\"}",
+        )
+        .await;
+        assert!(
+            resp.starts_with("HTTP/1.1 403"),
+            "got: {}",
+            &resp[..resp.len().min(120)]
+        );
+    }
+
+    #[tokio::test]
+    async fn events_requires_valid_query_token() {
+        // No token -> 403 (reads are authenticated too).
+        let (state2, _rx2) = test_state("sekrit");
+        let line = raw_request_status(state2, "GET /events HTTP/1.1\r\nhost: x\r\n\r\n").await;
+        assert!(line.starts_with("HTTP/1.1 403"), "got: {line}");
+        // Correct token in query -> 200 SSE (router strips the query string).
+        let (state, _rx) = test_state("sekrit");
+        let line = raw_request_status(
+            state,
+            "GET /events?token=sekrit HTTP/1.1\r\nhost: x\r\n\r\n",
+        )
+        .await;
+        assert!(line.starts_with("HTTP/1.1 200"), "got: {line}");
+    }
 }
