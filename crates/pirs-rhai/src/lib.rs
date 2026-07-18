@@ -613,7 +613,23 @@ impl ExtensionHost {
 
     fn run_on_tool_call(&self, id: &str, name: &str, args: &Value) -> Option<String> {
         for ext in &self.extensions {
-            let mut ext = ext.lock().unwrap();
+            // Policy hooks are a security gate: if the extension is busy
+            // (re-entrant call from a hook that spawned a sub-agent on this
+            // same host), a blocking lock would deadlock, so we try_lock and
+            // FAIL CLOSED — unevaluated policy means deny.
+            let mut ext = match ext.try_lock() {
+                Ok(g) => g,
+                Err(_) => {
+                    self.record_error(
+                        "on_tool_call",
+                        "extension busy (re-entrant); blocking tool call to avoid deadlock",
+                    );
+                    return Some(
+                        "blocked: policy extension busy (re-entrant hook); cannot evaluate"
+                            .to_string(),
+                    );
+                }
+            };
             if !ext.has_on_tool_call {
                 continue;
             }
@@ -658,7 +674,19 @@ impl ExtensionHost {
         result: &ToolResultMessage,
     ) -> Option<ToolResultPatch> {
         for ext in &self.extensions {
-            let mut ext = ext.lock().unwrap();
+            // After-hooks observe/patch results; they are not gates. On
+            // re-entrant contention skip with a recorded error rather than
+            // deadlock (a blocking lock here hangs the host).
+            let mut ext = match ext.try_lock() {
+                Ok(g) => g,
+                Err(_) => {
+                    self.record_error(
+                        "on_tool_result",
+                        "extension busy (re-entrant); result hook skipped to avoid deadlock",
+                    );
+                    continue;
+                }
+            };
             if !ext.has_on_tool_result {
                 continue;
             }
@@ -1258,7 +1286,14 @@ impl AgentTool for RhaiTool {
         let args = ctx.args.clone();
 
         let output = tokio::task::spawn_blocking(move || {
-            let mut ext_guard = host.extensions[ext_index].lock().unwrap();
+            // try_lock: a tool fn that spawns a sub-agent re-entering this
+            // extension would deadlock on a blocking lock.
+            let mut ext_guard = match host.extensions[ext_index].try_lock() {
+                Ok(g) => g,
+                Err(_) => anyhow::bail!(
+                    "extension busy (re-entrant call); refusing to run tool to avoid deadlock"
+                ),
+            };
             let ext = &mut *ext_guard;
             let dynamic_args = rhai::serde::to_dynamic(&args).unwrap_or(Dynamic::UNIT);
             let result: Result<Dynamic, _> = if ext.ast.iter_functions().any(|f| f.name == fn_name)
