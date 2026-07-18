@@ -280,12 +280,17 @@ async fn main() -> anyhow::Result<()> {
     } else {
         Some(std::sync::Arc::new(pirs_graph::LazyGraph::new(cwd.clone())))
     };
+    let mut sub_tools = tools.clone();
     if let Some(g) = &graph {
-        tools.push(std::sync::Arc::new(pirs_graph::code_map::CodeMapTool::new(
+        let map_tool = std::sync::Arc::new(pirs_graph::code_map::CodeMapTool::new(
             std::sync::Arc::clone(g),
             cwd.clone(),
-        )));
-        tools.push(std::sync::Arc::new(pirs_graph::ast_edit::AstEditTool::new(cwd.clone())));
+        ));
+        let ast_tool = std::sync::Arc::new(pirs_graph::ast_edit::AstEditTool::new(cwd.clone()));
+        tools.push(map_tool.clone());
+        tools.push(ast_tool.clone());
+        sub_tools.push(map_tool);
+        sub_tools.push(ast_tool);
     }
     {
         let manifests = ["Cargo.toml", "package.json", "go.mod", "pyproject.toml", "setup.py"];
@@ -300,7 +305,9 @@ async fn main() -> anyhow::Result<()> {
                 .map(|s| s.language)
                 .collect();
             eprintln!("[lsp: {}]", found.join(", "));
-            tools.push(std::sync::Arc::new(pirs_lsp::tool::LspTool::new(cwd.clone())));
+            let lsp_tool = std::sync::Arc::new(pirs_lsp::tool::LspTool::new(cwd.clone()));
+            tools.push(lsp_tool.clone());
+            sub_tools.push(lsp_tool);
         }
     }
     let mut policy_hooks: Option<(
@@ -329,11 +336,12 @@ async fn main() -> anyhow::Result<()> {
         let runner_cwd = cwd.clone();
         let policy_slot_run = std::sync::Arc::clone(&policy_slot);
         let usage_slot_run = std::sync::Arc::clone(&usage_slot);
+        let sub_tools_for_run = sub_tools.clone();
         h.set_subagent_runner(std::sync::Arc::new(
             move |task: String, model: Option<String>| {
                 let provider = std::sync::Arc::clone(&runner_provider);
                 let completion = runner_completion.clone();
-                let cwd = runner_cwd.clone();
+                let _cwd = runner_cwd.clone();
                 let model = model.unwrap_or_else(|| runner_model.clone());
                 let policy = policy_slot_run.lock().unwrap().clone();
                 let usage_slot = usage_slot_run.clone();
@@ -342,6 +350,7 @@ async fn main() -> anyhow::Result<()> {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
+                    let tools = sub_tools_for_run.clone();
                     rt.block_on(async move {
                         let mut hooks = pirs_agent::Hooks::default();
                         if let Some((b, a)) = &policy {
@@ -349,7 +358,7 @@ async fn main() -> anyhow::Result<()> {
                             hooks.after_tool_call = Some(a.clone());
                         }
                         let mut agent = pirs_agent::Agent::new(provider, &model)
-                            .with_tools(pirs_tools::default_tools(cwd))
+                            .with_tools(tools)
                             .with_completion(completion)
                             .with_hooks(hooks)
                             .with_compaction(None);
@@ -527,12 +536,13 @@ async fn main() -> anyhow::Result<()> {
             ..Default::default()
         };
         let delegate_model = cli.model.clone();
-        let delegate_cwd = cwd.clone();
+        let _delegate_cwd = cwd.clone();
+        let delegate_tools = sub_tools.clone();
         let delegate = pirs_agent::delegate::DelegateTool::new(
             delegate_provider,
             delegate_model,
             delegate_completion,
-            move || pirs_tools::default_tools(delegate_cwd.clone()),
+            move || delegate_tools.clone(),
         );
         if let Some((b, a)) = &policy_hooks {
             delegate.with_policy_hooks(b.clone(), a.clone());
