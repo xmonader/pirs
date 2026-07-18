@@ -189,6 +189,19 @@ impl Default for Printer {
     }
 }
 
+/// Installs the approval gate as the before-tool hook when nothing else
+/// claimed the slot. Yolo mode explicitly waives the gate.
+fn install_gate_if_absent(
+    hooks: &mut pirs_agent::Hooks,
+    gate_hook: &Option<pirs_agent::events::BeforeToolCallHook>,
+    approval: &str,
+) {
+    let yolo = approval::ApprovalMode::parse(approval) == Some(approval::ApprovalMode::Yolo);
+    if !yolo && hooks.before_tool_call.is_none() {
+        hooks.before_tool_call = gate_hook.clone();
+    }
+}
+
 fn print_usage(report: &pirs_agent::usage::UsageReport) {
     let total = report.grand_total();
     let hit_rate = if total.input + total.cache_read > 0 {
@@ -512,6 +525,11 @@ async fn main() -> anyhow::Result<()> {
         Some(h)
     };
 
+    // The approval gate must be installed even with --no-extensions: the
+    // chained install above only runs in the extensions branch, and without
+    // this fallback `--approval ask --no-extensions` had no gate at all.
+    install_gate_if_absent(&mut hooks, &gate_hook, &cli.approval);
+
     if !cli.no_mcp {
         let mcp = pirs_mcp::load_servers(&cwd).await;
         for err in &mcp.errors {
@@ -798,7 +816,7 @@ async fn run_turn(
         tokio::select! {
             r = &mut run => break r,
             _ = tokio::signal::ctrl_c() => {
-                cancel.cancel();
+                cancel.lock().unwrap().cancel();
             }
         }
     };
@@ -1061,4 +1079,53 @@ async fn handle_command(
         }
     }
     Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn gate() -> Option<pirs_agent::events::BeforeToolCallHook> {
+        Some(Arc::new(|_, name, _| {
+            if name == "danger" {
+                Some("blocked by gate".to_string())
+            } else {
+                None
+            }
+        }))
+    }
+
+    #[test]
+    fn gate_installed_when_hooks_empty() {
+        // --approval ask --no-extensions: previously no gate was installed.
+        let mut hooks = pirs_agent::Hooks::default();
+        install_gate_if_absent(&mut hooks, &gate(), "ask");
+        let before = hooks.before_tool_call.expect("gate must be installed");
+        assert_eq!(
+            before("1", "danger", &serde_json::json!({})).as_deref(),
+            Some("blocked by gate")
+        );
+    }
+
+    #[test]
+    fn gate_not_installed_in_yolo() {
+        let mut hooks = pirs_agent::Hooks::default();
+        install_gate_if_absent(&mut hooks, &gate(), "yolo");
+        assert!(hooks.before_tool_call.is_none());
+    }
+
+    #[test]
+    fn existing_hook_not_overwritten() {
+        let mut hooks = pirs_agent::Hooks {
+            before_tool_call: Some(Arc::new(|_, _, _| Some("ext".to_string()))),
+            ..Default::default()
+        };
+        install_gate_if_absent(&mut hooks, &gate(), "ask");
+        let before = hooks.before_tool_call.unwrap();
+        assert_eq!(
+            before("1", "x", &serde_json::json!({})).as_deref(),
+            Some("ext")
+        );
+    }
 }

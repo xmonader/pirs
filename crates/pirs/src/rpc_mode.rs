@@ -27,6 +27,7 @@ type RunFuture = std::pin::Pin<Box<dyn std::future::Future<Output = RunOutput> +
 struct Actor {
     agent: Agent,
     session_path: PathBuf,
+    session_slot: Arc<std::sync::Mutex<PathBuf>>,
     session_id: String,
     cwd: PathBuf,
     steering_mode: QueueMode,
@@ -99,6 +100,15 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     tools.extend(host.tools());
     let ext_hooks = host.hooks();
 
+    // Give sub-agents the same policy chain as the main agent (gate + before,
+    // after). Previously this slot was declared but never populated, so RPC
+    // sub-agents ran with no policy hooks at all.
+    if let (Some(b), Some(a)) = (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
+        if let Some(chained) = pirs_agent::Hooks::chain_before(gate_hook.clone(), Some(b.clone())) {
+            *policy_slot.lock().unwrap() = Some((chained, a.clone()));
+        }
+    }
+
     hooks.before_tool_call = pirs_agent::Hooks::chain_before(gate_hook, ext_hooks.before_tool_call);
     hooks.after_tool_call = ext_hooks.after_tool_call;
     hooks.transform_context = ext_hooks.transform_context;
@@ -148,11 +158,16 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
             let _ = out.send(format!("{line}\n"));
         }));
     }
+    // Single subscriber, gated on the CURRENT session path via a slot:
+    // new_session updates the slot instead of stacking a second
+    // subscriber (which double-writes every message to both files).
+    let session_slot = Arc::new(std::sync::Mutex::new(session_path.clone()));
     {
-        let session_file = session_path.clone();
+        let slot = Arc::clone(&session_slot);
         agent.subscribe(Arc::new(move |event: AgentEvent| {
             if let AgentEvent::MessageEnd { message } = event {
-                let _ = session::append(&session_file, &[*message]);
+                let path = slot.lock().unwrap().clone();
+                let _ = session::append(&path, &[*message]);
             }
         }));
     }
@@ -163,6 +178,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     let mut actor = Actor {
         agent,
         session_path,
+        session_slot,
         session_id,
         cwd: cwd.clone(),
         steering_mode: QueueMode::default(),
@@ -309,12 +325,8 @@ async fn handle_command(
             match session::session_path(&actor.cwd) {
                 Ok(new_path) => {
                     actor.session_path = new_path.clone();
-                    let sf = new_path.clone();
-                    actor.agent.subscribe(Arc::new(move |event: AgentEvent| {
-                        if let AgentEvent::MessageEnd { message } = event {
-                            let _ = session::append(&sf, &[*message]);
-                        }
-                    }));
+                    // Redirect the single session subscriber to the new file.
+                    *actor.session_slot.lock().unwrap() = new_path;
                 }
                 Err(e) => tracing::warn!("failed to rotate session: {e}"),
             }
