@@ -578,8 +578,6 @@ pub fn build_request_body(model: &str, ctx: &Context, options: &CompletionOption
     }
     if !ctx.tools.is_empty() {
         body["tools"] = Value::Array(ctx.tools.iter().map(tool_to_openai).collect());
-    } else if history_has_tool_calls(ctx) {
-        body["tools"] = json!([]);
     }
     match options.tool_choice {
         Some(crate::ToolChoice::Auto) => body["tool_choice"] = json!("auto"),
@@ -815,25 +813,6 @@ mod tests {
         let msgs = messages_to_openai(&ctx);
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0]["content"], "(no tool output)");
-    }
-
-    #[test]
-    fn empty_tools_sent_when_history_has_calls() {
-        let ctx = Context {
-            system_prompt: None,
-            messages: vec![Message::ToolResult(ToolResultMessage {
-                tool_call_id: "t".into(),
-                tool_name: "x".into(),
-                content: vec![ContentBlock::text("ok")],
-                details: None,
-                is_error: false,
-                terminate: false,
-                timestamp: 0,
-            })],
-            tools: vec![],
-        };
-        let body = build_request_body("m", &ctx, &CompletionOptions::default());
-        assert_eq!(body["tools"], json!([]));
     }
 
     #[test]

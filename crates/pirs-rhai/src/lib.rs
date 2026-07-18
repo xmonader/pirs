@@ -176,7 +176,19 @@ fn exec_impl(command: &str, timeout_secs: u64) -> rhai::Map {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .spawn();
+        .spawn()
+        .map(|mut c| {
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::CommandExt;
+                let _ = &mut c;
+                unsafe {
+                    let pid = c.id() as i32;
+                    libc::setpgid(pid, pid);
+                }
+            }
+            c
+        });
     let mut child = match spawned {
         Ok(c) => c,
         Err(e) => {
@@ -953,15 +965,17 @@ fn load_trusted() -> std::collections::HashSet<String> {
 
 pub fn trust_directory(dir: &Path) -> Result<(), String> {
     let canonical = dir.canonicalize().map_err(|e| e.to_string())?;
-    if !canonical.join(".pirs").join("extensions").exists()
-        && !canonical.extension().and_then(|e| e.to_str()).map(|e| e == "rhai").unwrap_or(false)
-    {
+    let ext_dir = canonical.join(".pirs").join("extensions");
+    if !ext_dir.exists() {
         return Err(format!(
             "{} has no .pirs/extensions directory",
             canonical.display()
         ));
     }
-    save_trusted(&canonical);
+    // Store the same key prompt_trust looks up at load time: the canonical
+    // extensions directory itself.
+    let key = ext_dir.canonicalize().unwrap_or(ext_dir);
+    save_trusted(&key);
     Ok(())
 }
 
@@ -1001,7 +1015,13 @@ fn prompt_trust(dir: &Path) -> TrustDecision {
         return TrustDecision::Allow;
     }
     let key = canonical.display().to_string();
-    if load_trusted().contains(&key) {
+    let trusted = load_trusted();
+    if trusted.contains(&key)
+        || canonical
+            .parent()
+            .map(|p| trusted.contains(&p.display().to_string()))
+            .unwrap_or(false)
+    {
         return TrustDecision::Allow;
     }
     if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {

@@ -94,11 +94,18 @@ pub fn build_cascade_judge(provider: Arc<dyn LlmProvider>, judge_model: String) 
             let mut verdict = String::new();
             use futures::StreamExt;
             while let Some(ev) = stream.next().await {
-                if let pirs_ai::StreamEvent::TextDelta(d) = ev {
-                    verdict.push_str(&d);
+                match ev {
+                    pirs_ai::StreamEvent::TextDelta(d) => verdict.push_str(&d),
+                    pirs_ai::StreamEvent::Done(m) => {
+                        if m.stop_reason == pirs_ai::StopReason::Error {
+                            return false;
+                        }
+                    }
+                    _ => {}
                 }
             }
-            !verdict.to_uppercase().contains("REJECT")
+            // Verdict must start with ACCEPT to pass; anything else rejects.
+            verdict.trim_start().to_uppercase().starts_with("ACCEPT")
         })
     })
 }

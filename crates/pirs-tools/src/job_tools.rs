@@ -207,7 +207,13 @@ impl AgentTool for JobKillTool {
                 }
             }
             jobs::JobKind::Agent => {
-                let _ = jobs::registry().steer(args.id, "/cancel");
+                let cancel = {
+                    let j = job.lock().unwrap();
+                    j.cancel.clone()
+                };
+                if let Some(token) = cancel {
+                    token.cancel();
+                }
             }
         }
         jobs::registry().set_status(args.id, JobStatus::Killed);

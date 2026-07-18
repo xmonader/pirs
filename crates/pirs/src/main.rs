@@ -44,8 +44,8 @@ struct Cli {
     #[arg(long, env = "OPENAI_BASE_URL")]
     base_url: Option<String>,
 
-    /// API key (falls back to OPENAI_API_KEY)
-    #[arg(long, env = "OPENAI_API_KEY")]
+    /// API key (falls back to the provider's auth store or env var)
+    #[arg(long)]
     api_key: Option<String>,
 
     /// Resume the most recent session for this directory
@@ -248,7 +248,11 @@ async fn main() -> anyhow::Result<()> {
 
     let mut cli = Cli::parse();
 
-    if let Some(dir) = cli.prompt.clone().filter(|p| p.starts_with("trust")) {
+    if let Some(dir) = cli
+        .prompt
+        .clone()
+        .filter(|p| p == "trust" || p.starts_with("trust "))
+    {
         let arg = dir.trim_start_matches("trust").trim().to_string();
         let target = if arg.is_empty() {
             std::env::current_dir()?
@@ -319,6 +323,14 @@ async fn main() -> anyhow::Result<()> {
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
     let mut hooks = Hooks::default();
+    let approval_mode =
+        approval::ApprovalMode::parse(&cli.approval).unwrap_or(approval::ApprovalMode::Auto);
+    let gate = std::sync::Arc::new(approval::ApprovalGate::new(approval_mode, cwd.clone()));
+    let gate_hook = if approval_mode == approval::ApprovalMode::Ask {
+        Some(gate.hook())
+    } else {
+        None
+    };
 
     let graph: Option<std::sync::Arc<pirs_graph::LazyGraph>> = if cli.no_graph {
         None
@@ -381,10 +393,7 @@ async fn main() -> anyhow::Result<()> {
         h.set_subagent_runner(subagent::build_subagent_runner(
             std::sync::Arc::clone(&provider),
             CompletionOptions {
-                api_key: cli
-                    .api_key
-                    .clone()
-                    .or_else(|| std::env::var("OPENAI_API_KEY").ok()),
+                api_key: Some(api_key.clone()),
                 ..Default::default()
             },
             cli.model.clone(),
@@ -414,7 +423,8 @@ async fn main() -> anyhow::Result<()> {
         };
         *policy_slot.lock().unwrap() = policy_hooks.clone();
         if !yolo {
-            hooks.before_tool_call = ext_hooks.before_tool_call;
+            hooks.before_tool_call =
+                pirs_agent::Hooks::chain_before(gate_hook.clone(), ext_hooks.before_tool_call);
             let rhai_after = ext_hooks.after_tool_call;
             let graph_after = graph.clone().map(|g| {
                 let g = std::sync::Arc::clone(&g);
@@ -530,7 +540,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let completion = CompletionOptions {
-        api_key: Some(api_key),
+        api_key: Some(api_key.clone()),
         ..Default::default()
     };
 
@@ -557,10 +567,7 @@ async fn main() -> anyhow::Result<()> {
             )
         };
         let delegate_completion = CompletionOptions {
-            api_key: cli
-                .api_key
-                .clone()
-                .or_else(|| std::env::var("OPENAI_API_KEY").ok()),
+            api_key: Some(api_key.clone()),
             ..Default::default()
         };
         let delegate_model = cli.model.clone();
@@ -602,10 +609,6 @@ async fn main() -> anyhow::Result<()> {
     });
     if approval_mode == approval::ApprovalMode::Yolo {
         eprintln!("[WARNING: yolo mode — no approvals, no policy hooks. All tool calls execute.]");
-    }
-    let gate = std::sync::Arc::new(approval::ApprovalGate::new(approval_mode, cwd.clone()));
-    if approval_mode == approval::ApprovalMode::Ask {
-        hooks.before_tool_call = Some(gate.hook());
     }
 
     let cascade_cfg =

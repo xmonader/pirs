@@ -74,7 +74,10 @@ impl AgentTool for GrepTool {
         let context_lines = args.context.unwrap_or(0);
 
         let mut builder = ignore::WalkBuilder::new(&root);
-        builder.hidden(false).require_git(false);
+        builder
+            .hidden(false)
+            .require_git(false)
+            .filter_entry(|e| e.file_name() != ".git");
         let glob_filter = match &args.glob {
             Some(g) => {
                 let mut overrides = ignore::overrides::OverrideBuilder::new(&root);
@@ -108,6 +111,7 @@ impl AgentTool for GrepTool {
                 .to_string_lossy()
                 .to_string();
 
+            let mut last_printed: i64 = -1i64;
             let mut i = 0;
             while i < lines.len() {
                 if re.is_match(lines[i]) {
@@ -116,7 +120,9 @@ impl AgentTool for GrepTool {
                         limit_hit = true;
                         break 'walk;
                     }
-                    let ctx_start = i.saturating_sub(context_lines);
+                    let ctx_start = i
+                        .saturating_sub(context_lines)
+                        .max((last_printed + 1) as usize);
                     let ctx_end = (i + context_lines + 1).min(lines.len());
                     for (n, line) in lines.iter().enumerate().take(ctx_end).skip(ctx_start) {
                         let display = truncate_line(line, GREP_LINE_MAX);
@@ -125,11 +131,12 @@ impl AgentTool for GrepTool {
                         } else {
                             out.push_str(&format!("{rel}-{}- {display}\n", n + 1));
                         }
+                        last_printed = n as i64;
                     }
                     if out.len() > MAX_BYTES {
                         break 'walk;
                     }
-                    i = ctx_end.max(i + 1);
+                    i = i + 1;
                 } else {
                     i += 1;
                 }

@@ -217,7 +217,15 @@ impl AgentTool for DelegateTool {
             .with_hooks(hooks)
             .with_compaction(None);
 
-        let new_messages = agent.prompt(&task).await?;
+        let cancel_watcher = agent.cancel_handle();
+        let parent_cancel = ctx.cancel.clone();
+        let watcher = tokio::spawn(async move {
+            parent_cancel.cancelled().await;
+            cancel_watcher.cancel();
+        });
+        let result = agent.prompt(&task).await;
+        watcher.abort();
+        let new_messages = result?;
 
         let answer = new_messages
             .iter()

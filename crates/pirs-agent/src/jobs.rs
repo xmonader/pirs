@@ -26,6 +26,7 @@ pub struct Job {
     pub pid: Option<u32>,
     pub progress: Option<Arc<Mutex<String>>>,
     pub steer: Option<NotifyFn>,
+    pub cancel: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl Job {
@@ -110,6 +111,7 @@ impl JobRegistry {
             pid,
             progress: None,
             steer: None,
+            cancel: None,
         }));
         self.jobs.lock().unwrap().insert(id, Arc::clone(&job));
         (id, job)
@@ -191,6 +193,12 @@ impl JobRegistry {
     pub fn set_progress_handle(&self, id: u64, progress: Arc<Mutex<String>>) {
         if let Some(job) = self.jobs.lock().unwrap().get(&id) {
             job.lock().unwrap().progress = Some(progress);
+        }
+    }
+
+    pub fn set_cancel(&self, id: u64, cancel: tokio_util::sync::CancellationToken) {
+        if let Some(job) = self.jobs.lock().unwrap().get(&id) {
+            job.lock().unwrap().cancel = Some(cancel);
         }
     }
 

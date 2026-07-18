@@ -64,9 +64,11 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         .and_then(|m| crate::approval::ApprovalMode::parse(&m))
         .unwrap_or(crate::approval::ApprovalMode::Auto);
     let gate = crate::approval::ApprovalGate::new(approval_mode, cwd.clone());
-    if approval_mode == crate::approval::ApprovalMode::Ask {
-        hooks.before_tool_call = Some(gate.hook());
-    }
+    let gate_hook = if approval_mode == crate::approval::ApprovalMode::Ask {
+        Some(gate.hook())
+    } else {
+        None
+    };
     let mut host = pirs_rhai::ExtensionHost::new();
     let policy_slot: std::sync::Arc<
         std::sync::Mutex<
@@ -99,7 +101,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         (Some(b), Some(a)) => Some((b.clone(), a.clone())),
         _ => None,
     };
-    hooks.before_tool_call = ext_hooks.before_tool_call;
+    hooks.before_tool_call = pirs_agent::Hooks::chain_before(gate_hook, ext_hooks.before_tool_call);
     hooks.after_tool_call = ext_hooks.after_tool_call;
     hooks.transform_context = ext_hooks.transform_context;
     hooks.should_stop_after_turn = ext_hooks.should_stop_after_turn;

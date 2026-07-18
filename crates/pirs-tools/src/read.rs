@@ -103,9 +103,7 @@ impl AgentTool for ReadTool {
             .map(|e| e.to_ascii_lowercase())
         {
             if let Some((_, mime)) = IMAGE_EXTS.iter().find(|(e, _)| *e == ext) {
-                let size = std::fs::metadata(&path)
-                    .map(|m| m.len())
-                    .unwrap_or(0);
+                let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
                 if size > 20 * 1024 * 1024 {
                     anyhow::bail!(
                         "image too large ({size} bytes, cap is 20MB); downscale it first (e.g. with bash)"

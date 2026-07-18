@@ -44,13 +44,15 @@ function line(cls, text) {
 }
 
 function refreshState() {
-  fetch('/state').then(r => r.json()).then(s => {
+  fetch('/state', authInit).then(r => r.json()).then(s => {
     bar.textContent = `${s.model} | ${s.running ? 'running' : 'idle'} | in ${s.usage.input} (${s.usage.cacheRead} cached) out ${s.usage.output} | ${s.usage.calls} calls`;
   });
 }
 setInterval(refreshState, 2000);
 
-const es = new EventSource('/events');
+const TOKEN = "__PIRS_TOKEN__";
+const authInit = { headers: { Authorization: `Bearer ${TOKEN}` } };
+const es = new EventSource(`/events?token=${encodeURIComponent(TOKEN)}`);
 es.onmessage = (e) => {
   const ev = JSON.parse(e.data);
   switch (ev.type) {
@@ -86,10 +88,10 @@ function send() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
-  fetch('/prompt', { method: 'POST', body: JSON.stringify({ text }) });
+  fetch('/prompt', { method: 'POST', headers: authInit.headers, body: JSON.stringify({ text }) });
 }
 document.getElementById('send').onclick = send;
-document.getElementById('cancel').onclick = () => fetch('/cancel', { method: 'POST' });
+document.getElementById('cancel').onclick = () => fetch('/cancel', { method: 'POST', headers: authInit.headers });
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
 refreshState();
 </script>

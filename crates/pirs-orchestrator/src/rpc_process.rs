@@ -148,8 +148,9 @@ impl RpcProcess {
         self.pending.lock().unwrap().insert(id, tx);
         let line = format!("{}\n", serde_json::to_string(&command)?);
         self.stdin.lock().await.write_all(line.as_bytes()).await?;
-        let response = rx
+        let response = tokio::time::timeout(std::time::Duration::from_secs(30), rx)
             .await
+            .context("rpc request timed out")?
             .context("instance exited before responding")?
             .map_err(|e| anyhow::anyhow!(e))?;
         Ok(response)

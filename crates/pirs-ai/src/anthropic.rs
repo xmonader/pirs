@@ -555,6 +555,8 @@ pub fn build_request_body(model: &str, ctx: &Context, options: &CompletionOption
                 "high" => 16384,
                 _ => 32768,
             };
+            let max_out = options.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
+            let budget = budget.min(max_out.saturating_sub(1024).max(1024));
             body["thinking"] = json!({ "type": "enabled", "budget_tokens": budget });
         }
     }
@@ -593,6 +595,7 @@ pub fn build_request_body(model: &str, ctx: &Context, options: &CompletionOption
 pub fn messages_to_anthropic(ctx: &Context) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::new();
     let mut pending_results: Vec<Value> = Vec::new();
+    let total = ctx.messages.len();
 
     for msg in &ctx.messages {
         match msg {
@@ -612,6 +615,10 @@ pub fn messages_to_anthropic(ctx: &Context) -> Vec<Value> {
             }
             Message::User(u) => {
                 flush_results(&mut out, &mut pending_results);
+                let is_last = {
+                    let idx = out.len() + pending_results.len() + 1;
+                    idx == total - 1
+                };
                 match &u.content {
                     crate::UserContent::Text(t) => {
                         out.push(json!({ "role": "user", "content": t }));
@@ -683,6 +690,21 @@ pub fn messages_to_anthropic(ctx: &Context) -> Vec<Value> {
         }
     }
     flush_results(&mut out, &mut pending_results);
+    // Cache breakpoint on the tail of the conversation so history is reused.
+    if let Some(last) = out.last_mut() {
+        if last.get("role").and_then(|r| r.as_str()) == Some("user") {
+            if let Some(content) = last.get_mut("content") {
+                if let Some(s) = content.as_str() {
+                    *content = serde_json::json!([{
+                        "type": "text",
+                        "text": s,
+                        "cache_control": { "type": "ephemeral" }
+                    }]);
+                }
+            }
+        }
+    }
+    let _ = total;
     out
 }
 

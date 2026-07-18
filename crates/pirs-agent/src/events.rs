@@ -83,6 +83,21 @@ pub struct Hooks {
 }
 
 impl Hooks {
+    /// Compose two before_tool_call hooks: run the gate first, then the
+    /// extension hook; first denial wins. Prevents clobbering when CLI-level
+    /// approval and extension policy coexist.
+    pub fn chain_before(
+        gate: Option<BeforeToolCallHook>,
+        ext: Option<BeforeToolCallHook>,
+    ) -> Option<BeforeToolCallHook> {
+        match (gate, ext) {
+            (Some(g), Some(e)) => Some(Arc::new(move |id, name, args| {
+                g(id, name, args).or_else(|| e(id, name, args))
+            })),
+            (a, b) => a.or(b),
+        }
+    }
+
     pub fn steering(&self) -> Vec<Message> {
         self.get_steering_messages
             .as_ref()

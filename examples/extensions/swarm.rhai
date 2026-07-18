@@ -20,7 +20,7 @@ fn queue_write(entries) {
     for e in entries {
         out = out + e.to_json() + "\n";
     }
-    fs_append(hive(), out);
+    fs_write(hive(), out);
 }
 
 register_tool("swarm_post", "Post a work packet for the swarm (queen/planner use).", #{

@@ -29,14 +29,16 @@ pub fn set(provider: &str, key: &str) -> anyhow::Result<()> {
     }
     let mut all = load();
     all.insert(provider.to_string(), key.to_string());
-    std::fs::write(&path, serde_json::to_string_pretty(&all)?)?;
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, serde_json::to_string_pretty(&all)?)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&path)?.permissions();
+        let mut perms = std::fs::metadata(&tmp)?.permissions();
         perms.set_mode(0o600);
-        std::fs::set_permissions(&path, perms)?;
+        std::fs::set_permissions(&tmp, perms)?;
     }
+    std::fs::rename(&tmp, &path)?;
     Ok(())
 }
 
@@ -58,8 +60,10 @@ pub fn login(provider: &str) -> anyhow::Result<()> {
 }
 
 fn rpassword_from_tty(provider: &str) -> anyhow::Result<String> {
-    let mut rl = rustyline::DefaultEditor::new()?;
-    Ok(rl.readline(&format!("{provider} API key: "))?)
+    eprint!("{provider} API key (input hidden after Enter): ");
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line)?;
+    Ok(line.trim().to_string())
 }
 
 #[cfg(test)]

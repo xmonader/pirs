@@ -292,7 +292,7 @@ impl Agent {
 
         let mut context = Context {
             system_prompt: Some(self.system_prompt.clone()),
-            messages: std::mem::take(&mut self.messages),
+            messages: self.messages.clone(),
             tools: vec![],
         };
 

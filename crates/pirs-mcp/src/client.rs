@@ -15,7 +15,7 @@ const PROTOCOL_VERSION: &str = "2025-03-26";
 type PendingMap = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>>;
 
 pub struct StdioClient {
-    stdin: tokio::sync::Mutex<tokio::process::ChildStdin>,
+    stdin: std::sync::Arc<tokio::sync::Mutex<tokio::process::ChildStdin>>,
     pending: PendingMap,
     next_id: AtomicU64,
     stderr: Arc<Mutex<String>>,
@@ -60,12 +60,14 @@ impl StdioClient {
         let stdin = child.stdin.take().context("no stdin on MCP server")?;
         let stdout = child.stdout.take().context("no stdout on MCP server")?;
         let stderr_pipe = child.stderr.take().context("no stderr on MCP server")?;
+        let stdin = std::sync::Arc::new(tokio::sync::Mutex::new(stdin));
 
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
         let stderr = Arc::new(Mutex::new(String::new()));
 
         {
             let pending = Arc::clone(&pending);
+            let stdin_writer = std::sync::Arc::clone(&stdin);
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stdout).lines();
                 loop {
@@ -118,7 +120,7 @@ impl StdioClient {
         }
 
         let client = Arc::new(StdioClient {
-            stdin: tokio::sync::Mutex::new(stdin),
+            stdin: std::sync::Arc::clone(&stdin),
             pending,
             next_id: AtomicU64::new(1),
             stderr,

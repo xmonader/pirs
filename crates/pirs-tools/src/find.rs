@@ -62,7 +62,10 @@ impl AgentTool for FindTool {
         let set = builder.build()?;
 
         let mut walker = ignore::WalkBuilder::new(&root);
-        walker.hidden(false).require_git(false);
+        walker
+            .hidden(false)
+            .require_git(false)
+            .filter_entry(|e| e.file_name() != ".git");
 
         let mut out = String::new();
         let mut count = 0usize;

@@ -187,7 +187,8 @@ async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> an
 
     match (method, path) {
         ("GET", "/") | ("GET", "/index.html") => {
-            respond(&mut write, 200, "text/html; charset=utf-8", PAGE).await?;
+            let page = PAGE.replace("__PIRS_TOKEN__", &state.token);
+            respond(&mut write, 200, "text/html; charset=utf-8", &page).await?;
         }
         ("GET", "/events") => {
             write

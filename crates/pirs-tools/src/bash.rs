@@ -278,6 +278,9 @@ async fn read_chunks_tagged<R: tokio::io::AsyncRead + Unpin>(
 }
 
 fn kill_tree(pid: u32) {
+    if pid == 0 {
+        return;
+    }
     #[cfg(unix)]
     unsafe {
         libc::kill(-(pid as i32), libc::SIGKILL);

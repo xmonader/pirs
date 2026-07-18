@@ -13,7 +13,7 @@ use tokio::sync::oneshot;
 type PendingMap = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>>;
 
 pub struct LspClient {
-    stdin: tokio::sync::Mutex<tokio::process::ChildStdin>,
+    stdin: std::sync::Arc<tokio::sync::Mutex<tokio::process::ChildStdin>>,
     pending: PendingMap,
     next_id: AtomicU64,
     opened: Mutex<HashMap<String, u64>>,
@@ -86,11 +86,13 @@ impl LspClient {
             .with_context(|| format!("failed to spawn LSP server '{command}'"))?;
 
         let stdin = child.stdin.take().context("no stdin on LSP server")?;
+        let stdin = std::sync::Arc::new(tokio::sync::Mutex::new(stdin));
         let stdout = child.stdout.take().context("no stdout on LSP server")?;
 
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
         {
             let pending = Arc::clone(&pending);
+            let stdin_writer = std::sync::Arc::clone(&stdin);
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stdout);
                 loop {
@@ -124,7 +126,7 @@ impl LspClient {
         }
 
         let client = Arc::new(LspClient {
-            stdin: tokio::sync::Mutex::new(stdin),
+            stdin: std::sync::Arc::clone(&stdin),
             pending,
             next_id: AtomicU64::new(1),
             opened: Mutex::new(HashMap::new()),
