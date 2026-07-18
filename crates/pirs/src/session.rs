@@ -42,6 +42,114 @@ pub fn append(path: &Path, messages: &[Message]) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct SessionMeta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_session: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_entry: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+fn meta_path(session: &Path) -> PathBuf {
+    session.with_extension("meta.json")
+}
+
+pub fn write_meta(session: &Path, meta: &SessionMeta) -> anyhow::Result<()> {
+    std::fs::write(meta_path(session), serde_json::to_string_pretty(meta)?)?;
+    Ok(())
+}
+
+pub fn read_meta(session: &Path) -> Option<SessionMeta> {
+    let content = std::fs::read_to_string(meta_path(session)).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+pub fn session_id(session: &Path) -> String {
+    session
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Fork: copy messages[0..=entry_idx] into a new session linked to the parent.
+pub fn fork_session(
+    current: &Path,
+    entry_idx: Option<usize>,
+) -> anyhow::Result<(PathBuf, Vec<Message>, SessionMeta)> {
+    let content = std::fs::read_to_string(current)?;
+    let mut messages = Vec::new();
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        messages.push(serde_json::from_str::<Message>(line)?);
+    }
+    let idx = entry_idx
+        .map(|i| i.min(messages.len().saturating_sub(1)))
+        .unwrap_or_else(|| messages.len().saturating_sub(1));
+    let kept: Vec<Message> = messages.into_iter().take(idx + 1).collect();
+
+    let dir = current.parent().context("session has no parent dir")?;
+    let new_id = format!(
+        "{}_fork{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
+        std::process::id()
+    );
+    let new_path = dir.join(format!("{new_id}.jsonl"));
+    let meta = SessionMeta {
+        parent_session: Some(session_id(current)),
+        parent_entry: Some(idx),
+        label: None,
+    };
+    write_meta(&new_path, &meta)?;
+    append(&new_path, &kept)?;
+    Ok((new_path, kept, meta))
+}
+
+pub fn lineage(current: &Path) -> Vec<(String, Option<String>, Option<usize>, usize)> {
+    let mut out = Vec::new();
+    let mut cursor = current.to_path_buf();
+    for _ in 0..32 {
+        let id = session_id(&cursor);
+        let meta = read_meta(&cursor).unwrap_or_default();
+        let entries = std::fs::read_to_string(&cursor)
+            .map(|c| c.lines().filter(|l| !l.trim().is_empty()).count())
+            .unwrap_or(0);
+        let parent = meta.parent_session.clone();
+        out.push((id, parent.clone(), meta.parent_entry, entries));
+        let Some(parent) = parent else {
+            break;
+        };
+        let found = cursor
+            .parent()
+            .map(|dir| {
+                std::fs::read_dir(dir)
+                    .map(|rd| {
+                        rd.flatten()
+                            .map(|e| e.path())
+                            .filter(|p| {
+                                p.file_stem()
+                                    .map(|s| s.to_string_lossy() == parent)
+                                    .unwrap_or(false)
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        if found.is_empty() {
+            break;
+        }
+        cursor = found[0].clone();
+    }
+    out
+}
+
 pub fn load_latest(cwd: &Path) -> anyhow::Result<(PathBuf, Vec<Message>)> {
     let dir = sessions_root()?.join(encode_cwd(cwd));
     let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)

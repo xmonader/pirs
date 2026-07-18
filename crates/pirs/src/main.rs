@@ -643,7 +643,7 @@ async fn main() -> anyhow::Result<()> {
     }
     let approval_shared = gate.shared_mode();
 
-    let session_path = session::session_path(&cwd)?;
+    let mut session_path = session::session_path(&cwd)?;
     if cli.resume {
         match session::load_latest(&cwd) {
             Ok((path, messages)) => {
@@ -655,6 +655,16 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let printer = Arc::new(Printer::new());
+    let session_file_shared = std::sync::Arc::new(std::sync::Mutex::new(session_path.clone()));
+    {
+        let sf = std::sync::Arc::clone(&session_file_shared);
+        agent.subscribe(Arc::new(move |event: AgentEvent| {
+            if let AgentEvent::MessageEnd { message } = event {
+                let path = sf.lock().unwrap().clone();
+                let _ = session::append(&path, &[*message]);
+            }
+        }));
+    }
     if let Some(h) = &host {
         if let Some(l) = h.listener() {
             agent.subscribe(l);
@@ -727,7 +737,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    repl(&mut agent, &printer, &session_path, &cwd, host.as_ref(), &file_commands, approval_shared).await
+    repl(&mut agent, &printer, &session_file_shared, &cwd, host.as_ref(), &file_commands, approval_shared).await
 }
 
 async fn run_turn(
@@ -738,12 +748,6 @@ async fn run_turn(
     approval_mode: approval::ApprovalMode,
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
 ) -> anyhow::Result<()> {
-    let session_file = session_path.to_path_buf();
-    agent.subscribe(Arc::new(move |event: pirs_agent::AgentEvent| {
-        if let pirs_agent::AgentEvent::MessageEnd { message } = event {
-            let _ = session::append(&session_file, &[*message]);
-        }
-    }));
     let cancel = agent.cancel_handle();
     let steer_handle = if approval_mode == approval::ApprovalMode::Ask {
         None
@@ -809,7 +813,7 @@ impl SteerHandle {
 async fn repl(
     agent: &mut Agent,
     printer: &Arc<Printer>,
-    session_path: &Path,
+    session_path: &std::sync::Arc<std::sync::Mutex<PathBuf>>,
     cwd: &Path,
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
     file_commands: &[discovery::FileCommand],
@@ -826,7 +830,7 @@ async fn repl(
                 }
                 let _ = rl.add_history_entry(line);
                 if line.starts_with('/') {
-                    match handle_command(line, agent, session_path, host, file_commands, printer, &approval_shared).await {
+                    match handle_command(line, agent, &session_path.clone(), host, file_commands, printer, &approval_shared).await {
                         Ok(true) => break,
                         Ok(false) => continue,
                         Err(e) => {
@@ -844,7 +848,8 @@ async fn repl(
                     continue;
                 }
                 let mode = *approval_shared.lock().unwrap();
-                if let Err(e) = run_turn(agent, line, printer, session_path, mode, host).await {
+                let sp = session_path.lock().unwrap().clone();
+                if let Err(e) = run_turn(agent, line, printer, &sp, mode, host).await {
                     eprintln!("[error: {e}]");
                 }
             }
@@ -886,7 +891,7 @@ async fn run_local_bash(cmd: &str, cwd: &Path, record: bool, agent: &mut Agent) 
 async fn handle_command(
     line: &str,
     agent: &mut Agent,
-    session_path: &Path,
+    session_path: &std::sync::Arc<std::sync::Mutex<PathBuf>>,
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
     file_commands: &[discovery::FileCommand],
     printer: &Arc<Printer>,
@@ -940,12 +945,39 @@ async fn handle_command(
                 println!("nothing to compact (or compaction disabled)");
             }
         }
+        "/fork" => {
+            let idx: Option<usize> = if arg.is_empty() {
+                None
+            } else {
+                Some(arg.parse()?)
+            };
+            let (new_path, messages, meta) = session::fork_session(&session_path.lock().unwrap().clone(), idx)?;
+            agent.messages = messages;
+            println!(
+                "forked at entry {} -> {} (parent: {})",
+                meta.parent_entry.unwrap_or(0),
+                new_path.display(),
+                meta.parent_session.unwrap_or_default()
+            );
+            *session_path.lock().unwrap() = new_path;
+        }
+        "/tree" => {
+            for (id, parent, parent_entry, entries) in session::lineage(&session_path.lock().unwrap().clone()) {
+                println!(
+                    "{id} ({} entries){}",
+                    entries,
+                    parent
+                        .map(|p| format!(" <- fork of {p} @ {parent_entry:?}"))
+                        .unwrap_or_default()
+                );
+            }
+        }
         "/export" => {
             if arg.is_empty() {
                 bail!("usage: /export <path>");
             }
             let dest = PathBuf::from(arg);
-            std::fs::copy(session_path, &dest)
+            std::fs::copy(session_path.lock().unwrap().clone(), &dest)
                 .with_context(|| format!("failed to export to {}", dest.display()))?;
             println!("exported to {}", dest.display());
         }
@@ -967,7 +999,8 @@ async fn handle_command(
                 if let Some(fc) = file_commands.iter().find(|c| c.name == cmd_name) {
                     let prompt = discovery::expand_command(fc, arg);
                     let mode = *approval_shared.lock().unwrap();
-                    if let Err(e) = run_turn(agent, &prompt, printer, session_path, mode, host).await {
+                    let sp = session_path.lock().unwrap().clone();
+                    if let Err(e) = run_turn(agent, &prompt, printer, &sp, mode, host).await {
                         eprintln!("[error: {e}]");
                     }
                 } else {
