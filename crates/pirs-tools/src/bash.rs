@@ -162,8 +162,16 @@ async fn run_command_raw(
     #[cfg(unix)]
     {
         child.process_group(0);
+        // PR_SET_PDEATHSIG must run in the CHILD (post-fork, pre-exec) so the
+        // shell is killed if pirs dies. Running it in this process would arm a
+        // death signal on the AGENT itself and do nothing for the child.
         unsafe {
-            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+            child.pre_exec(|| {
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
         }
     }
     let mut child = child.spawn()?;
@@ -351,6 +359,31 @@ mod tests {
         let text = out.content[0].as_text().unwrap();
         assert!(text.contains("out"));
         assert!(text.contains("err"));
+    }
+
+    /// PR_SET_PDEATHSIG must be armed in the child (via pre_exec). Reads it
+    /// back with PR_GET_PDEATHSIG (/proc hides DeathSig on newer kernels).
+    /// On the old code — prctl in the agent process — the child reports 0.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn child_has_pdeathsig_armed() {
+        if std::process::Command::new("python3")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("python3 unavailable; skipping");
+            return;
+        }
+        let tool = BashTool::new(std::env::temp_dir());
+        let out = tool
+            .execute(ctx(serde_json::json!({
+                "command": "python3 -c 'import ctypes; l=ctypes.CDLL(\"libc.so.6\"); s=ctypes.c_int(0); l.prctl(2, ctypes.byref(s)); print(s.value)'"
+            })))
+            .await
+            .unwrap();
+        let text = out.content[0].as_text().unwrap();
+        assert_eq!(text.trim(), "9", "child must inherit SIGKILL death signal");
     }
 
     #[tokio::test]

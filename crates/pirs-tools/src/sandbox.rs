@@ -39,9 +39,13 @@ pub async fn wait_and_drain(
                 status = Some(s?);
             }
             _ = &mut sleep, if deadline.is_some() => {
+                // Guard pid > 0: kill(0, SIGKILL) would signal OUR OWN process
+                // group. (kill(-pgid) targets the child's group; a zero pid
+                // turns that into a self-kill.)
                 #[cfg(unix)]
-                unsafe { libc::kill(-(pid as i32), libc::SIGKILL); }
-                let _ = child.wait().await;
+                if pid > 0 {
+                    unsafe { libc::kill(-(pid as i32), libc::SIGKILL); }
+                }
                 let s = child.wait().await?;
                 out.timed_out = true;
                 out.code = s.code();
