@@ -25,7 +25,7 @@ pub struct Extension {
     engine: Engine,
     ast: AST,
     scope: Scope<'static>,
-    caps: caps::Caps,
+    pub caps: caps::Caps,
     has_on_tool_call: bool,
     has_on_tool_result: bool,
     has_on_context: bool,
@@ -1028,6 +1028,7 @@ fn worker_engine(state: &StateStore, runner: &SubagentRunner, caps: &caps::Caps)
     engine
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parallel_map_impl(
     ast: AST,
     state: StateStore,
