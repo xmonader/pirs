@@ -165,6 +165,16 @@ fn reparse_check(path: &Path, lang: Lang) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn write_with_rollback(path: &Path, content: &str, lang: Lang) -> anyhow::Result<()> {
+    let original = std::fs::read_to_string(path)?;
+    std::fs::write(path, content)?;
+    if let Err(e) = reparse_check(path, lang) {
+        let _ = std::fs::write(path, &original);
+        return Err(e.context("edit rolled back"));
+    }
+    Ok(())
+}
+
 fn replace_function_body(
     path: &Path,
     lang: Lang,
@@ -192,8 +202,7 @@ fn replace_function_body(
         }
         _ => bail!("unsupported"),
     }
-    std::fs::write(path, &edited)?;
-    reparse_check(path, lang)?;
+    write_with_rollback(path, &edited, lang)?;
     Ok(EditResult {
         message: format!(
             "Replaced body of {name} in {} ({} -> {} bytes)",
@@ -224,8 +233,7 @@ fn rename_symbol(path: &Path, lang: Lang, old: &str, new: &str) -> anyhow::Resul
     for (start, end) in spans.iter().rev() {
         edited.replace_range(*start..*end, new);
     }
-    std::fs::write(path, &edited)?;
-    reparse_check(path, lang)?;
+    write_with_rollback(path, &edited, lang)?;
     let first = line_of_byte(&source, spans[0].0);
     Ok(EditResult {
         message: format!(
@@ -244,7 +252,9 @@ fn collect_identifiers(
     name: &str,
     spans: &mut Vec<(usize, usize)>,
 ) {
-    if node.kind() == "identifier" && node.utf8_text(source.as_bytes()).unwrap_or("") == name {
+    if matches!(node.kind(), "identifier" | "type_identifier")
+        && node.utf8_text(source.as_bytes()).unwrap_or("") == name
+    {
         spans.push((node.start_byte(), node.end_byte()));
     }
     if cursor.goto_first_child() {
@@ -281,6 +291,7 @@ fn move_function(src: &Path, dest: &Path, lang: Lang, name: &str) -> anyhow::Res
     dest_content.push_str(text.trim_end());
     dest_content.push('\n');
     std::fs::write(dest, &dest_content)?;
+    reparse_check(dest, lang)?;
 
     let mut remaining = source.clone();
     let end = if source.as_bytes().get(func.end_byte()) == Some(&b'\n') {

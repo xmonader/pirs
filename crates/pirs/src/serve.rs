@@ -138,15 +138,25 @@ async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> an
     let mut content_length = 0usize;
     let mut authorization = String::new();
     let mut origin = String::new();
+    let mut header_bytes = 0usize;
     loop {
         let mut line = String::new();
         reader.read_line(&mut line).await?;
+        header_bytes += line.len();
+        if header_bytes > 16 * 1024 {
+            respond(&mut write, 431, "text/plain", "headers too large").await?;
+            return Ok(());
+        }
         if line.trim().is_empty() {
             break;
         }
         let lower = line.to_ascii_lowercase();
         if let Some(rest) = lower.strip_prefix("content-length:") {
             content_length = rest.trim().parse().unwrap_or(0);
+            if content_length > 8 * 1024 * 1024 {
+                respond(&mut write, 413, "text/plain", "body too large").await?;
+                return Ok(());
+            }
         }
         if let Some(rest) = lower.strip_prefix("authorization:") {
             authorization = rest.trim().to_string();
@@ -173,7 +183,7 @@ async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> an
             return Ok(());
         }
         let expected = format!("Bearer {}", state.token);
-        if authorization != expected {
+        if !constant_time_eq(authorization.as_bytes(), expected.as_bytes()) {
             respond(
                 &mut write,
                 403,
@@ -274,6 +284,17 @@ async fn respond(
         .await?;
     write.flush().await?;
     Ok(())
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 fn role_of(m: &Message) -> &'static str {

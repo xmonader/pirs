@@ -114,16 +114,26 @@ impl LspClient {
                                 {
                                     // Server-initiated request: respond so the server isn't stuck.
                                     let reply = match method {
-                                        "workspace/configuration" => serde_json::json!({"jsonrpc":"2.0","id":id,"result":[null]}),
-                                        "window/workDoneProgress/create" => serde_json::json!({"jsonrpc":"2.0","id":id,"result":null}),
-                                        _ => serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32601,"message":"unsupported"}}),
+                                        "workspace/configuration" => {
+                                            serde_json::json!({"jsonrpc":"2.0","id":id,"result":[null]})
+                                        }
+                                        "window/workDoneProgress/create" => {
+                                            serde_json::json!({"jsonrpc":"2.0","id":id,"result":null})
+                                        }
+                                        _ => {
+                                            serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32601,"message":"unsupported"}})
+                                        }
                                     };
                                     let body = serde_json::to_string(&reply).unwrap_or_default();
                                     let mut stdin = stdin_writer.lock().await;
                                     let _ = stdin
                                         .write_all(
-                                            format!("Content-Length: {}\r\n\r\n{}", body.len(), body)
-                                                .as_bytes(),
+                                            format!(
+                                                "Content-Length: {}\r\n\r\n{}",
+                                                body.len(),
+                                                body
+                                            )
+                                            .as_bytes(),
                                         )
                                         .await;
                                 }

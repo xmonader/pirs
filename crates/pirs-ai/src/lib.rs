@@ -258,6 +258,38 @@ pub trait LlmProvider: Send + Sync {
     ) -> futures_util::stream::BoxStream<'static, StreamEvent>;
 }
 
+pub mod retry {
+    use tokio_util::sync::CancellationToken;
+
+    /// Shared backoff: honors Retry-After (capped), exponential otherwise, with jitter.
+    pub async fn backoff(attempt: u32, retry_after: Option<u64>, cancel: &CancellationToken) {
+        let secs = retry_after
+            .unwrap_or_else(|| 1u64 << attempt.min(5))
+            .min(120);
+        let jitter_ms = crate::now_millis() % 1000;
+        let wait =
+            std::time::Duration::from_secs(secs) + std::time::Duration::from_millis(jitter_ms);
+        tokio::select! {
+            _ = cancel.cancelled() => {}
+            _ = tokio::time::sleep(wait) => {}
+        }
+    }
+
+    pub fn extract_error_body(body: &str) -> String {
+        const MAX: usize = 4000;
+        let truncated: String = body.chars().take(MAX).collect();
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&truncated) {
+            if let Some(err) = v.get("error") {
+                if let Some(m) = err.get("message").and_then(|m| m.as_str()) {
+                    return m.to_string();
+                }
+                return err.to_string();
+            }
+        }
+        truncated
+    }
+}
+
 pub fn now_millis() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

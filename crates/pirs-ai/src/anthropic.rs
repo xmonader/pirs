@@ -9,7 +9,6 @@ use crate::{
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const DEFAULT_MAX_TOKENS: u64 = 8192;
-const MAX_ERROR_BODY: usize = 4000;
 
 pub struct AnthropicClient {
     base_url: String,
@@ -213,18 +212,7 @@ async fn send_terminal(
     let _ = tx.send(StreamEvent::Done(Box::new(msg))).await;
 }
 
-fn extract_error_body(body: &str) -> String {
-    let truncated: String = body.chars().take(MAX_ERROR_BODY).collect();
-    if let Ok(v) = serde_json::from_str::<Value>(&truncated) {
-        if let Some(err) = v.get("error") {
-            if let Some(m) = err.get("message").and_then(|m| m.as_str()) {
-                return m.to_string();
-            }
-            return err.to_string();
-        }
-    }
-    truncated
-}
+use crate::retry::extract_error_body;
 
 #[derive(Default)]
 struct BlockAcc {
@@ -451,7 +439,7 @@ async fn stream_response(
         let item = tokio::select! {
             _ = cancel.cancelled() => {
                 return StreamOutcome {
-                    message: aborted_message(model),
+                    message: aborted_message_with(model, acc.into_message(model)),
                     deltas_sent,
                 };
             }
@@ -492,6 +480,14 @@ async fn stream_response(
     }
 
     if !saw_stop && acc.stop_reason.is_none() {
+        if let Some(ev) = crate::sse::salvage_tail(&sse.remaining()) {
+            if ev.event.as_deref() == Some("message_stop") || ev.data.contains("message_stop") {
+                return StreamOutcome {
+                    message: acc.into_message(model),
+                    deltas_sent,
+                };
+            }
+        }
         let msg = "Stream ended without message_stop".to_string();
         let _ = tx.send(StreamEvent::Error(msg.clone())).await;
         return StreamOutcome {
@@ -518,12 +514,14 @@ fn parse_sse_event(item: &crate::sse::SseEvent) -> Option<(String, Value)> {
     Some((event, v))
 }
 
-fn aborted_message(model: &str) -> AssistantMessage {
+fn aborted_message_with(model: &str, partial: AssistantMessage) -> AssistantMessage {
     AssistantMessage {
         provider: "anthropic".to_string(),
         api: "anthropic-messages".to_string(),
         model: model.to_string(),
         stop_reason: StopReason::Aborted,
+        content: partial.content,
+        usage: partial.usage,
         ..Default::default()
     }
 }

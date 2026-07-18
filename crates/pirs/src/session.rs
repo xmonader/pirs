@@ -156,6 +156,20 @@ pub fn lineage(current: &Path) -> Vec<(String, Option<String>, Option<usize>, us
     out
 }
 
+pub fn messages_from_file(path: &Path) -> anyhow::Result<Vec<Message>> {
+    let content = std::fs::read_to_string(path)?;
+    let mut messages = Vec::new();
+    for (i, line) in content.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let msg: Message = serde_json::from_str(line)
+            .with_context(|| format!("corrupt session {} at line {}", path.display(), i + 1))?;
+        messages.push(msg);
+    }
+    Ok(messages)
+}
+
 pub fn load_latest(cwd: &Path) -> anyhow::Result<(PathBuf, Vec<Message>)> {
     let dir = sessions_root()?.join(encode_cwd(cwd));
     let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
@@ -168,15 +182,15 @@ pub fn load_latest(cwd: &Path) -> anyhow::Result<(PathBuf, Vec<Message>)> {
     let Some(latest) = files.pop() else {
         bail!("no session files found");
     };
-    let content = std::fs::read_to_string(&latest)?;
-    let mut messages = Vec::new();
-    for (i, line) in content.lines().enumerate() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let msg: Message = serde_json::from_str(line)
-            .with_context(|| format!("corrupt session {} at line {}", latest.display(), i + 1))?;
-        messages.push(msg);
+    let mut messages = messages_from_file(&latest)?;
+    // Resume after compaction: if a summary marker exists, fold history to it
+    // so resume continues from the compacted state, not the full pre-compaction transcript.
+    if let Some(pos) = messages.iter().position(|m| {
+        matches!(m, Message::User(u)
+            if matches!(&u.content, pirs_ai::UserContent::Text(t)
+                if t.starts_with("[Earlier conversation summarized by the agent]")))
+    }) {
+        messages.drain(..pos);
     }
     Ok((latest, messages))
 }

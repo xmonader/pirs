@@ -64,6 +64,7 @@ impl AgentTool for LsTool {
         items.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut size = 0;
+        let total = items.len();
         for (name, is_dir) in items.into_iter().take(limit) {
             let line = if is_dir { format!("{name}/") } else { name };
             size += line.len() + 1;
@@ -73,6 +74,9 @@ impl AgentTool for LsTool {
             entries.push(line);
         }
         let mut text = entries.join("\n");
+        if total > limit {
+            text.push_str(&format!("\n[showing {limit} of {total} entries]"));
+        }
         if text.is_empty() {
             text = "(empty directory)".to_string();
         }

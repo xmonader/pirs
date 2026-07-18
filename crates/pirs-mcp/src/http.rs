@@ -103,7 +103,8 @@ impl HttpClient {
         if !response.status().is_success() {
             let status = response.status().as_u16();
             let text = response.text().await.unwrap_or_default();
-            bail!("MCP HTTP error {status}: {}", &text[..text.len().min(500)]);
+            let truncated: String = text.chars().take(500).collect();
+            bail!("MCP HTTP error {status}: {truncated}");
         }
         let content_type = response
             .headers()

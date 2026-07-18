@@ -104,9 +104,7 @@ impl StdioClient {
                                 };
                                 let body = serde_json::to_string(&reply).unwrap_or_default();
                                 let mut stdin = stdin_writer.lock().await;
-                                let _ = stdin
-                                    .write_all(format!("{body}\n").as_bytes())
-                                    .await;
+                                let _ = stdin.write_all(format!("{body}\n").as_bytes()).await;
                             }
                         }
                         Ok(None) | Err(_) => {

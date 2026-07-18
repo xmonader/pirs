@@ -73,6 +73,28 @@ async fn shutdown_signal() {
 }
 
 async fn handle_connection(stream: UnixStream, supervisor: Arc<Supervisor>) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
+        let mut len = std::mem::size_of::<libc::ucred>() as u32;
+        let fd = stream.as_raw_fd();
+        let rc = unsafe {
+            libc::getsockopt(
+                fd,
+                libc::SOL_SOCKET,
+                libc::SO_PEERCRED,
+                &mut cred as *mut _ as *mut _,
+                &mut len,
+            )
+        };
+        if rc == 0 {
+            let uid = unsafe { libc::getuid() };
+            if cred.uid != 0 && cred.uid != uid {
+                anyhow::bail!("connection from foreign uid {}", cred.uid);
+            }
+        }
+    }
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
     let mut first = String::new();

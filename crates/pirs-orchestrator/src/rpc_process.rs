@@ -183,7 +183,18 @@ impl RpcProcess {
             let _ = pid;
         }
         let mut child = self.child.lock().await;
-        let _ = child.wait().await;
+        if tokio::time::timeout(std::time::Duration::from_secs(5), child.wait())
+            .await
+            .is_err()
+        {
+            if let Some(pid) = self.child_pid {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+            }
+            let _ = child.wait().await;
+        }
     }
 }
 

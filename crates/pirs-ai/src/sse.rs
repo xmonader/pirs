@@ -4,38 +4,16 @@ pub struct SseStream {
     inner: futures_util::stream::BoxStream<'static, Result<String, crate::AiError>>,
 }
 
-pub struct SseEventStream {
-    inner: futures_util::stream::BoxStream<'static, Result<SseEvent, crate::AiError>>,
-}
-
-impl SseEventStream {
-    pub fn new(response: reqwest::Response) -> Self {
-        let stream = response
-            .bytes_stream()
-            .scan(Vec::new(), |buf: &mut Vec<u8>, chunk| {
-                let events = match chunk {
-                    Ok(bytes) => feed_events(buf, &bytes).into_iter().map(Ok).collect(),
-                    Err(e) => vec![Err(crate::AiError::Network(e))],
-                };
-                std::future::ready(Some(futures_util::stream::iter(events)))
-            })
-            .flatten()
-            .boxed();
-        SseEventStream { inner: stream }
-    }
-
-    pub async fn next(&mut self) -> Option<Result<SseEvent, crate::AiError>> {
-        self.inner.next().await
-    }
-}
-
 impl SseStream {
     pub fn new(response: reqwest::Response) -> Self {
         let stream = response
             .bytes_stream()
             .scan(Vec::new(), |buf: &mut Vec<u8>, chunk| {
                 let events = match chunk {
-                    Ok(bytes) => feed(buf, &bytes).into_iter().map(Ok).collect(),
+                    Ok(bytes) => feed_events(buf, &bytes)
+                        .into_iter()
+                        .map(|e| Ok(e.data))
+                        .collect(),
                     Err(e) => vec![Err(crate::AiError::Network(e))],
                 };
                 std::future::ready(Some(futures_util::stream::iter(events)))
@@ -54,6 +32,77 @@ impl SseStream {
 pub struct SseEvent {
     pub event: Option<String>,
     pub data: String,
+}
+
+pub struct SseEventStream {
+    inner: futures_util::stream::BoxStream<'static, Result<SseEvent, crate::AiError>>,
+    buf: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+}
+
+impl SseEventStream {
+    pub fn new(response: reqwest::Response) -> Self {
+        let shared: std::sync::Arc<std::sync::Mutex<Vec<u8>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let shared2 = std::sync::Arc::clone(&shared);
+        let stream = response
+            .bytes_stream()
+            .scan(Vec::new(), move |buf: &mut Vec<u8>, chunk| {
+                let events = match chunk {
+                    Ok(bytes) => feed_events(buf, &bytes)
+                        .into_iter()
+                        .map(Ok)
+                        .collect::<Vec<_>>(),
+                    Err(e) => vec![Err(crate::AiError::Network(e))],
+                };
+                *shared2.lock().unwrap() = buf.clone();
+                std::future::ready(Some(futures_util::stream::iter(events)))
+            })
+            .flatten()
+            .boxed();
+        SseEventStream {
+            inner: stream,
+            buf: shared,
+        }
+    }
+
+    /// Unconsumed bytes left after the stream ends (for EOF salvage).
+    pub fn remaining(&self) -> Vec<u8> {
+        self.buf.lock().unwrap().clone()
+    }
+
+    pub async fn next(&mut self) -> Option<Result<SseEvent, crate::AiError>> {
+        self.inner.next().await
+    }
+}
+
+/// Salvage a trailing frame that lacks the terminating blank line (EOF cut).
+#[doc(hidden)]
+pub fn salvage_tail(buf: &[u8]) -> Option<SseEvent> {
+    if buf.is_empty() {
+        return None;
+    }
+    let body = String::from_utf8_lossy(buf);
+    let body = body.trim();
+    if body.is_empty() {
+        return None;
+    }
+    let mut data = String::new();
+    let mut event = None;
+    for line in body.lines() {
+        if let Some(rest) = line.strip_prefix("event:") {
+            event = Some(rest.trim().to_string());
+        } else if let Some(rest) = line.strip_prefix("data:") {
+            if !data.is_empty() {
+                data.push('\n');
+            }
+            data.push_str(rest.strip_prefix(' ').unwrap_or(rest));
+        }
+    }
+    if data.is_empty() {
+        None
+    } else {
+        Some(SseEvent { event, data })
+    }
 }
 
 #[doc(hidden)]

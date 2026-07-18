@@ -70,6 +70,9 @@ fn build_engine(state: &StateStore) -> Engine {
     engine.set_max_operations(200_000);
     engine.set_max_call_levels(32);
     engine.set_max_expr_depths(128, 128);
+    engine.set_max_string_size(2 * 1024 * 1024);
+    engine.set_max_array_size(100_000);
+    engine.set_max_map_size(10_000);
 
     let get_state = Arc::clone(state);
     engine.register_fn("state_get", move |key: &str| -> Dynamic {
@@ -762,7 +765,19 @@ impl ExtensionHost {
         fn_name: &str,
         args: impl rhai::FuncArgs + Send,
     ) -> Result<Dynamic, String> {
-        let mut guard = self.extensions[ext_index].lock().unwrap();
+        // Reentrancy guard: a hook that spawns a sub-agent whose policy hooks
+        // land on this same extension must not deadlock. If the lock is held,
+        // skip the hook (the parent's hook is the policy already evaluating).
+        let mut guard = match self.extensions[ext_index].try_lock() {
+            Ok(g) => g,
+            Err(_) => {
+                self.record_error(
+                    fn_name,
+                    "hook skipped: extension re-entered while already running (deadlock prevented)",
+                );
+                return Ok(Dynamic::UNIT);
+            }
+        };
         let ext = &mut *guard;
         ext.engine
             .call_fn(&mut ext.scope, &ext.ast, fn_name, args)
@@ -974,21 +989,16 @@ pub fn trust_directory(dir: &Path) -> Result<(), String> {
     // Store the same key prompt_trust looks up at load time: the canonical
     // extensions directory itself.
     let key = ext_dir.canonicalize().unwrap_or(ext_dir);
-    save_trusted(&key);
+    save_trusted_key(trust_key(&key));
     Ok(())
 }
 
-fn save_trusted(dir: &Path) {
+fn save_trusted_key(key: String) {
     let Some(path) = trust_store_path() else {
         return;
     };
     let mut set = load_trusted();
-    set.insert(
-        dir.canonicalize()
-            .unwrap_or_else(|_| dir.to_path_buf())
-            .display()
-            .to_string(),
-    );
+    set.insert(key);
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -996,6 +1006,31 @@ fn save_trusted(dir: &Path) {
         &path,
         serde_json::to_string_pretty(&set).unwrap_or_default(),
     );
+}
+
+fn scripts_hash(dir: &Path) -> String {
+    use sha2::Digest;
+    let mut h = sha2::Sha256::new();
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("rhai"))
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    for f in files {
+        h.update(f.to_string_lossy().as_bytes());
+        if let Ok(content) = std::fs::read(&f) {
+            h.update(&content);
+        }
+    }
+    format!("{:x}", h.finalize())
+}
+
+fn trust_key(dir: &Path) -> String {
+    format!("{}#{}", dir.display(), scripts_hash(dir))
 }
 
 fn prompt_trust(dir: &Path) -> TrustDecision {
@@ -1013,9 +1048,9 @@ fn prompt_trust(dir: &Path) -> TrustDecision {
     {
         return TrustDecision::Allow;
     }
-    let key = canonical.display().to_string();
     let trusted = load_trusted();
-    if trusted.contains(&key)
+    if trusted.contains(&trust_key(&canonical))
+        || trusted.contains(&canonical.display().to_string())
         || canonical
             .parent()
             .map(|p| trusted.contains(&p.display().to_string()))
@@ -1035,7 +1070,7 @@ fn prompt_trust(dir: &Path) -> TrustDecision {
         return TrustDecision::Deny;
     }
     if matches!(line.trim(), "y" | "yes" | "Y") {
-        save_trusted(&canonical);
+        save_trusted_key(trust_key(&canonical));
         TrustDecision::Allow
     } else {
         TrustDecision::Deny

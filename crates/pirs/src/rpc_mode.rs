@@ -28,6 +28,7 @@ struct Actor {
     agent: Agent,
     session_path: PathBuf,
     session_id: String,
+    cwd: PathBuf,
     steering_mode: QueueMode,
     follow_up_mode: QueueMode,
     run: Option<RunFuture>,
@@ -97,10 +98,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     let host = Arc::new(host);
     tools.extend(host.tools());
     let ext_hooks = host.hooks();
-    *policy_slot.lock().unwrap() = match (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
-        (Some(b), Some(a)) => Some((b.clone(), a.clone())),
-        _ => None,
-    };
+
     hooks.before_tool_call = pirs_agent::Hooks::chain_before(gate_hook, ext_hooks.before_tool_call);
     hooks.after_tool_call = ext_hooks.after_tool_call;
     hooks.transform_context = ext_hooks.transform_context;
@@ -150,6 +148,14 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
             let _ = out.send(format!("{line}\n"));
         }));
     }
+    {
+        let session_file = session_path.clone();
+        agent.subscribe(Arc::new(move |event: AgentEvent| {
+            if let AgentEvent::MessageEnd { message } = event {
+                let _ = session::append(&session_file, &[*message]);
+            }
+        }));
+    }
     if let Some(l) = host.listener() {
         agent.subscribe(l);
     }
@@ -158,6 +164,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         agent,
         session_path,
         session_id,
+        cwd: cwd.clone(),
         steering_mode: QueueMode::default(),
         follow_up_mode: QueueMode::default(),
         run: None,
@@ -204,9 +211,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
                 actor.run = None;
                 actor.agent.budget_hit = hit;
                 actor.agent.complete_run(full);
-                if let Err(e) = session::append(&actor.session_path, &new) {
-                    tracing::warn!("failed to persist session: {e}");
-                }
+                let _ = &new;
             }
             Cmd::Line(v) => {
                 handle_command(v, &mut actor, &out_tx).await;
@@ -267,14 +272,15 @@ async fn handle_command(
                 cmd.get("streamingBehavior").and_then(|v| v.as_str()),
                 Some("followUp")
             );
-            respond(true, None, None);
             if actor.run.is_some() {
                 if follow_up {
                     actor.agent.follow_up(Message::user(message));
                 } else {
                     actor.agent.steer(Message::user(message));
                 }
+                respond(true, None, None);
             } else {
+                respond(true, None, None);
                 match actor.agent.begin_prompt(vec![Message::user(message)]) {
                     Ok(fut) => actor.run = Some(Box::pin(fut)),
                     Err(e) => {
@@ -300,6 +306,18 @@ async fn handle_command(
             let cancelled = actor.agent.is_running();
             actor.agent.cancel();
             actor.agent.messages.clear();
+            match session::session_path(&actor.cwd) {
+                Ok(new_path) => {
+                    actor.session_path = new_path.clone();
+                    let sf = new_path.clone();
+                    actor.agent.subscribe(Arc::new(move |event: AgentEvent| {
+                        if let AgentEvent::MessageEnd { message } = event {
+                            let _ = session::append(&sf, &[*message]);
+                        }
+                    }));
+                }
+                Err(e) => tracing::warn!("failed to rotate session: {e}"),
+            }
             respond(true, Some(json!({"cancelled": cancelled})), None);
         }
         "get_state" => {

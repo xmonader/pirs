@@ -421,7 +421,12 @@ async fn main() -> anyhow::Result<()> {
                 _ => None,
             }
         };
-        *policy_slot.lock().unwrap() = policy_hooks.clone();
+        if let Some((b, a)) = &policy_hooks {
+            let b_chained = pirs_agent::Hooks::chain_before(gate_hook.clone(), Some(b.clone()));
+            if let Some(b_chained) = b_chained {
+                *policy_slot.lock().unwrap() = Some((b_chained, a.clone()));
+            }
+        }
         if !yolo {
             hooks.before_tool_call =
                 pirs_agent::Hooks::chain_before(gate_hook.clone(), ext_hooks.before_tool_call);

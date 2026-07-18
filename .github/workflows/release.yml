@@ -36,8 +36,8 @@ jobs:
       - name: package
         run: |
           mkdir bundle
-          cp target/${{ matrix.target }}/release/pirs bundle/ 2>/dev/null || true
-          cp target/${{ matrix.target }}/release/pirs-orchestrator bundle/ 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/pirs bundle/
+          cp target/${{ matrix.target }}/release/pirs-orchestrator bundle/
           tar -czf pirs-${{ matrix.target }}.tar.gz -C bundle .
       - uses: actions/upload-artifact@v4
         with:

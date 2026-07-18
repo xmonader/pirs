@@ -94,6 +94,21 @@ impl JobRegistry {
         output_path: PathBuf,
         pid: Option<u32>,
     ) -> (u64, Arc<Mutex<Job>>) {
+        // Bound the registry: evict the oldest finished jobs past 256 entries.
+        {
+            let mut jobs = self.jobs.lock().unwrap();
+            if jobs.len() >= 256 {
+                let mut finished: Vec<u64> = jobs
+                    .iter()
+                    .filter(|(_, j)| !matches!(j.lock().unwrap().status, JobStatus::Running))
+                    .map(|(id, _)| *id)
+                    .collect();
+                finished.sort();
+                for id in finished.into_iter().take(jobs.len() - 255) {
+                    jobs.remove(&id);
+                }
+            }
+        }
         let id = {
             let mut n = self.next_id.lock().unwrap();
             let id = *n;

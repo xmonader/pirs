@@ -89,6 +89,11 @@ impl AgentTool for FindTool {
                 break;
             }
         }
+        if count >= limit {
+            out.push_str(&format!(
+                "\n[{limit} results limit reached; narrow the pattern]"
+            ));
+        }
         if out.is_empty() {
             out = "No files found.".to_string();
         }

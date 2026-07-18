@@ -7,7 +7,6 @@ use crate::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
-const MAX_ERROR_BODY: usize = 4000;
 
 pub struct OpenAiCompat {
     base_url: String,
@@ -266,18 +265,7 @@ async fn send_done(
     let _ = tx.send(StreamEvent::Done(Box::new(msg))).await;
 }
 
-fn extract_error_body(body: &str) -> String {
-    let truncated: String = body.chars().take(MAX_ERROR_BODY).collect();
-    if let Ok(v) = serde_json::from_str::<Value>(&truncated) {
-        if let Some(err) = v.get("error") {
-            if let Some(m) = err.get("message").and_then(|m| m.as_str()) {
-                return m.to_string();
-            }
-            return err.to_string();
-        }
-    }
-    truncated
-}
+use crate::retry::extract_error_body;
 
 async fn stream_response(
     response: reqwest::Response,
@@ -590,7 +578,6 @@ pub fn build_request_body(model: &str, ctx: &Context, options: &CompletionOption
     }
     body
 }
-
 
 fn tool_to_openai(tool: &crate::ToolDef) -> Value {
     json!({
