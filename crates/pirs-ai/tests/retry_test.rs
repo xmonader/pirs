@@ -170,3 +170,15 @@ async fn retries_http_500_with_backoff() {
     .await;
     assert_eq!(msg.text(), "recovered");
 }
+
+#[test]
+fn retry_after_is_capped() {
+    // A day-long Retry-After must not park the task: the cap wins.
+    let d = pirs_ai::retry::backoff_duration(0, Some(86400));
+    assert!(d.as_secs() <= pirs_ai::retry::MAX_RETRY_SECS + 1);
+    let d = pirs_ai::retry::backoff_duration(0, Some(5));
+    assert!(d.as_secs() >= 5 && d.as_secs() <= 6);
+    // Exponential fallback also caps.
+    let d = pirs_ai::retry::backoff_duration(20, None);
+    assert!(d.as_secs() <= pirs_ai::retry::MAX_RETRY_SECS + 1);
+}

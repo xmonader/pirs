@@ -230,22 +230,7 @@ struct StreamOutcome {
     deltas_sent: bool,
 }
 
-async fn backoff(
-    attempt: u32,
-    retry_after: Option<u64>,
-    cancel: &tokio_util::sync::CancellationToken,
-) {
-    // Cap Retry-After and add jitter so a gateway can't park a task for a day.
-    let secs = retry_after
-        .unwrap_or_else(|| 1u64 << attempt.min(5))
-        .min(120);
-    let jitter_ms = crate::now_millis() % 1000;
-    let wait = std::time::Duration::from_secs(secs) + std::time::Duration::from_millis(jitter_ms);
-    tokio::select! {
-        _ = cancel.cancelled() => {}
-        _ = tokio::time::sleep(wait) => {}
-    }
-}
+use crate::retry::backoff;
 
 async fn send_done(
     tx: &tokio::sync::mpsc::Sender<StreamEvent>,

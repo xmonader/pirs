@@ -183,17 +183,7 @@ struct StreamOutcome {
     deltas_sent: bool,
 }
 
-async fn backoff(
-    attempt: u32,
-    retry_after: Option<u64>,
-    cancel: &tokio_util::sync::CancellationToken,
-) {
-    let secs = retry_after.unwrap_or_else(|| 1u64 << attempt.min(5));
-    tokio::select! {
-        _ = cancel.cancelled() => {}
-        _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => {}
-    }
-}
+use crate::retry::backoff;
 
 async fn send_terminal(
     tx: &tokio::sync::mpsc::Sender<StreamEvent>,
@@ -515,12 +505,21 @@ fn parse_sse_event(item: &crate::sse::SseEvent) -> Option<(String, Value)> {
 }
 
 fn aborted_message_with(model: &str, partial: AssistantMessage) -> AssistantMessage {
+    // An aborted turn's tool calls are never executed (the loop returns
+    // before execution on Aborted), so keeping tool_use blocks would orphan
+    // them: the next request would contain tool_use with no tool_result and
+    // Anthropic rejects the whole history with a 400. Strip them.
+    let content = partial
+        .content
+        .into_iter()
+        .filter(|b| !matches!(b, ContentBlock::ToolCall { .. }))
+        .collect();
     AssistantMessage {
         provider: "anthropic".to_string(),
         api: "anthropic-messages".to_string(),
         model: model.to_string(),
         stop_reason: StopReason::Aborted,
-        content: partial.content,
+        content,
         usage: partial.usage,
         ..Default::default()
     }
@@ -718,6 +717,43 @@ mod tests {
         assert_eq!(map_stop_reason(Some("max_tokens")), StopReason::Length);
         assert_eq!(map_stop_reason(Some("tool_use")), StopReason::ToolUse);
         assert_eq!(map_stop_reason(Some("other")), StopReason::Error);
+    }
+
+    #[test]
+    fn aborted_message_strips_orphaned_tool_use() {
+        // Abort mid-tool-call: the partial accumulator holds a completed
+        // tool_use plus text. The tool never ran, so no tool_result will ever
+        // exist — keeping the block poisons the next request (400). Text and
+        // thinking are kept; tool_use must go.
+        let partial = AssistantMessage {
+            content: vec![
+                ContentBlock::text("let me check"),
+                ContentBlock::ToolCall {
+                    id: "tc1".into(),
+                    name: "bash".into(),
+                    arguments: serde_json::json!({"command": "ls"}),
+                    thought_signature: None,
+                },
+            ],
+            ..Default::default()
+        };
+        let msg = aborted_message_with("m", partial);
+        assert_eq!(msg.stop_reason, StopReason::Aborted);
+        assert!(msg.tool_calls().is_empty(), "tool_use must be stripped");
+        assert_eq!(msg.text(), "let me check");
+
+        // And the stripped message serializes without any tool_use block.
+        let ctx = Context {
+            system_prompt: None,
+            messages: vec![Message::Assistant(msg), Message::user("next")],
+            tools: vec![],
+        };
+        let body = build_request_body("m", &ctx, &CompletionOptions::default());
+        let serialized = serde_json::to_string(&body).unwrap();
+        assert!(
+            !serialized.contains("tool_use"),
+            "no orphaned tool_use may remain: {serialized}"
+        );
     }
 
     #[test]

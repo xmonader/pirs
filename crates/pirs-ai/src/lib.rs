@@ -261,14 +261,22 @@ pub trait LlmProvider: Send + Sync {
 pub mod retry {
     use tokio_util::sync::CancellationToken;
 
-    /// Shared backoff: honors Retry-After (capped), exponential otherwise, with jitter.
-    pub async fn backoff(attempt: u32, retry_after: Option<u64>, cancel: &CancellationToken) {
+    /// Maximum wait regardless of Retry-After, so a hostile or broken gateway
+    /// cannot park a task for hours.
+    pub const MAX_RETRY_SECS: u64 = 120;
+
+    /// Pure wait-duration computation (testable without sleeping).
+    pub fn backoff_duration(attempt: u32, retry_after: Option<u64>) -> std::time::Duration {
         let secs = retry_after
             .unwrap_or_else(|| 1u64 << attempt.min(5))
-            .min(120);
+            .min(MAX_RETRY_SECS);
         let jitter_ms = crate::now_millis() % 1000;
-        let wait =
-            std::time::Duration::from_secs(secs) + std::time::Duration::from_millis(jitter_ms);
+        std::time::Duration::from_secs(secs) + std::time::Duration::from_millis(jitter_ms)
+    }
+
+    /// Shared backoff: honors Retry-After (capped), exponential otherwise, with jitter.
+    pub async fn backoff(attempt: u32, retry_after: Option<u64>, cancel: &CancellationToken) {
+        let wait = backoff_duration(attempt, retry_after);
         tokio::select! {
             _ = cancel.cancelled() => {}
             _ = tokio::time::sleep(wait) => {}
