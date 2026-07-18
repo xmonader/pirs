@@ -595,7 +595,6 @@ pub fn build_request_body(model: &str, ctx: &Context, options: &CompletionOption
 pub fn messages_to_anthropic(ctx: &Context) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::new();
     let mut pending_results: Vec<Value> = Vec::new();
-    let total = ctx.messages.len();
 
     for msg in &ctx.messages {
         match msg {
@@ -615,10 +614,6 @@ pub fn messages_to_anthropic(ctx: &Context) -> Vec<Value> {
             }
             Message::User(u) => {
                 flush_results(&mut out, &mut pending_results);
-                let is_last = {
-                    let idx = out.len() + pending_results.len() + 1;
-                    idx == total - 1
-                };
                 match &u.content {
                     crate::UserContent::Text(t) => {
                         out.push(json!({ "role": "user", "content": t }));
@@ -704,7 +699,6 @@ pub fn messages_to_anthropic(ctx: &Context) -> Vec<Value> {
             }
         }
     }
-    let _ = total;
     out
 }
 

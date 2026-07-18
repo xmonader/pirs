@@ -136,7 +136,7 @@ impl AgentTool for GrepTool {
                     if out.len() > MAX_BYTES {
                         break 'walk;
                     }
-                    i = i + 1;
+                    i += 1;
                 } else {
                     i += 1;
                 }

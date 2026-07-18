@@ -591,16 +591,6 @@ pub fn build_request_body(model: &str, ctx: &Context, options: &CompletionOption
     body
 }
 
-fn history_has_tool_calls(ctx: &Context) -> bool {
-    ctx.messages.iter().any(|m| match m {
-        Message::Assistant(a) => a
-            .content
-            .iter()
-            .any(|b| matches!(b, ContentBlock::ToolCall { .. })),
-        Message::ToolResult(_) => true,
-        _ => false,
-    })
-}
 
 fn tool_to_openai(tool: &crate::ToolDef) -> Value {
     json!({

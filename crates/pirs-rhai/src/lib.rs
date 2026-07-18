@@ -180,7 +180,6 @@ fn exec_impl(command: &str, timeout_secs: u64) -> rhai::Map {
         .map(|mut c| {
             #[cfg(unix)]
             {
-                use std::os::unix::process::CommandExt;
                 let _ = &mut c;
                 unsafe {
                     let pid = c.id() as i32;
