@@ -88,6 +88,18 @@ struct Cli {
     #[arg(long)]
     cascade: Option<String>,
 
+    /// Max agent turns (exit code 53 when hit)
+    #[arg(long)]
+    max_turns: Option<usize>,
+
+    /// Max wall-clock seconds (exit code 54 when hit)
+    #[arg(long)]
+    max_wall_time: Option<u64>,
+
+    /// Max tool calls (exit code 55 when hit)
+    #[arg(long)]
+    max_tool_calls: Option<usize>,
+
     /// Run the local web app (pirs serve): browser UI on localhost
     #[arg(long)]
     serve: bool,
@@ -632,7 +644,12 @@ async fn main() -> anyhow::Result<()> {
         .with_compaction(compaction)
         .with_visible_tools(visible)
         .with_tool_execution(execution)
-        .with_cascade(cascade_cfg);
+        .with_cascade(cascade_cfg)
+        .with_budgets(pirs_agent::agent_loop::Budgets {
+            max_turns: cli.max_turns,
+            max_tool_calls: cli.max_tool_calls,
+            max_wall_time: cli.max_wall_time.map(std::time::Duration::from_secs),
+        });
     agent.set_extra_usage_handle(usage_slot.clone());
     {
         let steer = agent.steer_sender();
@@ -733,6 +750,14 @@ async fn main() -> anyhow::Result<()> {
         run_turn(&mut agent, &prompt, &printer, &session_path, approval_mode, host.as_ref()).await?;
         eprintln!();
         print_usage(&agent.usage_report());
+        if let Some(hit) = agent.budget_hit {
+            eprintln!("[budget exhausted: {hit:?}]");
+            std::process::exit(match hit {
+                pirs_agent::agent_loop::BudgetHit::Turns => 53,
+                pirs_agent::agent_loop::BudgetHit::WallTime => 54,
+                pirs_agent::agent_loop::BudgetHit::ToolCalls => 55,
+            });
+        }
         return Ok(());
     }
 

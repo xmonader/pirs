@@ -22,6 +22,21 @@ pub struct LoopConfig {
     pub visible_tools: Option<VisibleTools>,
     pub extra_usage: std::sync::Arc<std::sync::Mutex<pirs_ai::Usage>>,
     pub cascade: Option<CascadeConfig>,
+    pub budgets: Budgets,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Budgets {
+    pub max_turns: Option<usize>,
+    pub max_tool_calls: Option<usize>,
+    pub max_wall_time: Option<std::time::Duration>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BudgetHit {
+    Turns,
+    WallTime,
+    ToolCalls,
 }
 
 pub type CascadeJudge = Arc<
@@ -57,7 +72,7 @@ pub async fn run_agent_loop(
     config: &LoopConfig,
     emit: &Emit,
     cancel: CancellationToken,
-) -> Vec<Message> {
+) -> (Vec<Message>, Option<BudgetHit>) {
     let mut new_messages: Vec<Message> = Vec::new();
 
     emit(AgentEvent::AgentStart);
@@ -75,6 +90,10 @@ pub async fn run_agent_loop(
 
     let mut pending = config.hooks.steering();
     let mut first_turn = true;
+    let mut turn_count = 0usize;
+    let mut tool_call_count = 0usize;
+    let started = std::time::Instant::now();
+    let mut budget_hit = None;
 
     'outer: loop {
         let mut has_more_tool_calls = true;
@@ -109,7 +128,7 @@ pub async fn run_agent_loop(
                 emit(AgentEvent::AgentEnd {
                     messages: new_messages.clone(),
                 });
-                return new_messages;
+                return (new_messages, None);
             }
 
             let calls = extract_tool_calls(&assistant);
@@ -161,6 +180,36 @@ pub async fn run_agent_loop(
                 message: Box::new(assistant.clone()),
                 tool_results: results.clone(),
             });
+            turn_count += 1;
+            tool_call_count += results.len();
+            if config
+                .budgets
+                .max_turns
+                .map(|m| turn_count >= m)
+                .unwrap_or(false)
+            {
+                budget_hit = Some(BudgetHit::Turns);
+            } else if config
+                .budgets
+                .max_tool_calls
+                .map(|m| tool_call_count >= m)
+                .unwrap_or(false)
+            {
+                budget_hit = Some(BudgetHit::ToolCalls);
+            } else if config
+                .budgets
+                .max_wall_time
+                .map(|m| started.elapsed() >= m)
+                .unwrap_or(false)
+            {
+                budget_hit = Some(BudgetHit::WallTime);
+            }
+            if budget_hit.is_some() {
+                emit(AgentEvent::AgentEnd {
+                    messages: new_messages.clone(),
+                });
+                return (new_messages, budget_hit);
+            }
 
             if let Some(cfg) = &config.compaction {
                 if last_input_tokens(&context.messages)
@@ -189,7 +238,7 @@ pub async fn run_agent_loop(
                     emit(AgentEvent::AgentEnd {
                         messages: new_messages.clone(),
                     });
-                    return new_messages;
+                    return (new_messages, None);
                 }
             }
             pending = config.hooks.steering();
@@ -205,7 +254,7 @@ pub async fn run_agent_loop(
         pending = follow;
     }
 
-    new_messages
+    (new_messages, budget_hit)
 }
 
 fn extract_tool_calls(assistant: &AssistantMessage) -> Vec<ToolCallData> {

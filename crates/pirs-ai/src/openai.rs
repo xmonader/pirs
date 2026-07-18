@@ -118,6 +118,11 @@ async fn run_request(
         options,
         max_retries,
     } = job;
+    let cache_affinity = if url.contains("mistral.ai") {
+        Some(format!("pirs-{}", std::process::id()))
+    } else {
+        None
+    };
     let mut stream_attempt = 0u32;
     let outcome = 'retry: loop {
         let response = {
@@ -131,6 +136,11 @@ async fn run_request(
         if let Some(key) = &options.api_key {
             if !has_auth_override {
                 req = req.bearer_auth(key);
+            }
+        }
+        if url.contains("mistral.ai") {
+            if let Some(affinity) = &cache_affinity {
+                req = req.header("x-affinity", affinity.clone());
             }
         }
         for (k, v) in &options.extra_headers {

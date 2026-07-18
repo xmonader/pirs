@@ -17,8 +17,12 @@ pub struct RpcOptions {
     pub max_retries: u32,
 }
 
-type RunFuture =
-    std::pin::Pin<Box<dyn std::future::Future<Output = (Vec<Message>, Vec<Message>)> + Send>>;
+type RunOutput = (
+    Vec<Message>,
+    Vec<Message>,
+    Option<pirs_agent::agent_loop::BudgetHit>,
+);
+type RunFuture = std::pin::Pin<Box<dyn std::future::Future<Output = RunOutput> + Send>>;
 
 struct Actor {
     agent: Agent,
@@ -31,7 +35,7 @@ struct Actor {
 
 enum Cmd {
     Line(Value),
-    RunFinished(Vec<Message>, Vec<Message>),
+    RunFinished(Vec<Message>, Vec<Message>, Option<pirs_agent::agent_loop::BudgetHit>),
 }
 
 pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
@@ -215,13 +219,14 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
                     None => std::future::pending().await,
                 }
             } => {
-                Cmd::RunFinished(result.0, result.1)
+                Cmd::RunFinished(result.0, result.1, result.2)
             }
         };
 
         match cmd {
-            Cmd::RunFinished(full, new) => {
+            Cmd::RunFinished(full, new, hit) => {
                 actor.run = None;
+                actor.agent.budget_hit = hit;
                 actor.agent.complete_run(full);
                 if let Err(e) = session::append(&actor.session_path, &new) {
                     tracing::warn!("failed to persist session: {e}");

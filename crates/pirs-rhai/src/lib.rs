@@ -276,7 +276,26 @@ impl ExtensionHost {
     }
 
     pub fn load_default_dirs(&mut self, cwd: &Path) {
-        let mut dirs = vec![cwd.join(".pirs").join("extensions")];
+        self.load_default_dirs_with_trust(cwd, &mut |dir| prompt_trust(dir));
+    }
+
+    pub fn load_default_dirs_with_trust(
+        &mut self,
+        cwd: &Path,
+        trust_decider: &mut dyn FnMut(&Path) -> TrustDecision,
+    ) {
+        let project_dir = cwd.join(".pirs").join("extensions");
+        let mut dirs = Vec::new();
+        match trust_decider(&project_dir) {
+            TrustDecision::Allow => dirs.push(project_dir),
+            TrustDecision::Deny => {
+                self.load_errors.push(format!(
+                    "{}: skipped (untrusted project extensions)",
+                    project_dir.display()
+                ));
+            }
+            TrustDecision::Skip => {}
+        }
         if let Ok(home) = std::env::var("HOME") {
             let global = Path::new(&home).join(".pirs").join("extensions");
             if !dirs.contains(&global) {
@@ -901,6 +920,73 @@ fn parallel_map_impl(
         idx = end;
     }
     results
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrustDecision {
+    Allow,
+    Deny,
+    Skip,
+}
+
+fn trust_store_path() -> Option<std::path::PathBuf> {
+    std::env::var("HOME")
+        .ok()
+        .map(|h| std::path::Path::new(&h).join(".pirs").join("trusted.json"))
+}
+
+fn load_trusted() -> std::collections::HashSet<String> {
+    let Some(path) = trust_store_path() else {
+        return std::collections::HashSet::new();
+    };
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default()
+}
+
+fn save_trusted(dir: &Path) {
+    let Some(path) = trust_store_path() else {
+        return;
+    };
+    let mut set = load_trusted();
+    set.insert(dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()).display().to_string());
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(&set).unwrap_or_default());
+}
+
+fn prompt_trust(dir: &Path) -> TrustDecision {
+    if !dir.exists() {
+        return TrustDecision::Skip;
+    }
+    let canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    let home = std::env::var("HOME").unwrap_or_default();
+    if canonical.starts_with(&home) {
+        return TrustDecision::Allow;
+    }
+    let key = canonical.display().to_string();
+    if load_trusted().contains(&key) {
+        return TrustDecision::Allow;
+    }
+    if !atty::is(atty::Stream::Stdin) {
+        return TrustDecision::Deny;
+    }
+    eprintln!(
+        "\nProject extensions found at {}\nThey run with your full permissions (tools, hooks, shell). Trust this directory? [y/N]",
+        canonical.display()
+    );
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line).is_err() {
+        return TrustDecision::Deny;
+    }
+    if matches!(line.trim(), "y" | "yes" | "Y") {
+        save_trusted(&canonical);
+        TrustDecision::Allow
+    } else {
+        TrustDecision::Deny
+    }
 }
 
 enum ExtensionFlag {

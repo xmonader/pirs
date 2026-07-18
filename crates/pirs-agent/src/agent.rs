@@ -5,7 +5,9 @@ use std::sync::{Arc, Mutex};
 use pirs_ai::{CompletionOptions, Context, LlmProvider, Message};
 use tokio_util::sync::CancellationToken;
 
-use crate::agent_loop::{run_agent_loop, CascadeConfig, LoopConfig, VisibleTools};
+use crate::agent_loop::{run_agent_loop, BudgetHit, CascadeConfig, LoopConfig, VisibleTools};
+
+pub type PromptRunOutput = (Vec<Message>, Vec<Message>, Option<BudgetHit>);
 use crate::compaction::{compact_messages, CompactionConfig};
 use crate::events::{AgentEvent, Emit, Hooks};
 use crate::tool::{AgentTool, ExecutionMode};
@@ -36,6 +38,8 @@ pub struct Agent {
     pub compaction: Option<CompactionConfig>,
     visible_tools: Option<VisibleTools>,
     cascade: Option<CascadeConfig>,
+    pub budgets: crate::agent_loop::Budgets,
+    pub budget_hit: Option<crate::agent_loop::BudgetHit>,
     extra_usage: Arc<Mutex<pirs_ai::Usage>>,
     hooks: Hooks,
     listeners: Vec<Emit>,
@@ -60,6 +64,8 @@ impl Agent {
             compaction: Some(CompactionConfig::default()),
             visible_tools: None,
             cascade: None,
+            budgets: crate::agent_loop::Budgets::default(),
+            budget_hit: None,
             extra_usage: Arc::new(Mutex::new(pirs_ai::Usage::default())),
             hooks: Hooks::default(),
             listeners: Vec::new(),
@@ -104,6 +110,11 @@ impl Agent {
 
     pub fn with_cascade(mut self, cascade: Option<CascadeConfig>) -> Self {
         self.cascade = cascade;
+        self
+    }
+
+    pub fn with_budgets(mut self, budgets: crate::agent_loop::Budgets) -> Self {
+        self.budgets = budgets;
         self
     }
 
@@ -216,7 +227,8 @@ impl Agent {
 
     async fn run_many(&mut self, prompts: Vec<Message>) -> Result<Vec<Message>, AgentError> {
         let run = self.begin_prompt(prompts)?;
-        let (full_messages, new_messages) = run.await;
+        let (full_messages, new_messages, hit) = run.await;
+        self.budget_hit = hit;
         self.complete_run(full_messages);
         Ok(new_messages)
     }
@@ -228,8 +240,7 @@ impl Agent {
     pub fn begin_prompt(
         &mut self,
         prompts: Vec<Message>,
-    ) -> Result<impl std::future::Future<Output = (Vec<Message>, Vec<Message>)> + Send + 'static, AgentError>
-    {
+    ) -> Result<impl std::future::Future<Output = PromptRunOutput> + Send + 'static, AgentError> {
         if self.running.swap(true, Ordering::SeqCst) {
             return Err(AgentError::AlreadyRunning);
         }
@@ -280,6 +291,7 @@ impl Agent {
             visible_tools: self.visible_tools.clone(),
             extra_usage: Arc::clone(&self.extra_usage),
             cascade: self.cascade.clone(),
+            budgets: self.budgets.clone(),
         };
 
         let tools = self.tools.clone();
@@ -287,10 +299,10 @@ impl Agent {
         let cancel = self.cancel.clone();
 
         Ok(async move {
-            let new_messages =
+            let (new_messages, budget_hit) =
                 run_agent_loop(prompts, &mut context, &tools, &provider, &config, &emit, cancel)
                     .await;
-            (context.messages, new_messages)
+            (context.messages, new_messages, budget_hit)
         })
     }
 

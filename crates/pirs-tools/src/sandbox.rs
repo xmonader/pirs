@@ -196,7 +196,97 @@ async fn read_pipe<R: tokio::io::AsyncRead + Unpin>(
     }
 }
 
+pub struct SshSandbox {
+    pub target: String,
+}
+
+#[async_trait]
+impl Sandbox for SshSandbox {
+    async fn exec(
+        &self,
+        command: &str,
+        cwd: &Path,
+        timeout: Option<Duration>,
+    ) -> Result<ExecOutput, SandboxError> {
+        let script = format!("cd {} 2>/dev/null || cd ~; {}", cwd.display(), command);
+        let mut cmd = tokio::process::Command::new("ssh");
+        cmd.args([
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=10",
+            "-o", "StrictHostKeyChecking=accept-new",
+            &self.target,
+            "bash", "-s",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        let mut child = cmd.spawn()?;
+        let pid = child.id().unwrap_or(0);
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            let _ = stdin.write_all(script.as_bytes()).await;
+        }
+
+        let stdout_pipe = child.stdout.take().expect("piped");
+        let stderr_pipe = child.stderr.take().expect("piped");
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<(bool, String)>(128);
+        tokio::spawn(read_pipe(stdout_pipe, true, tx.clone()));
+        tokio::spawn(read_pipe(stderr_pipe, false, tx));
+
+        let wait = child.wait();
+        let (status, timed_out) = match timeout {
+            Some(t) => match tokio::time::timeout(t, wait).await {
+                Ok(s) => (s?, false),
+                Err(_) => {
+                    #[cfg(unix)]
+                    unsafe {
+                        libc::kill(-(pid as i32), libc::SIGKILL);
+                    }
+                    let _ = child.wait().await;
+                    (child.wait().await?, true)
+                }
+            },
+            None => (wait.await?, false),
+        };
+
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+        while let Some((is_out, chunk)) = rx.recv().await {
+            if is_out {
+                stdout.push_str(&chunk);
+            } else {
+                stderr.push_str(&chunk);
+            }
+        }
+
+        Ok(ExecOutput {
+            stdout,
+            stderr,
+            code: status.code(),
+            timed_out,
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        "ssh"
+    }
+}
+
 pub fn from_env() -> std::sync::Arc<dyn Sandbox> {
+    if let Ok(spec) = std::env::var("PIRS_SANDBOX") {
+        if let Some(target) = spec.strip_prefix("ssh:") {
+            if !target.is_empty() {
+                return std::sync::Arc::new(SshSandbox {
+                    target: target.to_string(),
+                });
+            }
+        }
+    }
     if let Some(docker) = DockerSandbox::from_env() {
         std::sync::Arc::new(docker)
     } else {
@@ -216,6 +306,21 @@ mod tests {
             .unwrap();
         assert!(out.stdout.contains("hello"));
         assert!(out.stderr.contains("err"));
+        assert_eq!(out.code, Some(0));
+    }
+
+    #[tokio::test]
+    async fn ssh_backend_when_available() {
+        let Ok(target) = std::env::var("PIRS_TEST_SSH_TARGET") else {
+            eprintln!("PIRS_TEST_SSH_TARGET not set, skipping live ssh test");
+            return;
+        };
+        let sb = SshSandbox { target };
+        let out = sb
+            .exec("echo remote-host: $(hostname)", std::path::Path::new("/tmp"), Some(Duration::from_secs(15)))
+            .await
+            .unwrap();
+        assert!(out.stdout.contains("remote-host:"), "{:?}", out);
         assert_eq!(out.code, Some(0));
     }
 
