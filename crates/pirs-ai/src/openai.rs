@@ -124,9 +124,9 @@ async fn run_request(
         None
     };
     let mut stream_attempt = 0u32;
+    let mut attempt = 0u32;
     let outcome = 'retry: loop {
         let response = {
-            let mut attempt = 0u32;
             let response = loop {
                 let mut req = client.post(&url).json(&body);
                 let has_auth_override = options
@@ -616,6 +616,12 @@ fn tool_to_openai(tool: &crate::ToolDef) -> Value {
     })
 }
 
+fn echo_reasoning_to_provider(provider: &str) -> bool {
+    // DeepSeek REQUIRES reasoning_content echoed back; most OpenAI-compat
+    // gateways reject it in input. Echo only to known-safe providers.
+    matches!(provider, "deepseek")
+}
+
 pub fn messages_to_openai(ctx: &Context) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::new();
     if let Some(sp) = &ctx.system_prompt {
@@ -701,7 +707,7 @@ pub fn messages_to_openai(ctx: &Context) -> Vec<Value> {
                 if !calls.is_empty() {
                     m["tool_calls"] = Value::Array(calls);
                 }
-                if !thinking.is_empty() {
+                if !thinking.is_empty() && echo_reasoning_to_provider(&a.provider) {
                     m["reasoning_content"] = json!(thinking);
                 }
                 out.push(m);

@@ -302,8 +302,8 @@ async fn stream_assistant(
                 context.messages.pop();
             }
         }
-        emit(AgentEvent::MessageStart {
-            message: Box::new(Message::Assistant(AssistantMessage::default())),
+        emit(AgentEvent::MessageEnd {
+            message: Box::new(Message::Assistant(draft)),
         });
     }
     stream_once(

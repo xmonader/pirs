@@ -47,6 +47,12 @@ impl AgentTool for WriteTool {
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: WriteArgs = serde_json::from_value(ctx.args)?;
+        if args.content.len() > 10 * 1024 * 1024 {
+            anyhow::bail!(
+                "content too large ({} bytes, cap is 10MB); write in chunks or use bash",
+                args.content.len()
+            );
+        }
         let path = paths::resolve(&self.cwd, &args.path);
         let _mutation_guard = crate::filelock::lock(&path).await;
         if let Some(parent) = path.parent() {

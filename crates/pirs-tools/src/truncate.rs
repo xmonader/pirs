@@ -14,9 +14,24 @@ pub struct Window {
 pub fn head(content: &str, offset: usize, limit: usize) -> Window {
     let offset = offset.max(1);
     let total_lines = content.lines().count();
+    // Pre-check: the window's first line alone may exceed the byte cap;
+    // include it truncated rather than returning empty.
     let mut text = String::new();
     let mut end_line = offset - 1;
+    let mut first = true;
     for (count, (i, line)) in content.lines().enumerate().skip(offset - 1).enumerate() {
+        if first && line.len() + 1 > MAX_BYTES {
+            text = truncate_line(line, MAX_BYTES);
+            end_line = i + 1;
+            return Window {
+                text,
+                total_lines,
+                start_line: offset,
+                end_line,
+                truncated: end_line < total_lines,
+            };
+        }
+        first = false;
         if count >= limit || text.len() + line.len() + 1 > MAX_BYTES {
             break;
         }

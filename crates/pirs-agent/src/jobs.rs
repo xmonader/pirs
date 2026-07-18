@@ -133,6 +133,7 @@ impl JobRegistry {
             job.lock().unwrap().status = status.clone();
         }
         if !matches!(status, JobStatus::Running) {
+            self.stop_flags.lock().unwrap().remove(&id);
             if let Some(list) = self.waiters.lock().unwrap().remove(&id) {
                 for tx in list {
                     let _ = tx.send(());
@@ -142,19 +143,42 @@ impl JobRegistry {
     }
 
     pub async fn wait(&self, id: u64, timeout: std::time::Duration) -> Option<JobStatus> {
-        let rx = {
-            let current = self.get(id)?;
-            let status = current.lock().unwrap().status.clone();
-            if !matches!(status, JobStatus::Running) {
-                return Some(status);
+        // Register-then-recheck: a status flip between the first check and
+        // registration must not sleep the full timeout.
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let rx = {
+                let current = self.get(id)?;
+                let status = current.lock().unwrap().status.clone();
+                if !matches!(status, JobStatus::Running) {
+                    return Some(status);
+                }
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                self.waiters.lock().unwrap().entry(id).or_default().push(tx);
+                rx
+            };
+            // re-check after registration to close the flip window
+            {
+                let current = self.get(id)?;
+                let status = current.lock().unwrap().status.clone();
+                if !matches!(status, JobStatus::Running) {
+                    return Some(status);
+                }
             }
-            let (tx, rx) = tokio::sync::oneshot::channel();
-            self.waiters.lock().unwrap().entry(id).or_default().push(tx);
-            rx
-        };
-        match tokio::time::timeout(timeout, rx).await {
-            Ok(Ok(())) => self.get(id).map(|j| j.lock().unwrap().status.clone()),
-            _ => None,
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return None;
+            }
+            match tokio::time::timeout(remaining, rx).await {
+                Ok(Ok(())) => {
+                    let current = self.get(id)?;
+                    let status = current.lock().unwrap().status.clone();
+                    if !matches!(status, JobStatus::Running) {
+                        return Some(status);
+                    }
+                }
+                _ => return None,
+            }
         }
     }
 

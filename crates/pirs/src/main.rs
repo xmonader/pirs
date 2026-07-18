@@ -247,6 +247,22 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let mut cli = Cli::parse();
+
+    if let Some(dir) = cli.prompt.clone().filter(|p| p.starts_with("trust")) {
+        let arg = dir.trim_start_matches("trust").trim().to_string();
+        let target = if arg.is_empty() {
+            std::env::current_dir()?
+        } else {
+            std::path::PathBuf::from(arg)
+        };
+        return match pirs_rhai::trust_directory(&target) {
+            Ok(()) => {
+                println!("trusted {}", target.display());
+                Ok(())
+            }
+            Err(e) => anyhow::bail!(e),
+        };
+    }
     let cwd = std::env::current_dir()?;
 
     if cli.prompt.as_deref() == Some("login") || cli.mode == "login" {

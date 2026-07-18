@@ -162,6 +162,9 @@ async fn run_command_raw(
     #[cfg(unix)]
     {
         child.process_group(0);
+        unsafe {
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+        }
     }
     let mut child = child.spawn()?;
     let pid = child.id().unwrap_or(0);

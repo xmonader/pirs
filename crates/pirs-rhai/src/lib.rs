@@ -951,6 +951,20 @@ fn load_trusted() -> std::collections::HashSet<String> {
         .unwrap_or_default()
 }
 
+pub fn trust_directory(dir: &Path) -> Result<(), String> {
+    let canonical = dir.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical.join(".pirs").join("extensions").exists()
+        && !canonical.extension().and_then(|e| e.to_str()).map(|e| e == "rhai").unwrap_or(false)
+    {
+        return Err(format!(
+            "{} has no .pirs/extensions directory",
+            canonical.display()
+        ));
+    }
+    save_trusted(&canonical);
+    Ok(())
+}
+
 fn save_trusted(dir: &Path) {
     let Some(path) = trust_store_path() else {
         return;

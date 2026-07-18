@@ -546,13 +546,26 @@ pub fn build_request_body(model: &str, ctx: &Context, options: &CompletionOption
         "messages": messages_to_anthropic(ctx),
         "stream": true,
     });
-    if let Some(sp) = &ctx.system_prompt {
-        if !sp.is_empty() {
-            body["system"] = json!(sp);
+    if let Some(effort) = &options.reasoning_effort {
+        if effort != "off" {
+            let budget = match effort.as_str() {
+                "minimal" => 1024,
+                "low" => 2048,
+                "medium" => 8192,
+                "high" => 16384,
+                _ => 32768,
+            };
+            body["thinking"] = json!({ "type": "enabled", "budget_tokens": budget });
         }
     }
-    if let Some(t) = options.temperature {
-        body["temperature"] = json!(t);
+    if let Some(sp) = &ctx.system_prompt {
+        if !sp.is_empty() {
+            body["system"] = json!([{
+                "type": "text",
+                "text": sp,
+                "cache_control": { "type": "ephemeral" }
+            }]);
+        }
     }
     if !ctx.tools.is_empty() {
         body["tools"] = Value::Array(
@@ -750,7 +763,8 @@ mod tests {
         assert_eq!(msgs[1]["content"][0]["tool_use_id"], "t1");
         assert_eq!(msgs[2]["role"], "user");
         let body = build_request_body("claude-x", &ctx, &CompletionOptions::default());
-        assert_eq!(body["system"], "sys");
+        assert_eq!(body["system"][0]["text"], "sys");
+        assert_eq!(body["system"][0]["cache_control"]["type"], "ephemeral");
         assert_eq!(body["max_tokens"], DEFAULT_MAX_TOKENS);
     }
 
