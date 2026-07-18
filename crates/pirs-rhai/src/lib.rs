@@ -65,6 +65,16 @@ fn cache_path_for(key: &str) -> std::path::PathBuf {
         .join(format!("{name}.json"))
 }
 
+/// Process-wide session identity exposed to scripts via `session_id()` and
+/// `agent_model()`. Set once at startup; empty strings mean "unknown".
+static SESSION_META: std::sync::RwLock<(String, String)> =
+    std::sync::RwLock::new((String::new(), String::new()));
+
+/// Set the session id and model name exposed to extension scripts.
+pub fn set_session_meta(session_id: &str, model: &str) {
+    *SESSION_META.write().unwrap() = (session_id.to_string(), model.to_string());
+}
+
 fn build_engine(state: &StateStore) -> Engine {
     let mut engine = Engine::new();
     engine.set_max_operations(200_000);
@@ -127,6 +137,12 @@ fn build_engine(state: &StateStore) -> Engine {
         let mut h = sha2::Sha256::new();
         h.update(data.as_bytes());
         format!("{:x}", h.finalize())
+    });
+    engine.register_fn("session_id", || -> String {
+        SESSION_META.read().unwrap().0.clone()
+    });
+    engine.register_fn("agent_model", || -> String {
+        SESSION_META.read().unwrap().1.clone()
     });
     engine.register_fn("now_millis", || -> rhai::INT {
         std::time::SystemTime::now()

@@ -139,6 +139,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
+    pirs_rhai::set_session_meta(&session_id, &opts.model);
 
     let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     tokio::spawn(async move {

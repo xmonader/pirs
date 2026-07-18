@@ -11,6 +11,7 @@ use rustyline::DefaultEditor;
 
 mod approval;
 mod auth;
+mod blame;
 mod discovery;
 mod rpc_mode;
 mod serve;
@@ -279,6 +280,21 @@ async fn main() -> anyhow::Result<()> {
             }
             Err(e) => anyhow::bail!(e),
         };
+    }
+    if let Some(spec) = cli
+        .prompt
+        .clone()
+        .filter(|p| p == "blame" || p.starts_with("blame "))
+    {
+        let arg = spec.trim_start_matches("blame").trim().to_string();
+        let Some((file, line)) = arg.rsplit_once(':') else {
+            anyhow::bail!("usage: pirs blame <file>:<line>");
+        };
+        let line: u32 = line.parse().context("line must be a number")?;
+        let cwd = std::env::current_dir()?;
+        let info = blame::blame_line(&cwd, file, line)?;
+        println!("{}", blame::format_blame(&info));
+        return Ok(());
     }
     let cwd = std::env::current_dir()?;
 
@@ -669,6 +685,13 @@ async fn main() -> anyhow::Result<()> {
     let approval_shared = gate.shared_mode();
 
     let session_path = session::session_path(&cwd)?;
+    pirs_rhai::set_session_meta(
+        &session_path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "unknown".to_string()),
+        &cli.model,
+    );
     if cli.resume {
         match session::load_latest(&cwd) {
             Ok((path, messages)) => {
