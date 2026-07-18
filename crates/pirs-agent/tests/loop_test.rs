@@ -611,3 +611,15 @@ async fn cascade_escalates_on_judge_reject_and_keeps_good_draft() {
     agent2.prompt("go").await.unwrap();
     assert_eq!(seen_models2.lock().unwrap().clone(), vec!["draft-model"], "accepted draft: no escalation");
 }
+#[tokio::test]
+async fn assistant_message_appears_exactly_once_per_turn() {
+    let provider = MockProvider::new(vec![text_msg("answer")]);
+    let mut agent = make_agent(provider, vec![]);
+    agent.prompt("go").await.unwrap();
+    let assistants = agent
+        .messages
+        .iter()
+        .filter(|m| matches!(m, Message::Assistant(_)))
+        .count();
+    assert_eq!(assistants, 1, "assistant message duplicated in context: {:?}", agent.messages.iter().map(|m| match m { Message::User(_) => "user", Message::Assistant(_) => "assistant", Message::ToolResult(_) => "toolResult" }).collect::<Vec<_>>());
+}

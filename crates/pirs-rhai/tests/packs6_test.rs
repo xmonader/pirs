@@ -3,6 +3,8 @@ use std::sync::Arc;
 use pirs_rhai::ExtensionHost;
 use serde_json::json;
 
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn load(name: &str, runner: Option<pirs_rhai::SubagentRunner>) -> Arc<ExtensionHost> {
     let path = format!(
         "{}/../../examples/extensions/{name}",
@@ -35,6 +37,7 @@ fn user_msg(t: &str) -> pirs_ai::Message {
 
 #[test]
 fn review_gate_blocks_critical_and_releases_on_sound() {
+    let _g = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-rg-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
     std::process::Command::new("git").args(["init", "-q"]).current_dir(&tmp).output().unwrap();
@@ -74,6 +77,7 @@ fn review_gate_blocks_critical_and_releases_on_sound() {
 
 #[test]
 fn review_gate_sound_releases() {
+    let _g = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-rg2-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
     std::process::Command::new("git").args(["init", "-q"]).current_dir(&tmp).output().unwrap();
@@ -96,6 +100,7 @@ fn review_gate_sound_releases() {
 
 #[test]
 fn verify_guard_flags_zero_tests() {
+    let _g = ENV_LOCK.lock().unwrap();
     let host = load("verify-guard.rhai", None);
     let hooks = host.hooks();
     let before = hooks.before_tool_call.unwrap();
@@ -114,6 +119,7 @@ fn verify_guard_flags_zero_tests() {
 
 #[test]
 fn verify_guard_accepts_real_tests() {
+    let _g = ENV_LOCK.lock().unwrap();
     let host = load("verify-guard.rhai", None);
     let hooks = host.hooks();
     let before = hooks.before_tool_call.unwrap();
@@ -128,6 +134,7 @@ fn verify_guard_accepts_real_tests() {
 
 #[test]
 fn spend_caps_stop_at_budget() {
+    let _g = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-spend-{}", std::process::id()));
     std::env::set_var("HOME", &tmp);
     let host = load("spend-caps.rhai", None);
@@ -162,6 +169,7 @@ fn spend_caps_stop_at_budget() {
 
 #[test]
 fn runs_records_and_recovers_interrupted() {
+    let _g = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-runs-{}", std::process::id()));
     std::env::set_var("HOME", &tmp);
     let host = load("runs.rhai", None);
@@ -187,6 +195,7 @@ fn runs_records_and_recovers_interrupted() {
 
 #[test]
 fn sha256_hex_works() {
+    let _g = ENV_LOCK.lock().unwrap();
     let mut host = ExtensionHost::new();
     host.load_source(r#"fn h(x) { sha256_hex(x) } register_tool("h", "h", #{ type: "object", properties: #{ x: #{ type: "string" } }, required: ["x"] }); fn tool_h(args) { h(args.x) }"#, "h.rhai".into()).unwrap();
     let host = Arc::new(host);

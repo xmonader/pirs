@@ -115,9 +115,6 @@ pub async fn run_agent_loop(
             emit(AgentEvent::MessageEnd {
                 message: Box::new(Message::Assistant(assistant.clone())),
             });
-            context
-                .messages
-                .push(Message::Assistant(assistant.clone()));
             new_messages.push(Message::Assistant(assistant.clone()));
 
             if matches!(assistant.stop_reason, StopReason::Error | StopReason::Aborted) {
