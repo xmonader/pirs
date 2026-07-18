@@ -77,6 +77,12 @@ fn build_engine(state: &StateStore) -> Engine {
             .collect::<Vec<_>>()
             .join(sep)
     });
+    engine.register_fn("sha256_hex", |data: &str| -> String {
+        use sha2::Digest;
+        let mut h = sha2::Sha256::new();
+        h.update(data.as_bytes());
+        format!("{:x}", h.finalize())
+    });
     engine.register_fn("now_millis", || -> rhai::INT {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -99,6 +105,14 @@ fn build_engine(state: &StateStore) -> Engine {
     });
     engine.register_fn("fs_read", |path: &str| -> String {
         std::fs::read_to_string(path).unwrap_or_default()
+    });
+    engine.register_fn("fs_write", |path: &str, content: &str| -> bool {
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            if std::fs::create_dir_all(parent).is_err() {
+                return false;
+            }
+        }
+        std::fs::write(path, content).is_ok()
     });
     engine.register_fn("exec", |command: &str| -> rhai::Map {
         exec_impl(command, 30)
