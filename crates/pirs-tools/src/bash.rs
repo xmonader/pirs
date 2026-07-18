@@ -62,8 +62,28 @@ impl AgentTool for BashTool {
                 path.display()
             )));
         }
-        run_command(&self.cwd, &args.command, args.timeout, &ctx).await
+        let sandbox = crate::sandbox::from_env();
+        let out = sandbox
+            .exec(
+                &args.command,
+                &self.cwd,
+                args.timeout.map(std::time::Duration::from_secs),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        finish_output(out, &ctx.tool_call_id, sandbox.name(), args.timeout)
     }
+}
+
+pub async fn exec_local(
+    command: &str,
+    cwd: &std::path::Path,
+    timeout: Option<Duration>,
+) -> Result<crate::sandbox::ExecOutput, crate::sandbox::SandboxError> {
+    let out = run_command_raw(cwd, command, timeout.map(|d| d.as_secs()), None)
+        .await
+        .map_err(|e| crate::sandbox::SandboxError::Exec(e.to_string()))?;
+    Ok(out)
 }
 
 async fn run_command(
@@ -72,6 +92,49 @@ async fn run_command(
     timeout_secs: Option<u64>,
     ctx: &ToolExecContext,
 ) -> anyhow::Result<ToolOutput> {
+    let out = run_command_raw(cwd, command, timeout_secs, Some(ctx))
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    finish_output(out, &ctx.tool_call_id, "local", timeout_secs)
+}
+
+pub fn finish_output(
+    out: crate::sandbox::ExecOutput,
+    call_id: &str,
+    sandbox_name: &str,
+    timeout_secs: Option<u64>,
+) -> anyhow::Result<ToolOutput> {
+    let combined = format!("{}{}", out.stdout, out.stderr);
+    if out.timed_out {
+        bail!(
+            "Command timed out after {} seconds\n{}",
+            timeout_secs.unwrap_or(0),
+            tail_with_footer(&combined, call_id)
+        );
+    }
+    let text = tail_with_footer(&combined, call_id);
+    let note = if sandbox_name == "local" {
+        String::new()
+    } else {
+        format!(" [sandbox: {sandbox_name}]")
+    };
+    match out.code {
+        Some(0) => Ok(ToolOutput::text(if text.is_empty() {
+            "(no output)".to_string()
+        } else {
+            format!("{text}{note}")
+        })),
+        Some(n) => bail!("{text}\nCommand exited with code {n}{note}"),
+        None => bail!("{text}\nCommand terminated by signal{note}"),
+    }
+}
+
+async fn run_command_raw(
+    cwd: &std::path::Path,
+    command: &str,
+    timeout_secs: Option<u64>,
+    ctx: Option<&ToolExecContext>,
+) -> anyhow::Result<crate::sandbox::ExecOutput> {
     let shell = std::env::var("PIRS_SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let mut child = Command::new(&shell);
     child
@@ -90,11 +153,12 @@ async fn run_command(
 
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(128);
-    tokio::spawn(read_chunks(stdout, tx.clone()));
-    tokio::spawn(read_chunks(stderr, tx));
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<(bool, String)>(128);
+    tokio::spawn(read_chunks_tagged(stdout, true, tx.clone()));
+    tokio::spawn(read_chunks_tagged(stderr, false, tx));
 
     let mut out = String::new();
+    let mut out_err = String::new();
     let mut status: Option<std::process::ExitStatus> = None;
     let mut pipes_open = true;
     let deadline = timeout_secs.map(|t| Instant::now() + Duration::from_secs(t));
@@ -109,12 +173,20 @@ async fn run_command(
         tokio::select! {
             chunk = rx.recv(), if pipes_open => {
                 match chunk {
-                    Some(c) => {
-                        out.push_str(&c);
-                        if last_update.elapsed() > Duration::from_millis(100) {
-                            last_update = Instant::now();
-                            let tail = truncate::tail(&out, 20);
-                            ctx.emit_update(tail.text.trim_end().to_string());
+                    Some((is_out, c)) => {
+                        if is_out {
+                            out.push_str(&c);
+                        } else {
+                            out_err.push_str(&c);
+                        }
+                        out.push_str("");
+                        if let Some(ctx) = ctx {
+                            if last_update.elapsed() > Duration::from_millis(100) {
+                                last_update = Instant::now();
+                                let combined = format!("{out}{out_err}");
+                                let tail = truncate::tail(&combined, 20);
+                                ctx.emit_update(tail.text.trim_end().to_string());
+                            }
                         }
                     }
                     None => pipes_open = false,
@@ -126,26 +198,62 @@ async fn run_command(
             _ = &mut timeout_sleep, if has_deadline => {
                 kill_tree(pid);
                 let _ = child.wait().await;
-                bail!("Command timed out after {} seconds\n{}", timeout_secs.unwrap(), tail_with_footer(&out, &ctx.tool_call_id));
+                let _ = child.wait().await;
+                return Ok(crate::sandbox::ExecOutput {
+                    stdout: out,
+                    stderr: out_err,
+                    code: None,
+                    timed_out: true,
+                });
             }
-            _ = ctx.cancel.cancelled() => {
+            _ = async {
+                match ctx {
+                    Some(c) => c.cancel.cancelled().await,
+                    None => std::future::pending().await,
+                }
+            } => {
                 kill_tree(pid);
                 let _ = child.wait().await;
-                bail!("Command aborted\n{}", tail_with_footer(&out, &ctx.tool_call_id));
+                let status = child.wait().await?;
+                return Ok(crate::sandbox::ExecOutput {
+                    stdout: out + "\nCommand aborted",
+                    stderr: out_err,
+                    code: status.code(),
+                    timed_out: false,
+                });
             }
         }
     }
 
-    let text = tail_with_footer(&out, &ctx.tool_call_id);
-    let code = status.and_then(|s| s.code());
-    match code {
-        Some(0) => Ok(ToolOutput::text(if text.is_empty() {
-            "(no output)".to_string()
-        } else {
-            text
-        })),
-        Some(n) => bail!("{text}\nCommand exited with code {n}"),
-        None => bail!("{text}\nCommand terminated by signal"),
+    Ok(crate::sandbox::ExecOutput {
+        stdout: out,
+        stderr: out_err,
+        code: status.and_then(|s| s.code()),
+        timed_out: false,
+    })
+}
+
+async fn read_chunks_tagged<R: tokio::io::AsyncRead + Unpin>(
+    mut reader: R,
+    is_out: bool,
+    tx: tokio::sync::mpsc::Sender<(bool, String)>,
+) {
+    use tokio::io::AsyncReadExt;
+    let mut buf = [0u8; 8192];
+    loop {
+        match reader.read(&mut buf).await {
+            Ok(0) => break,
+            Ok(n) => {
+                if tx
+                    .send((is_out, String::from_utf8_lossy(&buf[..n]).into_owned()))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
     }
 }
 

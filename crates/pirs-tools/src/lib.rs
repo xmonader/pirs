@@ -4,6 +4,7 @@ use std::sync::Arc;
 use pirs_agent::AgentTool;
 
 pub mod bash;
+pub mod sandbox;
 pub mod edit;
 pub mod job_tools;
 pub mod filelock;
