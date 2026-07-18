@@ -122,7 +122,6 @@ impl Sandbox for DockerSandbox {
             .stderr(std::process::Stdio::piped());
         #[cfg(unix)]
         {
-            use std::os::unix::process::CommandExt;
             cmd.process_group(0);
         }
         let mut child = cmd.spawn()?;

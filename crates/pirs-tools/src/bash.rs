@@ -7,7 +7,6 @@ use pirs_agent::{AgentTool, ToolExecContext, ToolOutput};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 
 use crate::truncate::{self, MAX_LINES};
@@ -84,18 +83,6 @@ pub async fn exec_local(
         .await
         .map_err(|e| crate::sandbox::SandboxError::Exec(e.to_string()))?;
     Ok(out)
-}
-
-async fn run_command(
-    cwd: &std::path::Path,
-    command: &str,
-    timeout_secs: Option<u64>,
-    ctx: &ToolExecContext,
-) -> anyhow::Result<ToolOutput> {
-    let out = run_command_raw(cwd, command, timeout_secs, Some(ctx))
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    finish_output(out, &ctx.tool_call_id, "local", timeout_secs)
 }
 
 pub fn finish_output(
@@ -257,6 +244,15 @@ async fn read_chunks_tagged<R: tokio::io::AsyncRead + Unpin>(
     }
 }
 
+fn kill_tree(pid: u32) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(-(pid as i32), libc::SIGKILL);
+    }
+    #[cfg(not(unix))]
+    let _ = pid;
+}
+
 fn tail_with_footer(out: &str, call_id: &str) -> String {
     let window = truncate::tail(out, MAX_LINES);
     let mut text = window.text.trim_end_matches('\n').to_string();
@@ -290,29 +286,6 @@ fn sanitize_id(id: &str) -> String {
         .collect()
 }
 
-async fn read_chunks<R: AsyncRead + Unpin>(mut reader: R, tx: tokio::sync::mpsc::Sender<String>) {
-    let mut buf = [0u8; 8192];
-    loop {
-        match reader.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => {
-                if tx.send(String::from_utf8_lossy(&buf[..n]).into_owned()).await.is_err() {
-                    break;
-                }
-            }
-            Err(_) => break,
-        }
-    }
-}
-
-fn kill_tree(pid: u32) {
-    #[cfg(unix)]
-    unsafe {
-        libc::kill(-(pid as i32), libc::SIGKILL);
-    }
-    #[cfg(not(unix))]
-    let _ = pid;
-}
 
 #[cfg(test)]
 mod tests {
