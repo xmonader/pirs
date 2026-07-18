@@ -92,6 +92,21 @@ impl StdioClient {
                                     let _ = tx
                                         .send(Ok(v.get("result").cloned().unwrap_or(Value::Null)));
                                 }
+                            } else if let Some(method) = v.get("method").and_then(|m| m.as_str()) {
+                                // Server-initiated request (not a response): answer it.
+                                let reply = if method == "ping" {
+                                    serde_json::json!({"jsonrpc": "2.0", "id": id, "result": {}})
+                                } else {
+                                    serde_json::json!({
+                                        "jsonrpc": "2.0", "id": id,
+                                        "error": {"code": -32601, "message": format!("method not supported: {method}")}
+                                    })
+                                };
+                                let body = serde_json::to_string(&reply).unwrap_or_default();
+                                let mut stdin = stdin_writer.lock().await;
+                                let _ = stdin
+                                    .write_all(format!("{body}\n").as_bytes())
+                                    .await;
                             }
                         }
                         Ok(None) | Err(_) => {

@@ -96,10 +96,8 @@ pub fn build_cascade_judge(provider: Arc<dyn LlmProvider>, judge_model: String) 
             while let Some(ev) = stream.next().await {
                 match ev {
                     pirs_ai::StreamEvent::TextDelta(d) => verdict.push_str(&d),
-                    pirs_ai::StreamEvent::Done(m) => {
-                        if m.stop_reason == pirs_ai::StopReason::Error {
-                            return false;
-                        }
+                    pirs_ai::StreamEvent::Done(m) if m.stop_reason == pirs_ai::StopReason::Error => {
+                        return false;
                     }
                     _ => {}
                 }
