@@ -71,7 +71,17 @@ func start() {}
 #[test]
 fn finds_definitions_across_languages() {
     let (_dir, g) = fixture();
-    for name in ["main", "helper", "parse_config", "boot", "setup", "render", "mount", "run", "start"] {
+    for name in [
+        "main",
+        "helper",
+        "parse_config",
+        "boot",
+        "setup",
+        "render",
+        "mount",
+        "run",
+        "start",
+    ] {
         assert!(!g.symbol(name).is_empty(), "missing: {name}");
     }
     assert_eq!(g.symbol("parse_config")[0].kind, SymKind::Function);
@@ -97,7 +107,10 @@ fn callers_and_callees() {
 fn pagerank_ranks_callee_higher() {
     let (_dir, g) = fixture();
     let top = g.top(3);
-    assert_eq!(top[0].0.name, "parse_config", "most-called symbol ranks first: {top:?}");
+    assert_eq!(
+        top[0].0.name, "parse_config",
+        "most-called symbol ranks first: {top:?}"
+    );
 }
 
 #[test]

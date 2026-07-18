@@ -57,17 +57,15 @@ impl AgentTool for AstEditTool {
             .context("ast_edit supports Rust and Python files")?;
 
         let result = match args.op.as_str() {
-            "replace_function_body" => {
-                replace_function_body(&path, lang, &args.name, &args.value)?
-            }
+            "replace_function_body" => replace_function_body(&path, lang, &args.name, &args.value)?,
             "rename_symbol" => rename_symbol(&path, lang, &args.name, &args.value)?,
             "move_function" => {
                 let dest = resolve(&self.cwd, &args.value);
                 move_function(&path, &dest, lang, &args.name)?
             }
-            other => bail!(
-                "unknown op '{other}': use replace_function_body|rename_symbol|move_function"
-            ),
+            other => {
+                bail!("unknown op '{other}': use replace_function_body|rename_symbol|move_function")
+            }
         };
 
         Ok(ToolOutput::text(result.message).with_details(json!({
@@ -101,9 +99,7 @@ fn parse(lang: Lang, source: &str) -> anyhow::Result<tree_sitter::Tree> {
         _ => bail!("unsupported language for ast_edit"),
     };
     parser.set_language(&language)?;
-    parser
-        .parse(source, None)
-        .context("failed to parse source")
+    parser.parse(source, None).context("failed to parse source")
 }
 
 fn find_function<'a>(
@@ -157,6 +153,18 @@ fn body_node<'a>(func: tree_sitter::Node<'a>, lang: Lang) -> Option<tree_sitter:
     }
 }
 
+fn reparse_check(path: &Path, lang: Lang) -> anyhow::Result<()> {
+    let content = std::fs::read_to_string(path)?;
+    let tree = parse(lang, &content)?;
+    if tree.root_node().has_error() {
+        bail!(
+            "post-edit parse check failed: {} has syntax errors after mutation",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
 fn replace_function_body(
     path: &Path,
     lang: Lang,
@@ -172,7 +180,10 @@ fn replace_function_body(
     let mut edited = source.clone();
     match lang {
         Lang::Rust => {
-            edited.replace_range(body.start_byte()..body.end_byte(), &format!("{{\n{new_body}\n}}"));
+            edited.replace_range(
+                body.start_byte()..body.end_byte(),
+                &format!("{{\n{new_body}\n}}"),
+            );
         }
         Lang::Python => {
             // The body node starts at the first statement (after the indent);
@@ -182,6 +193,7 @@ fn replace_function_body(
         _ => bail!("unsupported"),
     }
     std::fs::write(path, &edited)?;
+    reparse_check(path, lang)?;
     Ok(EditResult {
         message: format!(
             "Replaced body of {name} in {} ({} -> {} bytes)",
@@ -213,6 +225,7 @@ fn rename_symbol(path: &Path, lang: Lang, old: &str, new: &str) -> anyhow::Resul
         edited.replace_range(*start..*end, new);
     }
     std::fs::write(path, &edited)?;
+    reparse_check(path, lang)?;
     let first = line_of_byte(&source, spans[0].0);
     Ok(EditResult {
         message: format!(
@@ -245,30 +258,14 @@ fn collect_identifiers(
     }
 }
 
-fn move_function(
-    src: &Path,
-    dest: &Path,
-    lang: Lang,
-    name: &str,
-) -> anyhow::Result<EditResult> {
+fn move_function(src: &Path, dest: &Path, lang: Lang, name: &str) -> anyhow::Result<EditResult> {
     let source = std::fs::read_to_string(src)?;
     let tree = parse(lang, &source)?;
     let func = find_function(&tree, &source, lang, name)
         .with_context(|| format!("function '{name}' not found in {}", src.display()))?;
-    let text = func
-        .utf8_text(source.as_bytes())
-        .unwrap_or("")
-        .to_string();
+    let text = func.utf8_text(source.as_bytes()).unwrap_or("").to_string();
 
-    let mut remaining = source.clone();
-    let end = if source.as_bytes().get(func.end_byte()) == Some(&b'\n') {
-        func.end_byte() + 1
-    } else {
-        func.end_byte()
-    };
-    remaining.replace_range(func.start_byte()..end, "");
-    std::fs::write(src, &remaining)?;
-
+    // Write the destination FIRST: if it fails, the source is untouched.
     let mut dest_content = if dest.exists() {
         std::fs::read_to_string(dest)?
     } else {
@@ -283,14 +280,21 @@ fn move_function(
     dest_content.push('\n');
     dest_content.push_str(text.trim_end());
     dest_content.push('\n');
-    std::fs::write(dest, dest_content)?;
+    std::fs::write(dest, &dest_content)?;
+
+    let mut remaining = source.clone();
+    let end = if source.as_bytes().get(func.end_byte()) == Some(&b'\n') {
+        func.end_byte() + 1
+    } else {
+        func.end_byte()
+    };
+    remaining.replace_range(func.start_byte()..end, "");
+    std::fs::write(src, &remaining)?;
+
+    reparse_check(src, lang)?;
 
     Ok(EditResult {
-        message: format!(
-            "Moved {name} from {} to {}",
-            src.display(),
-            dest.display()
-        ),
+        message: format!("Moved {name} from {} to {}", src.display(), dest.display()),
         first_line: func.start_position().row + 1,
     })
 }
@@ -329,7 +333,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(out.content[0].as_text().unwrap().contains("Replaced body of add"));
+        assert!(out.content[0]
+            .as_text()
+            .unwrap()
+            .contains("Replaced body of add"));
         let content = std::fs::read_to_string(&f).unwrap();
         assert_eq!(content, "fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n");
     }
@@ -353,7 +360,11 @@ mod tests {
     async fn rename_symbol_ast_precise() {
         let dir = tempfile::tempdir().unwrap();
         let f = dir.path().join("a.rs");
-        std::fs::write(&f, "fn process() { process_inner(); }\nfn process_inner() {}\n// process docs\n").unwrap();
+        std::fs::write(
+            &f,
+            "fn process() { process_inner(); }\nfn process_inner() {}\n// process docs\n",
+        )
+        .unwrap();
         run(
             &tool(dir.path()),
             json!({"op": "rename_symbol", "path": "a.rs", "name": "process_inner", "value": "handle"}),
@@ -361,7 +372,10 @@ mod tests {
         .await
         .unwrap();
         let content = std::fs::read_to_string(&f).unwrap();
-        assert_eq!(content, "fn process() { handle(); }\nfn handle() {}\n// process docs\n");
+        assert_eq!(
+            content,
+            "fn process() { handle(); }\nfn handle() {}\n// process docs\n"
+        );
     }
 
     #[tokio::test]

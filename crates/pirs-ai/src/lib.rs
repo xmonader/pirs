@@ -18,7 +18,6 @@ pub enum StopReason {
     Aborted,
 }
 
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Usage {

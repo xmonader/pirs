@@ -1,6 +1,10 @@
 #[test]
 fn example_extension_loads_and_state_fns_work() {
-    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/extensions/word_count.rhai")).unwrap();
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/extensions/word_count.rhai"
+    ))
+    .unwrap();
     let mut host = pirs_rhai::ExtensionHost::new();
     host.load_source(&src, "word_count.rhai".into()).unwrap();
     let host = std::sync::Arc::new(host);

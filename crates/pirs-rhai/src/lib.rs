@@ -73,7 +73,12 @@ fn build_engine(state: &StateStore) -> Engine {
 
     let get_state = Arc::clone(state);
     engine.register_fn("state_get", move |key: &str| -> Dynamic {
-        get_state.lock().unwrap().get(key).cloned().unwrap_or(Dynamic::UNIT)
+        get_state
+            .lock()
+            .unwrap()
+            .get(key)
+            .cloned()
+            .unwrap_or(Dynamic::UNIT)
     });
     let set_state = Arc::clone(state);
     engine.register_fn("state_set", move |key: &str, value: Dynamic| {
@@ -154,9 +159,12 @@ fn build_engine(state: &StateStore) -> Engine {
     engine.register_fn("exec", |command: &str| -> rhai::Map {
         exec_impl(command, 30)
     });
-    engine.register_fn("exec", |command: &str, timeout_secs: rhai::INT| -> rhai::Map {
-        exec_impl(command, timeout_secs.max(1) as u64)
-    });
+    engine.register_fn(
+        "exec",
+        |command: &str, timeout_secs: rhai::INT| -> rhai::Map {
+            exec_impl(command, timeout_secs.max(1) as u64)
+        },
+    );
     engine
 }
 
@@ -314,8 +322,7 @@ impl ExtensionHost {
             scripts.sort();
             for script in scripts {
                 if let Err(e) = self.load_script(&script) {
-                    self.load_errors
-                        .push(format!("{}: {e}", script.display()));
+                    self.load_errors.push(format!("{}: {e}", script.display()));
                 }
             }
         }
@@ -331,8 +338,7 @@ impl ExtensionHost {
         let ext_index = self.extensions.len();
         let registered: Arc<Mutex<Vec<(String, String, rhai::Map)>>> =
             Arc::new(Mutex::new(Vec::new()));
-        let registered_cmds: Arc<Mutex<Vec<(String, String)>>> =
-            Arc::new(Mutex::new(Vec::new()));
+        let registered_cmds: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
         let state: StateStore = Arc::new(Mutex::new(std::collections::BTreeMap::new()));
         let mut engine = build_engine(&state);
 
@@ -340,22 +346,20 @@ impl ExtensionHost {
         engine.register_fn(
             "register_tool",
             move |name: &str, description: &str, schema: rhai::Map| {
-                registrations
-                    .lock()
-                    .unwrap()
-                    .push((name.to_string(), description.to_string(), schema));
+                registrations.lock().unwrap().push((
+                    name.to_string(),
+                    description.to_string(),
+                    schema,
+                ));
             },
         );
         let cmd_registrations = Arc::clone(&registered_cmds);
-        engine.register_fn(
-            "register_command",
-            move |name: &str, description: &str| {
-                cmd_registrations
-                    .lock()
-                    .unwrap()
-                    .push((name.to_string(), description.to_string()));
-            },
-        );
+        engine.register_fn("register_command", move |name: &str, description: &str| {
+            cmd_registrations
+                .lock()
+                .unwrap()
+                .push((name.to_string(), description.to_string()));
+        });
 
         let runner_opt = self.subagent_runner.lock().unwrap().clone();
         if let Some(runner) = runner_opt.clone() {
@@ -397,9 +401,13 @@ impl ExtensionHost {
                     pirs_agent::jobs::registry().set_group(job_id, tag.clone());
                     let tag2 = tag.clone();
                     std::thread::spawn(move || {
-                        let result = runner(task, model)
-                            .unwrap_or_else(|e| format!("sub-agent error: {e}"));
-                        let status = if result.starts_with("sub-agent error") { 1 } else { 0 };
+                        let result =
+                            runner(task, model).unwrap_or_else(|e| format!("sub-agent error: {e}"));
+                        let status = if result.starts_with("sub-agent error") {
+                            1
+                        } else {
+                            0
+                        };
                         pirs_agent::jobs::registry()
                             .set_status(job_id, pirs_agent::jobs::JobStatus::Exited(status));
                         inbox.lock().unwrap().push((tag, result));
@@ -409,8 +417,7 @@ impl ExtensionHost {
             );
             let inbox2 = Arc::clone(&self.inbox);
             engine.register_fn("inbox", move || -> rhai::Array {
-                let items: Vec<(String, String)> =
-                    std::mem::take(&mut *inbox2.lock().unwrap());
+                let items: Vec<(String, String)> = std::mem::take(&mut *inbox2.lock().unwrap());
                 items
                     .into_iter()
                     .map(|(tag, result)| {
@@ -448,7 +455,11 @@ impl ExtensionHost {
             let pm_state = Arc::clone(&state);
             engine.register_fn(
                 "parallel_map",
-                move |items: rhai::Array, concurrency: rhai::INT, fn_name: &str, model: &str| -> rhai::Array {
+                move |items: rhai::Array,
+                      concurrency: rhai::INT,
+                      fn_name: &str,
+                      model: &str|
+                      -> rhai::Array {
                     parallel_map_impl(
                         pm_ast.clone(),
                         pm_state.clone(),
@@ -557,9 +568,7 @@ impl ExtensionHost {
             .any(|e| e.lock().unwrap().has_on_context);
         if has_context {
             let host = Arc::clone(self);
-            hooks.transform_context = Some(Arc::new(move |messages| {
-                host.run_on_context(messages)
-            }));
+            hooks.transform_context = Some(Arc::new(move |messages| host.run_on_context(messages)));
         }
         let has_stop = self
             .extensions
@@ -567,9 +576,7 @@ impl ExtensionHost {
             .any(|e| e.lock().unwrap().has_on_should_stop);
         if has_stop {
             let host = Arc::clone(self);
-            hooks.should_stop_after_turn = Some(Arc::new(move |ctx| {
-                host.run_on_should_stop(ctx)
-            }));
+            hooks.should_stop_after_turn = Some(Arc::new(move |ctx| host.run_on_should_stop(ctx)));
         }
         let has_steering = self
             .extensions
@@ -781,11 +788,11 @@ impl ExtensionHost {
                     match parsed {
                         Ok(v) => match serde_json::from_value::<Vec<pirs_ai::Message>>(v) {
                             Ok(msgs) => current = msgs,
-                            Err(e) => tracing::warn!(
-                                "on_context returned invalid messages: {e}"
-                            ),
+                            Err(e) => tracing::warn!("on_context returned invalid messages: {e}"),
                         },
-                        Err(e) => self.record_error("on_context", format!("returned non-JSON value: {e}")),
+                        Err(e) => {
+                            self.record_error("on_context", format!("returned non-JSON value: {e}"))
+                        }
                     }
                 }
                 Err(e) => self.record_error("on_context", e),
@@ -800,8 +807,7 @@ impl ExtensionHost {
             if stop {
                 return;
             }
-            let json = serde_json::to_value(&ctx.messages)
-                .unwrap_or_else(|_| Value::Array(vec![]));
+            let json = serde_json::to_value(&ctx.messages).unwrap_or_else(|_| Value::Array(vec![]));
             let mut map = rhai::Map::new();
             map.insert(
                 "messages".into(),
@@ -904,9 +910,7 @@ fn parallel_map_impl(
                     } else {
                         let engine = worker_engine(&state, &runner);
                         let mut scope = Scope::new();
-                        match engine
-                            .call_fn::<Dynamic>(&mut scope, &ast, &fn_name, (item,))
-                        {
+                        match engine.call_fn::<Dynamic>(&mut scope, &ast, &fn_name, (item,)) {
                             Ok(d) => d,
                             Err(e) => Dynamic::from(format!("__error__: {e}")),
                         }
@@ -915,7 +919,9 @@ fn parallel_map_impl(
             ));
         }
         for (i, h) in handles {
-            results[i] = h.join().unwrap_or_else(|_| Dynamic::from("worker panicked"));
+            results[i] = h
+                .join()
+                .unwrap_or_else(|_| Dynamic::from("worker panicked"));
         }
         idx = end;
     }
@@ -950,11 +956,19 @@ fn save_trusted(dir: &Path) {
         return;
     };
     let mut set = load_trusted();
-    set.insert(dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()).display().to_string());
+    set.insert(
+        dir.canonicalize()
+            .unwrap_or_else(|_| dir.to_path_buf())
+            .display()
+            .to_string(),
+    );
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(&path, serde_json::to_string_pretty(&set).unwrap_or_default());
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&set).unwrap_or_default(),
+    );
 }
 
 fn prompt_trust(dir: &Path) -> TrustDecision {
@@ -962,15 +976,21 @@ fn prompt_trust(dir: &Path) -> TrustDecision {
         return TrustDecision::Skip;
     }
     let canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
-    let home = std::env::var("HOME").unwrap_or_default();
-    if canonical.starts_with(&home) {
+    // Only pirs' own global dir is implicitly trusted; everything else asks.
+    let home_ext =
+        std::env::var("HOME").map(|h| std::path::Path::new(&h).join(".pirs").join("extensions"));
+    if home_ext
+        .as_ref()
+        .map(|h| h.canonicalize().unwrap_or_else(|_| h.clone()))
+        == Ok(canonical.clone())
+    {
         return TrustDecision::Allow;
     }
     let key = canonical.display().to_string();
     if load_trusted().contains(&key) {
         return TrustDecision::Allow;
     }
-    if !atty::is(atty::Stream::Stdin) {
+    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
         return TrustDecision::Deny;
     }
     eprintln!(
@@ -1046,10 +1066,7 @@ fn event_to_rhai(event: &pirs_agent::AgentEvent) -> (String, Dynamic) {
                 "stopReason".into(),
                 format!("{:?}", message.stop_reason).into(),
             );
-            map.insert(
-                "numToolResults".into(),
-                (tool_results.len() as i64).into(),
-            );
+            map.insert("numToolResults".into(), (tool_results.len() as i64).into());
             map.insert("inputTokens".into(), (message.usage.input as i64).into());
             map.insert(
                 "cacheReadTokens".into(),
@@ -1185,7 +1202,10 @@ impl AgentTool for RhaiTool {
                     &mut ext.scope,
                     &ext.ast,
                     "tool_dispatch",
-                    (fn_name.trim_start_matches("tool_").to_string(), dynamic_args),
+                    (
+                        fn_name.trim_start_matches("tool_").to_string(),
+                        dynamic_args,
+                    ),
                 )
             };
             result.map_err(|e| anyhow!("{e}"))

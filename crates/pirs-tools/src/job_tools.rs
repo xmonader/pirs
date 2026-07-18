@@ -9,13 +9,45 @@ use serde_json::Value;
 use pirs_agent::jobs::{self, JobStatus};
 
 pub const DAEMON_PATTERNS: &[&str] = &[
-    "flask run", "flask --app", "uvicorn", "gunicorn", "npm start", "npm run dev",
-    "yarn dev", "pnpm dev", "cargo run", "go run", "rails server", "rails s",
-    "python -m http.server", "http.server", "php -s", "serve", "watch", "tail -f",
-    "docker-compose up", "docker compose up", "redis-server", "postgres",
-    "nginx", "caddy", "traefik", "mongod", "rabbitmq-server", "kafka-server-start",
-    "elasticsearch", "jupyter", "streamlit", "vite", "next dev", "nuxt dev",
-    "hugo server", "jekyll serve", "live-server", "nodemon", "pm2 start",
+    "flask run",
+    "flask --app",
+    "uvicorn",
+    "gunicorn",
+    "npm start",
+    "npm run dev",
+    "yarn dev",
+    "pnpm dev",
+    "cargo run",
+    "go run",
+    "rails server",
+    "rails s",
+    "python -m http.server",
+    "http.server",
+    "php -s",
+    "serve",
+    "watch",
+    "tail -f",
+    "docker-compose up",
+    "docker compose up",
+    "redis-server",
+    "postgres",
+    "nginx",
+    "caddy",
+    "traefik",
+    "mongod",
+    "rabbitmq-server",
+    "kafka-server-start",
+    "elasticsearch",
+    "jupyter",
+    "streamlit",
+    "vite",
+    "next dev",
+    "nuxt dev",
+    "hugo server",
+    "jekyll serve",
+    "live-server",
+    "nodemon",
+    "pm2 start",
 ];
 
 pub fn looks_like_daemon(command: &str) -> bool {
@@ -24,10 +56,20 @@ pub fn looks_like_daemon(command: &str) -> bool {
 }
 
 const READY_PATTERNS: &[&str] = &[
-    "running on http", "listening on", "listening at", "serving", "started server",
-    "server started", "uvicorn running", "watching for changes", "ready in",
-    "application startup complete", "compiled successfully", "localhost:",
-    "127.0.0.1:", "0.0.0.0:",
+    "running on http",
+    "listening on",
+    "listening at",
+    "serving",
+    "started server",
+    "server started",
+    "uvicorn running",
+    "watching for changes",
+    "ready in",
+    "application startup complete",
+    "compiled successfully",
+    "localhost:",
+    "127.0.0.1:",
+    "0.0.0.0:",
 ];
 
 fn has_ready_signal(output: &str) -> bool {
@@ -124,8 +166,8 @@ impl AgentTool for JobOutputTool {
             let text = progress.lock().unwrap().clone();
             return Ok(ToolOutput::text(format!("{status_line}\n\n{text}")));
         }
-        let content = std::fs::read_to_string(&output_path)
-            .unwrap_or_else(|_| "(no output yet)".to_string());
+        let content =
+            std::fs::read_to_string(&output_path).unwrap_or_else(|_| "(no output yet)".to_string());
         let limit = args.limit.unwrap_or(50);
         let lines: Vec<&str> = content.lines().collect();
         let start = lines.len().saturating_sub(limit);
@@ -243,11 +285,7 @@ pub fn spawn_bash_job(
         let mut backoff = 1u64;
         let mut current = child;
         loop {
-            let code = current
-                .wait()
-                .ok()
-                .and_then(|s| s.code())
-                .unwrap_or(-1);
+            let code = current.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
             if !auto_restart {
                 jobs::registry().set_status(id, JobStatus::Exited(code));
                 jobs::registry().notify(format!(
@@ -261,11 +299,11 @@ pub fn spawn_bash_job(
             std::thread::sleep(std::time::Duration::from_secs(backoff));
             backoff = (backoff * 2).min(30);
             let shell = std::env::var("PIRS_SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
-            let out_file = std::fs::OpenOptions::new()
-                .append(true)
-                .open(&path);
+            let out_file = std::fs::OpenOptions::new().append(true).open(&path);
             let Ok(out_file) = out_file else { return };
-            let Ok(err_file) = out_file.try_clone() else { return };
+            let Ok(err_file) = out_file.try_clone() else {
+                return;
+            };
             let mut cmd = std::process::Command::new(shell);
             cmd.arg("-c")
                 .arg(&command_owned)
@@ -346,15 +384,28 @@ impl AgentTool for JobWaitTool {
                 } else {
                     std::fs::read_to_string(&path).unwrap_or_else(|_| "(no output)".into())
                 };
-                let tail: String = content.lines().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("
-");
-                Ok(ToolOutput::text(format!("{line}
+                let tail: String = content
+                    .lines()
+                    .rev()
+                    .take(30)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join(
+                        "
+",
+                    );
+                Ok(ToolOutput::text(format!(
+                    "{line}
 
-{tail}")))
+{tail}"
+                )))
             }
             None => Ok(ToolOutput::text(format!(
                 "job {} still running after {}s",
-                args.id, args.timeout.unwrap_or(300)
+                args.id,
+                args.timeout.unwrap_or(300)
             ))),
         }
     }
@@ -378,11 +429,14 @@ impl AgentTool for WaitReadyTool {
     }
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: WaitReadyArgs = serde_json::from_value(ctx.args)?;
-        let deadline = std::time::Instant::now()
-            + std::time::Duration::from_secs(args.timeout.unwrap_or(30));
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_secs(args.timeout.unwrap_or(30));
         loop {
             if let Some(port) = args.port {
-                if tokio::net::TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
+                if tokio::net::TcpStream::connect(("127.0.0.1", port))
+                    .await
+                    .is_ok()
+                {
                     return Ok(ToolOutput::text(format!(
                         "server is accepting connections on port {port}"
                     )));
@@ -405,8 +459,18 @@ impl AgentTool for WaitReadyTool {
                 )));
             }
             if !matches!(status, JobStatus::Running) {
-                let tail: String = output.lines().rev().take(10).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("
-");
+                let tail: String = output
+                    .lines()
+                    .rev()
+                    .take(10)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join(
+                        "
+",
+                    );
                 return Ok(ToolOutput::text(format!(
                     "job exited before becoming ready:
 {tail}"
@@ -417,8 +481,18 @@ impl AgentTool for WaitReadyTool {
                     "no readiness signal after {}s; job may still be starting. Check job_output.
 {}",
                     args.timeout.unwrap_or(30),
-                    output.lines().rev().take(5).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("
-")
+                    output
+                        .lines()
+                        .rev()
+                        .take(5)
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join(
+                            "
+"
+                        )
                 )));
             }
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -489,9 +563,14 @@ mod daemon_tests {
             .await
             .unwrap();
         let ready_text = ready.content[0].as_text().unwrap().to_string();
-        assert!(ready_text.contains("server is up") || ready_text.contains("accepting connections"), "{ready_text}");
+        assert!(
+            ready_text.contains("server is up") || ready_text.contains("accepting connections"),
+            "{ready_text}"
+        );
 
-        let status = jobs::registry().wait(id, std::time::Duration::from_millis(50)).await;
+        let status = jobs::registry()
+            .wait(id, std::time::Duration::from_millis(50))
+            .await;
         assert!(status.is_none(), "server should still be running");
         let _ = jobs::registry().steer(id, "x");
         JobKillTool

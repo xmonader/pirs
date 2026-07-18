@@ -8,7 +8,11 @@ fn untrusted_project_dir_is_skipped() {
     let tmp = tempfile::tempdir().unwrap();
     let proj = tmp.path().join("proj");
     std::fs::create_dir_all(proj.join(".pirs/extensions")).unwrap();
-    std::fs::write(proj.join(".pirs/extensions/evil.rhai"), "register_tool(\"x\", \"x\", #{ type: \"object\" }); fn tool_x(args) { \"x\" }").unwrap();
+    std::fs::write(
+        proj.join(".pirs/extensions/evil.rhai"),
+        "register_tool(\"x\", \"x\", #{ type: \"object\" }); fn tool_x(args) { \"x\" }",
+    )
+    .unwrap();
 
     let mut host = ExtensionHost::new();
     host.load_default_dirs_with_trust(&proj, &mut |_| TrustDecision::Deny);
@@ -29,11 +33,19 @@ fn home_dir_extensions_always_trusted() {
     let home = tmp.path().join("home");
     let ext = home.join(".pirs/extensions");
     std::fs::create_dir_all(&ext).unwrap();
-    std::fs::write(ext.join("ok.rhai"), "register_tool(\"y\", \"y\", #{ type: \"object\" }); fn tool_y(args) { \"y\" }").unwrap();
+    std::fs::write(
+        ext.join("ok.rhai"),
+        "register_tool(\"y\", \"y\", #{ type: \"object\" }); fn tool_y(args) { \"y\" }",
+    )
+    .unwrap();
     std::env::set_var("HOME", &home);
 
     let mut host = ExtensionHost::new();
     host.load_default_dirs_with_trust(tmp.path(), &mut |_| TrustDecision::Skip);
     let host = std::sync::Arc::new(host);
-    assert_eq!(host.tools().len(), 1, "home extensions load regardless of project trust");
+    assert_eq!(
+        host.tools().len(),
+        1,
+        "home extensions load regardless of project trust"
+    );
 }

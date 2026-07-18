@@ -1,8 +1,8 @@
 pub mod agent;
-pub mod compaction;
 pub mod agent_loop;
-pub mod events;
+pub mod compaction;
 pub mod delegate;
+pub mod events;
 pub mod jobs;
 pub mod tool;
 pub mod usage;

@@ -3,6 +3,56 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
+pub async fn wait_and_drain(
+    mut child: tokio::process::Child,
+    timeout: Option<Duration>,
+) -> Result<ExecOutput, SandboxError> {
+    let stdout_pipe = child.stdout.take().expect("piped");
+    let stderr_pipe = child.stderr.take().expect("piped");
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<(bool, String)>(128);
+    tokio::spawn(read_pipe(stdout_pipe, true, tx.clone()));
+    tokio::spawn(read_pipe(stderr_pipe, false, tx));
+
+    let pid = child.id().unwrap_or(0);
+    let mut out = ExecOutput::default();
+    let mut pipes_open = true;
+    let mut status: Option<std::process::ExitStatus> = None;
+    let deadline = timeout.map(|t| std::time::Instant::now() + t);
+    let sleep = tokio::time::sleep_until(
+        deadline
+            .unwrap_or_else(|| std::time::Instant::now() + Duration::from_secs(86400 * 365))
+            .into(),
+    );
+    tokio::pin!(sleep);
+
+    while pipes_open || status.is_none() {
+        tokio::select! {
+            chunk = rx.recv(), if pipes_open => {
+                match chunk {
+                    Some((is_out, c)) => {
+                        if is_out { out.stdout.push_str(&c); } else { out.stderr.push_str(&c); }
+                    }
+                    None => pipes_open = false,
+                }
+            }
+            s = child.wait(), if status.is_none() => {
+                status = Some(s?);
+            }
+            _ = &mut sleep, if deadline.is_some() => {
+                #[cfg(unix)]
+                unsafe { libc::kill(-(pid as i32), libc::SIGKILL); }
+                let _ = child.wait().await;
+                let s = child.wait().await?;
+                out.timed_out = true;
+                out.code = s.code();
+                return Ok(out);
+            }
+        }
+    }
+    out.code = status.and_then(|s| s.code());
+    Ok(out)
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ExecOutput {
     pub stdout: String,
@@ -68,8 +118,7 @@ impl DockerSandbox {
         let image = if container.is_some() {
             image
         } else {
-            std::env::var("PIRS_SANDBOX_IMAGE")
-                .unwrap_or_else(|_| "debian:stable-slim".to_string())
+            std::env::var("PIRS_SANDBOX_IMAGE").unwrap_or_else(|_| "debian:stable-slim".to_string())
         };
         Some(DockerSandbox { container, image })
     }
@@ -101,15 +150,22 @@ impl Sandbox for DockerSandbox {
         }
         let mut args: Vec<String> = Vec::new();
         if let Some(container) = &self.container {
-            args.extend(["exec".into(), "-w".into(), cwd.to_string_lossy().to_string()]);
+            args.extend([
+                "exec".into(),
+                "-w".into(),
+                cwd.to_string_lossy().to_string(),
+            ]);
             args.push(container.clone());
         } else {
             args.extend([
                 "run".into(),
                 "--rm".into(),
-                "-w".into(), "/work".into(),
-                "-v".into(), format!("{}:/work", cwd.canonicalize()?.display()),
-                "--network".into(), "none".into(),
+                "-w".into(),
+                "/work".into(),
+                "-v".into(),
+                format!("{}:/work", cwd.canonicalize()?.display()),
+                "--network".into(),
+                "none".into(),
             ]);
             args.push(self.image.clone());
         }
@@ -124,52 +180,17 @@ impl Sandbox for DockerSandbox {
         {
             cmd.process_group(0);
         }
-        let mut child = cmd.spawn()?;
-        let pid = child.id().unwrap_or(0);
-
-        let stdout_pipe = child.stdout.take().expect("piped");
-        let stderr_pipe = child.stderr.take().expect("piped");
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<(bool, String)>(128);
-        tokio::spawn(read_pipe(stdout_pipe, true, tx.clone()));
-        tokio::spawn(read_pipe(stderr_pipe, false, tx));
-
-        let wait = child.wait();
-        let (status, timed_out) = match timeout {
-            Some(t) => match tokio::time::timeout(t, wait).await {
-                Ok(s) => (s?, false),
-                Err(_) => {
-                    #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(pid as i32), libc::SIGKILL);
-                    }
-                    let _ = child.wait().await;
-                    (child.wait().await?, true)
-                }
-            },
-            None => (wait.await?, false),
-        };
-
-        let mut stdout = String::new();
-        let mut stderr = String::new();
-        while let Some((is_out, chunk)) = rx.recv().await {
-            if is_out {
-                stdout.push_str(&chunk);
-            } else {
-                stderr.push_str(&chunk);
-            }
-        }
-
-        Ok(ExecOutput {
-            stdout,
-            stderr,
-            code: status.code(),
-            timed_out,
-        })
+        let child = cmd.spawn()?;
+        wait_and_drain(child, timeout).await
     }
 
     fn name(&self) -> &'static str {
         "docker"
     }
+}
+
+pub fn shell_escape(arg: &str) -> String {
+    format!("'{}'", arg.replace('\'', "'\\''"))
 }
 
 async fn read_pipe<R: tokio::io::AsyncRead + Unpin>(
@@ -208,14 +229,24 @@ impl Sandbox for SshSandbox {
         cwd: &Path,
         timeout: Option<Duration>,
     ) -> Result<ExecOutput, SandboxError> {
-        let script = format!("cd {} 2>/dev/null || cd ~; {}", cwd.display(), command);
+        // Never interpolate cwd/command into the shell line unescaped —
+        // single-quote escaping is injection-safe for POSIX shells.
+        let cwd_escaped = shell_escape(&cwd.display().to_string());
+        let script = format!(
+            "cd {cwd_escaped} 2>/dev/null || cd ~
+{command}"
+        );
         let mut cmd = tokio::process::Command::new("ssh");
         cmd.args([
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=10",
-            "-o", "StrictHostKeyChecking=accept-new",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
             &self.target,
-            "bash", "-s",
+            "bash",
+            "-s",
         ])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -225,50 +256,11 @@ impl Sandbox for SshSandbox {
             cmd.process_group(0);
         }
         let mut child = cmd.spawn()?;
-        let pid = child.id().unwrap_or(0);
         if let Some(mut stdin) = child.stdin.take() {
             use tokio::io::AsyncWriteExt;
             let _ = stdin.write_all(script.as_bytes()).await;
         }
-
-        let stdout_pipe = child.stdout.take().expect("piped");
-        let stderr_pipe = child.stderr.take().expect("piped");
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<(bool, String)>(128);
-        tokio::spawn(read_pipe(stdout_pipe, true, tx.clone()));
-        tokio::spawn(read_pipe(stderr_pipe, false, tx));
-
-        let wait = child.wait();
-        let (status, timed_out) = match timeout {
-            Some(t) => match tokio::time::timeout(t, wait).await {
-                Ok(s) => (s?, false),
-                Err(_) => {
-                    #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(pid as i32), libc::SIGKILL);
-                    }
-                    let _ = child.wait().await;
-                    (child.wait().await?, true)
-                }
-            },
-            None => (wait.await?, false),
-        };
-
-        let mut stdout = String::new();
-        let mut stderr = String::new();
-        while let Some((is_out, chunk)) = rx.recv().await {
-            if is_out {
-                stdout.push_str(&chunk);
-            } else {
-                stderr.push_str(&chunk);
-            }
-        }
-
-        Ok(ExecOutput {
-            stdout,
-            stderr,
-            code: status.code(),
-            timed_out,
-        })
+        wait_and_drain(child, timeout).await
     }
 
     fn name(&self) -> &'static str {
@@ -316,7 +308,11 @@ mod tests {
         };
         let sb = SshSandbox { target };
         let out = sb
-            .exec("echo remote-host: $(hostname)", std::path::Path::new("/tmp"), Some(Duration::from_secs(15)))
+            .exec(
+                "echo remote-host: $(hostname)",
+                std::path::Path::new("/tmp"),
+                Some(Duration::from_secs(15)),
+            )
             .await
             .unwrap();
         assert!(out.stdout.contains("remote-host:"), "{:?}", out);

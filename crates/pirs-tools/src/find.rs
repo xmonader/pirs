@@ -54,9 +54,10 @@ impl AgentTool for FindTool {
         let limit = args.limit.unwrap_or(1000);
 
         let mut builder = globset::GlobSetBuilder::new();
-        builder.add(globset::Glob::new(&args.pattern).with_context(|| {
-            format!("invalid glob pattern: {}", args.pattern)
-        })?);
+        builder.add(
+            globset::Glob::new(&args.pattern)
+                .with_context(|| format!("invalid glob pattern: {}", args.pattern))?,
+        );
         builder.add(globset::Glob::new(&format!("**/{}", args.pattern))?);
         let set = builder.build()?;
 
@@ -114,7 +115,9 @@ mod tests {
         std::fs::write(dir.path().join("src/main.rs"), "").unwrap();
         std::fs::write(dir.path().join("README.md"), "").unwrap();
         let tool = FindTool::new(dir.path().to_path_buf());
-        let out = run(&tool, serde_json::json!({"pattern": "*.rs"})).await.unwrap();
+        let out = run(&tool, serde_json::json!({"pattern": "*.rs"}))
+            .await
+            .unwrap();
         let text = out.content[0].as_text().unwrap();
         assert!(text.contains("src/main.rs"));
         assert!(!text.contains("README.md"));
@@ -126,7 +129,9 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("a/b")).unwrap();
         std::fs::write(dir.path().join("a/b/c.txt"), "").unwrap();
         let tool = FindTool::new(dir.path().to_path_buf());
-        let out = run(&tool, serde_json::json!({"pattern": "b/c.txt"})).await.unwrap();
+        let out = run(&tool, serde_json::json!({"pattern": "b/c.txt"}))
+            .await
+            .unwrap();
         assert!(out.content[0].as_text().unwrap().contains("a/b/c.txt"));
     }
 }

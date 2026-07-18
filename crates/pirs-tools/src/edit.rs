@@ -63,8 +63,8 @@ impl AgentTool for EditTool {
         }
         let path = paths::resolve(&self.cwd, &args.path);
         let _mutation_guard = crate::filelock::lock(&path).await;
-        let raw = std::fs::read(&path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
+        let raw =
+            std::fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
         let original = String::from_utf8_lossy(&raw).into_owned();
 
         let (body, bom, crlf) = normalize_file(&original);
@@ -73,8 +73,8 @@ impl AgentTool for EditTool {
             if op.old_text.is_empty() {
                 bail!("oldText must not be empty");
             }
-            let span = locate(&body, &op.old_text)
-                .ok_or_else(|| not_found_error(&body, &op.old_text))?;
+            let span =
+                locate(&body, &op.old_text).ok_or_else(|| not_found_error(&body, &op.old_text))?;
             if body[span.0..span.1] == op.new_text {
                 bail!("newText is identical to the matched text; no change");
             }

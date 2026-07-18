@@ -58,7 +58,9 @@ async fn serve(responses: Vec<String>) -> String {
     format!("http://{addr}/v1")
 }
 
-async fn collect(stream: futures_util::stream::BoxStream<'static, StreamEvent>) -> pirs_ai::AssistantMessage {
+async fn collect(
+    stream: futures_util::stream::BoxStream<'static, StreamEvent>,
+) -> pirs_ai::AssistantMessage {
     use futures_util::StreamExt;
     tokio::pin!(stream);
     while let Some(ev) = stream.next().await {
@@ -145,7 +147,8 @@ async fn error_mid_stream_is_not_retried_after_deltas() {
 #[tokio::test]
 async fn retries_http_500_with_backoff() {
     let url = serve(vec![
-        "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}".to_string(),
+        "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}"
+            .to_string(),
         sse_response(&[
             r#"{"choices":[{"delta":{"content":"recovered"},"finish_reason":null}]}"#,
             r#"{"choices":[{"delta":{},"finish_reason":"stop"}]}"#,

@@ -128,69 +128,68 @@ async fn run_request(
         let response = {
             let mut attempt = 0u32;
             let response = loop {
-        let mut req = client.post(&url).json(&body);
-        let has_auth_override = options
-            .extra_headers
-            .iter()
-            .any(|(k, _)| k.eq_ignore_ascii_case("authorization"));
-        if let Some(key) = &options.api_key {
-            if !has_auth_override {
-                req = req.bearer_auth(key);
-            }
-        }
-        if url.contains("mistral.ai") {
-            if let Some(affinity) = &cache_affinity {
-                req = req.header("x-affinity", affinity.clone());
-            }
-        }
-        for (k, v) in &options.extra_headers {
-            req = req.header(k, v);
-        }
-        if let Some(t) = options.timeout {
-            req = req.timeout(t);
-        }
-
-        let result = tokio::select! {
-            _ = cancel.cancelled() => {
-                send_done(&tx, &provider, &model, StopReason::Aborted, None).await;
-                return;
-            }
-            r = req.send() => r,
-        };
-
-        match result {
-            Ok(resp) if resp.status().is_success() => break resp,
-            Ok(resp) => {
-                let status = resp.status().as_u16();
-                let retry_after = resp
-                    .headers()
-                    .get("retry-after")
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(|s| s.parse::<u64>().ok());
-                let body_text = resp.text().await.unwrap_or_default();
-                if (status == 429 || status >= 500) && attempt < max_retries {
-                    attempt += 1;
-                    backoff(attempt, retry_after, &cancel).await;
-                    continue;
+                let mut req = client.post(&url).json(&body);
+                let has_auth_override = options
+                    .extra_headers
+                    .iter()
+                    .any(|(k, _)| k.eq_ignore_ascii_case("authorization"));
+                if let Some(key) = &options.api_key {
+                    if !has_auth_override {
+                        req = req.bearer_auth(key);
+                    }
                 }
-                let msg = extract_error_body(&body_text);
-                send_done(&tx, &provider, &model, StopReason::Error, Some(msg)).await;
-                return;
-            }
-            Err(e) => {
-                if attempt < max_retries {
-                    attempt += 1;
-                    backoff(attempt, None, &cancel).await;
-                    continue;
+                if url.contains("mistral.ai") {
+                    if let Some(affinity) = &cache_affinity {
+                        req = req.header("x-affinity", affinity.clone());
+                    }
                 }
-                let _ = tx
-                    .send(StreamEvent::Error(AiError::Network(e).to_string()))
-                    .await;
-                send_done(&tx, &provider, &model, StopReason::Error, None)
-                    .await;
-                return;
-            }
-        }
+                for (k, v) in &options.extra_headers {
+                    req = req.header(k, v);
+                }
+                if let Some(t) = options.timeout {
+                    req = req.timeout(t);
+                }
+
+                let result = tokio::select! {
+                    _ = cancel.cancelled() => {
+                        send_done(&tx, &provider, &model, StopReason::Aborted, None).await;
+                        return;
+                    }
+                    r = req.send() => r,
+                };
+
+                match result {
+                    Ok(resp) if resp.status().is_success() => break resp,
+                    Ok(resp) => {
+                        let status = resp.status().as_u16();
+                        let retry_after = resp
+                            .headers()
+                            .get("retry-after")
+                            .and_then(|v| v.to_str().ok())
+                            .and_then(|s| s.parse::<u64>().ok());
+                        let body_text = resp.text().await.unwrap_or_default();
+                        if (status == 429 || status >= 500) && attempt < max_retries {
+                            attempt += 1;
+                            backoff(attempt, retry_after, &cancel).await;
+                            continue;
+                        }
+                        let msg = extract_error_body(&body_text);
+                        send_done(&tx, &provider, &model, StopReason::Error, Some(msg)).await;
+                        return;
+                    }
+                    Err(e) => {
+                        if attempt < max_retries {
+                            attempt += 1;
+                            backoff(attempt, None, &cancel).await;
+                            continue;
+                        }
+                        let _ = tx
+                            .send(StreamEvent::Error(AiError::Network(e).to_string()))
+                            .await;
+                        send_done(&tx, &provider, &model, StopReason::Error, None).await;
+                        return;
+                    }
+                }
             };
             response
         };
@@ -204,11 +203,19 @@ async fn run_request(
             });
         let retryable = matches!(outcome.message.stop_reason, StopReason::Error)
             || (empty && matches!(outcome.message.stop_reason, StopReason::Stop));
-        if retryable && !outcome.deltas_sent && stream_attempt < max_retries && !cancel.is_cancelled() {
+        if retryable
+            && !outcome.deltas_sent
+            && stream_attempt < max_retries
+            && !cancel.is_cancelled()
+        {
             stream_attempt += 1;
             tracing::warn!(
                 "retrying completion (attempt {stream_attempt}/{max_retries}): {}",
-                outcome.message.error_message.as_deref().unwrap_or("empty completion")
+                outcome
+                    .message
+                    .error_message
+                    .as_deref()
+                    .unwrap_or("empty completion")
             );
             backoff(stream_attempt, None, &cancel).await;
             continue 'retry;
@@ -224,11 +231,20 @@ struct StreamOutcome {
     deltas_sent: bool,
 }
 
-async fn backoff(attempt: u32, retry_after: Option<u64>, cancel: &tokio_util::sync::CancellationToken) {
-    let secs = retry_after.unwrap_or_else(|| 1u64 << attempt.min(5));
+async fn backoff(
+    attempt: u32,
+    retry_after: Option<u64>,
+    cancel: &tokio_util::sync::CancellationToken,
+) {
+    // Cap Retry-After and add jitter so a gateway can't park a task for a day.
+    let secs = retry_after
+        .unwrap_or_else(|| 1u64 << attempt.min(5))
+        .min(120);
+    let jitter_ms = crate::now_millis() % 1000;
+    let wait = std::time::Duration::from_secs(secs) + std::time::Duration::from_millis(jitter_ms);
     tokio::select! {
         _ = cancel.cancelled() => {}
-        _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => {}
+        _ = tokio::time::sleep(wait) => {}
     }
 }
 
@@ -314,7 +330,9 @@ async fn stream_response(
         for ev in acc.apply_chunk(&chunk) {
             if matches!(
                 ev,
-                StreamEvent::TextDelta(_) | StreamEvent::ThinkingDelta(_) | StreamEvent::ToolCallDelta
+                StreamEvent::TextDelta(_)
+                    | StreamEvent::ThinkingDelta(_)
+                    | StreamEvent::ToolCallDelta
             ) {
                 deltas_sent = true;
             }
@@ -833,7 +851,10 @@ mod tests {
         assert_eq!(calls.len(), 1);
         match calls[0] {
             ContentBlock::ToolCall {
-                id, name, arguments, ..
+                id,
+                name,
+                arguments,
+                ..
             } => {
                 assert_eq!(id, "call_9");
                 assert_eq!(name, "bash");

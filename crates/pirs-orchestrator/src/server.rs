@@ -21,8 +21,8 @@ pub async fn serve(supervisor: Arc<Supervisor>) -> anyhow::Result<()> {
             }
         }
     }
-    let listener = UnixListener::bind(&sock)
-        .with_context(|| format!("failed to bind {}", sock.display()))?;
+    let listener =
+        UnixListener::bind(&sock).with_context(|| format!("failed to bind {}", sock.display()))?;
 
     supervisor.recover_after_restart()?;
     let _ = storage::ensure_machine();
@@ -84,7 +84,9 @@ async fn handle_connection(stream: UnixStream, supervisor: Arc<Supervisor>) -> a
         Ok(r) => r,
         Err(e) => {
             write_half
-                .write_all(encode_message(&IpcResponse::error(format!("invalid request: {e}"))).as_bytes())
+                .write_all(
+                    encode_message(&IpcResponse::error(format!("invalid request: {e}"))).as_bytes(),
+                )
                 .await?;
             return Ok(());
         }
@@ -154,7 +156,10 @@ async fn handle_request(request: IpcRequest, supervisor: &Arc<Supervisor>) -> Ip
             None => IpcResponse::error(format!("Unknown instance: {instance_id}")),
         },
         IpcRequest::Stop { instance_id } => match supervisor.stop(&instance_id).await {
-            Ok(()) => IpcResponse::StopResult { ok: true, error: None },
+            Ok(()) => IpcResponse::StopResult {
+                ok: true,
+                error: None,
+            },
             Err(e) => IpcResponse::StopResult {
                 ok: false,
                 error: Some(e.to_string()),

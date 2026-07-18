@@ -6,10 +6,7 @@ use pirs_orchestrator::types::{encode_message, IpcRequest};
 use serde_json::Value;
 
 fn mock_child_path() -> String {
-    format!(
-        "{}/tests/mock_rpc_child.sh",
-        env!("CARGO_MANIFEST_DIR")
-    )
+    format!("{}/tests/mock_rpc_child.sh", env!("CARGO_MANIFEST_DIR"))
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -25,7 +22,10 @@ async fn orchestrator_end_to_end_over_uds() {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     // spawn
-    let cwd = std::env::current_dir().unwrap().to_string_lossy().to_string();
+    let cwd = std::env::current_dir()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
     let resp = client::send_ipc_request(
         encode_message(&IpcRequest::Spawn {
             cwd,

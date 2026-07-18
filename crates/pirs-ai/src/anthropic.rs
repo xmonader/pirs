@@ -156,7 +156,10 @@ async fn run_request(
             });
         let retryable = matches!(outcome.message.stop_reason, StopReason::Error)
             || (empty && matches!(outcome.message.stop_reason, StopReason::Stop));
-        if retryable && !outcome.deltas_sent && stream_attempt < max_retries && !cancel.is_cancelled()
+        if retryable
+            && !outcome.deltas_sent
+            && stream_attempt < max_retries
+            && !cancel.is_cancelled()
         {
             stream_attempt += 1;
             tracing::warn!(
@@ -181,7 +184,11 @@ struct StreamOutcome {
     deltas_sent: bool,
 }
 
-async fn backoff(attempt: u32, retry_after: Option<u64>, cancel: &tokio_util::sync::CancellationToken) {
+async fn backoff(
+    attempt: u32,
+    retry_after: Option<u64>,
+    cancel: &tokio_util::sync::CancellationToken,
+) {
     let secs = retry_after.unwrap_or_else(|| 1u64 << attempt.min(5));
     tokio::select! {
         _ = cancel.cancelled() => {}
@@ -275,6 +282,13 @@ impl Accumulator {
                     .to_string();
                 let block = self.block_mut(index);
                 block.kind = kind.clone();
+                if kind == "redacted_thinking" {
+                    block.thinking = data
+                        .pointer("/content_block/data")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                }
                 if kind == "tool_use" {
                     block.tool_id = data
                         .pointer("/content_block/id")
@@ -348,8 +362,15 @@ impl Accumulator {
         let mut content = Vec::new();
         for block in self.blocks {
             match block.kind.as_str() {
+                "redacted_thinking" => {
+                    content.push(ContentBlock::Thinking {
+                        thinking: block.thinking,
+                        thinking_signature: None,
+                        redacted: true,
+                    });
+                }
                 "thinking" => {
-                    if !block.thinking.is_empty() {
+                    if !block.thinking.is_empty() || block.kind == "redacted_thinking" {
                         content.push(ContentBlock::Thinking {
                             thinking: block.thinking,
                             thinking_signature: if block.signature.is_empty() {
@@ -357,7 +378,7 @@ impl Accumulator {
                             } else {
                                 Some(block.signature)
                             },
-                            redacted: false,
+                            redacted: block.kind == "redacted_thinking",
                         });
                     }
                 }
@@ -489,10 +510,11 @@ async fn stream_response(
 
 fn parse_sse_event(item: &crate::sse::SseEvent) -> Option<(String, Value)> {
     let v: Value = serde_json::from_str(&item.data).ok()?;
-    let event = item
-        .event
-        .clone()
-        .or_else(|| v.get("type").and_then(|t| t.as_str()).map(|s| s.to_string()))?;
+    let event = item.event.clone().or_else(|| {
+        v.get("type")
+            .and_then(|t| t.as_str())
+            .map(|s| s.to_string())
+    })?;
     Some((event, v))
 }
 
@@ -609,13 +631,18 @@ pub fn messages_to_anthropic(ctx: &Context) -> Vec<Value> {
                         ContentBlock::Thinking {
                             thinking,
                             thinking_signature,
-                            ..
+                            redacted,
                         } => {
-                            let mut part = json!({ "type": "thinking", "thinking": thinking });
-                            if let Some(sig) = thinking_signature {
-                                part["signature"] = json!(sig);
+                            if *redacted {
+                                parts
+                                    .push(json!({ "type": "redacted_thinking", "data": thinking }));
+                            } else {
+                                let mut part = json!({ "type": "thinking", "thinking": thinking });
+                                if let Some(sig) = thinking_signature {
+                                    part["signature"] = json!(sig);
+                                }
+                                parts.push(part);
                             }
-                            parts.push(part);
                         }
                         ContentBlock::Text { text, .. } if !text.trim().is_empty() => {
                             parts.push(json!({ "type": "text", "text": text }));
@@ -731,17 +758,47 @@ mod tests {
     fn accumulator_full_stream() {
         let mut acc = Accumulator::default();
         let events = vec![
-            ("message_start", json!({"message": {"usage": {"input_tokens": 100, "cache_read_input_tokens": 40}}})),
-            ("content_block_start", json!({"index": 0, "content_block": {"type": "thinking"}})),
-            ("content_block_delta", json!({"index": 0, "delta": {"type": "thinking_delta", "thinking": "hmm "}})),
-            ("content_block_delta", json!({"index": 0, "delta": {"type": "thinking_delta", "thinking": "yes"}})),
-            ("content_block_start", json!({"index": 1, "content_block": {"type": "text"}})),
-            ("content_block_delta", json!({"index": 1, "delta": {"type": "text_delta", "text": "Let me "}})),
-            ("content_block_start", json!({"index": 2, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "bash"}})),
-            ("content_block_delta", json!({"index": 2, "delta": {"type": "input_json_delta", "partial_json": "{\"command\":"}})),
-            ("content_block_delta", json!({"index": 2, "delta": {"type": "input_json_delta", "partial_json": " \"ls\"}"}})),
+            (
+                "message_start",
+                json!({"message": {"usage": {"input_tokens": 100, "cache_read_input_tokens": 40}}}),
+            ),
+            (
+                "content_block_start",
+                json!({"index": 0, "content_block": {"type": "thinking"}}),
+            ),
+            (
+                "content_block_delta",
+                json!({"index": 0, "delta": {"type": "thinking_delta", "thinking": "hmm "}}),
+            ),
+            (
+                "content_block_delta",
+                json!({"index": 0, "delta": {"type": "thinking_delta", "thinking": "yes"}}),
+            ),
+            (
+                "content_block_start",
+                json!({"index": 1, "content_block": {"type": "text"}}),
+            ),
+            (
+                "content_block_delta",
+                json!({"index": 1, "delta": {"type": "text_delta", "text": "Let me "}}),
+            ),
+            (
+                "content_block_start",
+                json!({"index": 2, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "bash"}}),
+            ),
+            (
+                "content_block_delta",
+                json!({"index": 2, "delta": {"type": "input_json_delta", "partial_json": "{\"command\":"}}),
+            ),
+            (
+                "content_block_delta",
+                json!({"index": 2, "delta": {"type": "input_json_delta", "partial_json": " \"ls\"}"}}),
+            ),
             ("content_block_stop", json!({"index": 2})),
-            ("message_delta", json!({"delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 25}})),
+            (
+                "message_delta",
+                json!({"delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 25}}),
+            ),
         ];
         for (e, d) in &events {
             acc.apply(e, d);
@@ -751,7 +808,9 @@ mod tests {
         assert_eq!(msg.usage.input, 100);
         assert_eq!(msg.usage.cache_read, 40);
         assert_eq!(msg.usage.output, 25);
-        assert!(matches!(&msg.content[0], ContentBlock::Thinking { thinking, .. } if thinking == "hmm yes"));
+        assert!(
+            matches!(&msg.content[0], ContentBlock::Thinking { thinking, .. } if thinking == "hmm yes")
+        );
         assert_eq!(msg.text(), "Let me ");
         match &msg.content[2] {
             ContentBlock::ToolCall {

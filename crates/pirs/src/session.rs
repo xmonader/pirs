@@ -11,7 +11,13 @@ fn sessions_root() -> anyhow::Result<PathBuf> {
 fn encode_cwd(cwd: &Path) -> String {
     let s = cwd.to_string_lossy();
     s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 

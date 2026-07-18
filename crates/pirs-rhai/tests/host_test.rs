@@ -37,7 +37,10 @@ fn host() -> Arc<ExtensionHost> {
     Arc::new(host)
 }
 
-async fn exec(tool: &Arc<dyn AgentTool>, args: serde_json::Value) -> anyhow::Result<pirs_agent::ToolOutput> {
+async fn exec(
+    tool: &Arc<dyn AgentTool>,
+    args: serde_json::Value,
+) -> anyhow::Result<pirs_agent::ToolOutput> {
     tool.execute(pirs_agent::ToolExecContext {
         tool_call_id: "t".into(),
         args,

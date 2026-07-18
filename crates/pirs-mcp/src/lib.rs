@@ -22,19 +22,9 @@ pub struct McpLoadResult {
 async fn connect(spec: &config::ServerSpec) -> anyhow::Result<std::sync::Arc<client::Client>> {
     use config::ServerTransport;
     match &spec.transport {
-        ServerTransport::Stdio {
-            command,
-            args,
-            env,
-        } => {
-            let c = client::StdioClient::spawn(
-                &spec.name,
-                command,
-                args,
-                env,
-                spec.cwd.as_deref(),
-            )
-            .await?;
+        ServerTransport::Stdio { command, args, env } => {
+            let c = client::StdioClient::spawn(&spec.name, command, args, env, spec.cwd.as_deref())
+                .await?;
             Ok(std::sync::Arc::new(client::Client::Stdio(c)))
         }
         ServerTransport::Http { url, headers, mode } => {
@@ -69,7 +59,10 @@ pub async fn load_servers(cwd: &Path) -> McpLoadResult {
                     tools.push(tool::McpTool::new(&spec.name, def, Arc::clone(&client)));
                 }
             }
-            Err(e) => errors.push(format!("MCP server '{}': tools/list failed: {e}", spec.name)),
+            Err(e) => errors.push(format!(
+                "MCP server '{}': tools/list failed: {e}",
+                spec.name
+            )),
         }
         handles.push(McpServerHandle {
             name: spec.name,

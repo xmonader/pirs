@@ -207,23 +207,14 @@ impl Graph {
         let mut scored: Vec<(&Symbol, f64)> = self
             .symbols
             .iter()
-            .map(|s| {
-                (
-                    s,
-                    *self.pagerank.get(&s.name).unwrap_or(&0.0),
-                )
-            })
+            .map(|s| (s, *self.pagerank.get(&s.name).unwrap_or(&0.0)))
             .collect();
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scored.truncate(n);
         scored
     }
 
-    pub fn find_definition(
-        &self,
-        name: &str,
-        file: &Path,
-    ) -> Option<&Symbol> {
+    pub fn find_definition(&self, name: &str, file: &Path) -> Option<&Symbol> {
         self.symbol(name).into_iter().find(|s| s.file == file)
     }
 }
@@ -274,7 +265,10 @@ fn walk_symbols(
     }
 }
 
-fn definition_info<'a>(lang: Lang, node: &tree_sitter::Node<'a>) -> Option<(SymKind, tree_sitter::Node<'a>)> {
+fn definition_info<'a>(
+    lang: Lang,
+    node: &tree_sitter::Node<'a>,
+) -> Option<(SymKind, tree_sitter::Node<'a>)> {
     let kind = node.kind();
     match (lang, kind) {
         (Lang::Rust, "function_item") => node
@@ -283,9 +277,7 @@ fn definition_info<'a>(lang: Lang, node: &tree_sitter::Node<'a>) -> Option<(SymK
         (Lang::Rust, "struct_item") => node
             .child_by_field_name("name")
             .map(|n| (SymKind::Struct, n)),
-        (Lang::Rust, "enum_item") => node
-            .child_by_field_name("name")
-            .map(|n| (SymKind::Enum, n)),
+        (Lang::Rust, "enum_item") => node.child_by_field_name("name").map(|n| (SymKind::Enum, n)),
         (Lang::Rust, "trait_item") => node
             .child_by_field_name("name")
             .map(|n| (SymKind::Trait, n)),

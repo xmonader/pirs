@@ -37,9 +37,15 @@ fn approval_blocks_then_allows_after_user_approval() {
     let blocked = before("1", "bash", &json!({"command": "rm -rf /tmp/x"})).unwrap();
     assert!(blocked.contains("APPROVAL REQUIRED (#1)"), "{blocked}");
 
-    assert!(before("2", "read", &json!({"path": "f"})).is_none(), "safe tools pass");
+    assert!(
+        before("2", "read", &json!({"path": "f"})).is_none(),
+        "safe tools pass"
+    );
 
-    assert!(before("3", "bash", &json!({"command": "rm -rf /tmp/x"})).is_some(), "still blocked before approval");
+    assert!(
+        before("3", "bash", &json!({"command": "rm -rf /tmp/x"})).is_some(),
+        "still blocked before approval"
+    );
 
     transform(vec![user_msg("go do it")]);
     transform(vec![user_msg("approve 1")]);
@@ -80,7 +86,10 @@ fn subagents_registers_persona_tools_from_files() {
 
     let host = load("subagents.rhai", true);
     let tools = host.tools();
-    let reviewer = tools.iter().find(|t| t.name() == "reviewer").expect("reviewer tool");
+    let reviewer = tools
+        .iter()
+        .find(|t| t.name() == "reviewer")
+        .expect("reviewer tool");
     assert_eq!(reviewer.description(), "Reviews code brutally");
 
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -94,7 +103,10 @@ fn subagents_registers_persona_tools_from_files() {
         .unwrap();
     let text = out.content[0].as_text().unwrap();
     assert!(text.contains("[glm-4.7]"), "persona model routed: {text}");
-    assert!(text.contains("'reviewer' specialist"), "persona framing included: {text}");
+    assert!(
+        text.contains("'reviewer' specialist"),
+        "persona framing included: {text}"
+    );
 }
 
 #[test]
@@ -113,9 +125,18 @@ fn checkpoint_snapshots_and_restores() {
     }
     let log = cwd.join(".pirs/checkpoints/log.jsonl");
     let content = std::fs::read_to_string(&log).expect("snapshot written");
-    assert!(content.contains("\"n\":5") || content.contains("\"n\": 5"), "{content}");
+    assert!(
+        content.contains("\"n\":5") || content.contains("\"n\": 5"),
+        "{content}"
+    );
 
-    assert_eq!(host.run_command("checkpoints", "").unwrap().matches("ts=").count(), 1);
+    assert_eq!(
+        host.run_command("checkpoints", "")
+            .unwrap()
+            .matches("ts=")
+            .count(),
+        1
+    );
     let out = host.run_command("restore", "0").unwrap();
     assert!(out.contains("Checkpoint #0"), "{out}");
     let steering = hooks.get_steering_messages.unwrap();
@@ -143,5 +164,8 @@ fn web_fetch_reads_file_urls() {
             on_update: None,
         }))
         .unwrap();
-    assert!(out.content[0].as_text().unwrap().contains("hello from disk"));
+    assert!(out.content[0]
+        .as_text()
+        .unwrap()
+        .contains("hello from disk"));
 }

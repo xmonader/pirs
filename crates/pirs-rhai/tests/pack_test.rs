@@ -10,7 +10,10 @@ use pirs_ai::{
 use pirs_rhai::ExtensionHost;
 use serde_json::{json, Value};
 
-const PACK: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/extensions/weak-model.rhai");
+const PACK: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../examples/extensions/weak-model.rhai"
+);
 
 struct MockProvider {
     scripted: Mutex<VecDeque<AssistantMessage>>,
@@ -37,9 +40,9 @@ impl LlmProvider for MockProvider {
                 stop_reason: StopReason::Stop,
                 ..Default::default()
             });
-        Box::pin(futures::stream::iter(vec![
-            StreamEvent::Done(Box::new(msg)),
-        ]))
+        Box::pin(futures::stream::iter(vec![StreamEvent::Done(Box::new(
+            msg,
+        ))]))
     }
 }
 
@@ -84,7 +87,10 @@ fn text(t: &str) -> AssistantMessage {
     }
 }
 
-fn build(script_msgs: Vec<AssistantMessage>, tools: Vec<Arc<dyn AgentTool>>) -> (Agent, Arc<Mutex<Vec<Vec<Message>>>>) {
+fn build(
+    script_msgs: Vec<AssistantMessage>,
+    tools: Vec<Arc<dyn AgentTool>>,
+) -> (Agent, Arc<Mutex<Vec<Vec<Message>>>>) {
     let mut host = ExtensionHost::new();
     host.load_source(&std::fs::read_to_string(PACK).unwrap(), PACK.into())
         .unwrap();
@@ -112,7 +118,9 @@ async fn loop_detector_blocks_third_identical_call() {
             tc("3", "bash", json!({"path": "/x"})),
             text("gave up"),
         ],
-        vec![Arc::new(NamedTool { name: "bash".into() })],
+        vec![Arc::new(NamedTool {
+            name: "bash".into(),
+        })],
     );
     let new = agent.prompt("go").await.unwrap();
 
@@ -127,7 +135,9 @@ async fn loop_detector_blocks_third_identical_call() {
 async fn verify_after_edit_steers_model_to_test() {
     let (mut agent, seen) = build(
         vec![tc("1", "edit", json!({"path": "f.rs"})), text("done")],
-        vec![Arc::new(NamedTool { name: "edit".into() })],
+        vec![Arc::new(NamedTool {
+            name: "edit".into(),
+        })],
     );
     agent.prompt("go").await.unwrap();
 
@@ -157,8 +167,15 @@ async fn plan_pinned_at_tail_of_context() {
         m,
         Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("[current-plan pinned by extension]") && t.contains("1. do x"))
     ));
-    assert!(pin_pos.is_some(), "plan pin should be in context: {last_call:?}");
-    assert_eq!(pin_pos.unwrap(), last_call.len() - 2, "pin sits before the last message");
+    assert!(
+        pin_pos.is_some(),
+        "plan pin should be in context: {last_call:?}"
+    );
+    assert_eq!(
+        pin_pos.unwrap(),
+        last_call.len() - 2,
+        "pin sits before the last message"
+    );
 
     let duplicates = last_call.iter().filter(|m| matches!(
         m,

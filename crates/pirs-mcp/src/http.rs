@@ -149,7 +149,10 @@ impl HttpClient {
 
     pub async fn call_tool(&self, name: &str, arguments: Value) -> anyhow::Result<CallResult> {
         let result = self
-            .request("tools/call", json!({ "name": name, "arguments": arguments }))
+            .request(
+                "tools/call",
+                json!({ "name": name, "arguments": arguments }),
+            )
             .await?;
         Ok(parse_call_result(&result))
     }
@@ -292,7 +295,10 @@ impl LegacySseClient {
         if !response.status().is_success() && response.status().as_u16() != 202 {
             let status = response.status().as_u16();
             let text = response.text().await.unwrap_or_default();
-            bail!("MCP SSE POST error {status}: {}", &text[..text.len().min(300)]);
+            bail!(
+                "MCP SSE POST error {status}: {}",
+                &text[..text.len().min(300)]
+            );
         }
         Ok(())
     }
@@ -332,7 +338,10 @@ impl LegacySseClient {
 
     pub async fn call_tool(&self, name: &str, arguments: Value) -> anyhow::Result<CallResult> {
         let result = self
-            .request("tools/call", json!({ "name": name, "arguments": arguments }))
+            .request(
+                "tools/call",
+                json!({ "name": name, "arguments": arguments }),
+            )
             .await?;
         Ok(parse_call_result(&result))
     }
@@ -386,7 +395,11 @@ pub fn parse_call_result(result: &Value) -> CallResult {
                 .and_then(|t| t.as_str())
                 .map(pirs_ai::ContentBlock::text),
             Some("image") => Some(pirs_ai::ContentBlock::Image {
-                data: c.get("data").and_then(|d| d.as_str()).unwrap_or("").to_string(),
+                data: c
+                    .get("data")
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 mime_type: c
                     .get("mimeType")
                     .and_then(|m| m.as_str())
@@ -480,10 +493,15 @@ mod tests {
 
     #[test]
     fn drain_events_parses() {
-        let mut buf = b"event: endpoint\ndata: /messages?sid=1\n\nevent: message\ndata: {\"id\":1}\n\n".to_vec();
+        let mut buf =
+            b"event: endpoint\ndata: /messages?sid=1\n\nevent: message\ndata: {\"id\":1}\n\n"
+                .to_vec();
         let events = drain_sse_events(&mut buf);
         assert_eq!(events.len(), 2);
-        assert_eq!(events[0], ("endpoint".to_string(), "/messages?sid=1".to_string()));
+        assert_eq!(
+            events[0],
+            ("endpoint".to_string(), "/messages?sid=1".to_string())
+        );
         assert_eq!(events[1].0, "message");
     }
 

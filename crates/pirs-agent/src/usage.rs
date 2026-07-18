@@ -21,11 +21,19 @@ pub struct UsageReport {
 
 impl UsageReport {
     pub fn grand_total(&self) -> Usage {
-        self.main_usage.clone() + self.delegate_usage.clone() + self.compaction_usage.clone()
+        let mut total =
+            self.main_usage.clone() + self.delegate_usage.clone() + self.compaction_usage.clone();
+        // total_tokens accumulated per-message can drift from input+output
+        // (providers report it independently); recompute from the parts.
+        total.total_tokens = total.input + total.output + total.cache_read + total.cache_write;
+        total
     }
 
     pub fn delegate_calls(&self) -> usize {
-        self.calls.iter().filter(|c| c.model.starts_with("delegate:")).count()
+        self.calls
+            .iter()
+            .filter(|c| c.model.starts_with("delegate:"))
+            .count()
     }
 }
 

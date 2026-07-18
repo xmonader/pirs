@@ -135,7 +135,10 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(out.content[0].as_text().unwrap().contains("Tool 'grep' loaded"));
+        assert!(out.content[0]
+            .as_text()
+            .unwrap()
+            .contains("Tool 'grep' loaded"));
         assert!(visible.lock().unwrap().contains("grep"));
     }
 

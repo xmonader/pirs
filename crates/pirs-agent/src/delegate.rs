@@ -35,11 +35,7 @@ impl DelegateTool {
         })
     }
 
-    pub fn with_policy_hooks(
-        &self,
-        before: BeforeToolCallHook,
-        after: AfterToolCallHook,
-    ) {
+    pub fn with_policy_hooks(&self, before: BeforeToolCallHook, after: AfterToolCallHook) {
         *self.policy_hooks.lock().unwrap() = Some((before, after));
     }
 }
@@ -64,7 +60,8 @@ impl DelegateTool {
             job.lock().unwrap().output_path = out_path.clone();
         }
 
-        let progress: Arc<std::sync::Mutex<String>> = Arc::new(std::sync::Mutex::new(String::new()));
+        let progress: Arc<std::sync::Mutex<String>> =
+            Arc::new(std::sync::Mutex::new(String::new()));
         let progress2 = Arc::clone(&progress);
         let task_for_thread = task.clone();
         let task_for_desc = task.clone();
@@ -99,11 +96,13 @@ impl DelegateTool {
                     }));
                 }
                 let steer = agent.steer_sender();
-                crate::jobs::registry().set_steer(id, Arc::new(move |s: String| {
-                    steer(pirs_ai::Message::user(s));
-                }));
-                crate::jobs::registry()
-                    .set_progress_handle(id, Arc::clone(&progress2));
+                crate::jobs::registry().set_steer(
+                    id,
+                    Arc::new(move |s: String| {
+                        steer(pirs_ai::Message::user(s));
+                    }),
+                );
+                crate::jobs::registry().set_progress_handle(id, Arc::clone(&progress2));
                 let result = agent.prompt(&task_for_thread).await;
                 let (status, answer) = match result {
                     Ok(new) => {
@@ -122,10 +121,7 @@ impl DelegateTool {
                     Err(e) => (1, format!("error: {e}")),
                 };
                 let _ = std::fs::write(&out_path, &answer);
-                crate::jobs::registry().set_status(
-                    id,
-                    crate::jobs::JobStatus::Exited(status),
-                );
+                crate::jobs::registry().set_status(id, crate::jobs::JobStatus::Exited(status));
                 crate::jobs::registry().notify(format!(
                     "background agent #{id} finished: {}",
                     answer.chars().take(200).collect::<String>()
@@ -173,7 +169,9 @@ impl AgentTool for DelegateTool {
     }
 
     fn prompt_snippet(&self) -> Option<&str> {
-        Some("delegate: run a self-contained subtask in a fresh sub-agent, get back only its answer")
+        Some(
+            "delegate: run a self-contained subtask in a fresh sub-agent, get back only its answer",
+        )
     }
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {

@@ -112,7 +112,10 @@ mod tests {
         let mut updated = rec;
         updated.status = crate::types::InstanceStatus::Stopped;
         upsert_instance(updated).unwrap();
-        assert_eq!(load_instances()[0].status, crate::types::InstanceStatus::Stopped);
+        assert_eq!(
+            load_instances()[0].status,
+            crate::types::InstanceStatus::Stopped
+        );
         remove_instance("i1").unwrap();
         assert!(load_instances().is_empty());
     }

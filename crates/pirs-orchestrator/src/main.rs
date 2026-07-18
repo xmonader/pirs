@@ -5,7 +5,10 @@ use pirs_orchestrator::supervisor::Supervisor;
 use pirs_orchestrator::types::{encode_message, IpcRequest};
 
 #[derive(Parser)]
-#[command(name = "pirs-orchestrator", about = "Manage fleets of headless pirs instances")]
+#[command(
+    name = "pirs-orchestrator",
+    about = "Manage fleets of headless pirs instances"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -84,9 +87,7 @@ async fn main() -> anyhow::Result<()> {
             })
             .await
         }
-        Command::Status { instance_id } => {
-            one_shot(&IpcRequest::Status { instance_id }).await
-        }
+        Command::Status { instance_id } => one_shot(&IpcRequest::Status { instance_id }).await,
         Command::Stop { instance_id } => one_shot(&IpcRequest::Stop { instance_id }).await,
         Command::Rpc { instance_id, json } => {
             let command: serde_json::Value = serde_json::from_str(&json)?;

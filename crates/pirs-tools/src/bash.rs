@@ -56,6 +56,15 @@ impl AgentTool for BashTool {
         if !self.cwd.exists() {
             bail!("working directory {} does not exist", self.cwd.display());
         }
+        let sandbox_is_local = std::env::var("PIRS_SANDBOX").is_err();
+        if (args.background.unwrap_or(false) || args.auto_restart.unwrap_or(false))
+            && !sandbox_is_local
+        {
+            bail!(
+                "background jobs are not supported in sandbox mode ({}); run in foreground or unset PIRS_SANDBOX",
+                crate::sandbox::from_env().name()
+            );
+        }
         if args.background.unwrap_or(false)
             || args.auto_restart.unwrap_or(false)
             || crate::job_tools::looks_like_daemon(&args.command)
@@ -76,6 +85,11 @@ impl AgentTool for BashTool {
             )));
         }
         let sandbox = crate::sandbox::from_env();
+        if sandbox.name() == "local" {
+            // Local path keeps live streaming updates and cancellation.
+            let out = run_command_raw(&self.cwd, &args.command, args.timeout, Some(&ctx)).await?;
+            return finish_output(out, &ctx.tool_call_id, "local", args.timeout);
+        }
         let out = sandbox
             .exec(
                 &args.command,
@@ -164,7 +178,9 @@ async fn run_command_raw(
     let mut pipes_open = true;
     let deadline = timeout_secs.map(|t| Instant::now() + Duration::from_secs(t));
     let timeout_sleep = tokio::time::sleep_until(
-        deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(86400 * 365)).into(),
+        deadline
+            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400 * 365))
+            .into(),
     );
     tokio::pin!(timeout_sleep);
     let has_deadline = deadline.is_some();
@@ -284,10 +300,7 @@ fn tail_with_footer(out: &str, call_id: &str) -> String {
 }
 
 fn spill_to_temp(out: &str, call_id: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!(
-        "pirs-bash-{}.log",
-        sanitize_id(call_id)
-    ));
+    let path = std::env::temp_dir().join(format!("pirs-bash-{}.log", sanitize_id(call_id)));
     if std::fs::write(&path, out).is_err() {
         return PathBuf::from("<failed to write log>");
     }
@@ -296,10 +309,15 @@ fn spill_to_temp(out: &str, call_id: &str) -> PathBuf {
 
 fn sanitize_id(id: &str) -> String {
     id.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -319,7 +337,9 @@ mod tests {
     async fn captures_stdout_and_stderr() {
         let tool = BashTool::new(std::env::temp_dir());
         let out = tool
-            .execute(ctx(serde_json::json!({"command": "echo out; echo err >&2"})))
+            .execute(ctx(
+                serde_json::json!({"command": "echo out; echo err >&2"}),
+            ))
             .await
             .unwrap();
         let text = out.content[0].as_text().unwrap();
@@ -344,7 +364,9 @@ mod tests {
         let tool = BashTool::new(std::env::temp_dir());
         let start = Instant::now();
         let err = tool
-            .execute(ctx(serde_json::json!({"command": "sleep 30", "timeout": 1})))
+            .execute(ctx(
+                serde_json::json!({"command": "sleep 30", "timeout": 1}),
+            ))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("timed out after 1 seconds"));

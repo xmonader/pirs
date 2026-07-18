@@ -40,11 +40,27 @@ fn review_gate_blocks_critical_and_releases_on_sound() {
     let _g = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-rg-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
-    std::process::Command::new("git").args(["init", "-q"]).current_dir(&tmp).output().unwrap();
-    std::fs::write(tmp.join("f.txt"), "v1\n").unwrap();
-    std::process::Command::new("git").args(["add", "-A"]).current_dir(&tmp).output().unwrap();
     std::process::Command::new("git")
-        .args(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"])
+        .args(["init", "-q"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::fs::write(tmp.join("f.txt"), "v1\n").unwrap();
+    std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "init",
+        ])
         .current_dir(&tmp)
         .output()
         .unwrap();
@@ -52,9 +68,8 @@ fn review_gate_blocks_critical_and_releases_on_sound() {
     let cwd = std::env::current_dir().unwrap();
     std::env::set_current_dir(&tmp).unwrap();
 
-    let critical: pirs_rhai::SubagentRunner = Arc::new(|_, _| {
-        Ok("CRITICAL\n- changes the wrong thing".to_string())
-    });
+    let critical: pirs_rhai::SubagentRunner =
+        Arc::new(|_, _| Ok("CRITICAL\n- changes the wrong thing".to_string()));
     let host = load("review-gate.rhai", Some(critical));
     let hooks = host.hooks();
     let transform = hooks.transform_context.unwrap();
@@ -67,10 +82,17 @@ fn review_gate_blocks_critical_and_releases_on_sound() {
 
     let msgs = follow();
     assert_eq!(msgs.len(), 1, "blocked message injected: {msgs:?}");
-    let pirs_ai::Message::User(u) = &msgs[0] else { panic!() };
-    let pirs_ai::UserContent::Text(t) = &u.content else { panic!() };
+    let pirs_ai::Message::User(u) = &msgs[0] else {
+        panic!()
+    };
+    let pirs_ai::UserContent::Text(t) = &u.content else {
+        panic!()
+    };
     assert!(t.contains("REVIEW BLOCKED"));
-    assert!(stop(&pirs_ai::Context::default()), "should_stop must hold while blocked");
+    assert!(
+        stop(&pirs_ai::Context::default()),
+        "should_stop must hold while blocked"
+    );
 
     std::env::set_current_dir(cwd).unwrap();
 }
@@ -80,7 +102,11 @@ fn review_gate_sound_releases() {
     let _g = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-rg2-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
-    std::process::Command::new("git").args(["init", "-q"]).current_dir(&tmp).output().unwrap();
+    std::process::Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
     std::fs::write(tmp.join("f.txt"), "v2\n").unwrap();
     let cwd = std::env::current_dir().unwrap();
     std::env::set_current_dir(&tmp).unwrap();
@@ -112,8 +138,12 @@ fn verify_guard_flags_zero_tests() {
     after("2", "bash", &tr("bash", "collected 0 items\n", false));
     let msgs = steering();
     assert_eq!(msgs.len(), 1);
-    let pirs_ai::Message::User(u) = &msgs[0] else { panic!() };
-    let pirs_ai::UserContent::Text(t) = &u.content else { panic!() };
+    let pirs_ai::Message::User(u) = &msgs[0] else {
+        panic!()
+    };
+    let pirs_ai::UserContent::Text(t) = &u.content else {
+        panic!()
+    };
     assert!(t.contains("ZERO passing tests"));
 }
 
@@ -187,9 +217,17 @@ fn runs_records_and_recovers_interrupted() {
     });
 
     let msgs = steering();
-    assert_eq!(msgs.len(), 1, "interrupted run should be reported: {msgs:?}");
-    let pirs_ai::Message::User(u) = &msgs[0] else { panic!() };
-    let pirs_ai::UserContent::Text(t) = &u.content else { panic!() };
+    assert_eq!(
+        msgs.len(),
+        1,
+        "interrupted run should be reported: {msgs:?}"
+    );
+    let pirs_ai::Message::User(u) = &msgs[0] else {
+        panic!()
+    };
+    let pirs_ai::UserContent::Text(t) = &u.content else {
+        panic!()
+    };
     assert!(t.contains("interrupted"));
 }
 
@@ -200,12 +238,14 @@ fn sha256_hex_works() {
     host.load_source(r#"fn h(x) { sha256_hex(x) } register_tool("h", "h", #{ type: "object", properties: #{ x: #{ type: "string" } }, required: ["x"] }); fn tool_h(args) { h(args.x) }"#, "h.rhai".into()).unwrap();
     let host = Arc::new(host);
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let out = rt.block_on(host.tools()[0].execute(pirs_agent::ToolExecContext {
-        tool_call_id: "t".into(),
-        args: json!({"x": "pirs"}),
-        cancel: tokio_util::sync::CancellationToken::new(),
-        on_update: None,
-    })).unwrap();
+    let out = rt
+        .block_on(host.tools()[0].execute(pirs_agent::ToolExecContext {
+            tool_call_id: "t".into(),
+            args: json!({"x": "pirs"}),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            on_update: None,
+        }))
+        .unwrap();
     let digest = out.content[0].as_text().unwrap();
     assert_eq!(digest.len(), 64);
     assert!(digest.chars().all(|c| c.is_ascii_hexdigit()));

@@ -44,14 +44,20 @@ async fn lsp_definition_across_files() {
         .await
         .unwrap();
 
-    client.open_document(&dir.path().join("src/main.rs"), "rust").await.unwrap();
+    client
+        .open_document(&dir.path().join("src/main.rs"), "rust")
+        .await
+        .unwrap();
     let result = client
         .definition(&dir.path().join("src/main.rs"), 2, 22)
         .await
         .unwrap();
 
     let text = serde_json::to_string(&result).unwrap();
-    assert!(text.contains("lib.rs"), "definition should point to lib.rs: {text}");
+    assert!(
+        text.contains("lib.rs"),
+        "definition should point to lib.rs: {text}"
+    );
     client.shutdown().await;
 }
 
@@ -66,14 +72,23 @@ async fn lsp_references_and_symbols() {
         .await
         .unwrap();
 
-    client.open_document(&dir.path().join("src/lib.rs"), "rust").await.unwrap();
-    client.open_document(&dir.path().join("src/main.rs"), "rust").await.unwrap();
+    client
+        .open_document(&dir.path().join("src/lib.rs"), "rust")
+        .await
+        .unwrap();
+    client
+        .open_document(&dir.path().join("src/main.rs"), "rust")
+        .await
+        .unwrap();
     let refs = client
         .references(&dir.path().join("src/lib.rs"), 1, 8)
         .await
         .unwrap();
     let text = serde_json::to_string(&refs).unwrap();
-    assert!(text.contains("main.rs"), "references should include main.rs: {text}");
+    assert!(
+        text.contains("main.rs"),
+        "references should include main.rs: {text}"
+    );
 
     let syms = client
         .document_symbols(&dir.path().join("src/lib.rs"))

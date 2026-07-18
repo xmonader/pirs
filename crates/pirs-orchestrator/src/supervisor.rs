@@ -37,7 +37,10 @@ impl Supervisor {
         let mut all = storage::load_instances();
         let mut changed = false;
         for rec in all.iter_mut() {
-            if matches!(rec.status, InstanceStatus::Online | InstanceStatus::Starting) {
+            if matches!(
+                rec.status,
+                InstanceStatus::Online | InstanceStatus::Starting
+            ) {
                 rec.status = InstanceStatus::Stopped;
                 rec.last_seen_at = Some(now_iso());
                 changed = true;
@@ -67,7 +70,9 @@ impl Supervisor {
         };
         storage::upsert_instance(record.clone())?;
 
-        let result = self.start_process(&mut record, env.as_ref(), model.as_deref()).await;
+        let result = self
+            .start_process(&mut record, env.as_ref(), model.as_deref())
+            .await;
         match result {
             Ok(()) => {
                 record.status = InstanceStatus::Online;
@@ -95,8 +100,7 @@ impl Supervisor {
         env: Option<&std::collections::HashMap<String, String>>,
         model: Option<&str>,
     ) -> anyhow::Result<()> {
-        let process =
-            RpcProcess::spawn(std::path::Path::new(&record.cwd), env, model).await?;
+        let process = RpcProcess::spawn(std::path::Path::new(&record.cwd), env, model).await?;
         let id = record.id.clone();
         let live = Arc::clone(&self.live);
         let exit = process.on_exit();
@@ -104,7 +108,10 @@ impl Supervisor {
             let _ = exit.await;
             let mut map = live.lock().unwrap();
             if let Some(inst) = map.get_mut(&id) {
-                if !matches!(inst.record.status, InstanceStatus::Stopping | InstanceStatus::Stopped) {
+                if !matches!(
+                    inst.record.status,
+                    InstanceStatus::Stopping | InstanceStatus::Stopped
+                ) {
                     inst.record.status = InstanceStatus::Error;
                     inst.record.last_seen_at = Some(now_iso());
                     let rec = inst.record.clone();

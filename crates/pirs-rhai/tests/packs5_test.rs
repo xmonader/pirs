@@ -29,17 +29,41 @@ fn critic_spawns_background_review_after_n_edits() {
     let _guard = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-critic-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
-    std::process::Command::new("git").args(["init", "-q"]).current_dir(&tmp).output().unwrap();
-    std::fs::write(tmp.join("f.txt"), "v1
-").unwrap();
-    std::process::Command::new("git").args(["add", "-A"]).current_dir(&tmp).output().unwrap();
     std::process::Command::new("git")
-        .args(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"])
+        .args(["init", "-q"])
         .current_dir(&tmp)
         .output()
         .unwrap();
-    std::fs::write(tmp.join("f.txt"), "v2
-").unwrap();
+    std::fs::write(
+        tmp.join("f.txt"),
+        "v1
+",
+    )
+    .unwrap();
+    std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "init",
+        ])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::fs::write(
+        tmp.join("f.txt"),
+        "v2
+",
+    )
+    .unwrap();
     let old_cwd = std::env::current_dir().unwrap();
     std::env::set_current_dir(&tmp).unwrap();
 
@@ -74,22 +98,29 @@ fn critic_spawns_background_review_after_n_edits() {
 
 #[test]
 fn approval2_denies_dangerous_approves_safe() {
-    let runner: Runner =
-        Arc::new(|task: String, _| {
-            if task.contains("rm -rf /important") {
-                Ok("DENY - deletes data".to_string())
-            } else {
-                Ok("APPROVE - fine".to_string())
-            }
-        });
+    let runner: Runner = Arc::new(|task: String, _| {
+        if task.contains("rm -rf /important") {
+            Ok("DENY - deletes data".to_string())
+        } else {
+            Ok("APPROVE - fine".to_string())
+        }
+    });
     let host = load("approval2.rhai", Some(runner));
     let hooks = host.hooks();
     let before = hooks.before_tool_call.unwrap();
 
-    let denied = before("1", "bash", &serde_json::json!({"command": "rm -rf /important"}));
+    let denied = before(
+        "1",
+        "bash",
+        &serde_json::json!({"command": "rm -rf /important"}),
+    );
     assert!(denied.is_some(), "judge denied: {denied:?}");
 
-    let allowed = before("2", "bash", &serde_json::json!({"command": "rm -rf ./build"}));
+    let allowed = before(
+        "2",
+        "bash",
+        &serde_json::json!({"command": "rm -rf ./build"}),
+    );
     assert!(allowed.is_none(), "judge approved: {allowed:?}");
 
     let pass = before("3", "bash", &serde_json::json!({"command": "ls -la"}));
@@ -152,7 +183,15 @@ fn rollback_snapshots_and_restores() {
         .output()
         .unwrap();
     std::process::Command::new("git")
-        .args(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"])
+        .args([
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "init",
+        ])
         .current_dir(&tmp)
         .output()
         .unwrap();
@@ -216,16 +255,22 @@ fn swarm_post_claim_done_cycle() {
         }))
         .unwrap()
         .content[0]
-        .as_text()
-        .unwrap()
-        .to_string()
+            .as_text()
+            .unwrap()
+            .to_string()
     };
 
     assert!(exec("swarm_claim", serde_json::json!({})).contains("no open packets"));
-    exec("swarm_post", serde_json::json!({"task": "port module A", "role": "worker"}));
+    exec(
+        "swarm_post",
+        serde_json::json!({"task": "port module A", "role": "worker"}),
+    );
     let claim = exec("swarm_claim", serde_json::json!({}));
     assert!(claim.contains("packet #1: port module A"), "{claim}");
-    exec("swarm_done", serde_json::json!({"id": 1, "result": "ported"}));
+    exec(
+        "swarm_done",
+        serde_json::json!({"id": 1, "result": "ported"}),
+    );
     let status = exec("swarm_status", serde_json::json!({}));
     assert!(status.contains("[done]"), "{status}");
 }

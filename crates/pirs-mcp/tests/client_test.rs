@@ -42,7 +42,10 @@ async fn initialize_list_and_call() {
 #[tokio::test]
 async fn error_result_maps_is_error() {
     let client = spawn().await;
-    let fail = client.call_tool("fail", serde_json::json!({})).await.unwrap();
+    let fail = client
+        .call_tool("fail", serde_json::json!({}))
+        .await
+        .unwrap();
     assert!(fail.is_error);
     assert_eq!(fail.content[0].as_text().unwrap(), "intentional failure");
     client.shutdown().await;
@@ -51,7 +54,10 @@ async fn error_result_maps_is_error() {
 #[tokio::test]
 async fn unknown_tool_returns_error() {
     let client = spawn().await;
-    let err = client.call_tool("nope", serde_json::json!({})).await.unwrap_err();
+    let err = client
+        .call_tool("nope", serde_json::json!({}))
+        .await
+        .unwrap_err();
     assert!(err.to_string().contains("unknown tool"));
     client.shutdown().await;
 }
@@ -60,7 +66,8 @@ async fn unknown_tool_returns_error() {
 async fn mcp_tool_as_agent_tool() {
     let client = spawn_facade().await;
     let defs = client.list_tools().await.unwrap();
-    let tool: std::sync::Arc<dyn pirs_agent::AgentTool> = pirs_mcp::tool::McpTool::new("echo-srv", defs[0].clone(), client);
+    let tool: std::sync::Arc<dyn pirs_agent::AgentTool> =
+        pirs_mcp::tool::McpTool::new("echo-srv", defs[0].clone(), client);
     assert_eq!(tool.name(), "mcp_echo-srv_echo");
     let out = tool
         .execute(pirs_agent::ToolExecContext {

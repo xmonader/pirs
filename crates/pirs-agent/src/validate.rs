@@ -1,10 +1,9 @@
 use serde_json::Value;
 
 pub fn validate_args(schema: &Value, args: &Value) -> Result<(), String> {
-    let validator = jsonschema::validator_for(schema).map_err(|e| format!("invalid schema: {e}"))?;
-    validator
-        .validate(args)
-        .map_err(|e| e.to_string())
+    let validator =
+        jsonschema::validator_for(schema).map_err(|e| format!("invalid schema: {e}"))?;
+    validator.validate(args).map_err(|e| e.to_string())
 }
 
 pub fn coerce_args(schema: &Value, args: &Value) -> Value {
@@ -16,7 +15,9 @@ pub fn coerce_args(schema: &Value, args: &Value) -> Value {
     };
     let mut out = obj.clone();
     for (key, value) in obj.iter() {
-        let Some(prop_schema) = props.get(key) else { continue };
+        let Some(prop_schema) = props.get(key) else {
+            continue;
+        };
         let expected = match prop_schema.get("type") {
             Some(Value::String(t)) => Some(t.clone()),
             Some(Value::Array(types)) => types
@@ -76,7 +77,10 @@ mod tests {
             "path":{"type":"string"}
         }});
         let args = json!({"limit": "60", "path": "f.rs"});
-        assert_eq!(coerce_args(&schema, &args), json!({"limit": 60, "path": "f.rs"}));
+        assert_eq!(
+            coerce_args(&schema, &args),
+            json!({"limit": 60, "path": "f.rs"})
+        );
     }
 
     #[test]

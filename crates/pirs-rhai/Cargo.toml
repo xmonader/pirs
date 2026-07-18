@@ -14,7 +14,6 @@ anyhow = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
-atty = "0.2"
 sha2 = "0.10"
 libc = { workspace = true }
 

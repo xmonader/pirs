@@ -171,7 +171,9 @@ async fn tool_error_becomes_error_result_and_loop_continues() {
     assert!(new.iter().any(
         |m| matches!(m, Message::ToolResult(r) if r.is_error && r.content[0].as_text() == Some("boom"))
     ));
-    assert!(matches!(agent.messages.last(), Some(Message::Assistant(a)) if a.text() == "recovered"));
+    assert!(
+        matches!(agent.messages.last(), Some(Message::Assistant(a)) if a.text() == "recovered")
+    );
 }
 
 #[tokio::test]
@@ -189,10 +191,7 @@ async fn invalid_args_rejected_without_executing() {
 
 #[tokio::test]
 async fn unknown_tool_reported() {
-    let provider = MockProvider::new(vec![
-        tool_call_msg("c1", "nope", json!({})),
-        text_msg("ok"),
-    ]);
+    let provider = MockProvider::new(vec![tool_call_msg("c1", "nope", json!({})), text_msg("ok")]);
     let mut agent = make_agent(provider, vec![]);
     let new = agent.prompt("go").await.unwrap();
     assert!(new.iter().any(
@@ -257,8 +256,8 @@ async fn parallel_results_in_source_order() {
         },
         text_msg("done"),
     ]);
-    let mut agent = make_agent(provider, vec![Arc::new(EchoTool)])
-        .with_tool_execution(ExecutionMode::Parallel);
+    let mut agent =
+        make_agent(provider, vec![Arc::new(EchoTool)]).with_tool_execution(ExecutionMode::Parallel);
     let new = agent.prompt("go").await.unwrap();
     let results: Vec<&str> = new
         .iter()
@@ -298,13 +297,12 @@ async fn auto_compaction_fires_on_threshold() {
         text_msg("continuing"),
     ]);
     let seen = Arc::clone(&provider.seen);
-    let mut agent = make_agent(provider, vec![Arc::new(EchoTool)]).with_compaction(Some(
-        CompactionConfig {
+    let mut agent =
+        make_agent(provider, vec![Arc::new(EchoTool)]).with_compaction(Some(CompactionConfig {
             context_window: 100_000,
             reserve_tokens: 16_000,
             keep_recent_tokens: 10,
-        },
-    ));
+        }));
     agent.messages = vec![
         Message::user("old task"),
         Message::Assistant(text_msg("did some earlier work")),
@@ -324,7 +322,9 @@ async fn auto_compaction_fires_on_threshold() {
 
     let turn2_call = &calls[2];
     let first = &turn2_call.messages[0];
-    assert!(matches!(first, Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains(SUMMARY_PREFIX) && t.contains("SUMMARY: user wants a ported loop"))));
+    assert!(
+        matches!(first, Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains(SUMMARY_PREFIX) && t.contains("SUMMARY: user wants a ported loop")))
+    );
 
     assert!(agent.messages.iter().any(|m| matches!(
         m,
@@ -336,9 +336,8 @@ async fn auto_compaction_fires_on_threshold() {
 async fn no_compaction_below_threshold() {
     let provider = MockProvider::new(vec![text_msg("fine")]);
     let seen = Arc::clone(&provider.seen);
-    let mut agent = make_agent(provider, vec![]).with_compaction(Some(
-        pirs_agent::compaction::CompactionConfig::default(),
-    ));
+    let mut agent = make_agent(provider, vec![])
+        .with_compaction(Some(pirs_agent::compaction::CompactionConfig::default()));
     agent.prompt("go").await.unwrap();
     assert_eq!(seen.lock().unwrap().len(), 1);
 }
@@ -384,7 +383,10 @@ async fn tool_diet_blocks_hidden_tool_until_loaded() {
         m,
         Message::ToolResult(r) if r.is_error && r.content[0].as_text().unwrap().contains("not loaded in this session")
     ));
-    assert!(blocked, "hidden tool call should be rejected with use_tool hint");
+    assert!(
+        blocked,
+        "hidden tool call should be rejected with use_tool hint"
+    );
 
     let loaded = new.iter().any(|m| matches!(
         m,
@@ -458,7 +460,10 @@ async fn delegate_runs_subagent_with_fresh_context() {
         m,
         Message::ToolResult(r) if !r.is_error && r.tool_name == "delegate" && r.content[0].as_text() == Some("3 words")
     ));
-    assert!(delegated, "delegate result should be the sub-agent's answer");
+    assert!(
+        delegated,
+        "delegate result should be the sub-agent's answer"
+    );
 
     let calls = shared_seen.lock().unwrap();
     assert_eq!(calls.len(), 3, "main turn1 + sub-agent turn + main turn2");
@@ -505,7 +510,10 @@ async fn delegate_inherits_policy_hooks() {
                 Message::ToolResult(r) if r.is_error && r.content[0].as_text().map(|t| t.contains("policy denies echo")).unwrap_or(false)
             ))
         });
-    assert!(sub_turn2.is_some(), "policy hook must apply inside sub-agent: {calls:?}");
+    assert!(
+        sub_turn2.is_some(),
+        "policy hook must apply inside sub-agent: {calls:?}"
+    );
 }
 
 #[tokio::test]
@@ -514,7 +522,11 @@ async fn delegate_background_job_completes_and_is_steerable() {
     use pirs_agent::jobs::{self, JobStatus};
 
     let provider = Arc::new(MockProvider::new(vec![
-        tool_call_msg("c1", "delegate", json!({"task": "short job", "background": true})),
+        tool_call_msg(
+            "c1",
+            "delegate",
+            json!({"task": "short job", "background": true}),
+        ),
         text_msg("main done"),
     ]));
     let sub_provider = Arc::new(MockProvider::new(vec![text_msg("bg answer")]));
@@ -527,16 +539,20 @@ async fn delegate_background_job_completes_and_is_steerable() {
     let mut agent = Agent::new(provider, "mock-model").with_tools(vec![delegate]);
     let new = agent.prompt("go").await.unwrap();
 
-    let started = new.iter().any(|m| matches!(
-        m,
-        Message::ToolResult(r) if r.content[0].as_text().unwrap().contains("background agent #")
-    ));
+    let started = new.iter().any(|m| {
+        matches!(
+            m,
+            Message::ToolResult(r) if r.content[0].as_text().unwrap().contains("background agent #")
+        )
+    });
     assert!(started, "{new:?}");
 
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     let registry = jobs::registry();
     let list = registry.list();
-    let finished = list.iter().find(|l| l.contains("agent") && l.contains("exited(0)"));
+    let finished = list
+        .iter()
+        .find(|l| l.contains("agent") && l.contains("exited(0)"));
     assert!(finished.is_some(), "{list:?}");
     let id: u64 = finished
         .unwrap()
@@ -566,7 +582,10 @@ async fn bash_background_job_runs_to_completion() {
         })
         .await
         .unwrap();
-    assert!(out.content[0].as_text().unwrap().contains("background job #"));
+    assert!(out.content[0]
+        .as_text()
+        .unwrap()
+        .contains("background job #"));
     tokio::time::sleep(std::time::Duration::from_millis(600)).await;
     assert!(dir.path().join("bg.txt").exists());
     let list = pirs_agent::jobs::registry().list();
@@ -593,7 +612,11 @@ async fn cascade_escalates_on_judge_reject_and_keeps_good_draft() {
     agent.prompt("go").await.unwrap();
 
     let models = seen_models.lock().unwrap().clone();
-    assert_eq!(models, vec!["draft-model", "mock-model"], "draft then escalate");
+    assert_eq!(
+        models,
+        vec!["draft-model", "mock-model"],
+        "draft then escalate"
+    );
     assert!(matches!(
         agent.messages.last(),
         Some(Message::Assistant(a)) if a.text() == "main model answer"
@@ -609,7 +632,11 @@ async fn cascade_escalates_on_judge_reject_and_keeps_good_draft() {
         }),
     }));
     agent2.prompt("go").await.unwrap();
-    assert_eq!(seen_models2.lock().unwrap().clone(), vec!["draft-model"], "accepted draft: no escalation");
+    assert_eq!(
+        seen_models2.lock().unwrap().clone(),
+        vec!["draft-model"],
+        "accepted draft: no escalation"
+    );
 }
 #[tokio::test]
 async fn assistant_message_appears_exactly_once_per_turn() {
@@ -621,5 +648,18 @@ async fn assistant_message_appears_exactly_once_per_turn() {
         .iter()
         .filter(|m| matches!(m, Message::Assistant(_)))
         .count();
-    assert_eq!(assistants, 1, "assistant message duplicated in context: {:?}", agent.messages.iter().map(|m| match m { Message::User(_) => "user", Message::Assistant(_) => "assistant", Message::ToolResult(_) => "toolResult" }).collect::<Vec<_>>());
+    assert_eq!(
+        assistants,
+        1,
+        "assistant message duplicated in context: {:?}",
+        agent
+            .messages
+            .iter()
+            .map(|m| match m {
+                Message::User(_) => "user",
+                Message::Assistant(_) => "assistant",
+                Message::ToolResult(_) => "toolResult",
+            })
+            .collect::<Vec<_>>()
+    );
 }

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use pirs_ai::{AssistantMessage, ContentBlock, Context, LlmProvider, Message, StopReason, StreamEvent};
+use pirs_ai::{
+    AssistantMessage, ContentBlock, Context, LlmProvider, Message, StopReason, StreamEvent,
+};
 use tokio_util::sync::CancellationToken;
 
 use crate::events::AgentEvent;
@@ -145,10 +147,7 @@ pub async fn summarize(
         while boundary < transcript.len() && !transcript.is_char_boundary(boundary) {
             boundary += 1;
         }
-        transcript = format!(
-            "[oldest messages omitted]\n{}",
-            &transcript[boundary..]
-        );
+        transcript = format!("[oldest messages omitted]\n{}", &transcript[boundary..]);
     }
 
     let ctx = Context {
@@ -211,7 +210,8 @@ pub async fn compact_messages(
     match result {
         Ok((summary, usage)) => {
             *extra_usage.lock().unwrap() += usage;
-            let summary_msg = Message::user(format!("{SUMMARY_PREFIX}\n{summary}\n{SUMMARY_SUFFIX}"));
+            let summary_msg =
+                Message::user(format!("{SUMMARY_PREFIX}\n{summary}\n{SUMMARY_SUFFIX}"));
             messages.splice(..cut, [summary_msg]);
             emit(AgentEvent::CompactionEnd {
                 reason: "threshold".into(),
@@ -234,9 +234,7 @@ pub async fn compact_messages(
 /// Check the last assistant message's usage against the window.
 pub fn last_input_tokens(messages: &[Message]) -> Option<u64> {
     messages.iter().rev().find_map(|m| match m {
-        Message::Assistant(AssistantMessage { usage, .. }) => {
-            Some(usage.input + usage.cache_read)
-        }
+        Message::Assistant(AssistantMessage { usage, .. }) => Some(usage.input + usage.cache_read),
         _ => None,
     })
 }

@@ -63,8 +63,12 @@ fn dmail_folds_history_and_injects_note() {
     ];
     let folded = transform(messages);
     let last = folded.last().unwrap();
-    let pirs_ai::Message::User(u) = last else { panic!() };
-    let pirs_ai::UserContent::Text(t) = &u.content else { panic!() };
+    let pirs_ai::Message::User(u) = last else {
+        panic!()
+    };
+    let pirs_ai::UserContent::Text(t) = &u.content else {
+        panic!()
+    };
     assert!(t.contains("dmail from your future self"));
     assert!(t.contains("that approach failed"));
     assert!(folded.len() < 6, "history folded: {}", folded.len());
@@ -97,7 +101,11 @@ fn fork_includes_history_prefix() {
 
     let calls = captured.lock().unwrap();
     assert_eq!(calls.len(), 1);
-    assert!(calls[0].contains("build a parser"), "fork passes history: {}", calls[0]);
+    assert!(
+        calls[0].contains("build a parser"),
+        "fork passes history: {}",
+        calls[0]
+    );
     assert!(calls[0].contains("now optimize it"));
 }
 
@@ -106,11 +114,27 @@ fn dirty_guard_commits_wip_before_edit() {
     let _g = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-dg-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
-    std::process::Command::new("git").args(["init", "-q"]).current_dir(&tmp).output().unwrap();
-    std::fs::write(tmp.join("f.txt"), "v1\n").unwrap();
-    std::process::Command::new("git").args(["add", "-A"]).current_dir(&tmp).output().unwrap();
     std::process::Command::new("git")
-        .args(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"])
+        .args(["init", "-q"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::fs::write(tmp.join("f.txt"), "v1\n").unwrap();
+    std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "init",
+        ])
         .current_dir(&tmp)
         .output()
         .unwrap();
@@ -122,7 +146,10 @@ fn dirty_guard_commits_wip_before_edit() {
     let hooks = host.hooks();
     let before = hooks.before_tool_call.unwrap();
 
-    assert!(before("1", "edit", &json!({"path": "f.txt"})).is_none(), "clean commit must pass");
+    assert!(
+        before("1", "edit", &json!({"path": "f.txt"})).is_none(),
+        "clean commit must pass"
+    );
 
     let log = std::process::Command::new("git")
         .args(["log", "--oneline", "-2"])
@@ -137,7 +164,10 @@ fn dirty_guard_commits_wip_before_edit() {
         .current_dir(&tmp)
         .output()
         .unwrap();
-    assert!(String::from_utf8_lossy(&status.stdout).trim().is_empty(), "wip committed");
+    assert!(
+        String::from_utf8_lossy(&status.stdout).trim().is_empty(),
+        "wip committed"
+    );
     std::env::set_current_dir(cwd).unwrap();
 }
 
@@ -203,7 +233,9 @@ fn checkpoints_snapshot_and_restore() {
     let before = hooks.before_tool_call.unwrap();
     before("1", "edit", &json!({"path": f.to_string_lossy()}));
 
-    let ckpt = tmp.join(".pirs/checkpoints").join(f.to_string_lossy().replace("/", "_"));
+    let ckpt = tmp
+        .join(".pirs/checkpoints")
+        .join(f.to_string_lossy().replace("/", "_"));
     assert!(ckpt.exists(), "checkpoint written: {ckpt:?}");
 
     std::fs::write(&f, "v2\n").unwrap();

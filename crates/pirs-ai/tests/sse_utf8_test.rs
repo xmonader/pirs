@@ -11,7 +11,10 @@ fn multibyte_char_split_across_chunks() {
         events.extend(feed(&mut buf, &bytes[..split]));
         events.extend(feed(&mut buf, &bytes[split..]));
         assert_eq!(events.len(), 2, "split at {split}");
-        assert_eq!(events[0], "{\"a\":\"héllo — 日本語 👋\"}", "split at {split}");
+        assert_eq!(
+            events[0], "{\"a\":\"héllo — 日本語 👋\"}",
+            "split at {split}"
+        );
         assert_eq!(events[1], "[DONE]");
         assert!(buf.is_empty(), "split at {split}");
     }

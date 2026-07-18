@@ -91,9 +91,15 @@ mod tests {
         std::env::set_var("HOME", dir.path());
         std::env::remove_var("PIRS_TEST_KEY");
         set("openai", "stored").unwrap();
-        assert_eq!(resolve(None, "openai", "PIRS_TEST_KEY").as_deref(), Some("stored"));
+        assert_eq!(
+            resolve(None, "openai", "PIRS_TEST_KEY").as_deref(),
+            Some("stored")
+        );
         std::env::set_var("PIRS_TEST_KEY", "env");
-        assert_eq!(resolve(None, "openai", "PIRS_TEST_KEY").as_deref(), Some("stored"));
+        assert_eq!(
+            resolve(None, "openai", "PIRS_TEST_KEY").as_deref(),
+            Some("stored")
+        );
         assert_eq!(
             resolve(Some("flag"), "openai", "PIRS_TEST_KEY").as_deref(),
             Some("flag")

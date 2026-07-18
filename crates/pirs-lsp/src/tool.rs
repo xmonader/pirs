@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use anyhow::Context as _;
 use async_trait::async_trait;
 use pirs_agent::{AgentTool, ToolExecContext, ToolOutput};
-use anyhow::Context as _;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -152,7 +152,10 @@ fn format_hover(result: &Value) -> String {
             .iter()
             .filter_map(|c| match c {
                 Value::String(s) => Some(s.clone()),
-                Value::Object(o) => o.get("value").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                Value::Object(o) => o
+                    .get("value")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
                 _ => None,
             })
             .collect::<Vec<_>>()
@@ -181,7 +184,12 @@ fn format_symbols(result: &Value) -> String {
                 23 => "trait",
                 _ => "sym",
             };
-            out.push(format!("{}{} {} (:{line})", "  ".repeat(depth), kind_name, name));
+            out.push(format!(
+                "{}{} {} (:{line})",
+                "  ".repeat(depth),
+                kind_name,
+                name
+            ));
             if let Some(children) = sym.get("children").and_then(|c| c.as_array()) {
                 walk(children, depth + 1, out);
             }

@@ -95,7 +95,10 @@ mod tests {
 
     #[test]
     fn tail_basic() {
-        let content = (1..=10).map(|i| i.to_string()).collect::<Vec<_>>().join("\n");
+        let content = (1..=10)
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
         let w = tail(&content, 3);
         assert_eq!(w.text, "8\n9\n10\n");
         assert_eq!(w.start_line, 8);

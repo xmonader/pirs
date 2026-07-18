@@ -16,6 +16,8 @@ pub struct ServeOptions {
     pub host: Option<Arc<pirs_rhai::ExtensionHost>>,
     pub port: u16,
     pub bind: String,
+    pub token: String,
+    pub allow_external: bool,
 }
 
 pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
@@ -68,9 +70,8 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
                     let _ = tx.send(json!({"type": "status", "text": "steered"}).to_string());
                     continue;
                 }
-                let _ = tx.send(
-                    json!({"type": "message_end", "role": "user", "text": text}).to_string(),
-                );
+                let _ = tx
+                    .send(json!({"type": "message_end", "role": "user", "text": text}).to_string());
                 let mut a = agent.lock().await;
                 let _ = a.prompt(text).await;
                 let report = a.usage_report();
@@ -89,11 +90,17 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
         });
     }
 
+    if !matches!(opts.bind.as_str(), "127.0.0.1" | "localhost" | "::1") && !opts.allow_external {
+        anyhow::bail!(
+            "refusing to bind {} without --serve-external (and set --serve-token for auth)",
+            opts.bind
+        );
+    }
     let addr = format!("{}:{}", opts.bind, opts.port);
     let listener = TcpListener::bind(&addr)
         .await
         .with_context(|| format!("failed to bind {addr}"))?;
-    eprintln!("[pirs serve: http://{addr}]");
+    eprintln!("[pirs serve: http://{addr} (token auth required for writes)]");
 
     loop {
         let (stream, _) = listener.accept().await?;
@@ -101,6 +108,7 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
             events: tx.clone(),
             prompts: prompt_tx.clone(),
             agent: Arc::clone(&agent),
+            token: opts.token.clone(),
         };
         tokio::spawn(async move {
             if let Err(e) = handle_connection(stream, state).await {
@@ -115,12 +123,10 @@ struct AppState {
     events: broadcast::Sender<String>,
     prompts: tokio::sync::mpsc::UnboundedSender<String>,
     agent: Arc<tokio::sync::Mutex<Agent>>,
+    token: String,
 }
 
-async fn handle_connection(
-    stream: tokio::net::TcpStream,
-    state: AppState,
-) -> anyhow::Result<()> {
+async fn handle_connection(stream: tokio::net::TcpStream, state: AppState) -> anyhow::Result<()> {
     let (read, mut write) = stream.into_split();
     let mut reader = BufReader::new(read);
     let mut request_line = String::new();
@@ -130,14 +136,52 @@ async fn handle_connection(
     let path = parts.next().unwrap_or("/");
 
     let mut content_length = 0usize;
+    let mut authorization = String::new();
+    let mut origin = String::new();
     loop {
         let mut line = String::new();
         reader.read_line(&mut line).await?;
         if line.trim().is_empty() {
             break;
         }
-        if let Some(rest) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+        let lower = line.to_ascii_lowercase();
+        if let Some(rest) = lower.strip_prefix("content-length:") {
             content_length = rest.trim().parse().unwrap_or(0);
+        }
+        if let Some(rest) = lower.strip_prefix("authorization:") {
+            authorization = rest.trim().to_string();
+        }
+        if let Some(rest) = lower.strip_prefix("origin:") {
+            origin = rest.trim().to_string();
+        }
+    }
+
+    let is_write = matches!(method, "POST");
+    if is_write {
+        if !origin.is_empty()
+            && !origin.contains("localhost")
+            && !origin.contains("127.0.0.1")
+            && !origin.contains("::1")
+        {
+            respond(
+                &mut write,
+                403,
+                "text/plain",
+                "cross-origin writes rejected",
+            )
+            .await?;
+            return Ok(());
+        }
+        let expected = format!("Bearer {}", state.token);
+        if authorization != expected {
+            respond(
+                &mut write,
+                403,
+                "text/plain",
+                "missing or invalid bearer token",
+            )
+            .await?;
+            return Ok(());
         }
     }
 

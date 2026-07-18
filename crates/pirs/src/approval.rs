@@ -36,9 +36,28 @@ impl ApprovalMode {
 }
 
 const BASH_PATTERNS: &[&str] = &[
-    "rm ", "rm -", "mv ", "dd ", "mkfs", "chmod", "chown", "git push", "git commit",
-    "git reset", "git clean", "pip install", "pip uninstall", "npm install", "npm uninstall",
-    "apt ", "apt-get", "doas", "sudo", ">", "curl ", "wget ",
+    "rm ",
+    "rm -",
+    "mv ",
+    "dd ",
+    "mkfs",
+    "chmod",
+    "chown",
+    "git push",
+    "git commit",
+    "git reset",
+    "git clean",
+    "pip install",
+    "pip uninstall",
+    "npm install",
+    "npm uninstall",
+    "apt ",
+    "apt-get",
+    "doas",
+    "sudo",
+    ">",
+    "curl ",
+    "wget ",
 ];
 
 pub fn is_sensitive(tool: &str, args: &Value, cwd: &Path) -> bool {
@@ -49,15 +68,35 @@ pub fn is_sensitive(tool: &str, args: &Value, cwd: &Path) -> bool {
         }
         "edit" | "write" => {
             let raw = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
-            let path = if raw.starts_with('/') {
+            let joined = if raw.starts_with('/') {
                 PathBuf::from(raw)
             } else {
                 cwd.join(raw)
             };
-            !path.starts_with(cwd)
+            // Lexical starts_with accepts ../ escapes; canonicalize (or fall
+            // back to component normalization for non-existent paths).
+            let resolved = joined.canonicalize().unwrap_or_else(|_| normalize(&joined));
+            let root = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
+            !resolved.starts_with(root)
         }
         _ => tool.starts_with("mcp_"),
     }
+}
+
+pub fn normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::from("/");
+    for comp in path.components() {
+        match comp {
+            std::path::Component::RootDir => {}
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::Normal(c) => out.push(c),
+            _ => {}
+        }
+    }
+    out
 }
 
 fn bucket(tool: &str, args: &Value) -> String {
@@ -88,7 +127,7 @@ pub struct ApprovalGate {
     mode: Arc<Mutex<ApprovalMode>>,
     remembered: Arc<Mutex<HashSet<String>>>,
     cwd: PathBuf,
-    prompter: Arc<Mutex<Prompter>>,
+    prompter: Mutex<Prompter>,
 }
 
 impl ApprovalGate {
@@ -97,13 +136,13 @@ impl ApprovalGate {
             mode: Arc::new(Mutex::new(mode)),
             remembered: Arc::new(Mutex::new(HashSet::new())),
             cwd,
-            prompter: Arc::new(Mutex::new(Arc::new(|question| {
+            prompter: Mutex::new(Arc::new(|question| {
                 eprint!("{question}");
                 let _ = std::io::stderr().flush();
                 let mut line = String::new();
                 let _ = std::io::stdin().read_line(&mut line);
                 line.trim().to_string()
-            }))),
+            })),
         }
     }
 
@@ -130,7 +169,7 @@ impl ApprovalGate {
         let mode = Arc::clone(&self.mode);
         let remembered = Arc::clone(&self.remembered);
         let cwd = self.cwd.clone();
-        let prompter = Arc::clone(&self.prompter);
+        let prompter = self.prompter.lock().unwrap().clone();
         Arc::new(move |_id, tool, args| {
             if *mode.lock().unwrap() != ApprovalMode::Ask {
                 return None;
@@ -146,7 +185,7 @@ impl ApprovalGate {
                 "\n[approval] {tool}: {}\nallow? [y]es / [n]o / [a]lways {bucket}: ",
                 summarize(tool, args)
             );
-            let answer = (prompter.lock().unwrap())(&question);
+            let answer = prompter(&question);
             match answer.as_str() {
                 "y" | "yes" => None,
                 "a" | "always" => {
@@ -176,6 +215,22 @@ mod tests {
     }
 
     #[test]
+    fn traversal_is_sensitive() {
+        let cwd = Path::new("/work");
+        assert!(is_sensitive("edit", &json!({"path": "../etc/passwd"}), cwd));
+        assert!(is_sensitive(
+            "write",
+            &json!({"path": "src/../../etc/shadow"}),
+            cwd
+        ));
+        assert!(!is_sensitive(
+            "edit",
+            &json!({"path": "src/../lib/x.rs"}),
+            cwd
+        ));
+    }
+
+    #[test]
     fn ask_prompts_and_remembers() {
         let answers = Arc::new(Mutex::new(vec!["a".to_string()]));
         let answers2 = Arc::clone(&answers);
@@ -183,7 +238,10 @@ mod tests {
             .with_prompter(move |_| answers2.lock().unwrap().remove(0));
         let hook = gate.hook();
         assert!(hook("1", "bash", &json!({"command": "rm -rf x"})).is_none());
-        assert!(hook("2", "bash", &json!({"command": "rm -rf y"})).is_none(), "remembered always");
+        assert!(
+            hook("2", "bash", &json!({"command": "rm -rf y"})).is_none(),
+            "remembered always"
+        );
         assert_eq!(answers.lock().unwrap().len(), 0);
     }
 

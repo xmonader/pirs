@@ -14,20 +14,53 @@ pub type MessageSourceHook = Arc<dyn Fn() -> Vec<Message> + Send + Sync>;
 pub type ApiKeyHook = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum AgentEvent {
     AgentStart,
-    AgentEnd { messages: Vec<Message> },
+    AgentEnd {
+        messages: Vec<Message>,
+    },
     TurnStart,
-    TurnEnd { message: Box<AssistantMessage>, tool_results: Vec<ToolResultMessage> },
-    MessageStart { message: Box<Message> },
-    MessageUpdate { message: Box<AssistantMessage> },
-    MessageEnd { message: Box<Message> },
-    ToolExecutionStart { tool_call_id: String, tool_name: String, args: Value },
-    ToolExecutionUpdate { tool_call_id: String, tool_name: String, partial: String },
-    ToolExecutionEnd { tool_call_id: String, tool_name: String, result: Box<ToolResultMessage> },
-    CompactionStart { reason: String },
-    CompactionEnd { reason: String, aborted: bool, error_message: Option<String> },
+    TurnEnd {
+        message: Box<AssistantMessage>,
+        tool_results: Vec<ToolResultMessage>,
+    },
+    MessageStart {
+        message: Box<Message>,
+    },
+    MessageUpdate {
+        message: Box<AssistantMessage>,
+    },
+    MessageEnd {
+        message: Box<Message>,
+    },
+    ToolExecutionStart {
+        tool_call_id: String,
+        tool_name: String,
+        args: Value,
+    },
+    ToolExecutionUpdate {
+        tool_call_id: String,
+        tool_name: String,
+        partial: String,
+    },
+    ToolExecutionEnd {
+        tool_call_id: String,
+        tool_name: String,
+        result: Box<ToolResultMessage>,
+    },
+    CompactionStart {
+        reason: String,
+    },
+    CompactionEnd {
+        reason: String,
+        aborted: bool,
+        error_message: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Default)]

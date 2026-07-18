@@ -35,26 +35,38 @@ struct Actor {
 
 enum Cmd {
     Line(Value),
-    RunFinished(Vec<Message>, Vec<Message>, Option<pirs_agent::agent_loop::BudgetHit>),
+    RunFinished(
+        Vec<Message>,
+        Vec<Message>,
+        Option<pirs_agent::agent_loop::BudgetHit>,
+    ),
 }
 
 pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     let cwd = &opts.cwd;
-    let provider: std::sync::Arc<dyn pirs_ai::LlmProvider> =
-        if std::env::var("PIRS_PROVIDER").as_deref() == Ok("anthropic") {
-            std::sync::Arc::new(
-                pirs_ai::AnthropicClient::new(opts.base_url.clone())
-                    .with_max_retries(opts.max_retries),
-            )
-        } else {
-            std::sync::Arc::new(
-                pirs_ai::OpenAiCompat::new(opts.base_url.clone())
-                    .with_max_retries(opts.max_retries),
-            )
-        };
+    let provider: std::sync::Arc<dyn pirs_ai::LlmProvider> = if std::env::var("PIRS_PROVIDER")
+        .as_deref()
+        == Ok("anthropic")
+    {
+        std::sync::Arc::new(
+            pirs_ai::AnthropicClient::new(opts.base_url.clone()).with_max_retries(opts.max_retries),
+        )
+    } else {
+        std::sync::Arc::new(
+            pirs_ai::OpenAiCompat::new(opts.base_url.clone()).with_max_retries(opts.max_retries),
+        )
+    };
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
     let mut hooks = Hooks::default();
+    let approval_mode = std::env::var("PIRS_APPROVAL")
+        .ok()
+        .and_then(|m| crate::approval::ApprovalMode::parse(&m))
+        .unwrap_or(crate::approval::ApprovalMode::Auto);
+    let gate = crate::approval::ApprovalGate::new(approval_mode, cwd.clone());
+    if approval_mode == crate::approval::ApprovalMode::Ask {
+        hooks.before_tool_call = Some(gate.hook());
+    }
     let mut host = pirs_rhai::ExtensionHost::new();
     let policy_slot: std::sync::Arc<
         std::sync::Mutex<
@@ -64,52 +76,17 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
             )>,
         >,
     > = std::sync::Arc::new(std::sync::Mutex::new(None));
-    let runner_provider = std::sync::Arc::clone(&provider);
-    let runner_completion = CompletionOptions {
-        api_key: Some(opts.api_key.clone()),
-        ..Default::default()
-    };
-    let runner_model = opts.model.clone();
     let runner_cwd = cwd.clone();
-    let policy_slot_run = std::sync::Arc::clone(&policy_slot);
-    host.set_subagent_runner(std::sync::Arc::new(
-        move |task: String, model: Option<String>| {
-            let provider = std::sync::Arc::clone(&runner_provider);
-            let completion = runner_completion.clone();
-            let cwd = runner_cwd.clone();
-            let model = model.unwrap_or_else(|| runner_model.clone());
-            let policy = policy_slot_run.lock().unwrap().clone();
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .map_err(|e| e.to_string())?;
-                rt.block_on(async move {
-                    let mut hooks = pirs_agent::Hooks::default();
-                    if let Some((b, a)) = &policy {
-                        hooks.before_tool_call = Some(b.clone());
-                        hooks.after_tool_call = Some(a.clone());
-                    }
-                    let mut agent = pirs_agent::Agent::new(provider, &model)
-                        .with_tools(pirs_tools::default_tools(cwd))
-                        .with_completion(completion)
-                        .with_hooks(hooks)
-                        .with_compaction(None);
-                    let new = agent.prompt(&task).await.map_err(|e| e.to_string())?;
-                    new.iter()
-                        .rev()
-                        .find_map(|m| match m {
-                            pirs_ai::Message::Assistant(a) if !a.text().trim().is_empty() => {
-                                Some(a.text())
-                            }
-                            _ => None,
-                        })
-                        .ok_or_else(|| "sub-agent produced no answer".to_string())
-                })
-            })
-            .join()
-            .unwrap_or_else(|_| Err("sub-agent thread panicked".to_string()))
+    host.set_subagent_runner(crate::subagent::build_subagent_runner(
+        std::sync::Arc::clone(&provider),
+        CompletionOptions {
+            api_key: Some(opts.api_key.clone()),
+            ..Default::default()
         },
+        opts.model.clone(),
+        pirs_tools::default_tools(runner_cwd),
+        std::sync::Arc::clone(&policy_slot),
+        std::sync::Arc::new(std::sync::Mutex::new(pirs_ai::Usage::default())),
     ));
     host.load_default_dirs(cwd);
     for err in &host.load_errors {
@@ -118,10 +95,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     let host = Arc::new(host);
     tools.extend(host.tools());
     let ext_hooks = host.hooks();
-    *policy_slot.lock().unwrap() = match (
-        &ext_hooks.before_tool_call,
-        &ext_hooks.after_tool_call,
-    ) {
+    *policy_slot.lock().unwrap() = match (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
         (Some(b), Some(a)) => Some((b.clone(), a.clone())),
         _ => None,
     };
@@ -249,7 +223,10 @@ async fn handle_command(
     actor: &mut Actor,
     out: &tokio::sync::mpsc::UnboundedSender<String>,
 ) {
-    let id = cmd.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let id = cmd
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     let ty = cmd
         .get("type")
         .and_then(|v| v.as_str())

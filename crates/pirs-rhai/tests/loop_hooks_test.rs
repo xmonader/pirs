@@ -83,7 +83,10 @@ fn tool_call_msg() -> AssistantMessage {
     }
 }
 
-fn build(script: &str, provider_msgs: Vec<AssistantMessage>) -> (Agent, Arc<Mutex<Vec<Vec<Message>>>>) {
+fn build(
+    script: &str,
+    provider_msgs: Vec<AssistantMessage>,
+) -> (Agent, Arc<Mutex<Vec<Vec<Message>>>>) {
     let mut host = ExtensionHost::new();
     host.load_source(script, "test.rhai".into()).unwrap();
     let host = Arc::new(host);

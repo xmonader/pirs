@@ -101,9 +101,6 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(
-            out.content[0].as_text().unwrap(),
-            ".hidden\na.txt\nsub/"
-        );
+        assert_eq!(out.content[0].as_text().unwrap(), ".hidden\na.txt\nsub/");
     }
 }

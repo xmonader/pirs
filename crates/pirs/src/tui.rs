@@ -15,6 +15,7 @@ use crate::approval::ApprovalMode;
 pub struct TuiOptions {
     pub agent: Agent,
     pub host: Option<Arc<pirs_rhai::ExtensionHost>>,
+    #[allow(dead_code)]
     pub session_path: std::path::PathBuf,
     pub approval_mode: ApprovalMode,
     pub approval_gate: Option<Arc<crate::approval::ApprovalGate>>,
@@ -82,13 +83,6 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
     opts.agent.subscribe(Arc::new(move |event: AgentEvent| {
         let _ = event_tx.send(event);
-    }));
-
-    let session_file = opts.session_path.clone();
-    opts.agent.subscribe(Arc::new(move |event: AgentEvent| {
-        if let AgentEvent::MessageEnd { message } = event {
-            let _ = crate::session::append(&session_file, &[*message]);
-        }
     }));
 
     let (pending_approval, approval_answer_rx) = approval_bridge(&mut opts);
@@ -305,10 +299,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                 .chars()
                 .take(width)
                 .collect();
-            frame.render_widget(
-                Paragraph::new(Span::styled(status, dim())),
-                chunks[1],
-            );
+            frame.render_widget(Paragraph::new(Span::styled(status, dim())), chunks[1]);
 
             let (input_title, input_style) = if app.pending_approval.lock().unwrap().is_some() {
                 ("approval [y/n/a]", error_style())
@@ -319,13 +310,13 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                 .block(Block::default().borders(Borders::ALL).title(input_title))
                 .style(input_style);
             frame.render_widget(input, chunks[2]);
-            let cursor_x = (chunks[2].x + 1
+            let cursor_x = (chunks[2].x
+                + 1
                 + unicode_width::UnicodeWidthStr::width(app.input.as_str()) as u16)
                 .min(chunks[2].x + chunks[2].width.saturating_sub(2));
             frame.set_cursor_position((cursor_x, chunks[2].y + 1));
         })?;
     }
-
 
     restore_terminal()?;
     if let Some(h) = &opts.host {
@@ -344,10 +335,7 @@ fn line_width(line: &Line) -> usize {
 }
 
 fn wrapped_rows(lines: &[Line], width: usize) -> usize {
-    lines
-        .iter()
-        .map(|l| (line_width(l) / width) + 1)
-        .sum()
+    lines.iter().map(|l| (line_width(l) / width) + 1).sum()
 }
 
 fn window_by_rows(
@@ -408,7 +396,6 @@ fn thinking_lines(a: &pirs_ai::AssistantMessage) -> Vec<Line<'static>> {
     }
     all
 }
-
 
 fn apply_agent_event(app: &mut App, event: AgentEvent) {
     match event {
@@ -474,7 +461,11 @@ fn apply_agent_event(app: &mut App, event: AgentEvent) {
                 .join("\n");
             let preview: String = text.lines().take(3).collect::<Vec<_>>().join("\n");
             if !preview.is_empty() {
-                let style = if result.is_error { error_style() } else { dim() };
+                let style = if result.is_error {
+                    error_style()
+                } else {
+                    dim()
+                };
                 app.push_text(style, format!("- {preview}"));
             }
         }
@@ -494,7 +485,10 @@ fn apply_agent_event(app: &mut App, event: AgentEvent) {
 
 fn approval_bridge(
     opts: &mut TuiOptions,
-) -> (Arc<Mutex<Option<String>>>, Arc<std::sync::mpsc::Sender<String>>) {
+) -> (
+    Arc<Mutex<Option<String>>>,
+    Arc<std::sync::mpsc::Sender<String>>,
+) {
     let pending: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let (tx, rx) = std::sync::mpsc::channel::<String>();
     if let Some(gate) = &opts.approval_gate {
@@ -511,7 +505,8 @@ fn approval_bridge(
     (pending, Arc::new(tx))
 }
 
-fn setup_terminal() -> anyhow::Result<Terminal<ratatui::backend::CrosstermBackend<std::io::Stdout>>> {
+fn setup_terminal() -> anyhow::Result<Terminal<ratatui::backend::CrosstermBackend<std::io::Stdout>>>
+{
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     stdout.execute(crossterm::terminal::EnterAlternateScreen)?;

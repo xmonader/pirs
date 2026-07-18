@@ -35,7 +35,13 @@ impl Job {
             JobStatus::Exited(code) => format!("exited({code})"),
             JobStatus::Killed => "killed".to_string(),
         };
-        format!("#{} [{}] {} — {}", self.id, status, kind_name(self.kind), self.description)
+        format!(
+            "#{} [{}] {} — {}",
+            self.id,
+            status,
+            kind_name(self.kind),
+            self.description
+        )
     }
 }
 
@@ -210,14 +216,22 @@ mod tests {
     #[test]
     fn register_list_steer() {
         let r = registry();
-        let (id, _job) = r.register(JobKind::Bash, "sleep 1".into(), PathBuf::from("/tmp/x.log"), Some(1));
+        let (id, _job) = r.register(
+            JobKind::Bash,
+            "sleep 1".into(),
+            PathBuf::from("/tmp/x.log"),
+            Some(1),
+        );
         assert!(r.list().iter().any(|l| l.contains(&format!("#{id}"))));
         assert!(r.steer(id, "hi").is_err(), "bash jobs are not steerable");
         let got = Arc::new(Mutex::new(String::new()));
         let got2 = Arc::clone(&got);
-        r.set_steer(id, Arc::new(move |m| {
-            *got2.lock().unwrap() = m;
-        }));
+        r.set_steer(
+            id,
+            Arc::new(move |m| {
+                *got2.lock().unwrap() = m;
+            }),
+        );
         r.steer(id, "hello job").unwrap();
         assert_eq!(*got.lock().unwrap(), "hello job");
         r.set_status(id, JobStatus::Exited(0));

@@ -32,8 +32,13 @@ async fn workflow_fans_out_caches_and_merges() {
     let home = tmp.join("home");
     std::env::set_var("HOME", &home);
 
-    let tool = host.tools().into_iter().find(|t| t.name() == "workflow").unwrap();
-    let args = serde_json::json!({"files": [f1.to_string_lossy(), f2.to_string_lossy()], "model": ""});
+    let tool = host
+        .tools()
+        .into_iter()
+        .find(|t| t.name() == "workflow")
+        .unwrap();
+    let args =
+        serde_json::json!({"files": [f1.to_string_lossy(), f2.to_string_lossy()], "model": ""});
     let out1 = tool
         .execute(pirs_agent::ToolExecContext {
             tool_call_id: "t".into(),
@@ -47,7 +52,12 @@ async fn workflow_fans_out_caches_and_merges() {
     assert!(text1.contains("MERGED: two issues"), "{text1}");
 
     let first_call_count = calls.lock().unwrap().len();
-    assert_eq!(first_call_count, 3, "2 file reviews + 1 merge: {:?}", calls.lock().unwrap());
+    assert_eq!(
+        first_call_count,
+        3,
+        "2 file reviews + 1 merge: {:?}",
+        calls.lock().unwrap()
+    );
 
     let out2 = tool
         .execute(pirs_agent::ToolExecContext {

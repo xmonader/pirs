@@ -137,7 +137,11 @@ fn shadow_verify_flags_discrepancy() {
     let after = hooks.after_tool_call.unwrap();
     let steering = hooks.get_steering_messages.unwrap();
 
-    before("1", "bash", &serde_json::json!({"command": "pytest -q && exit 1"}));
+    before(
+        "1",
+        "bash",
+        &serde_json::json!({"command": "pytest -q && exit 1"}),
+    );
     let ok = pirs_ai::ToolResultMessage {
         tool_call_id: "1".into(),
         tool_name: "bash".into(),
@@ -263,7 +267,11 @@ fn env_doctor_blocks_missing_toolchain() {
     );
     assert!(missing.is_none(), "unknown binaries pass through");
     let cargo = before("2", "bash", &serde_json::json!({"command": "cargo build"}));
-    if std::process::Command::new("cargo").arg("--version").output().is_ok() {
+    if std::process::Command::new("cargo")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
         assert!(cargo.is_none());
     } else {
         assert!(cargo.is_some());
@@ -313,7 +321,11 @@ fn arena_and_relay_run_pipelines() {
     assert!(text.contains("=== glm ===") && text.contains("=== qwen ==="));
 
     let host2 = load("relay-race.rhai", true);
-    let relay = host2.tools().into_iter().find(|t| t.name() == "relay").unwrap();
+    let relay = host2
+        .tools()
+        .into_iter()
+        .find(|t| t.name() == "relay")
+        .unwrap();
     let out2 = rt
         .block_on(relay.execute(pirs_agent::ToolExecContext {
             tool_call_id: "t".into(),

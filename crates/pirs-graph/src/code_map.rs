@@ -60,6 +60,7 @@ impl AgentTool for CodeMapTool {
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: CodeMapArgs = serde_json::from_value(ctx.args)?;
         let graph = self.graph.get();
+        let graph = &*graph;
         let target = args.target.unwrap_or_default();
         let out = match args.action.as_str() {
             "symbol" => {
@@ -128,7 +129,9 @@ impl AgentTool for CodeMapTool {
                         .join("\n")
                 )
             }
-            other => format!("unknown action '{other}': use symbol|callers|callees|top|file_map|blast"),
+            other => {
+                format!("unknown action '{other}': use symbol|callers|callees|top|file_map|blast")
+            }
         };
         Ok(ToolOutput::text(out))
     }
@@ -162,14 +165,17 @@ mod tests {
                 .await
                 .unwrap()
                 .content[0]
-                .as_text()
-                .unwrap()
-                .to_string()
+                    .as_text()
+                    .unwrap()
+                    .to_string()
             }
         };
 
         let callers = run(serde_json::json!({"action": "callers", "target": "b"})).await;
-        assert!(callers.contains("fn a") && callers.contains("fn c"), "{callers}");
+        assert!(
+            callers.contains("fn a") && callers.contains("fn c"),
+            "{callers}"
+        );
 
         let top = run(serde_json::json!({"action": "top", "limit": 1})).await;
         assert!(top.contains(" b "), "{top}");

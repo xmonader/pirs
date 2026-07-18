@@ -70,7 +70,11 @@ pub fn server_available(spec: &ServerSpec) -> bool {
 }
 
 impl LspClient {
-    pub async fn spawn(command: &str, args: &[&str], root: &std::path::Path) -> anyhow::Result<Arc<Self>> {
+    pub async fn spawn(
+        command: &str,
+        args: &[&str],
+        root: &std::path::Path,
+    ) -> anyhow::Result<Arc<Self>> {
         let mut child = Command::new(command)
             .args(args)
             .current_dir(root)
@@ -98,7 +102,10 @@ impl LspClient {
                                     if let Some(err) = value.get("error") {
                                         let _ = tx.send(Err(err.to_string()));
                                     } else {
-                                        let _ = tx.send(Ok(value.get("result").cloned().unwrap_or(Value::Null)));
+                                        let _ = tx.send(Ok(value
+                                            .get("result")
+                                            .cloned()
+                                            .unwrap_or(Value::Null)));
                                     }
                                 }
                             }
@@ -191,7 +198,11 @@ impl LspClient {
         Ok(())
     }
 
-    pub async fn open_document(&self, path: &std::path::Path, language: &str) -> anyhow::Result<()> {
+    pub async fn open_document(
+        &self,
+        path: &std::path::Path,
+        language: &str,
+    ) -> anyhow::Result<()> {
         let uri = uri_for(path);
         {
             let opened = self.opened.lock().unwrap();
@@ -216,7 +227,11 @@ impl LspClient {
         Ok(())
     }
 
-    pub async fn touch_document(&self, path: &std::path::Path, language: &str) -> anyhow::Result<()> {
+    pub async fn touch_document(
+        &self,
+        path: &std::path::Path,
+        language: &str,
+    ) -> anyhow::Result<()> {
         let uri = uri_for(path);
         let version = {
             let mut opened = self.opened.lock().unwrap();
@@ -251,7 +266,10 @@ impl LspClient {
     ) -> anyhow::Result<Value> {
         match self.request(method, params.clone()).await {
             Ok(v) => Ok(v),
-            Err(e) if e.to_string().contains("-32801") || e.to_string().contains("content modified") => {
+            Err(e)
+                if e.to_string().contains("-32801")
+                    || e.to_string().contains("content modified") =>
+            {
                 self.touch_document(path, language).await?;
                 self.request(method, params).await
             }
@@ -266,7 +284,8 @@ impl LspClient {
         params: Value,
         language: &str,
     ) -> anyhow::Result<Value> {
-        self.request_on_document(method, path, params, language).await
+        self.request_on_document(method, path, params, language)
+            .await
     }
 
     fn position_params(&self, path: &std::path::Path, line: u32, character: u32) -> Value {
@@ -276,7 +295,12 @@ impl LspClient {
         })
     }
 
-    pub async fn definition(&self, path: &std::path::Path, line: u32, character: u32) -> anyhow::Result<Value> {
+    pub async fn definition(
+        &self,
+        path: &std::path::Path,
+        line: u32,
+        character: u32,
+    ) -> anyhow::Result<Value> {
         self.request_indexed(
             "textDocument/definition",
             self.position_params(path, line, character),
@@ -284,10 +308,16 @@ impl LspClient {
         .await
     }
 
-    pub async fn references(&self, path: &std::path::Path, line: u32, character: u32) -> anyhow::Result<Value> {
+    pub async fn references(
+        &self,
+        path: &std::path::Path,
+        line: u32,
+        character: u32,
+    ) -> anyhow::Result<Value> {
         let mut params = self.position_params(path, line, character);
         params["context"] = json!({ "includeDeclaration": true });
-        self.request_indexed("textDocument/references", params).await
+        self.request_indexed("textDocument/references", params)
+            .await
     }
 
     /// rust-analyzer (and others) answer with empty results while indexing;
@@ -309,7 +339,9 @@ impl LspClient {
                 Err(e) => {
                     let msg = e.to_string();
                     if msg.contains("-32801") || msg.contains("content modified") {
-                        if let Some(uri) = params.pointer("/textDocument/uri").and_then(|u| u.as_str()) {
+                        if let Some(uri) =
+                            params.pointer("/textDocument/uri").and_then(|u| u.as_str())
+                        {
                             let path = std::path::PathBuf::from(uri.trim_start_matches("file://"));
                             let lang = crate::client::server_for_file(&path)
                                 .map(|s| s.language)
@@ -328,9 +360,17 @@ impl LspClient {
         self.request(method, params).await
     }
 
-    pub async fn hover(&self, path: &std::path::Path, line: u32, character: u32) -> anyhow::Result<Value> {
-        self.request("textDocument/hover", self.position_params(path, line, character))
-            .await
+    pub async fn hover(
+        &self,
+        path: &std::path::Path,
+        line: u32,
+        character: u32,
+    ) -> anyhow::Result<Value> {
+        self.request(
+            "textDocument/hover",
+            self.position_params(path, line, character),
+        )
+        .await
     }
 
     pub async fn document_symbols(&self, path: &std::path::Path) -> anyhow::Result<Value> {
@@ -350,13 +390,13 @@ impl LspClient {
 }
 
 fn uri_for(path: &std::path::Path) -> String {
-    let abs = path
-        .canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf());
+    let abs = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     format!("file://{}", abs.display())
 }
 
-async fn read_message(reader: &mut BufReader<tokio::process::ChildStdout>) -> anyhow::Result<Option<Value>> {
+async fn read_message(
+    reader: &mut BufReader<tokio::process::ChildStdout>,
+) -> anyhow::Result<Option<Value>> {
     let mut content_length = 0usize;
     loop {
         let mut line = String::new();

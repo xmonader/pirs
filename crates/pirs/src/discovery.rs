@@ -206,7 +206,9 @@ mod tests {
 
     #[test]
     fn frontmatter_parses_fields_and_body() {
-        let (fields, body) = parse_frontmatter("---\nname: pdf\ndescription: \"Extract text\"\n---\n# Do the thing\n");
+        let (fields, body) = parse_frontmatter(
+            "---\nname: pdf\ndescription: \"Extract text\"\n---\n# Do the thing\n",
+        );
         assert_eq!(field(&fields, "name"), Some("pdf"));
         assert_eq!(field(&fields, "description"), Some("Extract text"));
         assert_eq!(body, "# Do the thing\n");

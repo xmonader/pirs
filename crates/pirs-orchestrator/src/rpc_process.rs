@@ -37,7 +37,11 @@ impl RpcProcess {
         let mut child = cmd
             .arg("--mode")
             .arg("rpc")
-            .args(model.map(|m| ["-m".to_string(), m.to_string()]).unwrap_or_default())
+            .args(
+                model
+                    .map(|m| ["-m".to_string(), m.to_string()])
+                    .unwrap_or_default(),
+            )
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -53,8 +57,7 @@ impl RpcProcess {
         let event_senders: Arc<Mutex<Vec<mpsc::UnboundedSender<Value>>>> =
             Arc::new(Mutex::new(Vec::new()));
         let stderr_buf = Arc::new(Mutex::new(String::new()));
-        let exit_watchers: Arc<Mutex<Vec<oneshot::Sender<i64>>>> =
-            Arc::new(Mutex::new(Vec::new()));
+        let exit_watchers: Arc<Mutex<Vec<oneshot::Sender<i64>>>> = Arc::new(Mutex::new(Vec::new()));
 
         {
             let pending = Arc::clone(&pending);

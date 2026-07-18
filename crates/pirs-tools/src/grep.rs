@@ -169,7 +169,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "hello\nworld\nhello again\n").unwrap();
         let tool = GrepTool::new(dir.path().to_path_buf());
-        let out = run(&tool, serde_json::json!({"pattern": "hello"})).await.unwrap();
+        let out = run(&tool, serde_json::json!({"pattern": "hello"}))
+            .await
+            .unwrap();
         let text = out.content[0].as_text().unwrap();
         assert!(text.contains("a.txt:1: hello"));
         assert!(text.contains("a.txt:3: hello again"));

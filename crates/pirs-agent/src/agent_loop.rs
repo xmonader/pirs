@@ -39,9 +39,8 @@ pub enum BudgetHit {
     ToolCalls,
 }
 
-pub type CascadeJudge = Arc<
-    dyn Fn(&AssistantMessage) -> futures::future::BoxFuture<'static, bool> + Send + Sync,
->;
+pub type CascadeJudge =
+    Arc<dyn Fn(&AssistantMessage) -> futures::future::BoxFuture<'static, bool> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct CascadeConfig {
@@ -117,7 +116,10 @@ pub async fn run_agent_loop(
             });
             new_messages.push(Message::Assistant(assistant.clone()));
 
-            if matches!(assistant.stop_reason, StopReason::Error | StopReason::Aborted) {
+            if matches!(
+                assistant.stop_reason,
+                StopReason::Error | StopReason::Aborted
+            ) {
                 emit(AgentEvent::TurnEnd {
                     message: Box::new(assistant),
                     tool_results: vec![],
@@ -226,8 +228,7 @@ pub async fn run_agent_loop(
                 }
             }
 
-            let batch_terminate =
-                !results.is_empty() && results.iter().all(|r| r.terminate);
+            let batch_terminate = !results.is_empty() && results.iter().all(|r| r.terminate);
             has_more_tool_calls = had_calls && !batch_terminate;
 
             if let Some(f) = &config.hooks.should_stop_after_turn {
@@ -365,15 +366,15 @@ async fn stream_once(
         match event {
             StreamEvent::Start | StreamEvent::ToolCallDelta => {}
             StreamEvent::TextDelta(d) => {
-                append_text(&mut partial, d);
-                replace_last(context, &partial);
+                append_text(&mut partial, d.clone());
+                append_delta_to_last(context, &d, false);
                 emit(AgentEvent::MessageUpdate {
                     message: Box::new(partial.clone()),
                 });
             }
             StreamEvent::ThinkingDelta(d) => {
-                append_thinking(&mut partial, d);
-                replace_last(context, &partial);
+                append_thinking(&mut partial, d.clone());
+                append_delta_to_last(context, &d, true);
                 emit(AgentEvent::MessageUpdate {
                     message: Box::new(partial.clone()),
                 });
@@ -420,6 +421,18 @@ fn replace_last(context: &mut Context, msg: &AssistantMessage) {
     }
 }
 
+/// O(1) delta application to the trailing assistant message in context —
+/// avoids cloning the whole AssistantMessage on every streamed token.
+fn append_delta_to_last(context: &mut Context, delta: &str, thinking: bool) {
+    if let Some(Message::Assistant(a)) = context.messages.last_mut() {
+        if thinking {
+            append_thinking(a, delta.to_string());
+        } else {
+            append_text(a, delta.to_string());
+        }
+    }
+}
+
 fn error_result(id: &str, name: &str, message: &str) -> ToolResultMessage {
     ToolResultMessage {
         tool_call_id: id.to_string(),
@@ -445,7 +458,11 @@ fn schema_summary(schema: &Value) -> String {
         .iter()
         .map(|(k, v)| {
             let ty = v.get("type").and_then(|t| t.as_str()).unwrap_or("any");
-            let req = if required.contains(&k.as_str()) { " (required)" } else { "" };
+            let req = if required.contains(&k.as_str()) {
+                " (required)"
+            } else {
+                ""
+            };
             format!("{k}: {ty}{req}")
         })
         .collect::<Vec<_>>()
@@ -476,7 +493,11 @@ fn prepare_call(
     let Some(tool) = tools.iter().find(|t| t.name() == call.name) else {
         return Prepared::Failed {
             index,
-            result: error_result(&call.id, &call.name, &format!("Tool {} not found", call.name)),
+            result: error_result(
+                &call.id,
+                &call.name,
+                &format!("Tool {} not found", call.name),
+            ),
         };
     };
     if !is_visible(visible, &call.name) {
@@ -609,7 +630,8 @@ async fn execute_tool_calls(
                     tool,
                     ..
                 } => {
-                    let outcome = run_tool(tool, id.clone(), name.clone(), args, cancel.clone(), emit).await;
+                    let outcome =
+                        run_tool(tool, id.clone(), name.clone(), args, cancel.clone(), emit).await;
                     finalize_result(&id, &name, outcome, hooks)
                 }
             };

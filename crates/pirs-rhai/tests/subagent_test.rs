@@ -40,11 +40,8 @@ fn tool_ask(args) {
 #[test]
 fn run_subagent_unregistered_without_runner() {
     let mut host = pirs_rhai::ExtensionHost::new();
-    host.load_source(
-        "fn tool_x(args) { run_subagent(\"hi\") }",
-        "x.rhai".into(),
-    )
-    .unwrap();
+    host.load_source("fn tool_x(args) { run_subagent(\"hi\") }", "x.rhai".into())
+        .unwrap();
     let host = Arc::new(host);
     let hooks = host.hooks();
     let _ = hooks;

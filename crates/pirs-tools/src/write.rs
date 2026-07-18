@@ -82,6 +82,9 @@ mod tests {
             .await
             .unwrap();
         assert!(out.content[0].as_text().unwrap().contains("5 bytes"));
-        assert_eq!(std::fs::read_to_string(dir.path().join("a/b/c.txt")).unwrap(), "hello");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("a/b/c.txt")).unwrap(),
+            "hello"
+        );
     }
 }

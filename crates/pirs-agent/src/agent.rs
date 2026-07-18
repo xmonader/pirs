@@ -27,6 +27,14 @@ pub enum AgentError {
     NothingToContinue,
 }
 
+struct RunningGuard(Arc<AtomicBool>);
+
+impl Drop for RunningGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 pub struct Agent {
     provider: Arc<dyn LlmProvider>,
     pub system_prompt: String,
@@ -212,7 +220,12 @@ impl Agent {
     }
 
     pub async fn continue_(&mut self) -> Result<Vec<Message>, AgentError> {
-        if self.messages.last().map(|m| m.is_assistant()).unwrap_or(false) {
+        if self
+            .messages
+            .last()
+            .map(|m| m.is_assistant())
+            .unwrap_or(false)
+        {
             return Err(AgentError::NothingToContinue);
         }
         self.run(None).await
@@ -240,7 +253,8 @@ impl Agent {
     pub fn begin_prompt(
         &mut self,
         prompts: Vec<Message>,
-    ) -> Result<impl std::future::Future<Output = PromptRunOutput> + Send + 'static, AgentError> {
+    ) -> Result<impl std::future::Future<Output = PromptRunOutput> + Send + 'static, AgentError>
+    {
         if self.running.swap(true, Ordering::SeqCst) {
             return Err(AgentError::AlreadyRunning);
         }
@@ -298,10 +312,19 @@ impl Agent {
         let provider = Arc::clone(&self.provider);
         let cancel = self.cancel.clone();
 
+        let running_guard = RunningGuard(Arc::clone(&self.running));
         Ok(async move {
-            let (new_messages, budget_hit) =
-                run_agent_loop(prompts, &mut context, &tools, &provider, &config, &emit, cancel)
-                    .await;
+            let _guard = running_guard;
+            let (new_messages, budget_hit) = run_agent_loop(
+                prompts,
+                &mut context,
+                &tools,
+                &provider,
+                &config,
+                &emit,
+                cancel,
+            )
+            .await;
             (context.messages, new_messages, budget_hit)
         })
     }

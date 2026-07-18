@@ -15,7 +15,9 @@ static READ_CACHE: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<PathBuf, (std::time::SystemTime, String)>>,
 > = std::sync::OnceLock::new();
 
-fn cache() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, (std::time::SystemTime, String)>> {
+fn cache(
+) -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, (std::time::SystemTime, String)>>
+{
     READ_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
@@ -29,13 +31,15 @@ fn read_cached(path: &std::path::Path) -> anyhow::Result<String> {
             }
         }
     }
-    let raw = std::fs::read(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let raw = std::fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
     let content = String::from_utf8_lossy(&raw).into_owned();
     if let Some(mtime) = mtime {
         let mut map = cache().lock().unwrap();
         if map.len() > 500 {
-            map.clear();
+            let drop: Vec<PathBuf> = map.keys().take(100).cloned().collect();
+            for k in drop {
+                map.remove(&k);
+            }
         }
         map.insert(path.to_path_buf(), (mtime, content.clone()));
     }
@@ -167,9 +171,12 @@ mod tests {
         let file = dir.path().join("f.txt");
         std::fs::write(&file, "l1\nl2\nl3\nl4\n").unwrap();
         let tool = ReadTool::new(dir.path().to_path_buf());
-        let out = run(&tool, serde_json::json!({"path": "f.txt", "offset": 2, "limit": 2}))
-            .await
-            .unwrap();
+        let out = run(
+            &tool,
+            serde_json::json!({"path": "f.txt", "offset": 2, "limit": 2}),
+        )
+        .await
+        .unwrap();
         let text = out.content[0].as_text().unwrap();
         assert!(text.starts_with("l2\nl3"));
         assert!(text.contains("offset=4"));
@@ -191,7 +198,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("i.png"), [0x89, 0x50, 0x4e, 0x47]).unwrap();
         let tool = ReadTool::new(dir.path().to_path_buf());
-        let out = run(&tool, serde_json::json!({"path": "i.png"})).await.unwrap();
+        let out = run(&tool, serde_json::json!({"path": "i.png"}))
+            .await
+            .unwrap();
         assert!(out
             .content
             .iter()

@@ -22,8 +22,6 @@ pub struct StdioClient {
     child: tokio::sync::Mutex<Child>,
 }
 
-
-
 #[derive(Debug, Clone)]
 pub struct McpToolDef {
     pub name: String,
@@ -38,7 +36,13 @@ pub struct CallResult {
 }
 
 impl StdioClient {
-    pub async fn spawn(name: &str, command: &str, args: &[String], env: &HashMap<String, String>, cwd: Option<&str>) -> anyhow::Result<Arc<Self>> {
+    pub async fn spawn(
+        name: &str,
+        command: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+        cwd: Option<&str>,
+    ) -> anyhow::Result<Arc<Self>> {
         let mut cmd = Command::new(command);
         cmd.args(args)
             .envs(env)
@@ -83,7 +87,8 @@ impl StdioClient {
                                         .to_string();
                                     let _ = tx.send(Err(msg));
                                 } else {
-                                    let _ = tx.send(Ok(v.get("result").cloned().unwrap_or(Value::Null)));
+                                    let _ = tx
+                                        .send(Ok(v.get("result").cloned().unwrap_or(Value::Null)));
                                 }
                             }
                         }
@@ -124,7 +129,12 @@ impl StdioClient {
         Ok(client)
     }
 
-    async fn request(&self, method: &str, params: Value, timeout: Duration) -> anyhow::Result<Value> {
+    async fn request(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> anyhow::Result<Value> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
         self.pending.lock().unwrap().insert(id, tx);
@@ -144,7 +154,10 @@ impl StdioClient {
                 if tail.is_empty() {
                     bail!("MCP server dropped the request")
                 } else {
-                    bail!("MCP server dropped the request; stderr: {}", tail.chars().take(500).collect::<String>())
+                    bail!(
+                        "MCP server dropped the request; stderr: {}",
+                        tail.chars().take(500).collect::<String>()
+                    )
                 }
             }
             Err(_) => bail!("MCP request '{method}' timed out"),
@@ -234,22 +247,24 @@ impl StdioClient {
             .unwrap_or_default();
         let blocks: Vec<pirs_ai::ContentBlock> = content
             .into_iter()
-            .filter_map(|c| {
-                match c.get("type").and_then(|t| t.as_str()) {
-                    Some("text") => c
-                        .get("text")
-                        .and_then(|t| t.as_str())
-                        .map(pirs_ai::ContentBlock::text),
-                    Some("image") => Some(pirs_ai::ContentBlock::Image {
-                        data: c.get("data").and_then(|d| d.as_str()).unwrap_or("").to_string(),
-                        mime_type: c
-                            .get("mimeType")
-                            .and_then(|m| m.as_str())
-                            .unwrap_or("image/png")
-                            .to_string(),
-                    }),
-                    _ => None,
-                }
+            .filter_map(|c| match c.get("type").and_then(|t| t.as_str()) {
+                Some("text") => c
+                    .get("text")
+                    .and_then(|t| t.as_str())
+                    .map(pirs_ai::ContentBlock::text),
+                Some("image") => Some(pirs_ai::ContentBlock::Image {
+                    data: c
+                        .get("data")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    mime_type: c
+                        .get("mimeType")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("image/png")
+                        .to_string(),
+                }),
+                _ => None,
             })
             .collect();
         Ok(CallResult {
