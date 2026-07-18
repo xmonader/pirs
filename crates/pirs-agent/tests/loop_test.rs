@@ -663,3 +663,75 @@ async fn assistant_message_appears_exactly_once_per_turn() {
             .collect::<Vec<_>>()
     );
 }
+
+/// Parent cancel must propagate into a running delegate sub-agent. Regression:
+/// the watcher captured a token that begin_prompt re-minted, so it cancelled a
+/// dead token and the sub-agent ran to completion anyway.
+#[tokio::test]
+async fn parent_cancel_aborts_delegate_subagent() {
+    use pirs_agent::delegate::DelegateTool;
+
+    // Main model asks for a delegate; the sub-agent's model blocks until
+    // cancelled (never completes on its own).
+    let main_provider = Arc::new(MockProvider::new(vec![tool_call_msg(
+        "c1",
+        "delegate",
+        json!({"task": "block forever"}),
+    )]));
+
+    struct BlockingSubProvider;
+    #[async_trait]
+    impl LlmProvider for BlockingSubProvider {
+        async fn stream(
+            &self,
+            model: &str,
+            _context: &Context,
+            _options: &CompletionOptions,
+            cancel: tokio_util::sync::CancellationToken,
+        ) -> futures::stream::BoxStream<'static, StreamEvent> {
+            let model = model.to_string();
+            Box::pin(futures::stream::once(async move {
+                cancel.cancelled().await;
+                StreamEvent::Done(Box::new(AssistantMessage {
+                    provider: "mock".into(),
+                    api: "mock".into(),
+                    model,
+                    stop_reason: StopReason::Aborted,
+                    ..Default::default()
+                }))
+            }))
+        }
+    }
+
+    let delegate = DelegateTool::new(
+        Arc::new(BlockingSubProvider),
+        "mock-model",
+        CompletionOptions::default(),
+        || vec![Arc::new(EchoTool)],
+    );
+
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let ctx = ToolExecContext {
+        tool_call_id: "c1".into(),
+        args: json!({"task": "block forever"}),
+        cancel: cancel.clone(),
+        on_update: None,
+    };
+    let _ = main_provider; // documents intent; the tool is exercised directly
+    let handle = tokio::spawn(async move { delegate.execute(ctx).await });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    cancel.cancel();
+
+    let out = tokio::time::timeout(std::time::Duration::from_secs(5), handle)
+        .await
+        .expect("delegate did not return after parent cancel — sub-agent still running")
+        .unwrap();
+    // The sub-agent aborted, so the delegate surfaces an error, not a hang.
+    assert!(
+        out.is_err()
+            || out.unwrap().content[0]
+                .as_text()
+                .map(|t| !t.is_empty())
+                .unwrap_or(false)
+    );
+}

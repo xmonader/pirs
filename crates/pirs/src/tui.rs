@@ -38,7 +38,7 @@ struct App {
     usage_summary: String,
     pending_approval: Arc<Mutex<Option<String>>>,
     approval_answer: Arc<std::sync::mpsc::Sender<String>>,
-    cancel: tokio_util::sync::CancellationToken,
+    cancel: pirs_agent::agent::CancelSlot,
 }
 
 impl App {
@@ -185,7 +185,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                 (KeyCode::Char('d'), KeyModifiers::CONTROL) => break,
                 (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
                     if app.running {
-                        app.cancel.cancel();
+                        app.cancel.lock().unwrap().cancel();
                         app.push_text(dim(), "[cancel requested]");
                     } else {
                         break;

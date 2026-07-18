@@ -26,7 +26,7 @@ pub struct Job {
     pub pid: Option<u32>,
     pub progress: Option<Arc<Mutex<String>>>,
     pub steer: Option<NotifyFn>,
-    pub cancel: Option<tokio_util::sync::CancellationToken>,
+    pub cancel: Option<crate::agent::CancelSlot>,
 }
 
 impl Job {
@@ -211,7 +211,7 @@ impl JobRegistry {
         }
     }
 
-    pub fn set_cancel(&self, id: u64, cancel: tokio_util::sync::CancellationToken) {
+    pub fn set_cancel(&self, id: u64, cancel: crate::agent::CancelSlot) {
         if let Some(job) = self.jobs.lock().unwrap().get(&id) {
             job.lock().unwrap().cancel = Some(cancel);
         }

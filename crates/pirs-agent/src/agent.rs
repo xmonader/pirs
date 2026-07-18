@@ -56,8 +56,13 @@ pub struct Agent {
     steering_mode: QueueMode,
     follow_up_mode: QueueMode,
     running: Arc<AtomicBool>,
-    cancel: CancellationToken,
+    cancel: CancelSlot,
 }
+
+/// Stable handle for cancelling the agent's current run. The token inside is
+/// re-minted at the start of every run, so a handle captured at any time
+/// always cancels whatever run is active when `.cancel()` is called through it.
+pub type CancelSlot = std::sync::Arc<std::sync::Mutex<CancellationToken>>;
 
 impl Agent {
     pub fn new(provider: Arc<dyn LlmProvider>, model: impl Into<String>) -> Self {
@@ -82,7 +87,7 @@ impl Agent {
             steering_mode: QueueMode::default(),
             follow_up_mode: QueueMode::default(),
             running: Arc::new(AtomicBool::new(false)),
-            cancel: CancellationToken::new(),
+            cancel: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
         }
     }
 
@@ -154,13 +159,14 @@ impl Agent {
             }
         });
         let provider = Arc::clone(&self.provider);
+        let cancel = { self.cancel.lock().unwrap().clone() };
         compact_messages(
             &provider,
             &self.model,
             &mut self.messages,
             &cfg,
             &emit,
-            self.cancel.clone(),
+            cancel,
             &self.extra_usage,
         )
         .await
@@ -194,11 +200,14 @@ impl Agent {
     }
 
     pub fn cancel(&self) {
-        self.cancel.cancel();
+        self.cancel.lock().unwrap().cancel();
     }
 
-    pub fn cancel_handle(&self) -> CancellationToken {
-        self.cancel.clone()
+    /// Returns the stable cancel slot. Prefer this over snapshotting a token:
+    /// cancelling through the slot always reaches the current run, even if the
+    /// run started after the handle was captured.
+    pub fn cancel_handle(&self) -> CancelSlot {
+        Arc::clone(&self.cancel)
     }
 
     pub fn steer_sender(&self) -> impl Fn(Message) + Send + 'static {
@@ -258,7 +267,7 @@ impl Agent {
         if self.running.swap(true, Ordering::SeqCst) {
             return Err(AgentError::AlreadyRunning);
         }
-        self.cancel = CancellationToken::new();
+        *self.cancel.lock().unwrap() = CancellationToken::new();
 
         let steering = Arc::clone(&self.steering);
         let steering_mode = self.steering_mode;
@@ -310,7 +319,7 @@ impl Agent {
 
         let tools = self.tools.clone();
         let provider = Arc::clone(&self.provider);
-        let cancel = self.cancel.clone();
+        let cancel = self.cancel.lock().unwrap().clone();
 
         let running_guard = RunningGuard(Arc::clone(&self.running));
         Ok(async move {

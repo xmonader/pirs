@@ -102,6 +102,7 @@ impl DelegateTool {
                         steer(pirs_ai::Message::user(s));
                     }),
                 );
+                crate::jobs::registry().set_cancel(id, agent.cancel_handle());
                 crate::jobs::registry().set_progress_handle(id, Arc::clone(&progress2));
                 let result = agent.prompt(&task_for_thread).await;
                 let (status, answer) = match result {
@@ -221,7 +222,7 @@ impl AgentTool for DelegateTool {
         let parent_cancel = ctx.cancel.clone();
         let watcher = tokio::spawn(async move {
             parent_cancel.cancelled().await;
-            cancel_watcher.cancel();
+            cancel_watcher.lock().unwrap().cancel();
         });
         let result = agent.prompt(&task).await;
         watcher.abort();

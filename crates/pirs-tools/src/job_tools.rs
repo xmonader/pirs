@@ -211,8 +211,8 @@ impl AgentTool for JobKillTool {
                     let j = job.lock().unwrap();
                     j.cancel.clone()
                 };
-                if let Some(token) = cancel {
-                    token.cancel();
+                if let Some(slot) = cancel {
+                    slot.lock().unwrap().cancel();
                 }
             }
         }
@@ -283,6 +283,10 @@ pub fn spawn_bash_job(
         j.pid = Some(child.id());
         j.output_path = path.clone();
     }
+    // Stop flag lets job_kill prevent respawns: the watcher checks it after
+    // every exit and during the restart backoff.
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    jobs::registry().register_stop_flag(id, std::sync::Arc::clone(&stop));
     let path = path_for_thread;
     let return_path = path.clone();
     let command_owned = command.to_string();
@@ -292,6 +296,10 @@ pub fn spawn_bash_job(
         let mut current = child;
         loop {
             let code = current.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+            if stop.load(std::sync::atomic::Ordering::SeqCst) {
+                jobs::registry().set_status(id, JobStatus::Killed);
+                return;
+            }
             if !auto_restart {
                 jobs::registry().set_status(id, JobStatus::Exited(code));
                 jobs::registry().notify(format!(
@@ -302,7 +310,15 @@ pub fn spawn_bash_job(
             jobs::registry().notify(format!(
                 "job #{id} exited (code {code}); restarting in {backoff}s: {command_owned}"
             ));
-            std::thread::sleep(std::time::Duration::from_secs(backoff));
+            // Interruptible backoff: a kill during the wait still prevents the
+            // respawn.
+            for _ in 0..backoff * 10 {
+                if stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    jobs::registry().set_status(id, JobStatus::Killed);
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
             backoff = (backoff * 2).min(30);
             let shell = std::env::var("PIRS_SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
             let out_file = std::fs::OpenOptions::new().append(true).open(&path);
@@ -617,5 +633,47 @@ mod daemon_tests {
             .wait(id, std::time::Duration::from_secs(5))
             .await;
         assert!(matches!(result, Some(JobStatus::Exited(0))), "{result:?}");
+    }
+
+    /// Kill an auto-restart job: the watcher must NOT respawn it. Regression
+    /// test — previously job_kill SIGKILLed the process but the restart loop
+    /// never checked the stop flag and revived it.
+    #[tokio::test]
+    async fn killed_auto_restart_job_does_not_respawn() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("runs.log");
+        let cmd = format!("echo run >> {}", marker.display());
+        let (id, _path) = spawn_bash_job(dir.path(), &cmd, true).unwrap();
+
+        // Let it run and restart at least once (initial backoff is 1s).
+        tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+        let before = std::fs::read_to_string(&marker).unwrap_or_default();
+        assert!(
+            before.matches("run").count() >= 2,
+            "expected at least one restart, got: {before:?}"
+        );
+
+        let kill = JobKillTool
+            .execute(ToolExecContext {
+                tool_call_id: "t".into(),
+                args: serde_json::json!({"id": id}),
+                cancel: CancellationToken::new(),
+                on_update: None,
+            })
+            .await;
+        assert!(kill.is_ok(), "kill failed: {kill:?}");
+
+        // Past the next backoff window: no further runs may appear.
+        tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+        let after = std::fs::read_to_string(&marker).unwrap_or_default();
+        assert_eq!(
+            before.matches("run").count(),
+            after.matches("run").count(),
+            "job respawned after kill: {after:?}"
+        );
+        let status = jobs::registry()
+            .get(id)
+            .map(|j| j.lock().unwrap().status.clone());
+        assert!(matches!(status, Some(JobStatus::Killed)), "{status:?}");
     }
 }
