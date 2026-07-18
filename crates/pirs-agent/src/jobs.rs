@@ -51,6 +51,8 @@ pub struct JobRegistry {
     jobs: Mutex<HashMap<u64, Arc<Mutex<Job>>>>,
     next_id: Mutex<u64>,
     notifier: Mutex<Option<NotifyFn>>,
+    waiters: Mutex<HashMap<u64, Vec<tokio::sync::oneshot::Sender<()>>>>,
+    stop_flags: Mutex<HashMap<u64, std::sync::Arc<std::sync::atomic::AtomicBool>>>,
 }
 
 static REGISTRY: OnceLock<JobRegistry> = OnceLock::new();
@@ -60,6 +62,8 @@ pub fn registry() -> &'static JobRegistry {
         jobs: Mutex::new(HashMap::new()),
         next_id: Mutex::new(1),
         notifier: Mutex::new(None),
+        waiters: Mutex::new(HashMap::new()),
+        stop_flags: Mutex::new(HashMap::new()),
     })
 }
 
@@ -103,9 +107,46 @@ impl JobRegistry {
         (id, job)
     }
 
+    pub fn register_stop_flag(&self, id: u64, flag: std::sync::Arc<std::sync::atomic::AtomicBool>) {
+        self.stop_flags.lock().unwrap().insert(id, flag);
+    }
+
+    pub fn request_stop(&self, id: u64) -> bool {
+        if let Some(flag) = self.stop_flags.lock().unwrap().get(&id) {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn set_status(&self, id: u64, status: JobStatus) {
         if let Some(job) = self.jobs.lock().unwrap().get(&id) {
             job.lock().unwrap().status = status.clone();
+        }
+        if !matches!(status, JobStatus::Running) {
+            if let Some(list) = self.waiters.lock().unwrap().remove(&id) {
+                for tx in list {
+                    let _ = tx.send(());
+                }
+            }
+        }
+    }
+
+    pub async fn wait(&self, id: u64, timeout: std::time::Duration) -> Option<JobStatus> {
+        let rx = {
+            let current = self.get(id)?;
+            let status = current.lock().unwrap().status.clone();
+            if !matches!(status, JobStatus::Running) {
+                return Some(status);
+            }
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            self.waiters.lock().unwrap().entry(id).or_default().push(tx);
+            rx
+        };
+        match tokio::time::timeout(timeout, rx).await {
+            Ok(Ok(())) => self.get(id).map(|j| j.lock().unwrap().status.clone()),
+            _ => None,
         }
     }
 

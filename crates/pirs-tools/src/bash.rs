@@ -19,6 +19,8 @@ struct BashArgs {
     timeout: Option<u64>,
     /// Run in the background as a job; returns immediately with a job id
     background: Option<bool>,
+    /// Restart the job automatically on exit (for long-running services)
+    auto_restart: Option<bool>,
 }
 
 pub struct BashTool {
@@ -54,10 +56,22 @@ impl AgentTool for BashTool {
         if !self.cwd.exists() {
             bail!("working directory {} does not exist", self.cwd.display());
         }
-        if args.background.unwrap_or(false) {
-            let (id, path) = crate::job_tools::spawn_bash_job(&self.cwd, &args.command)?;
+        if args.background.unwrap_or(false)
+            || args.auto_restart.unwrap_or(false)
+            || crate::job_tools::looks_like_daemon(&args.command)
+        {
+            let (id, path) = crate::job_tools::spawn_bash_job(
+                &self.cwd,
+                &args.command,
+                args.auto_restart.unwrap_or(false),
+            )?;
+            let why = if args.background.unwrap_or(false) {
+                ""
+            } else {
+                " (auto-backgrounded: this looks like a long-running server)"
+            };
             return Ok(ToolOutput::text(format!(
-                "background job #{id} started (output: {}). Use jobs/job_output/job_kill to manage it.",
+                "background job #{id} started{why} (output: {}). Use wait_ready to check if it's up, jobs/job_output/job_kill to manage it.",
                 path.display()
             )));
         }
