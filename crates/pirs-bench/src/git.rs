@@ -149,6 +149,41 @@ mod tests {
     }
 
     #[test]
+    fn restore_paths_reverts_only_named_files() {
+        let Some(dir) = repo_with_commit() else {
+            eprintln!("skipping: git unavailable");
+            return;
+        };
+        // Add a second committed file so we can prove restore is selective.
+        std::fs::write(dir.path().join("other.py"), "x = 1\n").unwrap();
+        run_capture("git add -A && git commit -qm second", dir.path(), 60).unwrap();
+        let ws = GitWorkspace::new(dir.path().to_path_buf());
+
+        // Edit both files; restore only mymod.py.
+        std::fs::write(dir.path().join("mymod.py"), "TAMPERED\n").unwrap();
+        std::fs::write(dir.path().join("other.py"), "x = 2\n").unwrap();
+        ws.restore_paths(&["mymod.py"]).unwrap();
+
+        // mymod.py is back to its committed content; other.py keeps its edit.
+        let restored = std::fs::read_to_string(dir.path().join("mymod.py")).unwrap();
+        assert!(restored.contains("return a - b"), "protected file must be reverted");
+        let other = std::fs::read_to_string(dir.path().join("other.py")).unwrap();
+        assert_eq!(other, "x = 2\n", "unprotected file must keep its edit");
+    }
+
+    #[test]
+    fn restore_paths_tolerates_untracked_and_empty() {
+        let Some(dir) = repo_with_commit() else {
+            eprintln!("skipping: git unavailable");
+            return;
+        };
+        let ws = GitWorkspace::new(dir.path().to_path_buf());
+        // Empty list is a no-op; a path not tracked at HEAD is skipped, not fatal.
+        ws.restore_paths(&[]).unwrap();
+        ws.restore_paths(&["does/not/exist.py"]).unwrap();
+    }
+
+    #[test]
     fn head_sha_is_stable_and_forty_hex() {
         let Some(dir) = repo_with_commit() else {
             eprintln!("skipping: git unavailable");
