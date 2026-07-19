@@ -96,6 +96,47 @@ impl Agent {
         self
     }
 
+    /// Build a sibling agent for one strategy phase: same provider, completion,
+    /// tool-execution mode, compaction, visible-tool policy, cascade, budgets,
+    /// hooks, and listeners as `self`, plus the shared steering, follow-up, and
+    /// usage handles — but with an empty message history and the phase's own
+    /// system prompt, model, and (scoped) tools.
+    ///
+    /// This is how a `--strategy`/`--profile` phase reuses the parent agent's
+    /// full wiring (approval hooks, streaming/printing listeners, session
+    /// persistence, usage accounting) without the caller re-threading each piece.
+    /// A fresh cancel/running slot keeps each phase independently cancellable.
+    pub fn fork_for_phase(
+        &self,
+        system_prompt: impl Into<String>,
+        model: impl Into<String>,
+        tools: Vec<Arc<dyn AgentTool>>,
+    ) -> Agent {
+        Agent {
+            provider: Arc::clone(&self.provider),
+            system_prompt: system_prompt.into(),
+            model: model.into(),
+            tools,
+            messages: Vec::new(),
+            completion: self.completion.clone(),
+            tool_execution: self.tool_execution,
+            compaction: self.compaction.clone(),
+            visible_tools: self.visible_tools.clone(),
+            cascade: self.cascade.clone(),
+            budgets: self.budgets.clone(),
+            budget_hit: None,
+            extra_usage: Arc::clone(&self.extra_usage),
+            hooks: self.hooks.clone(),
+            listeners: self.listeners.clone(),
+            steering: Arc::clone(&self.steering),
+            follow_up: Arc::clone(&self.follow_up),
+            steering_mode: self.steering_mode,
+            follow_up_mode: self.follow_up_mode,
+            running: Arc::new(AtomicBool::new(false)),
+            cancel: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
+        }
+    }
+
     pub fn with_tools(mut self, tools: Vec<Arc<dyn AgentTool>>) -> Self {
         self.tools = tools;
         self

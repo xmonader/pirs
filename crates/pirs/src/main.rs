@@ -58,6 +58,20 @@ struct Cli {
     #[arg(long)]
     resume: bool,
 
+    /// Run a multi-phase loop strategy for a one-shot prompt. Accepts a built-in
+    /// name (monolithic, plan-exec, plan-critic-exec, wide-plan-exec), a name
+    /// resolved from .pirs/strategies/<name>.rhai (project then ~/.pirs), or a
+    /// path to a .rhai script. No effect in the interactive REPL.
+    #[arg(long)]
+    strategy: Option<String>,
+
+    /// Run under a profile (a role: persona + model + strategy + tool policy).
+    /// Accepts a name resolved from .pirs/profiles/<name>.rhai (project then
+    /// ~/.pirs) or a path to a .rhai script. Implies its strategy; --strategy
+    /// overrides which strategy the profile runs.
+    #[arg(long)]
+    profile: Option<String>,
+
     /// Disable rhai extension loading
     #[arg(long)]
     no_extensions: bool,
@@ -854,6 +868,15 @@ async fn main() -> anyhow::Result<()> {
                 ),
             });
 
+    // Strategy/profile mode needs the full tool list after the agent takes it, to
+    // re-scope tools per phase. Clone the Arc handles up front (cheap) only then.
+    let strategy_mode = cli.strategy.is_some() || cli.profile.is_some();
+    let strategy_tools: Vec<Arc<dyn AgentTool>> = if strategy_mode {
+        tools.clone()
+    } else {
+        Vec::new()
+    };
+
     let mut agent = Agent::new(provider, &cli.model)
         .with_system_prompt(system)
         .with_tools(tools)
@@ -999,6 +1022,21 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if let Some(prompt) = cli.prompt.first().cloned() {
+        if strategy_mode {
+            let report = run_strategy_turn(
+                &agent,
+                &prompt,
+                cli.strategy.as_deref(),
+                cli.profile.as_deref(),
+                &cli.model,
+                strategy_tools,
+                &cwd,
+            )
+            .await?;
+            eprintln!();
+            print_usage(&report);
+            return Ok(());
+        }
         run_turn(
             &mut agent,
             &prompt,
@@ -1068,6 +1106,105 @@ async fn run_turn(
         }
     }
     Ok(())
+}
+
+/// Tools a read-only (planning/critique) phase may use: navigation and search
+/// only, nothing that can change the tree. An allowlist — not a denylist — so a
+/// newly added mutating tool can never silently leak into a planner's scope.
+const READONLY_PHASE_TOOLS: &[&str] = &["read", "grep", "find", "ls", "recall", "code_map", "lsp"];
+
+/// Run a one-shot prompt through a loop strategy/profile on the real agent.
+///
+/// Each phase forks the fully wired `base` agent (same hooks, listeners, session
+/// persistence, completion), re-scoped to the phase's tools and model. Returns a
+/// usage report spanning every phase so cost is reported for the whole run.
+async fn run_strategy_turn(
+    base: &Agent,
+    input: &str,
+    strategy_arg: Option<&str>,
+    profile_arg: Option<&str>,
+    default_model: &str,
+    full_tools: Vec<Arc<dyn AgentTool>>,
+    cwd: &Path,
+) -> anyhow::Result<pirs_agent::usage::UsageReport> {
+    use pirs_agent::phase_agent::AgentPhaseDriver;
+    use pirs_agent::profile::Profile;
+    use pirs_agent::strategy::{run_strategy_async, PhaseReq, Strategy, Task, ToolScope};
+
+    // Effective profile: a neutral wrapper when only --strategy is given. A
+    // --strategy always overrides which strategy the profile runs, keeping the
+    // profile's persona, model, and tool policy.
+    let mut profile = match profile_arg {
+        Some(p) => pirs_rhai::discover::resolve_profile(p, cwd)
+            .with_context(|| format!("resolving profile {p:?}"))?,
+        None => Profile::from_strategy("adhoc", Strategy::monolithic()),
+    };
+    if let Some(s) = strategy_arg {
+        profile.strategy = pirs_rhai::discover::resolve_strategy(s, cwd)
+            .with_context(|| format!("resolving strategy {s:?}"))?;
+    }
+    let strategy = profile.resolved_strategy();
+    let policy = profile.tools.clone();
+
+    eprintln!(
+        "[strategy '{}' · {} step(s){}]",
+        strategy.name,
+        strategy.steps.len(),
+        profile_arg
+            .map(|p| format!(" · profile '{p}'"))
+            .unwrap_or_default(),
+    );
+
+    let task = Task {
+        issue: input.to_string(),
+        targets: Vec::new(),
+        verdict: None,
+    };
+
+    let default_model = default_model.to_string();
+    let mut driver = AgentPhaseDriver::new(|req: &PhaseReq| {
+        // Profile tool policy first (a role can forbid tools entirely), then the
+        // phase's read/write scope narrows a planner to navigation-only.
+        let mut scoped: Vec<Arc<dyn AgentTool>> = full_tools
+            .iter()
+            .filter(|t| policy.permits(t.name()))
+            .cloned()
+            .collect();
+        if req.scope == ToolScope::ReadOnly {
+            scoped.retain(|t| READONLY_PHASE_TOOLS.contains(&t.name()));
+        }
+        let model = req.model.clone().unwrap_or_else(|| default_model.clone());
+        eprintln!(
+            "\n\x1b[2m── phase {} · model {} · {}\x1b[0m",
+            req.phase_id,
+            model,
+            if req.scope == ToolScope::ReadOnly {
+                "read-only"
+            } else {
+                "full"
+            },
+        );
+        base.fork_for_phase(req.system.clone(), model, scoped)
+    });
+
+    // Ctrl-C aborts the whole run: dropping the strategy future cancels the
+    // in-flight phase's provider stream at its next await point. The pinned future
+    // is scoped to this block so its borrow of `driver` is released before we read
+    // the accumulated usage below.
+    let result = {
+        let run = run_strategy_async(&strategy, &mut driver, &task);
+        tokio::select! {
+            r = run => r,
+            _ = tokio::signal::ctrl_c() => {
+                eprintln!("\n[interrupted]");
+                Err(anyhow::anyhow!("interrupted"))
+            }
+        }
+    };
+
+    let report = pirs_agent::usage::usage_report(driver.messages(), pirs_ai::Usage::default());
+    result?;
+    Ok(report)
 }
 
 struct SteerHandle {

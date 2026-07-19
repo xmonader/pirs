@@ -40,6 +40,10 @@ fn last_assistant_text(msgs: &[Message]) -> String {
 /// starts clean, seeded only by the plan carried in its prompt.
 pub struct AgentPhaseDriver<F> {
     make_agent: F,
+    /// Every phase's newly produced messages, in run order. Kept so the caller
+    /// can render one usage/cost report over the whole multi-phase run (the fresh
+    /// per-phase agents each discard their own history).
+    messages: Vec<Message>,
 }
 
 impl<F> AgentPhaseDriver<F>
@@ -47,7 +51,16 @@ where
     F: FnMut(&PhaseReq) -> Agent,
 {
     pub fn new(make_agent: F) -> Self {
-        AgentPhaseDriver { make_agent }
+        AgentPhaseDriver {
+            make_agent,
+            messages: Vec::new(),
+        }
+    }
+
+    /// All messages produced across every phase so far — feed to
+    /// [`crate::usage::usage_report`] for a run-wide token/cost total.
+    pub fn messages(&self) -> &[Message] {
+        &self.messages
     }
 }
 
@@ -62,7 +75,9 @@ where
             .prompt(req.prompt.clone())
             .await
             .map_err(|e| anyhow::anyhow!("phase {} failed: {e}", req.phase_id))?;
-        Ok(last_assistant_text(&msgs))
+        let text = last_assistant_text(&msgs);
+        self.messages.extend(msgs);
+        Ok(text)
     }
 
     /// Fan-out: build every branch's agent first (the factory borrows `self`),
@@ -82,9 +97,22 @@ where
             agent
                 .prompt(prompt.clone())
                 .await
-                .map(|msgs| last_assistant_text(&msgs))
                 .map_err(|e| anyhow::anyhow!("phase {id} failed: {e}"))
         });
-        futures::future::join_all(futs).await
+        let results = futures::future::join_all(futs).await;
+
+        // Collect every branch's messages (for usage) and reduce to its text.
+        let mut out = Vec::with_capacity(results.len());
+        for r in results {
+            match r {
+                Ok(msgs) => {
+                    let text = last_assistant_text(&msgs);
+                    self.messages.extend(msgs);
+                    out.push(Ok(text));
+                }
+                Err(e) => out.push(Err(e)),
+            }
+        }
+        out
     }
 }
