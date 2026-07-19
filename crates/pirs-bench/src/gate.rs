@@ -46,21 +46,16 @@ impl Verdict {
     }
 }
 
-/// Evaluate a candidate differentially against a baseline.
-///
-/// * `targets` — the tests that must flip red→green (SWE-bench `FAIL_TO_PASS`).
-/// * `scope` — the tests checked for regression (targets + affected/keep-green,
-///   depending on the ring). Only tests **green at baseline** count as
-///   regressions; pre-existing reds are ignored.
-/// * `base` — the pre-edit snapshot over `scope`.
-/// * `post` — the post-edit snapshot over `scope`.
-/// * `post2` — a second post-edit run over `targets` only, for the flaky guard.
-pub fn evaluate(
+/// Rules 1 & 2 of the gate over a single post-edit snapshot: every target flips
+/// red→green (NotCollected is failure), and nothing green at baseline regresses.
+/// Returns [`Verdict::Done`] when both hold — *provisionally*, pending the flaky
+/// re-confirmation in [`confirm_flips`]. Splitting it out lets the driver skip
+/// the (subprocess-costly) confirmation run when the fix hasn't landed yet.
+pub fn provisional(
     targets: &[TestId],
     scope: &[TestId],
     base: &Snapshot,
     post: &Snapshot,
-    post2: &Snapshot,
 ) -> Verdict {
     // (1) Every target must flip red→green; NotCollected/absent is failure.
     for t in targets {
@@ -72,22 +67,41 @@ pub fn evaluate(
             _ => return Verdict::NotYet(t.clone()),
         }
     }
-
     // (2) Nothing green at baseline may regress. Baseline-red tests are ignored.
     for t in scope {
         if base.get(t) == Some(TestOutcome::Pass) && post.get(t) != Some(TestOutcome::Pass) {
             return Verdict::Regressed(t.clone());
         }
     }
+    Verdict::Done
+}
 
-    // (3) Re-confirm every flip to reject flaky red→green.
+/// Rule 3: re-confirm every target's flip on a second run. Returns `Some(Flaky)`
+/// for the first target that failed to stay green, or `None` if all held.
+pub fn confirm_flips(targets: &[TestId], post2: &Snapshot) -> Option<Verdict> {
     for t in targets {
         if post2.get(t) != Some(TestOutcome::Pass) {
-            return Verdict::Flaky(t.clone());
+            return Some(Verdict::Flaky(t.clone()));
         }
     }
+    None
+}
 
-    Verdict::Done
+/// Evaluate a candidate differentially against a baseline — the full gate in one
+/// call. `post2` is a second run over `targets` only, for the flaky guard.
+/// Equivalent to [`provisional`] followed by [`confirm_flips`].
+pub fn evaluate(
+    targets: &[TestId],
+    scope: &[TestId],
+    base: &Snapshot,
+    post: &Snapshot,
+    post2: &Snapshot,
+) -> Verdict {
+    let prov = provisional(targets, scope, base, post);
+    if !prov.is_done() {
+        return prov;
+    }
+    confirm_flips(targets, post2).unwrap_or(Verdict::Done)
 }
 
 #[cfg(test)]

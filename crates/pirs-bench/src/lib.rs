@@ -7,8 +7,10 @@
 
 pub mod gate;
 pub mod report;
+pub mod run;
 pub mod types;
 
 pub use gate::{evaluate, Verdict};
 pub use report::Attribution;
+pub use run::{verify, TestRunner, VerifyPlan};
 pub use types::{FailBucket, Outcome, Ring, Snapshot, TestId, TestOutcome};
