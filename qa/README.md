@@ -38,6 +38,22 @@ feature end to end against a real model.
 | 6 | Verify-and-retry gate (pass) | `live/06-gate-pass.log` | `--verify` command runs; passing verify completes the run cleanly. |
 | 7 | Verify gate (fail → exit 1) | `live/07-gate-fail-exit1.log` | Exhausted attempts with a failing `--verify` exits non-zero (real exit 1). |
 
+## Orchestration & runtime control (live)
+
+Live runs proving the agent-loop control surface and multi-instance features.
+
+| # | Feature | Proof | What it demonstrates |
+|---|---------|-------|----------------------|
+| 8 | Background jobs + waiter + monitoring | `live/08-background-jobs.log` | `bash(background:true)` → job #1; `wait_ready` confirms the server is listening; `jobs`/`job_output` monitor it; `job_kill` stops it (`running`→`killed`). |
+| 9 | Steering a running turn | `live/09-steering-rpc.log` | Over `--mode rpc`, a `steer` message injected mid-turn (while a tool was executing) lands as a user message inside the running conversation and redirects the model — it abandons its 4-step plan and answers the steered question instead. |
+| 10 | Fleets (orchestrator) | `live/10-fleet-orchestrator.log` | `pirs-orchestrator` daemon + `spawn` of two headless workers; `list` shows both `online`; per-instance `rpc` prompts run independently; **isolation** proven (worker-a writes `ALPHA` in its cwd, worker-b writes `BETA` in its); `status`; `stop` → `no instances`. |
+| 11 | Swarm / hive coordination | `live/11-swarm-hive.log` | Two separate `pirs` processes coordinate over the shared `swarm.jsonl` blackboard (`swarm.rhai` pack): a queen `swarm_post`s two packets, a worker `swarm_claim`s + `swarm_done`s one; final blackboard shows `#1 done`, `#2 open`. Also exercises the extension re-entrancy guard. |
+
+These map to: background-job tools (`jobs`/`job_output`/`job_kill`/`job_wait`/`wait_ready`/`job_steer`),
+`agent.steer()` via the RPC `steer`/`prompt` commands, the `pirs-orchestrator`
+Unix-socket fleet control (`spawn`/`list`/`status`/`stop`/`rpc`), and the
+Rhai swarm pack over a shared JSONL queue.
+
 ## Discovery
 
 | Feature | Proof | What it demonstrates |

@@ -1,0 +1,63 @@
+############ QUEEN (instance 1): post two packets ############
+2. Then call swarm_status to show the queue
+3. Report the queue
+
+Let me do all three calls. I can post both packets first (they're independent), then check status.
+> swarm_post 
+
+> swarm_post 
+x extension busy (re-entrant call); refusing to run tool to avoid deadlock
+- packet #1 posted
+The first post worked (packet #1 posted). The second one got a deadlock error - it seems the system doesn't allow re-entrant calls. Let me try posting the second one again after the first completes, but actually it seems like the tool calls might be processed sequentially. Let me try again.The first packet was posted (#1). Let me retry the second one now.
+> swarm_post 
+- packet #2 posted
+Now both are posted. Let me check the status.Both posted. Now let me check the queue status.
+> swarm_status 
+- #1 [open] lint the code\n#2 [open] write tests\n
+The status shows both packets are open and ready for workers to claim. Let me report the result.## 📋 Swarm Queen Report — Queue Status
+
+| ID | Task | Role | Status |
+|----|------|------|--------|
+| #1 | `lint the code` | builder | **open** ⏳ |
+| #2 | `write tests` | builder | **open** ⏳ |
+
+Two work packets have been successfully posted to the swarm. Both are **open** and waiting for builders to claim and execute them. The queue is healthy with no pending blockers.
+[usage: 4 api calls + 0 delegate sub-agents | input 398 (cached 17280, 98%) | output 513 | reasoning 183 | total 18191]
+  deepseek-v4-flash: input 398 (cached 17280) output 513 total 18191
+
+############ shared blackboard after queen ############
+{"id":1,"result":null,"role":"builder","status":"open","task":"lint the code","ts":1784479945241}
+{"id":2,"result":null,"role":"builder","status":"open","task":"write tests","ts":1784479947557}
+
+############ WORKER (instance 2, separate process): claim + complete ############
+3. Call swarm_status and report the final queue
+
+Let me start with step 1.
+> swarm_claim 
+- packet #1: lint the code
+Claimed packet #1 with task "lint the code". Now I need to immediately mark it done with result "lint passed, 0 warnings".
+> swarm_done 
+- packet #1 done
+Packet #1 marked as done. Now call swarm_status to report the final queue.
+> swarm_status 
+- #1 [done] lint the code -> lint passed, 0 warnings\n#2 [open] write tests\n
+The task is complete. Let me report the final queue state.All three steps done. Here's the summary:
+
+1. **swarm_claim** → claimed **packet #1** ("lint the code")
+2. **swarm_done** → marked packet #1 complete with result `"lint passed, 0 warnings"`
+3. **swarm_status** → final queue:
+
+| # | Status | Task | Result |
+|---|--------|------|--------|
+| 1 | ✅ done | lint the code | lint passed, 0 warnings |
+| 2 | 🔓 open | write tests | — |
+
+Queue-mechanics test passed — no linters were harmed in the process.
+[usage: 4 api calls + 0 delegate sub-agents | input 430 (cached 17024, 98%) | output 383 | reasoning 126 | total 17837]
+  deepseek-v4-flash: input 430 (cached 17024) output 383 total 17837
+
+############ shared blackboard after worker (proof of coordination) ############
+{"id":1,"result":"lint passed, 0 warnings","role":"builder","status":"done","task":"lint the code","ts":1784479945241}
+{"id":2,"result":null,"role":"builder","status":"open","task":"write tests","ts":1784479947557}
+
+== DONE ==

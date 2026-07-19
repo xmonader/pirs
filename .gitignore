@@ -6,3 +6,7 @@ target/
 
 # CommandCode tool artifacts
 .commandcode/
+
+# QA proof artifacts are intentional (override *.log)
+!qa/live/
+!qa/live/*.log

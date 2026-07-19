@@ -1,0 +1,82 @@
+== start daemon ==
+daemon up (socket present)
+== spawn 2 workers ==
+worker-a id=3baccc9d-91d9-4e6f-9886-1c4c1a31a56b
+worker-b id=966bcbfb-55a6-4f6f-9148-f43d60f157d7
+== list (expect 2 online) ==
+      "id": "3baccc9d-91d9-4e6f-9886-1c4c1a31a56b",
+      "label": "worker-a",
+      "status": "online"
+      "id": "966bcbfb-55a6-4f6f-9148-f43d60f157d7",
+      "label": "worker-b",
+      "status": "online"
+== per-instance prompts (isolation: A writes ALPHA, B writes BETA) ==
+{
+  "ok": true,
+  "response": {
+    "command": "prompt",
+    "id": "pirs_orch_1_60f6c35a-dac4-4eda-a2ee-173ed491d9e7",
+    "success": true,
+    "type": "response"
+  },
+  "type": "rpc_result"
+}
+{
+  "ok": true,
+  "response": {
+    "command": "prompt",
+    "id": "pirs_orch_1_fc1cb26a-b1de-4eed-8035-9d4d45adb21e",
+    "success": true,
+    "type": "response"
+  },
+  "type": "rpc_result"
+}
+(waiting for workers...)
+== each worker's last assistant text ==
+-- A --
+{
+  "ok": true,
+  "response": {
+    "command": "get_last_assistant_text",
+    "data": {
+      "text": "Done. The file `/tmp/pofleet-a/out.txt` has been created with the contents `ALPHA`."
+    },
+    "id": "pirs_orch_3_87769d6a-9b81-48a6-b878-d5f5c96fc444",
+    "success": true,
+    "type": "response"
+  },
+  "type": "rpc_result"
+}
+-- B --
+{
+  "ok": true,
+  "response": {
+    "command": "get_last_assistant_text",
+    "data": {
+      "text": "File `out.txt` created at `/tmp/pofleet-b/out.txt` with the word `BETA`."
+    },
+    "id": "pirs_orch_3_5463b854-f7ad-4494-8e4a-eef2f296a62b",
+    "success": true,
+    "type": "response"
+  },
+  "type": "rpc_result"
+}
+== isolation proof: each worker's own cwd/out.txt ==
+A/out.txt = ALPHA
+B/out.txt = BETA
+== status of worker-a ==
+    "id": "3baccc9d-91d9-4e6f-9886-1c4c1a31a56b",
+    "label": "worker-a",
+    "status": "online"
+== stop both ==
+{
+  "ok": true,
+  "type": "stop_result"
+}
+{
+  "ok": true,
+  "type": "stop_result"
+}
+== list after stop ==
+(no instances)
+== DONE ==
