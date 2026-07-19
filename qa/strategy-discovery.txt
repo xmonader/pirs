@@ -1,0 +1,15 @@
+### Proof: strategy discovery resolves built-ins by name and errors helpfully
+
+$ pirs --api-key <dummy> --strategy nope 'x'   # unknown name
+---
+[lsp: rust]
+Error: resolving strategy "nope"
+
+Caused by:
+    unknown strategy "nope": not a built-in (monolithic, plan-exec, plan-critic-exec, wide-plan-exec) and no nope.rhai found under /home/xmonader/wspace/k3play/pirs/.pirs/strategies, /home/xmonader/.pirs/strategies
+
+$ pirs --api-key <dummy> --strategy plan-exec 'x'  # embedded built-in resolves (then stops at network)
+---
+[strategy 'plan-exec' · 2 step(s)]
+[2m── phase plan-exec#0 · model gpt-4o-mini · read-only[0m
+[2m── phase plan-exec#1 · model gpt-4o-mini · full[0m

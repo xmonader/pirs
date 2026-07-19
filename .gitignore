@@ -3,3 +3,6 @@ target/
 .pirs/sessions/
 .pirs/memory.db
 .pirs/mutants/
+
+# CommandCode tool artifacts
+.commandcode/

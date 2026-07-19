@@ -1,0 +1,66 @@
+Rust port of the pi coding agent, extensible via rhai
+
+Usage: pirs [OPTIONS] [PROMPT]...
+
+Arguments:
+  [PROMPT]...  One-shot prompt; if omitted, starts the interactive REPL. Collects all trailing args so pseudo-subcommands work unquoted (`pirs blame src/main.rs:42`, `pirs pack install <url> --yes`)
+
+Options:
+      --mode <MODE>
+          Run mode: interactive REPL or headless JSONL-over-stdio RPC [default: repl]
+  -m, --model <MODEL>
+          Model id to use [env: PIRS_MODEL=] [default: gpt-4o-mini]
+      --provider <PROVIDER>
+          LLM provider: openai (OpenAI-compatible) or anthropic [env: PIRS_PROVIDER=] [default: openai]
+      --base-url <BASE_URL>
+          OpenAI-compatible base URL [env: OPENAI_BASE_URL=]
+      --api-key <API_KEY>
+          API key (falls back to the provider's auth store or env var)
+      --resume
+          Resume the most recent session for this directory
+      --strategy <STRATEGY>
+          Run a multi-phase loop strategy for a one-shot prompt. Accepts a built-in name (monolithic, plan-exec, plan-critic-exec, wide-plan-exec), a name resolved from .pirs/strategies/<name>.rhai (project then ~/.pirs), or a path to a .rhai script. No effect in the interactive REPL
+      --profile <PROFILE>
+          Run under a profile (a role: persona + model + strategy + tool policy). Accepts a name resolved from .pirs/profiles/<name>.rhai (project then ~/.pirs) or a path to a .rhai script. Implies its strategy; --strategy overrides which strategy the profile runs
+      --verify <VERIFY>
+          Shell command that verifies a strategy attempt succeeded (exit 0 = pass, e.g. "cargo test" or "pytest -x"). On failure its output is fed into the next attempt as the prior verdict, so the strategy re-plans against the real error. Only used with --strategy/--profile
+      --max-attempts <MAX_ATTEMPTS>
+          Max strategy attempts when --verify is set (retry on gate failure). Defaults to 3 with --verify, 1 otherwise
+      --no-extensions
+          Disable rhai extension loading
+      --no-mcp
+          Disable MCP server connections (.mcp.json)
+      --approval <APPROVAL>
+          Approval mode: auto (no prompts), ask (inline y/n for sensitive ops), yolo (no prompts, no policy hooks — dangerous) [env: PIRS_APPROVAL=] [default: auto]
+      --max-retries <MAX_RETRIES>
+          Retry failed/rate-limited requests up to N times [default: 0]
+      --no-compaction
+          Disable automatic context compaction
+      --context-window <CONTEXT_WINDOW>
+          Model context window in tokens (drives compaction threshold) [default: 128000]
+      --no-graph
+          Disable the code graph (code_map/ast_edit tools, blast-radius notes)
+      --tool-diet
+          Start with only core tools loaded; model loads more via use_tool
+      --sequential
+          Execute tool calls one at a time (helps weaker models)
+      --cascade <CASCADE>
+          Draft each turn with a cheaper model; escalate to the main model only when the draft is rejected
+      --max-turns <MAX_TURNS>
+          Max agent turns (exit code 53 when hit)
+      --max-wall-time <MAX_WALL_TIME>
+          Max wall-clock seconds (exit code 54 when hit)
+      --max-tool-calls <MAX_TOOL_CALLS>
+          Max tool calls (exit code 55 when hit)
+      --serve
+          Run the local web app (pirs serve): browser UI on localhost
+      --port <PORT>
+          Port for --serve [default: 8477]
+      --bind <BIND>
+          Bind address for --serve [default: 127.0.0.1]
+      --serve-token <SERVE_TOKEN>
+          Auth token for --serve writes (default: generated per run) [env: PIRS_SERVE_TOKEN=]
+      --serve-external
+          Allow --serve to bind non-loopback addresses
+  -h, --help
+          Print help

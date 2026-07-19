@@ -1,0 +1,841 @@
+   Compiling pirs v0.1.0 (/home/xmonader/wspace/k3play/pirs/crates/pirs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.64s
+     Running unittests src/main.rs (target/debug/deps/pirs-508115af531044ea)
+
+running 51 tests
+test approval::tests::traversal_is_sensitive ... ok
+test approval::tests::auto_and_yolo_never_prompt ... ok
+test pack::tests::name_from_url ... ok
+test approval::tests::ask_prompts_and_remembers ... ok
+test approval::tests::sensitive_classification ... ok
+test pack::tests::pin_rejects_injection ... ok
+test pack::tests::pack_url_rejects_code_execution_vectors ... ok
+test replay::tests::compare_finds_first_divergence ... ok
+test discovery::tests::skills_block_xml ... ok
+test replay::tests::compare_identical ... ok
+test discovery::tests::expand_without_placeholder_appends_args ... ok
+test approval::tests::no_denies ... ok
+test serve::tests::bearer_matches_mixed_case_token ... ok
+test discovery::tests::frontmatter_parses_fields_and_body ... ok
+test serve::tests::query_param_extracts_token ... ok
+test session::tests::encode_cwd_disambiguates_colliding_paths ... ok
+test tests::existing_hook_not_overwritten ... ok
+test session::tests::interior_corruption_still_errors ... ok
+test discovery::tests::frontmatter_absent ... ok
+test replay::tests::live_mode_matches_by_signature_and_executes_on_miss ... ok
+test serve::tests::wrong_token_post_returns_403 ... ok
+test session::tests::truncated_final_line_is_tolerated ... ok
+test serve::tests::authorized_post_prompt_returns_200 ... ok
+test serve::tests::events_requires_valid_query_token ... ok
+test tests::gate_installed_when_hooks_empty ... ok
+test tests::gate_not_installed_in_yolo ... ok
+test discovery::tests::discovers_skills_and_commands ... ok
+test tests::serve_token_is_random_and_long ... ok
+test tui::tests::chat_item_user_renders_label ... ok
+test tui::tests::inline_spans_code_and_bold ... ok
+test tui::tests::render_markdown_code_fence ... ok
+test tui::tests::split_keep_spaces_alternates ... ok
+test tui::tests::tool_icon_known ... ok
+test tui::tests::truncate_chars_shortens ... ok
+test tui::tests::cursor_pos_multiline ... ok
+test tui::tests::compact_num_formats ... ok
+test tui::tests::flatten_rows_all_within_width ... ok
+test tui::tests::clip_spans_bounds_width_and_keeps_style ... ok
+test tui::tests::wrap_line_hard_splits_overlong_token ... ok
+test tui::tests::wrap_line_preserves_span_styles ... ok
+test tui::tests::wrap_line_to_rows_fast_path_when_fits ... ok
+test tui::tests::wrap_words_empty ... ok
+test tui::tests::wrap_words_respects_width ... ok
+test tui::tests::wrap_line_to_rows_wraps_long_line ... ok
+test auth::tests::resolve_order ... ok
+test auth::tests::set_get_roundtrip ... ok
+test pack::tests::wrong_sha_pin_fails ... ok
+test blame::tests::blame_reads_note_provenance ... ok
+test pack::tests::clone_collect_install_pinned ... ok
+test replay::tests::strict_replay_reproduces_cassette ... ok
+test replay::tests::strict_replay_detects_tampered_result ... ok
+
+test result: ok. 51 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/profiles_load.rs (target/debug/deps/profiles_load-0304d98a5ffa48a3)
+
+running 2 tests
+test security_reviewer_bakes_in_persona_model_and_denies_shell ... ok
+test every_shipped_profile_loads_and_resolves ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/strategies_load.rs (target/debug/deps/strategies_load-cfdedf01d6437bd0)
+
+running 2 tests
+test general_wide_plan_exec_script_fans_out_then_executes ... ok
+test every_shipped_strategy_script_loads ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_agent-d1659b5440c0b095)
+
+running 53 tests
+test compaction::tests::cut_point_snaps_to_user_boundary ... ok
+test compaction::tests::last_input_uses_newest_assistant ... ok
+test compaction::tests::cut_point_none_when_only_initial_prompt ... ok
+test compaction::tests::should_compact_threshold ... ok
+test compaction::tests::transcript_includes_tool_calls_and_results ... ok
+test gate::tests::attempt_error_aborts_immediately ... ok
+test gate::tests::passes_on_first_attempt_runs_once ... ok
+test gate::tests::exhausts_attempts_and_returns_last_failure ... ok
+test gate::tests::retries_with_verdict_then_passes ... ok
+test jobs::tests::notifier_fires ... ok
+test jobs::tests::register_list_steer ... ok
+test gate::tests::zero_max_attempts_is_clamped_to_one ... ok
+test profile::tests::default_model_fills_unpinned_phases_only ... ok
+test profile::tests::deny_always_wins_over_allow ... ok
+test profile::tests::filter_preserves_order_and_drops_denied ... ok
+test profile::tests::from_strategy_is_the_identity_wrapper ... ok
+test profile::tests::none_allow_permits_all_except_denied ... ok
+test profile::tests::persona_applies_to_fan_out_branches ... ok
+test profile::tests::persona_is_prepended_to_every_phase ... ok
+test steering::tests::as_hook_drains_the_queue_when_called ... ok
+test steering::tests::clones_share_one_buffer ... ok
+test steering::tests::one_at_a_time_paces_across_polls ... ok
+test steering::tests::push_then_drain_is_fifo ... ok
+test strategy::tests::fan_out_fails_only_when_all_branches_fail ... ok
+test strategy::tests::async_runner_threads_prev_through_phases ... ok
+test strategy::tests::fan_out_tolerates_partial_branch_failure ... ok
+test strategy::tests::fan_out_uses_the_drivers_parallel_path ... ok
+test strategy::tests::async_runner_fans_out_and_merges ... ok
+test strategy::tests::merge_first_keeps_only_the_primary_branch ... ok
+test strategy::tests::monolithic_runs_one_full_persistent_phase ... ok
+test strategy::tests::oracle_runs_the_critic_phase_on_a_different_model ... ok
+test strategy::tests::plan_exec_plans_read_only_then_executes_with_the_plan ... ok
+test strategy::tests::plan_critic_exec_inserts_a_read_only_critic_between_plan_and_exec ... ok
+test strategy::tests::render_substitutes_all_placeholders ... ok
+test strategy::tests::wide_plan_exec_fans_out_then_executes_on_the_merged_plan ... ok
+test trace::tests::agent_events_are_captured_verbatim ... ok
+test trace::tests::header_then_events_get_monotonic_seq ... ok
+test usage::tests::aggregates_main_delegate_and_extra ... ok
+test usage::tests::skips_zero_usage_and_non_delegate_results ... ok
+test validate::tests::coerce_string_to_integer ... ok
+test use_tool::tests::use_tool_loads_and_reports_schema ... ok
+test validate::tests::coerce_stringified_object ... ok
+test validate::tests::coerce_nullable_type_arrays ... ok
+test use_tool::tests::use_tool_unknown_lists_available ... ok
+test memory::tests::demote_skips_tool_results_to_avoid_double_spill ... ok
+test memory::tests::demote_messages_into_store ... ok
+test memory::tests::recall_is_scoped_to_current_session ... ok
+test memory::tests::spill_and_recall_ranked ... ok
+test trace::tests::concurrent_recorders_do_not_interleave_partial_lines ... ok
+test compaction::demote_tests::dropped_range_is_searchable_after_compaction ... ok
+test validate::tests::validate_wrong_type ... ok
+test validate::tests::validate_ok ... ok
+test validate::tests::validate_missing_required ... ok
+
+test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/cancel_test.rs (target/debug/deps/cancel_test-0d819789779c2830)
+
+running 2 tests
+test cancel_handle_captured_before_prompt_cancels_run ... ok
+test agent_remains_usable_after_cancel ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/event_serde_test.rs (target/debug/deps/event_serde_test-4913f35c5e878579)
+
+running 1 test
+test agent_event_serializes_pi_style ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/loop_test.rs (target/debug/deps/loop_test-d7cf3841e67c0c83)
+
+running 22 tests
+test assistant_message_appears_exactly_once_per_turn ... ok
+test cascade_escalates_on_judge_reject_and_keeps_good_draft ... ok
+test error_stop_reason_ends_run ... ok
+test errored_turn_with_tool_call_gets_synthetic_result ... ok
+test length_stop_reason_fails_tool_calls_without_executing ... ok
+test no_compaction_below_threshold ... ok
+test terminate_stops_loop ... ok
+test tool_error_becomes_error_result_and_loop_continues ... ok
+test steering_queue_primitive_injects_mid_run ... ok
+test unknown_tool_reported ... ok
+test auto_compaction_fires_on_threshold ... ok
+test loop_executes_tool_then_answers ... ok
+test invalid_args_rejected_without_executing ... ok
+test steering_message_injected_mid_run ... ok
+test parallel_results_in_source_order ... ok
+test delegate_model_override_routes_subagent ... ok
+test delegate_runs_subagent_with_fresh_context ... ok
+test tool_diet_blocks_hidden_tool_until_loaded ... ok
+test delegate_inherits_policy_hooks ... ok
+test parent_cancel_aborts_delegate_subagent ... ok
+test delegate_background_job_completes_and_is_steerable ... ok
+test bash_background_job_runs_to_completion ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+     Running tests/phase_agent_test.rs (target/debug/deps/phase_agent_test-0279f96e4afbaeae)
+
+running 2 tests
+test oracle_strategy_routes_system_prompts_models_and_prev ... ok
+test fan_out_runs_every_branch_then_merges_for_the_executor ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_ai-783672f60cad1912)
+
+running 27 tests
+test anthropic::tests::refusal_is_terminal_not_retryable ... ok
+test anthropic::tests::aborted_message_strips_orphaned_tool_use ... ok
+test anthropic::tests::accumulator_full_stream ... ok
+test anthropic::tests::cache_breakpoint_lands_on_tool_result_tail ... ok
+test anthropic::tests::parse_event_prefers_event_line_then_payload_type ... ok
+test anthropic::tests::thinking_off_emits_no_thinking_config ... ok
+test anthropic::tests::thinking_uses_adaptive_on_current_models ... ok
+test anthropic::tests::stop_reason_mapping ... ok
+test anthropic::tests::thinking_uses_budget_tokens_on_legacy_models ... ok
+test openai::tests::accumulator_collects_stream ... ok
+test openai::tests::accumulator_malformed_args_fall_back_to_empty_object ... ok
+test anthropic::tests::tool_results_bundle_into_one_user_message ... ok
+test openai::tests::empty_assistant_skipped_and_empty_tool_result_placeholder ... ok
+test openai::tests::assistant_with_tool_calls_serializes ... ok
+test openai::tests::finish_reason_mapping ... ok
+test openai::tests::tool_call_id_normalized ... ok
+test pricing::tests::cached_reads_and_writes_bill_at_their_own_tiers ... ok
+test pricing::tests::dated_suffix_still_resolves_to_the_family ... ok
+test pricing::tests::empty_table_knows_nothing ... ok
+test pricing::tests::longest_prefix_wins_over_family_prefix ... ok
+test pricing::tests::opus_cost_is_input_plus_output_at_list_price ... ok
+test pricing::tests::unknown_model_has_no_price ... ok
+test sse::tests::boundary_crlf ... ok
+test sse::tests::boundary_lf ... ok
+test sse::tests::none ... ok
+test sse::tests::parse_single_event ... ok
+test openai::tests::accumulator_survives_hostile_tool_call_index ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/retry_test.rs (target/debug/deps/retry_test-53787ba444162293)
+
+running 5 tests
+test retry_after_is_capped ... ok
+test no_retry_without_budget ... ok
+test error_mid_stream_is_not_retried_after_deltas ... ok
+test retries_http_500_with_backoff ... ok
+test retries_empty_completion_then_succeeds ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.52s
+
+     Running tests/sse_utf8_test.rs (target/debug/deps/sse_utf8_test-f0ea55fa922461ea)
+
+running 2 tests
+test crlf_and_mixed_boundaries ... ok
+test multibyte_char_split_across_chunks ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_bench-1584d4820ad7d32b)
+
+running 86 tests
+test baseline::tests::disagreeing_runs_are_unstable ... ok
+test baseline::tests::reproduce_requires_red_targets ... ok
+test baseline::tests::agreeing_runs_capture_a_baseline ... ok
+test baseline::tests::fully_cached_baseline_skips_the_runner ... ok
+test baseline::tests::cached_capture_runs_only_misses_and_backfills ... ok
+test cache::tests::corrupt_file_is_treated_as_empty ... ok
+test cache::tests::put_get_roundtrip_is_sha_scoped ... ok
+test cache::tests::persists_and_reloads ... ok
+test cache::tests::save_is_noop_when_not_dirty ... ok
+test cache::tests::split_separates_hits_from_misses ... ok
+test driver::tests::already_green_target_is_repro_failed ... ok
+test driver::tests::never_fixing_exhausts_to_fix_no_flip ... ok
+test command::tests::missing_junit_is_an_error_not_a_pass ... ok
+test gate::tests::deleted_target_is_not_collected_not_pass ... ok
+test gate::tests::clean_flip_is_done ... ok
+test gate::tests::done_verdict_has_no_fail_bucket ... ok
+test gate::tests::errored_target_flipping_is_done ... ok
+test gate::tests::flaky_flip_is_rejected ... ok
+test gate::tests::missing_target_in_post_is_not_collected ... ok
+test gate::tests::multiple_targets_all_must_flip ... ok
+test gate::tests::preexisting_red_is_ignored ... ok
+test driver::tests::regression_ring_runs_only_after_a_flip ... ok
+test driver::tests::fix_on_first_attempt_solves ... ok
+test driver::tests::unusable_baseline_aborts_before_fixing ... ok
+test bootstrap::tests::failed_probe_surfaces_repair_hint ... ok
+test gate::tests::target_still_red_is_not_yet ... ok
+test gate::tests::regressed_neighbor_blocks_done ... ok
+test driver::tests::fix_that_regresses_keep_green_is_failed ... ok
+test junit::tests::matches_pytest_node_ids ... ok
+test junit::tests::parses_all_outcome_kinds ... ok
+test junit::tests::unreported_request_is_not_collected ... ok
+test command::tests::test_join_controls_how_ids_are_combined ... ok
+test localize::tests::non_frame_lines_are_ignored ... ok
+test junit::tests::same_leaf_disambiguated_by_classname ... ok
+test localize::tests::parses_go_frame ... ok
+test localize::tests::parses_pytest_short_style ... ok
+test localize::tests::parses_rust_panic_and_backtrace ... ok
+test bootstrap::tests::install_failure_tolerated_if_probe_confirms ... ok
+test bootstrap::tests::install_then_enumerate_is_ready ... ok
+test orchestrate::tests::garbage_output_falls_back_to_deterministic_order ... ok
+test orchestrate::tests::give_up_is_honored ... ok
+test orchestrate::tests::invented_paths_are_dropped ... ok
+test orchestrate::tests::json_extracted_from_fenced_prose ... ok
+test command::tests::runs_command_and_parses_emitted_junit ... ok
+test localize::tests::parses_python_traceback_frames_in_order ... ok
+test orchestrate::tests::steer_hint_returns_text_or_none ... ok
+test detect::tests::detector_emits_nothing_without_marker ... ok
+test orchestrate::tests::valid_plan_reorders_within_candidate_set ... ok
+test detect::tests::host_file_api_is_root_confined ... ok
+test probe::tests::failing_probe_keeps_stderr_as_repair_signal ... ok
+test probe::tests::enumerating_tests_confirms ... ok
+test probe::tests::clean_exit_but_no_tests_is_not_confirmed ... ok
+test proc::tests::captures_failure_and_stderr ... ok
+test localize::tests::vendored_frames_score_below_project_frames ... ok
+test report::tests::buckets_accumulate ... ok
+test report::tests::empty_report_is_stable ... ok
+test detect::tests::discover_unconfirmed_when_nothing_probes ... ok
+test localize::tests::test_files_rank_below_source_files ... ok
+test orchestrate::tests::json_extraction_ignores_braces_in_strings ... ok
+test orchestrate::tests::oracle_error_degrades_safe ... ok
+test localize::tests::scoped_tests_uses_graph_affected_tests ... ok
+test detect::tests::bundled_detectors_all_compile ... ok
+test detect::tests::ci_oracle_silent_without_pytest_in_ci ... ok
+test timing::tests::report_shows_shares ... ok
+test report::tests::report_lists_buckets ... ok
+test report::tests::solve_rate_excludes_scoped_only ... ok
+test run::tests::done_requires_two_runs ... ok
+test run::tests::flip_that_does_not_hold_is_flaky ... ok
+test run::tests::regression_skips_confirmation_run ... ok
+test run::tests::still_red_skips_confirmation_run ... ok
+test timing::tests::same_label_sums_with_count ... ok
+test timing::tests::time_records_and_returns_value ... ok
+test proc::tests::captures_stdout_and_exit ... ok
+test detect::tests::bundled_pytest_detects_python_project ... ok
+test detect::tests::discover_returns_first_confirmed_candidate ... ok
+test proc::tests::large_output_does_not_deadlock ... ok
+test detect::tests::bundled_go_detector_uses_regex_alternation_join ... ok
+test git::tests::head_sha_is_stable_and_forty_hex ... ok
+test detect::tests::detector_emits_spec_when_marker_present ... ok
+test detect::tests::ci_oracle_extracts_installs_and_ranks_first ... ok
+test git::tests::restore_paths_tolerates_untracked_and_empty ... ok
+test git::tests::restore_paths_reverts_only_named_files ... ok
+test harness::tests::undetected_runner_short_circuits_before_executor ... ok
+test git::tests::diff_captures_edits_then_reset_reverts_them ... ok
+test command::tests::timeout_is_enforced ... ok
+test proc::tests::timeout_kills_and_flags ... ok
+
+test result: ok. 86 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+
+     Running tests/e2e_pytest.rs (target/debug/deps/e2e_pytest-dc77837e1289ffdb)
+
+running 2 tests
+test solves_a_real_pytest_bug_end_to_end ... ok
+test unpatched_bug_is_not_a_false_pass ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.37s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_bench_runner-20f32bfed8753001)
+
+running 8 tests
+test metrics::tests::merge_folds_sessions_together ... ok
+test metrics::tests::stats_summary_counts_tools ... ok
+test metrics::tests::usage_aggregates_per_model_and_total ... ok
+test metrics::tests::report_prices_known_models_and_flags_unknown ... ok
+test tests::read_only_phase_uses_planner_tools_full_phase_uses_all ... ok
+test tests::planner_tools_exclude_mutating_tools ... ok
+test tests::profile_allow_list_restricts_to_named_tools ... ok
+test tests::profile_tool_policy_removes_denied_tools_everywhere ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/main.rs (target/debug/deps/pirs_bench-eda6d9b242eb801d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_graph-b9ce43189a39286f)
+
+running 8 tests
+test ast_edit::tests::missing_function_errors ... ok
+test ast_edit::tests::replace_body_python ... ok
+test ast_edit::tests::move_function_carries_rust_attributes_and_docs ... ok
+test ast_edit::tests::replace_body_rust ... ok
+test ast_edit::tests::move_function_between_files ... ok
+test ast_edit::tests::rename_symbol_ast_precise ... ok
+test ast_edit::tests::move_function_carries_python_decorators ... ok
+test code_map::tests::code_map_queries ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/graph_test.rs (target/debug/deps/graph_test-898c41de378aaee6)
+
+running 5 tests
+test file_symbols_map ... ok
+test pagerank_ranks_callee_higher ... ok
+test finds_definitions_across_languages ... ok
+test affected_tests_direct_callers_and_same_file ... ok
+test callers_and_callees ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_lsp-eedd22e8fab83a00)
+
+running 11 tests
+test edit::tests::empty_edit_is_an_error ... ok
+test client::uri_tests::special_char_paths_roundtrip_through_uri ... ok
+test edit::tests::multiple_edits_on_one_line_keep_offsets_valid ... ok
+test client::uri_tests::format_location_decodes_encoded_uri ... ok
+test edit::tests::apply_workspace_edit_handles_document_changes_form ... ok
+test edit::tests::offset_resolves_line_and_character ... ok
+test edit::tests::single_rename_replaces_the_identifier ... ok
+test edit::tests::overlapping_edits_are_rejected ... ok
+test edit::tests::apply_workspace_edit_writes_changes_map_across_files ... ok
+test rename::tests::empty_new_name_is_rejected_before_any_lsp_work ... ok
+test rename::tests::missing_file_is_rejected ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/lsp_test.rs (target/debug/deps/lsp_test-0246e61fd54a0e99)
+
+running 5 tests
+test smoke_no_unused_imports ... ok
+test rename_symbol_updates_all_references_across_files ... ok
+test lsp_references_and_symbols ... ok
+test lsp_tool_end_to_end ... ok
+test lsp_definition_across_files ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.78s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_mcp-83e1be9dd9593d75)
+
+running 6 tests
+test http::tests::base_url_extraction ... ok
+test http::tests::drain_events_parses ... ok
+test config::tests::http_servers_become_http_specs ... ok
+test config::tests::loads_claude_code_format ... ok
+test config::tests::untrusted_project_config_is_not_loaded ... ok
+test config::tests::trust_decider_sees_the_config_path ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/client_test.rs (target/debug/deps/client_test-81d7fea06dacf3a4)
+
+running 5 tests
+test spawn_failure_is_reported ... ok
+test mcp_tool_as_agent_tool ... ok
+test unknown_tool_returns_error ... ok
+test error_result_maps_is_error ... ok
+test initialize_list_and_call ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/http_test.rs (target/debug/deps/http_test-1b59967844719967)
+
+running 3 tests
+test legacy_sse_transport ... ok
+test streamable_http_json_mode ... ok
+test streamable_http_sse_mode ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_orchestrator-d866a0fd13be309c)
+
+running 2 tests
+test server::tests::own_uid_and_root_allowed_foreign_rejected ... ok
+test storage::tests::roundtrip_instances ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/pirs_orchestrator-ab7d374343d1e76f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e_test.rs (target/debug/deps/e2e_test-ba5f8dcf9c2b8f83)
+
+running 1 test
+test orchestrator_end_to_end_over_uds ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_rhai-eb9d18a3b43f96b5)
+
+running 36 tests
+test caps::tests::check_fs_rejects_parent_traversal_and_absolute ... ok
+test caps::tests::coarse_exec_grants_are_surfaced_in_summary ... ok
+test caps::tests::check_fs_suffix_rule_cannot_escape_via_absolute ... ok
+test caps::tests::exec_allowlist_blocks_metachars_and_unknown_bins ... ok
+test caps::tests::subagents_gate ... ok
+test caps::tests::parses_manifest_from_leading_comment ... ok
+test caps::tests::fs_globs ... ok
+test discover::tests::missing_path_argument_errors ... ok
+test discover::tests::search_roots_puts_project_before_home ... ok
+test discover::tests::unknown_profile_name_errors ... ok
+test discover::tests::project_root_shadows_home_root ... ok
+test discover::tests::named_file_shadows_builtin ... ok
+test discover::tests::path_argument_loads_verbatim ... ok
+test strategy_script::tests::a_parallel_step_becomes_a_fan_out ... ok
+test strategy_script::tests::loads_a_two_phase_plan_exec_strategy ... ok
+test discover::tests::resolves_named_strategy_from_first_root ... ok
+test strategy_script::tests::a_script_can_build_phases_programmatically ... ok
+test strategy_script::tests::missing_phases_is_rejected ... ok
+test profile_script::tests::loads_a_profile_with_an_inline_strategy ... ok
+test profile_script::tests::missing_strategy_is_rejected ... ok
+test strategy_script::tests::unknown_scope_is_a_clear_error ... ok
+test strategy_script::tests::scope_defaults_to_full_and_name_falls_back ... ok
+test strategy_script::tests::join_defaults_to_concat_and_rejects_unknown ... ok
+test strategy_script::tests::per_phase_model_defines_an_oracle ... ok
+test builtins::tests::monolithic_is_a_single_persistent_full_phase ... ok
+test builtins::tests::plan_critic_exec_has_three_phases ... ok
+test builtins::tests::all_builtins_parse_and_are_named_consistently ... ok
+test builtins::tests::wide_plan_exec_fans_out_three_readonly_then_full_exec ... ok
+test builtins::tests::plan_exec_is_readonly_plan_then_full_exec ... ok
+test discover::tests::falls_back_to_builtin_strategy ... ok
+test discover::tests::unknown_strategy_name_errors_with_context ... ok
+test profile_script::tests::resolved_strategy_bakes_persona_and_model ... ok
+test profile_script::tests::unknown_builtin_strategy_is_a_clear_error ... ok
+test profile_script::tests::no_tools_field_permits_everything ... ok
+test profile_script::tests::loads_a_profile_referencing_a_builtin_strategy ... ok
+test discover::tests::resolves_named_profile ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/blame_pack_test.rs (target/debug/deps/blame_pack_test-d769d00a759a159f)
+
+running 1 test
+test blame_pack_notes_moved_head ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+     Running tests/caps_test.rs (target/debug/deps/caps_test-faa803dab212dcc4)
+
+running 2 tests
+test no_manifest_stays_unrestricted ... ok
+test caps_enforced_at_host_fn_boundary ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/example_test.rs (target/debug/deps/example_test-97abbb643daf31d9)
+
+running 1 test
+test example_extension_loads_and_state_fns_work ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/goal_test.rs (target/debug/deps/goal_test-9c62a30f15e376d3)
+
+running 1 test
+test goal_lifecycle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/host_test.rs (target/debug/deps/host_test-4576bfe636dbdae8)
+
+running 4 tests
+test registered_tool_executes_script_function ... ok
+test on_tool_call_blocks ... ok
+test missing_tool_function_is_load_error ... ok
+test on_tool_result_patches_text ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/interp_test.rs (target/debug/deps/interp_test-cffd8424bfc9636f)
+
+running 1 test
+test rhai_interpolates_backtick_dollar_brace ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/loop_hooks_test.rs (target/debug/deps/loop_hooks_test-7c601d82ece77441)
+
+running 6 tests
+test hooks_empty_when_no_loop_functions ... ok
+test on_steering_injects_message_mid_run ... ok
+test listener_only_when_on_event_defined ... ok
+test on_context_rewrites_outgoing_messages ... ok
+test on_follow_up_continues_otherwise_finished_run ... ok
+test on_should_stop_ends_loop_after_turn ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/mutation_guard_test.rs (target/debug/deps/mutation_guard_test-befeda57ec10f641)
+
+running 3 tests
+test build_plan_flags_files_with_no_reaching_tests ... ok
+test on_tool_result_records_only_source_files ... ok
+test build_plan_scopes_tests_via_graph ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/pack_test.rs (target/debug/deps/pack_test-cddfb9c0be560cff)
+
+running 4 tests
+test verify_after_edit_steers_model_to_test ... ok
+test plan_pinned_at_tail_of_context ... ok
+test loop_detector_blocks_third_identical_call ... ok
+test exec_runs_commands_with_timeout ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.07s
+
+     Running tests/packs2_test.rs (target/debug/deps/packs2_test-35f6f47ede7eff4e)
+
+running 7 tests
+test turn_end_event_carries_usage ... ok
+test register_command_exposed_and_runnable ... ok
+test conductor_pins_instructions_at_tail ... ok
+test guardrails_blocks_destructive_allows_safe ... ok
+test janitor_shrinks_old_tool_results_keeps_recent ... ok
+test reviewer_injects_review_followup_once ... ok
+test audit_log_writes_jsonl_entries ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/packs3_test.rs (target/debug/deps/packs3_test-d8dc15f413f82439)
+
+running 13 tests
+test diff_shield_merges_consecutive_same_tool_results ... ok
+test chapter_spine_builds_spine ... ok
+test cost_sentinel_stops_at_cap ... ok
+test instincts_records_and_steers ... ok
+test semantic_bookmarks_pinned_and_capped ... ok
+test arena_and_relay_run_pipelines ... ok
+test env_doctor_blocks_missing_toolchain ... ok
+test failure_diary_logs_and_pins ... ok
+test red_team_attacks_edits_once ... ok
+test session_handoff_injects_previous_brief ... ok
+test spec_check_pins_and_verifies_once ... ok
+test hive_note_posts_and_reads ... ok
+test shadow_verify_flags_discrepancy ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running tests/packs4_test.rs (target/debug/deps/packs4_test-0c4b2b328fc0ddfa)
+
+running 5 tests
+test approval_blocks_then_allows_after_user_approval ... ok
+test approval_approve_all_unlocks_session ... ok
+test web_fetch_reads_file_urls ... ok
+test checkpoint_snapshots_and_restores ... ok
+test subagents_registers_persona_tools_from_files ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+
+     Running tests/packs5_test.rs (target/debug/deps/packs5_test-7a98347e7ce06443)
+
+running 6 tests
+test approval2_denies_dangerous_approves_safe ... ok
+test critic_spawns_background_review_after_n_edits ... ok
+test spawn_and_inbox_roundtrip ... ok
+test rollback_snapshots_and_restores ... ok
+test crystallizer_writes_skill_after_successful_run ... ok
+test swarm_post_claim_done_cycle ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+
+     Running tests/packs6_test.rs (target/debug/deps/packs6_test-6b8b7e7ce2597437)
+
+running 7 tests
+test review_gate_sound_releases ... ok
+test review_gate_blocks_critical_and_releases_on_sound ... ok
+test runs_records_and_recovers_interrupted ... ok
+test spend_caps_stop_at_budget ... ok
+test sha256_hex_works ... ok
+test verify_guard_accepts_real_tests ... ok
+test verify_guard_flags_zero_tests ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running tests/packs7_test.rs (target/debug/deps/packs7_test-a91281290f52e4c5)
+
+running 6 tests
+test btw_answers_without_history ... ok
+test checkpoints_snapshot_and_restore ... ok
+test dirty_guard_commits_wip_before_edit ... ok
+test dmail_folds_history_and_injects_note ... ok
+test fork_includes_history_prefix ... ok
+test safe_edit_rewrites_via_editor_prompt ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+
+     Running tests/reentrancy_test.rs (target/debug/deps/reentrancy_test-bb8c12159a93bb17)
+
+running 1 test
+test reentrant_policy_hook_fails_closed_not_deadlock ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/subagent_test.rs (target/debug/deps/subagent_test-b4685d1392669c7d)
+
+running 2 tests
+test run_subagent_from_script ... ok
+test run_subagent_unregistered_without_runner ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/trust_test.rs (target/debug/deps/trust_test-0bdb5546e8d433de)
+
+running 4 tests
+test home_dir_extensions_always_trusted ... ok
+test installed_packs_dir_is_trust_gated ... ok
+test trust_directory_roundtrips_through_load ... ok
+test untrusted_project_dir_is_skipped ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/verify_impact_test.rs (target/debug/deps/verify_impact_test-cabf314480dc2767)
+
+running 3 tests
+test non_edit_and_error_results_are_ignored ... ok
+test impact_plan_fails_open_to_full_suite_when_no_tests ... ok
+test impact_plan_scopes_to_graph_tests ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/workflow_pack_test.rs (target/debug/deps/workflow_pack_test-78218d72d863b11f)
+
+running 1 test
+test workflow_fans_out_caches_and_merges ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/workflow_test.rs (target/debug/deps/workflow_test-2963f8a8322d6dce)
+
+running 3 tests
+test cache_roundtrip ... ok
+test parallel_map_applies_mapper_fn ... ok
+test parallel_map_runs_bound_and_ordered ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running unittests src/lib.rs (target/debug/deps/pirs_tools-ae2e43c83088ad4b)
+
+running 63 tests
+test bash::tests::cap_tail_bounds_memory_and_keeps_tail ... ok
+test bash::tests::daemon_heuristic_never_backgrounds_under_sandbox ... ok
+test edit::tests::exact_multiple_rejected ... ok
+test edit::tests::fuzzy_multiple_rejected ... ok
+test edit::tests::exact_unique ... ok
+test edit::tests::fuzzy_matches_smart_quotes_and_trailing_ws ... ok
+test edit::tests::normalize_file_crlf ... ok
+test job_tools::daemon_tests::daemon_classification ... ok
+test edit::tests::crlf_file_keeps_crlf ... ok
+test ls::tests::lists_sorted_with_dir_suffix ... ok
+test edit::tests::lf_file_keeps_lf ... ok
+test edit::tests::multi_edit_applies_regardless_of_input_order ... ok
+test edit::tests::mixed_eol_untouched_lines_keep_their_endings ... ok
+test paths::tests::absolute_kept ... ok
+test paths::tests::contained_rejects_absolute_escape ... ok
+test paths::tests::contained_allows_in_root_paths ... ok
+test edit::tests::concurrent_edits_all_land ... ok
+test paths::tests::contained_rejects_dotdot_escape ... ok
+test paths::tests::relative_resolves_against_cwd ... ok
+test paths::tests::contained_rejects_symlink_escape ... ok
+test run_tests::tests::detects_rust_by_cargo_toml ... ok
+test read::tests::offset_past_eof_errors ... ok
+test read::tests::reads_png_as_image ... ok
+test read::tests::reads_with_offset_and_limit ... ok
+test run_tests::tests::filter_is_shell_quoted_against_injection ... ok
+test run_tests::tests::go_filter_uses_run_flag ... ok
+test run_tests::tests::language_marker_beats_makefile_fallback ... ok
+test run_tests::tests::makefile_is_the_last_resort ... ok
+test run_tests::tests::node_picks_the_lockfile_specific_runner ... ok
+test run_tests::tests::no_markers_reports_what_it_looked_for ... ok
+test run_tests::tests::python_detected_by_a_tests_dir_alone ... ok
+test run_tests::tests::pinned_ecosystem_without_its_marker_errors ... ok
+test bash::tests::long_output_truncated_and_spilled ... ok
+test run_tests::tests::rust_summary_line_is_extracted ... ok
+test run_tests::tests::tail_keeps_only_the_last_lines ... ok
+test bash::tests::captures_stdout_and_stderr ... ok
+test sandbox::tests::ssh_backend_when_available ... ok
+test sandbox::tests::docker_spec_parsing ... ok
+test scratch_tests::scratch_dir_is_private_and_hosts_job_logs ... ok
+test truncate::tests::head_basic ... ok
+test bash::tests::nonzero_exit_errors_with_code ... ok
+test truncate::tests::head_no_truncation ... ok
+test truncate::tests::tail_basic ... ok
+test sandbox::tests::local_sandbox_exec ... ok
+test truncate::tests::truncate_line_multibyte ... ok
+test write::tests::writes_and_creates_parents ... ok
+test recall::tests::recall_finds_spilled_result ... ok
+test grep::tests::finds_matches_with_line_numbers ... ok
+test find::tests::path_pattern_matches_suffix ... ok
+test find::tests::finds_by_extension ... ok
+test grep::tests::respects_limit ... ok
+test run_tests::tests::executes_a_passing_make_target_end_to_end ... ok
+test run_tests::tests::executes_a_failing_make_target_and_reports_fail ... ok
+test grep::tests::context_lines_dash_prefixed ... ok
+test grep::tests::glob_filters_files ... ok
+test grep::tests::skips_oversized_files ... ok
+test bash::tests::child_has_pdeathsig_armed ... ok
+test filelock::tests::serializes_same_path ... ok
+test job_tools::daemon_tests::bash_auto_backgrounds_daemon_command ... ok
+test job_tools::daemon_tests::job_wait_returns_on_completion ... ok
+test bash::tests::timeout_kills_process ... ok
+test read::tests::oversized_file_is_byte_capped ... ok
+test job_tools::daemon_tests::killed_auto_restart_job_does_not_respawn ... ok
+
+test result: ok. 63 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.03s
+
+   Doc-tests pirs_agent
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_ai
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_bench
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_bench_runner
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_graph
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_lsp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_mcp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_orchestrator
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_rhai
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pirs_tools
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

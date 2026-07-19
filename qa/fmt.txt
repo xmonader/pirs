@@ -1,0 +1,1 @@
+FMT: clean (exit 0)
