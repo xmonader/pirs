@@ -6,6 +6,7 @@
 //! `PIRS-BENCH-PLAN.md` for the full design.
 
 pub mod gate;
+pub mod junit;
 pub mod report;
 pub mod run;
 pub mod types;
