@@ -292,16 +292,33 @@ Prior: `BaselineUnusable` + `EnvSetup` dominate early and are under-anticipated.
   + process-group timeout); `probe` (collect-only confirm, keeps stderr as
   repair signal); shared `proc::run_capture` (deadlock-safe capture + group
   kill). *Remaining:* expose these to Rhai + bench-mode script isolation (§9).
-- **M3 — Rhai detectors** (Go/Rust/pytest) + CI oracle + probe + parallel.
-  *Accept:* auto-detects & confirms runner on 3 repos/language, zero hand-config.
-- **M4 — Bootstrap + `policy.rhai`.** Install + usable-baseline; phase/ring/budget
-  policy in Rhai. *Accept:* green baseline unattended; clean `EnvSetup` abort on a
-  broken env.
-- **M5 — Localization + scoped ring + full driver.** traceback→graph/LSP,
-  `graph_affected_tests`. *Accept:* ground-truth edit file in candidate set ≥70%;
-  attribution histogram populated; non-trivial solve rate.
-- **M6 — `orchestration.rhai` (planner/steerer).** A/B-flagged over `ask_model`.
-  *Accept:* beats strong-solo on solve-rate at acceptable cost, else reverted.
+- **M3 — Rhai detectors + discovery. ✅ DONE (CI oracle pending).** Read-only
+  `DetectorHost` (root-confined `file_read`/`path_exists`/`read_dir`); bundled
+  pytest/go/rust detectors compiled in via `include_str!`; `discover` probes
+  candidates in trust order and returns the first confirmed, keeping the last
+  failing stderr as an env-repair hint. Bench-mode isolation is structural (host
+  loads only trusted scripts, cannot exec/write). *Remaining:* CI-config oracle
+  detector; parallel probing.
+- **M4 — Bootstrap + baseline cache. ✅ DONE (`policy.rhai` pending).**
+  `bootstrap` (best-effort install, probe-gated, repair hint on failure);
+  `capture_stable` (twice-agree) + `capture_stable_cached` over a SHA-keyed
+  `BaselineCache` (atomic-persisted, corrupt-tolerant, reused across
+  attempts/tasks); `targets_reproduce` gate. *Remaining:* phase/ring/budget
+  `policy.rhai`.
+- **M5 — Localization + scoped ring + driver. ✅ DONE (LSP path pending).**
+  `parse_traceback` (Python/pytest/Rust/Go) → `rank_candidates` (graph-backed:
+  project>vendored, source>test, symbol-confirmed ×1.5) → `scoped_tests` via
+  `Graph::affected_tests`; `driver::run_task` state machine that *structurally*
+  makes `Solved` require a gate `Done`. *Remaining:* LSP-based localization as a
+  second signal alongside the graph.
+- **M6 — Strong-model planner/steerer. ✅ DONE (Rhai policy pending).**
+  `ModelOracle` (`ask_model`) trait; `plan_next` returns a `PlanDecision` that is
+  hard-validated to a reorder/filter of the real candidate set (invented paths
+  dropped, omitted candidates re-appended, all failures degrade to deterministic
+  order); `steer_hint` advisory-only. A/B-honest: oracle-disabled path is
+  byte-for-byte deterministic. *Remaining:* `orchestration.rhai` policy layer;
+  live A/B measurement (*Accept:* beats strong-solo at acceptable cost, else
+  reverted).
 
 ---
 
