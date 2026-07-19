@@ -6,8 +6,52 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use pirs_agent::phase_agent::AgentPhaseDriver;
-use pirs_agent::strategy::{run_strategy_async, PhaseReq, Strategy, Task};
+use pirs_agent::strategy::{
+    run_strategy_async, Join, Phase, PhaseReq, Step, Strategy, Task, ToolScope,
+};
 use pirs_agent::Agent;
+
+// Minimal strategy fixtures (the built-in content lives in pirs-rhai; this test
+// only needs well-shaped strategies to drive the AgentPhaseDriver).
+fn ph(system: &str, prompt: &str, scope: ToolScope, model: Option<&str>) -> Phase {
+    Phase {
+        system: system.into(),
+        prompt: prompt.into(),
+        scope,
+        model: model.map(String::from),
+    }
+}
+fn plan_oracle_exec(oracle_model: &str) -> Strategy {
+    Strategy {
+        name: "plan-oracle-exec".into(),
+        persist_across_attempts: false,
+        steps: vec![
+            Step::Solo(ph("plan-sys", "plan {issue}", ToolScope::ReadOnly, None)),
+            Step::Solo(ph(
+                "critic-sys",
+                "critic {prev}",
+                ToolScope::ReadOnly,
+                Some(oracle_model),
+            )),
+            Step::Solo(ph("exec-sys", "exec {prev}", ToolScope::Full, None)),
+        ],
+    }
+}
+fn wide_plan_exec(n: usize) -> Strategy {
+    Strategy {
+        name: "wide-plan-exec".into(),
+        persist_across_attempts: false,
+        steps: vec![
+            Step::Fan {
+                branches: (0..n)
+                    .map(|_| ph("plan-sys", "plan {issue}", ToolScope::ReadOnly, None))
+                    .collect(),
+                join: Join::Concat,
+            },
+            Step::Solo(ph("exec-sys", "exec {prev}", ToolScope::Full, None)),
+        ],
+    }
+}
 use pirs_ai::{
     AssistantMessage, CompletionOptions, ContentBlock, Context, LlmProvider, Message, StopReason,
     StreamEvent,
@@ -119,13 +163,9 @@ async fn oracle_strategy_routes_system_prompts_models_and_prev() {
     let mut driver = driver_over(provider);
 
     // plan -> critic(strong-model) -> exec
-    run_strategy_async(
-        &Strategy::plan_oracle_exec("strong-model"),
-        &mut driver,
-        &task(),
-    )
-    .await
-    .unwrap();
+    run_strategy_async(&plan_oracle_exec("strong-model"), &mut driver, &task())
+        .await
+        .unwrap();
 
     let calls = seen.lock().unwrap();
     assert_eq!(calls.len(), 3, "three phases, three model calls");
@@ -163,7 +203,7 @@ async fn fan_out_runs_every_branch_then_merges_for_the_executor() {
     let seen = Arc::clone(&provider.seen);
     let mut driver = driver_over(provider);
 
-    run_strategy_async(&Strategy::wide_plan_exec(3), &mut driver, &task())
+    run_strategy_async(&wide_plan_exec(3), &mut driver, &task())
         .await
         .unwrap();
 

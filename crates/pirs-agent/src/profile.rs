@@ -111,7 +111,61 @@ impl Profile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::strategy::ToolScope;
+    use crate::strategy::{Join, ToolScope};
+
+    // Minimal strategy fixtures (the built-in *content* lives in pirs-rhai; these
+    // tests only need well-shaped strategies to exercise profile resolution).
+    fn ph(system: &str, scope: ToolScope) -> Phase {
+        Phase {
+            system: system.into(),
+            prompt: "p {issue}".into(),
+            scope,
+            model: None,
+        }
+    }
+    fn plan_exec() -> Strategy {
+        Strategy {
+            name: "plan-exec".into(),
+            persist_across_attempts: false,
+            steps: vec![
+                Step::Solo(ph("plan", ToolScope::ReadOnly)),
+                Step::Solo(ph("exec", ToolScope::Full)),
+            ],
+        }
+    }
+    fn plan_oracle_exec(oracle_model: &str) -> Strategy {
+        let mut critic = ph("critic", ToolScope::ReadOnly);
+        critic.model = Some(oracle_model.to_string());
+        Strategy {
+            name: "plan-oracle-exec".into(),
+            persist_across_attempts: false,
+            steps: vec![
+                Step::Solo(ph("plan", ToolScope::ReadOnly)),
+                Step::Solo(critic),
+                Step::Solo(ph("exec", ToolScope::Full)),
+            ],
+        }
+    }
+    fn wide_plan_exec(n: usize) -> Strategy {
+        Strategy {
+            name: "wide-plan-exec".into(),
+            persist_across_attempts: false,
+            steps: vec![
+                Step::Fan {
+                    branches: (0..n).map(|_| ph("plan", ToolScope::ReadOnly)).collect(),
+                    join: Join::Concat,
+                },
+                Step::Solo(ph("exec", ToolScope::Full)),
+            ],
+        }
+    }
+    fn monolithic() -> Strategy {
+        Strategy {
+            name: "monolithic".into(),
+            persist_across_attempts: true,
+            steps: vec![Step::Solo(ph("mono", ToolScope::Full))],
+        }
+    }
 
     #[test]
     fn deny_always_wins_over_allow() {
@@ -151,7 +205,7 @@ mod tests {
             name: "security-reviewer".into(),
             persona: Some("You are a paranoid security reviewer.".into()),
             model: None,
-            strategy: Strategy::plan_exec(),
+            strategy: plan_exec(),
             tools: ToolPolicy::allow_all(),
         };
         let resolved = profile.resolved_strategy();
@@ -175,7 +229,7 @@ mod tests {
             name: "cheap-with-oracle".into(),
             persona: None,
             model: Some("cheap-model".into()),
-            strategy: Strategy::plan_oracle_exec("strong-oracle"),
+            strategy: plan_oracle_exec("strong-oracle"),
             tools: ToolPolicy::allow_all(),
         };
         let resolved = profile.resolved_strategy();
@@ -198,7 +252,7 @@ mod tests {
             name: "wide".into(),
             persona: Some("PERSONA".into()),
             model: Some("m".into()),
-            strategy: Strategy::wide_plan_exec(3),
+            strategy: wide_plan_exec(3),
             tools: ToolPolicy::allow_all(),
         };
         let resolved = profile.resolved_strategy();
@@ -217,7 +271,7 @@ mod tests {
 
     #[test]
     fn from_strategy_is_the_identity_wrapper() {
-        let s = Strategy::monolithic();
+        let s = monolithic();
         let p = Profile::from_strategy("plain", s.clone());
         let resolved = p.resolved_strategy();
         // No persona, no model → phases unchanged.

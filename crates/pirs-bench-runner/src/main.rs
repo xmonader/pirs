@@ -156,12 +156,15 @@ enum StrategyKind {
 
 impl From<StrategyKind> for Strategy {
     fn from(k: StrategyKind) -> Self {
-        match k {
-            StrategyKind::Monolithic => Strategy::monolithic(),
-            StrategyKind::PlanExec => Strategy::plan_exec(),
-            StrategyKind::PlanCriticExec => Strategy::plan_critic_exec(),
-            StrategyKind::WidePlanExec => Strategy::wide_plan_exec(3),
-        }
+        // Built-ins now live as embedded scripts in pirs-rhai; resolve by name.
+        let name = match k {
+            StrategyKind::Monolithic => "monolithic",
+            StrategyKind::PlanExec => "plan-exec",
+            StrategyKind::PlanCriticExec => "plan-critic-exec",
+            StrategyKind::WidePlanExec => "wide-plan-exec",
+        };
+        pirs_rhai::builtins::builtin(name)
+            .unwrap_or_else(|| panic!("built-in strategy {name:?} missing"))
     }
 }
 

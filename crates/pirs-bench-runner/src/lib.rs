@@ -596,7 +596,7 @@ mod tests {
                 api_key: "k".into(),
                 max_turns_per_attempt: 1,
                 provider: build_provider(&Provider::Anthropic),
-                strategy: Strategy::plan_exec(),
+                strategy: pirs_rhai::builtins::builtin("plan-exec").unwrap(),
                 tool_policy: policy,
                 recorder: None,
                 steering: None,
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn planner_tools_exclude_mutating_tools() {
-        let ex = test_executor(Strategy::plan_exec());
+        let ex = test_executor(pirs_rhai::builtins::builtin("plan-exec").unwrap());
         let planner: Vec<&str> = ex.planner_tools.iter().map(|t| t.name()).collect();
         // Planner can localize but not mutate the tree.
         assert!(planner.contains(&"read"), "planner keeps read: {planner:?}");
@@ -625,7 +625,7 @@ mod tests {
     #[test]
     fn read_only_phase_uses_planner_tools_full_phase_uses_all() {
         // A read-only phase must never expose a mutating tool to the model.
-        let ex = test_executor(Strategy::plan_exec());
+        let ex = test_executor(pirs_rhai::builtins::builtin("plan-exec").unwrap());
         let ro: Vec<&str> = match ToolScope::ReadOnly {
             ToolScope::ReadOnly => ex.planner_tools.iter().map(|t| t.name()).collect(),
             ToolScope::Full => ex.tools.iter().map(|t| t.name()).collect(),

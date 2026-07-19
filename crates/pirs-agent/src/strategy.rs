@@ -7,14 +7,16 @@
 //! [`PhaseDriver`] — the actual agent loop, supplied by the caller.
 //!
 //! This split is deliberate:
-//! - The **policy** (which phases, what prompts, which tools) is data. The three
-//!   built-ins ([`Strategy::monolithic`], [`Strategy::plan_exec`],
-//!   [`Strategy::plan_critic_exec`]) are just values, and a user can author their
-//!   own — including from a script — without touching Rust.
+//! - The **policy** (which phases, what prompts, which tools) is data. A
+//!   [`Strategy`] is just a value; the built-ins ship as embedded `.rhai` scripts
+//!   in `pirs-rhai` (`builtins`), and a user can author their own — from a script
+//!   or in Rust — without touching this engine.
 //! - The **engine** (running a sub-loop, managing context, token/behaviour
 //!   accounting) is a [`PhaseDriver`] the host implements once.
 //!
-//! Nothing here is benchmark-specific; the bench harness is one consumer.
+//! This module is pure mechanism: the [`Strategy`]/[`Phase`]/[`Step`] data types
+//! and the runner. It defines no built-in strategies. Nothing here is
+//! benchmark-specific; the bench harness is one consumer.
 
 /// Which tools a phase may use. The read-only scope is how a planning phase is
 /// prevented from mutating the tree — it never sees edit/write/shell tools.
@@ -276,224 +278,6 @@ fn merge(join: Join, outs: &[String]) -> String {
     }
 }
 
-// ---- Built-in strategies ---------------------------------------------------
-
-/// System prompt for a single self-correcting fix loop, and for the executor
-/// phase of a split strategy.
-const MONO_SYSTEM: &str = "\
-You are fixing a bug in a real code repository so that specific failing tests pass.
-
-Rules:
-- Make the SMALLEST change that makes the failing tests pass. Do not refactor.
-- Fix the SOURCE code, never the tests. Do not edit, delete, or weaken any test.
-- Use the read and code-graph tools to locate the real cause before editing.
-- You may run the project's tests to check your work.
-- When the target tests pass and you have not broken others, stop.";
-
-/// Planner: investigate and emit a self-contained plan, no edits.
-const PLAN_SYSTEM: &str = "\
-You are a senior engineer producing a fix plan for a bug in a real repository.
-
-- Investigate with the read / search / code-graph tools to find the true root cause.
-- Do NOT edit any files. Output only a plan.
-- The plan must be SELF-CONTAINED: a fresh engineer with no memory of your
-  investigation will execute it. Name the exact file(s) and function(s), state
-  the precise change, and keep it minimal.
-- Never propose editing, deleting, or weakening tests. The fix is in source.";
-
-/// Executor: carry out an already-approved plan.
-const EXEC_SYSTEM: &str = "\
-You are fixing a bug in a real repository by executing an APPROVED plan.
-
-- Make the edits the plan specifies, and nothing more. Keep the change minimal.
-- Fix the SOURCE code, never the tests. Do not edit, delete, or weaken any test.
-- You may run the project's tests to check your work.
-- Follow the plan; if a step is clearly wrong, make the smallest correct fix.
-- When the target tests pass and you have not broken others, stop.";
-
-/// Critic: vet (and if needed correct) a plan before execution.
-const CRITIC_SYSTEM: &str = "\
-You are reviewing a proposed fix plan before it is executed.
-
-Check it against the issue: does it target the real root cause, is it minimal,
-does it avoid touching tests, will it make the failing tests pass? You may read
-the code to verify. If the plan is sound, output it unchanged. If it is flawed,
-output a corrected, self-contained plan. Output ONLY the final plan to execute.";
-
-const MONO_PROMPT: &str = "\
-{verdict}Fix the following issue in this repository.
-
-## Issue
-{issue}
-
-## Tests that must pass after your fix
-{targets}
-
-Locate the cause, make the minimal source change, and verify.";
-
-const PLAN_PROMPT: &str = "\
-{verdict}Investigate and produce a self-contained fix plan.
-
-## Issue
-{issue}
-
-## Tests that must pass after the fix
-{targets}
-
-Output ONLY the numbered plan (files, functions, exact changes). Do not edit.";
-
-const EXEC_PROMPT: &str = "\
-Execute this approved fix plan in the repository.
-
-## Issue
-{issue}
-
-## Tests that must pass
-{targets}
-
-## Approved plan
-{prev}
-
-Make the edits now and verify.";
-
-const CRITIC_PROMPT: &str = "\
-## Issue
-{issue}
-
-## Tests that must pass
-{targets}
-
-## Proposed plan
-{prev}
-
-Review and output the final plan to execute.";
-
-/// A phase on the run's default model.
-fn phase(system: &str, prompt: &str, scope: ToolScope) -> Phase {
-    Phase {
-        system: system.into(),
-        prompt: prompt.into(),
-        scope,
-        model: None,
-    }
-}
-
-/// A single-phase step on the default model.
-fn solo(system: &str, prompt: &str, scope: ToolScope) -> Step {
-    Step::Solo(phase(system, prompt, scope))
-}
-
-/// Prompt angles for the wide (parallel) planner: each branch investigates from a
-/// different starting point, so the branches don't collapse onto one hypothesis.
-const WIDE_ANGLES: &[&str] = &[
-    "Focus on the failing assertion itself: what value is produced vs expected, and \
-     which function computes it.",
-    "Focus on the most recently changed or most complex code path touched by the \
-     failing test.",
-    "Focus on boundary/edge handling (empty, zero, off-by-one, sign) in the code \
-     under test.",
-];
-
-impl Strategy {
-    /// One self-correcting loop in a persistent context. The baseline.
-    pub fn monolithic() -> Self {
-        Strategy {
-            name: "monolithic".into(),
-            persist_across_attempts: true,
-            steps: vec![solo(MONO_SYSTEM, MONO_PROMPT, ToolScope::Full)],
-        }
-    }
-
-    /// Read-only planner → fresh executor seeded with only the plan.
-    pub fn plan_exec() -> Self {
-        Strategy {
-            name: "plan-exec".into(),
-            persist_across_attempts: false,
-            steps: vec![
-                solo(PLAN_SYSTEM, PLAN_PROMPT, ToolScope::ReadOnly),
-                solo(EXEC_SYSTEM, EXEC_PROMPT, ToolScope::Full),
-            ],
-        }
-    }
-
-    /// Planner → critic gate → fresh executor.
-    pub fn plan_critic_exec() -> Self {
-        Strategy {
-            name: "plan-critic-exec".into(),
-            persist_across_attempts: false,
-            steps: vec![
-                solo(PLAN_SYSTEM, PLAN_PROMPT, ToolScope::ReadOnly),
-                solo(CRITIC_SYSTEM, CRITIC_PROMPT, ToolScope::ReadOnly),
-                solo(EXEC_SYSTEM, EXEC_PROMPT, ToolScope::Full),
-            ],
-        }
-    }
-
-    /// Plan → **Oracle critic on a different model** → execute. The Amp pattern:
-    /// the second opinion comes from a stronger/other model than the executor.
-    /// `oracle_model` runs only the critic phase; the rest use the run default.
-    pub fn plan_oracle_exec(oracle_model: &str) -> Self {
-        let mut critic = phase(CRITIC_SYSTEM, CRITIC_PROMPT, ToolScope::ReadOnly);
-        critic.model = Some(oracle_model.to_string());
-        Strategy {
-            name: "plan-oracle-exec".into(),
-            persist_across_attempts: false,
-            steps: vec![
-                solo(PLAN_SYSTEM, PLAN_PROMPT, ToolScope::ReadOnly),
-                Step::Solo(critic),
-                solo(EXEC_SYSTEM, EXEC_PROMPT, ToolScope::Full),
-            ],
-        }
-    }
-
-    /// `n` planners explore **in parallel** from different angles, their findings
-    /// are merged, then a fresh executor acts on the combined plan. The SoulForge
-    /// dispatch pattern: concurrent read-only research, then a single edit.
-    pub fn wide_plan_exec(n: usize) -> Self {
-        let n = n.clamp(2, WIDE_ANGLES.len());
-        let branches = (0..n)
-            .map(|i| {
-                let prompt = format!("{}\n\n{}", WIDE_ANGLES[i], PLAN_PROMPT);
-                phase(PLAN_SYSTEM, &prompt, ToolScope::ReadOnly)
-            })
-            .collect();
-        Strategy {
-            name: "wide-plan-exec".into(),
-            persist_across_attempts: false,
-            steps: vec![
-                Step::Fan {
-                    branches,
-                    join: Join::Concat,
-                },
-                solo(EXEC_SYSTEM, EXEC_PROMPT, ToolScope::Full),
-            ],
-        }
-    }
-
-    /// Names of the built-in strategies resolvable by [`Self::builtin`].
-    /// (`plan-oracle-exec` is excluded — it needs an oracle model argument and
-    /// cannot be constructed from a bare name.)
-    pub fn builtin_names() -> &'static [&'static str] {
-        &[
-            "monolithic",
-            "plan-exec",
-            "plan-critic-exec",
-            "wide-plan-exec",
-        ]
-    }
-
-    /// Look up a built-in strategy by name.
-    pub fn builtin(name: &str) -> Option<Self> {
-        match name {
-            "monolithic" => Some(Self::monolithic()),
-            "plan-exec" => Some(Self::plan_exec()),
-            "plan-critic-exec" => Some(Self::plan_critic_exec()),
-            "wide-plan-exec" => Some(Self::wide_plan_exec(3)),
-            _ => None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -531,6 +315,79 @@ mod tests {
         }
     }
 
+    // Minimal fixtures matching the *shape* (names, phase count, scopes, model
+    // routing) of the built-ins the engine tests exercise. The built-in *content*
+    // lives in pirs-rhai now; these tests only need a well-shaped strategy.
+    fn ph(system: &str, prompt: &str, scope: ToolScope) -> Phase {
+        Phase {
+            system: system.into(),
+            prompt: prompt.into(),
+            scope,
+            model: None,
+        }
+    }
+    fn monolithic() -> Strategy {
+        Strategy {
+            name: "monolithic".into(),
+            persist_across_attempts: true,
+            steps: vec![Step::Solo(ph(
+                "mono",
+                "fix {issue}\n{targets}",
+                ToolScope::Full,
+            ))],
+        }
+    }
+    fn plan_exec() -> Strategy {
+        Strategy {
+            name: "plan-exec".into(),
+            persist_across_attempts: false,
+            steps: vec![
+                Step::Solo(ph("plan", "plan {issue}\n{targets}", ToolScope::ReadOnly)),
+                Step::Solo(ph("exec", "exec {prev}", ToolScope::Full)),
+            ],
+        }
+    }
+    fn plan_critic_exec() -> Strategy {
+        Strategy {
+            name: "plan-critic-exec".into(),
+            persist_across_attempts: false,
+            steps: vec![
+                Step::Solo(ph("plan", "plan {issue}", ToolScope::ReadOnly)),
+                Step::Solo(ph("critic", "critic {prev}", ToolScope::ReadOnly)),
+                Step::Solo(ph("exec", "exec {prev}", ToolScope::Full)),
+            ],
+        }
+    }
+    fn plan_oracle_exec(oracle_model: &str) -> Strategy {
+        let mut critic = ph("critic", "critic {prev}", ToolScope::ReadOnly);
+        critic.model = Some(oracle_model.to_string());
+        Strategy {
+            name: "plan-oracle-exec".into(),
+            persist_across_attempts: false,
+            steps: vec![
+                Step::Solo(ph("plan", "plan {issue}", ToolScope::ReadOnly)),
+                Step::Solo(critic),
+                Step::Solo(ph("exec", "exec {prev}", ToolScope::Full)),
+            ],
+        }
+    }
+    fn wide_plan_exec(n: usize) -> Strategy {
+        let branches = (0..n)
+            .map(|i| ph(&format!("plan{i}"), "plan {issue}", ToolScope::ReadOnly))
+            .collect();
+        Strategy {
+            name: "wide-plan-exec".into(),
+            persist_across_attempts: false,
+            steps: vec![
+                Step::Fan {
+                    branches,
+                    join: Join::Concat,
+                },
+                Step::Solo(ph("exec", "exec {prev}", ToolScope::Full)),
+            ],
+        }
+    }
+
     #[test]
     fn render_substitutes_all_placeholders() {
         let t = Task {
@@ -551,7 +408,7 @@ mod tests {
     #[test]
     fn monolithic_runs_one_full_persistent_phase() {
         let mut d = RecordingDriver::default();
-        run_strategy(&Strategy::monolithic(), &mut d, &task()).unwrap();
+        run_strategy(&monolithic(), &mut d, &task()).unwrap();
         assert_eq!(d.calls.len(), 1);
         let (id, scope, fresh, prompt, _model) = &d.calls[0];
         assert_eq!(id, "monolithic#0");
@@ -563,7 +420,7 @@ mod tests {
     #[test]
     fn plan_exec_plans_read_only_then_executes_with_the_plan() {
         let mut d = RecordingDriver::default();
-        run_strategy(&Strategy::plan_exec(), &mut d, &task()).unwrap();
+        run_strategy(&plan_exec(), &mut d, &task()).unwrap();
         assert_eq!(d.calls.len(), 2);
         // Phase 0: planning, read-only, fresh.
         assert_eq!(d.calls[0].1, ToolScope::ReadOnly);
@@ -580,7 +437,7 @@ mod tests {
     #[test]
     fn plan_critic_exec_inserts_a_read_only_critic_between_plan_and_exec() {
         let mut d = RecordingDriver::default();
-        run_strategy(&Strategy::plan_critic_exec(), &mut d, &task()).unwrap();
+        run_strategy(&plan_critic_exec(), &mut d, &task()).unwrap();
         assert_eq!(d.calls.len(), 3);
         assert_eq!(d.calls[1].1, ToolScope::ReadOnly); // critic reads, doesn't edit
         assert!(d.calls[1].3.contains("OUTPUT_OF[plan-critic-exec#0]")); // sees plan
@@ -589,15 +446,9 @@ mod tests {
     }
 
     #[test]
-    fn builtin_lookup_matches_names_and_rejects_unknown() {
-        assert_eq!(Strategy::builtin("plan-exec").unwrap().steps.len(), 2);
-        assert!(Strategy::builtin("nope").is_none());
-    }
-
-    #[test]
     fn oracle_runs_the_critic_phase_on_a_different_model() {
         let mut d = RecordingDriver::default();
-        run_strategy(&Strategy::plan_oracle_exec("strong-model"), &mut d, &task()).unwrap();
+        run_strategy(&plan_oracle_exec("strong-model"), &mut d, &task()).unwrap();
         assert_eq!(d.calls.len(), 3);
         // Plan and exec use the default (None); only the critic overrides.
         assert_eq!(d.calls[0].4, None);
@@ -626,7 +477,7 @@ mod tests {
     #[test]
     fn wide_plan_exec_fans_out_then_executes_on_the_merged_plan() {
         let mut d = RecordingDriver::default();
-        run_strategy(&Strategy::wide_plan_exec(3), &mut d, &task()).unwrap();
+        run_strategy(&wide_plan_exec(3), &mut d, &task()).unwrap();
         // 3 parallel planners + 1 executor.
         assert_eq!(d.calls.len(), 4);
         // Branch ids carry the `.b` suffix; all read-only.
@@ -645,7 +496,7 @@ mod tests {
     #[test]
     fn fan_out_uses_the_drivers_parallel_path() {
         let mut d = ParallelDriver::default();
-        run_strategy(&Strategy::wide_plan_exec(2), &mut d, &task()).unwrap();
+        run_strategy(&wide_plan_exec(2), &mut d, &task()).unwrap();
         // One fan-out step of width 2 went through run_parallel, not run_phase.
         assert_eq!(d.parallel_widths, vec![2]);
     }
@@ -656,7 +507,7 @@ mod tests {
             fail: vec!["wide-plan-exec#0.1".into()],
             ..Default::default()
         };
-        run_strategy(&Strategy::wide_plan_exec(3), &mut d, &task()).unwrap();
+        run_strategy(&wide_plan_exec(3), &mut d, &task()).unwrap();
         // Executor still ran; its merged plan contains the two surviving branches
         // and not the failed one.
         let exec = &d.calls.last().unwrap().3;
@@ -671,7 +522,7 @@ mod tests {
             fail: vec!["wide-plan-exec#0.0".into(), "wide-plan-exec#0.1".into()],
             ..Default::default()
         };
-        let err = run_strategy(&Strategy::wide_plan_exec(2), &mut d, &task()).unwrap_err();
+        let err = run_strategy(&wide_plan_exec(2), &mut d, &task()).unwrap_err();
         assert!(err.to_string().contains("all parallel branches failed"));
     }
 
@@ -701,7 +552,7 @@ mod tests {
     #[tokio::test]
     async fn async_runner_threads_prev_through_phases() {
         let mut d = AsyncRecorder::default();
-        run_strategy_async(&Strategy::plan_exec(), &mut d, &task())
+        run_strategy_async(&plan_exec(), &mut d, &task())
             .await
             .unwrap();
         assert_eq!(d.calls.len(), 2);
@@ -716,7 +567,7 @@ mod tests {
     #[tokio::test]
     async fn async_runner_fans_out_and_merges() {
         let mut d = AsyncRecorder::default();
-        run_strategy_async(&Strategy::wide_plan_exec(3), &mut d, &task())
+        run_strategy_async(&wide_plan_exec(3), &mut d, &task())
             .await
             .unwrap();
         // 3 planners (default sequential run_parallel) + 1 executor.

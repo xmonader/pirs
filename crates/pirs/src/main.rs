@@ -1182,7 +1182,7 @@ async fn run_strategy_turn(
     use pirs_agent::gate::{run_gated, GateOutcome};
     use pirs_agent::phase_agent::AgentPhaseDriver;
     use pirs_agent::profile::Profile;
-    use pirs_agent::strategy::{run_strategy_async, PhaseReq, Strategy, Task, ToolScope};
+    use pirs_agent::strategy::{run_strategy_async, PhaseReq, Task, ToolScope};
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -1192,7 +1192,12 @@ async fn run_strategy_turn(
     let mut profile = match profile_arg {
         Some(p) => pirs_rhai::discover::resolve_profile(p, cwd)
             .with_context(|| format!("resolving profile {p:?}"))?,
-        None => Profile::from_strategy("adhoc", Strategy::monolithic()),
+        // Placeholder strategy; always replaced below because reaching here means
+        // --strategy was given (strategy_mode with no --profile).
+        None => Profile::from_strategy(
+            "adhoc",
+            pirs_rhai::builtins::builtin("monolithic").expect("monolithic is a built-in"),
+        ),
     };
     if let Some(s) = strategy_arg {
         profile.strategy = pirs_rhai::discover::resolve_strategy(s, cwd)
