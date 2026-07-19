@@ -26,6 +26,20 @@ pub struct Extension {
     ast: AST,
     scope: Scope<'static>,
     pub caps: caps::Caps,
+}
+
+pub type SubagentRunner =
+    Arc<dyn Fn(String, Option<String>) -> Result<String, String> + Send + Sync>;
+
+pub mod caps;
+
+/// Immutable per-extension hook presence, hoisted OUT of `Mutex<Extension>` so
+/// dispatchers can tell whether an extension even has a hook without taking its
+/// lock. Without this, a busy extension (running its own tool) hard-blocks
+/// every concurrent tool call — and drops `on_tool_result` patches — even when
+/// it has no relevant hook at all. Indexed identically to `extensions`.
+#[derive(Clone, Copy, Default)]
+struct ExtFlags {
     has_on_tool_call: bool,
     has_on_tool_result: bool,
     has_on_context: bool,
@@ -35,13 +49,9 @@ pub struct Extension {
     has_on_event: bool,
 }
 
-pub type SubagentRunner =
-    Arc<dyn Fn(String, Option<String>) -> Result<String, String> + Send + Sync>;
-
-pub mod caps;
-
 pub struct ExtensionHost {
     extensions: Vec<Mutex<Extension>>,
+    ext_flags: Vec<ExtFlags>,
     tool_registry: Vec<RegisteredTool>,
     command_registry: Vec<RegisteredCommand>,
     subagent_runner: Mutex<Option<SubagentRunner>>,
@@ -327,6 +337,7 @@ impl ExtensionHost {
     pub fn new() -> Self {
         ExtensionHost {
             extensions: Vec::new(),
+            ext_flags: Vec::new(),
             tool_registry: Vec::new(),
             command_registry: Vec::new(),
             subagent_runner: Mutex::new(None),
@@ -625,12 +636,7 @@ impl ExtensionHost {
             });
         }
 
-        self.extensions.push(Mutex::new(Extension {
-            path: PathBuf::from(name),
-            engine,
-            ast,
-            scope,
-            caps,
+        self.ext_flags.push(ExtFlags {
             has_on_tool_call,
             has_on_tool_result,
             has_on_context,
@@ -638,6 +644,13 @@ impl ExtensionHost {
             has_on_steering,
             has_on_follow_up,
             has_on_event,
+        });
+        self.extensions.push(Mutex::new(Extension {
+            path: PathBuf::from(name),
+            engine,
+            ast,
+            scope,
+            caps,
         }));
         Ok(())
     }
@@ -659,14 +672,8 @@ impl ExtensionHost {
 
     pub fn hooks(self: &Arc<Self>) -> Hooks {
         let mut hooks = Hooks::default();
-        let has_call = self
-            .extensions
-            .iter()
-            .any(|e| e.lock().unwrap().has_on_tool_call);
-        let has_result = self
-            .extensions
-            .iter()
-            .any(|e| e.lock().unwrap().has_on_tool_result);
+        let has_call = self.ext_flags.iter().any(|f| f.has_on_tool_call);
+        let has_result = self.ext_flags.iter().any(|f| f.has_on_tool_result);
 
         if has_call {
             let host = Arc::clone(self);
@@ -680,34 +687,22 @@ impl ExtensionHost {
                 host.run_on_tool_result(id, name, result)
             }));
         }
-        let has_context = self
-            .extensions
-            .iter()
-            .any(|e| e.lock().unwrap().has_on_context);
+        let has_context = self.ext_flags.iter().any(|f| f.has_on_context);
         if has_context {
             let host = Arc::clone(self);
             hooks.transform_context = Some(Arc::new(move |messages| host.run_on_context(messages)));
         }
-        let has_stop = self
-            .extensions
-            .iter()
-            .any(|e| e.lock().unwrap().has_on_should_stop);
+        let has_stop = self.ext_flags.iter().any(|f| f.has_on_should_stop);
         if has_stop {
             let host = Arc::clone(self);
             hooks.should_stop_after_turn = Some(Arc::new(move |ctx| host.run_on_should_stop(ctx)));
         }
-        let has_steering = self
-            .extensions
-            .iter()
-            .any(|e| e.lock().unwrap().has_on_steering);
+        let has_steering = self.ext_flags.iter().any(|f| f.has_on_steering);
         if has_steering {
             let host = Arc::clone(self);
             hooks.get_steering_messages = Some(Arc::new(move || host.run_on_steering()));
         }
-        let has_follow = self
-            .extensions
-            .iter()
-            .any(|e| e.lock().unwrap().has_on_follow_up);
+        let has_follow = self.ext_flags.iter().any(|f| f.has_on_follow_up);
         if has_follow {
             let host = Arc::clone(self);
             hooks.get_follow_up_messages = Some(Arc::new(move || host.run_on_follow_up()));
@@ -716,7 +711,13 @@ impl ExtensionHost {
     }
 
     fn run_on_tool_call(&self, id: &str, name: &str, args: &Value) -> Option<String> {
-        for ext in &self.extensions {
+        for (i, ext) in self.extensions.iter().enumerate() {
+            // Skip extensions without this hook WITHOUT locking — a busy
+            // extension that has no policy hook must not block a concurrent
+            // tool call.
+            if !self.ext_flags[i].has_on_tool_call {
+                continue;
+            }
             // Policy hooks are a security gate: if the extension is busy
             // (re-entrant call from a hook that spawned a sub-agent on this
             // same host), a blocking lock would deadlock, so we try_lock and
@@ -734,9 +735,6 @@ impl ExtensionHost {
                     );
                 }
             };
-            if !ext.has_on_tool_call {
-                continue;
-            }
             let dynamic_args = rhai::serde::to_dynamic(args).unwrap_or(Dynamic::UNIT);
             let ext = &mut *ext;
             let result: Result<Dynamic, _> = ext.engine.call_fn(
@@ -786,7 +784,13 @@ impl ExtensionHost {
         name: &str,
         result: &ToolResultMessage,
     ) -> Option<ToolResultPatch> {
-        for ext in &self.extensions {
+        for (i, ext) in self.extensions.iter().enumerate() {
+            // Skip extensions without this hook WITHOUT locking, so a busy
+            // extension with no result hook doesn't cause us to record a
+            // spurious error / skip. Only lock ones that actually patch results.
+            if !self.ext_flags[i].has_on_tool_result {
+                continue;
+            }
             // After-hooks observe/patch results; they are not gates. On
             // re-entrant contention skip with a recorded error rather than
             // deadlock (a blocking lock here hangs the host).
@@ -800,9 +804,6 @@ impl ExtensionHost {
                     continue;
                 }
             };
-            if !ext.has_on_tool_result {
-                continue;
-            }
             let text: String = result
                 .content
                 .iter()
@@ -887,10 +888,7 @@ impl ExtensionHost {
     }
 
     pub fn listener(self: &Arc<Self>) -> Option<pirs_agent::Emit> {
-        let any = self
-            .extensions
-            .iter()
-            .any(|e| e.lock().unwrap().has_on_event);
+        let any = self.ext_flags.iter().any(|f| f.has_on_event);
         if !any {
             return None;
         }
@@ -937,16 +935,16 @@ impl ExtensionHost {
     }
 
     fn for_each_with(&self, flag: ExtensionFlag, mut f: impl FnMut(&Self, usize)) {
-        for (i, ext) in self.extensions.iter().enumerate() {
-            let has = {
-                let e = ext.lock().unwrap();
-                match flag {
-                    ExtensionFlag::Context => e.has_on_context,
-                    ExtensionFlag::ShouldStop => e.has_on_should_stop,
-                    ExtensionFlag::Steering => e.has_on_steering,
-                    ExtensionFlag::FollowUp => e.has_on_follow_up,
-                    ExtensionFlag::Event => e.has_on_event,
-                }
+        for i in 0..self.extensions.len() {
+            // Read the hook flag without locking the extension (a blocking lock
+            // here would hang if the extension is mid-run).
+            let e = &self.ext_flags[i];
+            let has = match flag {
+                ExtensionFlag::Context => e.has_on_context,
+                ExtensionFlag::ShouldStop => e.has_on_should_stop,
+                ExtensionFlag::Steering => e.has_on_steering,
+                ExtensionFlag::FollowUp => e.has_on_follow_up,
+                ExtensionFlag::Event => e.has_on_event,
             };
             if has {
                 f(self, i);
