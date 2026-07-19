@@ -6,6 +6,7 @@
 //! `PIRS-BENCH-PLAN.md` for the full design.
 
 pub mod command;
+pub mod detect;
 pub mod gate;
 pub mod junit;
 pub mod probe;
@@ -15,6 +16,7 @@ pub mod run;
 pub mod types;
 
 pub use command::CommandRunner;
+pub use detect::DetectorHost;
 pub use gate::{evaluate, Verdict};
 pub use probe::{probe, ProbeResult};
 pub use report::Attribution;

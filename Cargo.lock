@@ -1455,6 +1455,7 @@ dependencies = [
  "anyhow",
  "libc",
  "quick-xml",
+ "rhai",
  "serde",
  "serde_json",
  "tempfile",
