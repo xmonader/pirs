@@ -112,6 +112,12 @@ struct Cli {
     #[arg(long)]
     no_graph: bool,
 
+    /// Cache the code graph in .pirs/graph.db and refresh it incrementally
+    /// (re-parse only changed files). Speeds up warm starts on large repos;
+    /// off by default. The cache is disposable and never source of truth.
+    #[arg(long)]
+    persist_graph: bool,
+
     /// Start with only core tools loaded; model loads more via use_tool
     #[arg(long)]
     tool_diet: bool,
@@ -556,6 +562,12 @@ async fn main() -> anyhow::Result<()> {
 
     let graph: Option<std::sync::Arc<pirs_graph::LazyGraph>> = if cli.no_graph {
         None
+    } else if cli.persist_graph {
+        let db = cwd.join(".pirs").join("graph.db");
+        Some(std::sync::Arc::new(pirs_graph::LazyGraph::persistent(
+            cwd.clone(),
+            db,
+        )))
     } else {
         Some(std::sync::Arc::new(pirs_graph::LazyGraph::new(cwd.clone())))
     };

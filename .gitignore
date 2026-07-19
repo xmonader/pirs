@@ -2,6 +2,9 @@ target/
 *.log
 .pirs/sessions/
 .pirs/memory.db
+.pirs/graph.db
+.pirs/graph.db-wal
+.pirs/graph.db-shm
 .pirs/mutants/
 
 # CommandCode tool artifacts
