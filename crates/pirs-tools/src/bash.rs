@@ -348,7 +348,7 @@ fn tail_with_footer(out: &str, call_id: &str) -> String {
 }
 
 fn spill_to_temp(out: &str, call_id: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("pirs-bash-{}.log", sanitize_id(call_id)));
+    let path = crate::scratch_dir().join(format!("bash-{}.log", sanitize_id(call_id)));
     if std::fs::write(&path, out).is_err() {
         return PathBuf::from("<failed to write log>");
     }

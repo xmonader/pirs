@@ -252,7 +252,7 @@ impl AgentTool for JobSteerTool {
 }
 
 pub fn bash_job_output_path(id: u64) -> PathBuf {
-    std::env::temp_dir().join(format!("pirs-job-{id}.log"))
+    crate::scratch_dir().join(format!("job-{id}.log"))
 }
 
 pub fn spawn_bash_job(
