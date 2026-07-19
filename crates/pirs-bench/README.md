@@ -75,6 +75,31 @@ Every session reports per-model token usage (input / cache-read / cache-write /
 output / reasoning) and behavior stats (turns, tool calls). `batch` and
 `selftest` also print the aggregate across all instances.
 
+## Validation
+
+`selftest` is the reproducible check. The deterministic oracle validates the
+harness pipeline; `--agent` validates the whole thing end to end.
+
+```bash
+# Pipeline only (no model, no key) — must be 100%:
+pirs-bench selftest --count 50
+
+# End to end with a real model:
+DEEPSEEK_API_KEY=… pirs-bench selftest --count 50 --agent \
+  --provider deepseek --model deepseek-v4-flash
+```
+
+A representative agent run over the 50 generated projects (deepseek-v4-flash):
+
+- **50/50 solved (100%)**, attribution histogram clean.
+- **0 test files modified** — every fix is source-only (test-file protection +
+  honest tool use); a fix that touched a test would be reverted before the gate
+  and could not pass.
+- Minimal edits: ~1 `edit` call per project; the agent `read`s the source and
+  runs the suite via `bash` before the harness verifies.
+- Per-model token totals (input / cache-read / cache-write / output / reasoning)
+  reported for every session and in aggregate.
+
 ## Crates
 
 - `pirs-bench` — the harness: gate, differential verify, discovery, baseline
