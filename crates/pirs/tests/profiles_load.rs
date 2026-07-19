@@ -44,7 +44,12 @@ fn security_reviewer_bakes_in_persona_model_and_denies_shell() {
                 "persona not stamped onto phase: {}",
                 phase.system
             );
-            assert_eq!(phase.model.as_deref(), Some("deepseek-v4-flash"));
+            // The role pins no model: every phase inherits the run's --model, so
+            // the profile is provider-agnostic.
+            assert_eq!(
+                phase.model, None,
+                "profile must not pin a provider-specific model"
+            );
         }
     }
 }
