@@ -81,9 +81,22 @@ pub enum Ring {
     Full,
 }
 
+/// The terminal result of a single task.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    /// Targets flipped and the full keep-green set verified clean.
+    Solved,
+    /// Targets flipped and the scoped ring verified, but the full ring was not
+    /// completed (e.g. budget/timeout). Weaker evidence — flagged, not silent.
+    AcceptedScopedOnly,
+    /// Aborted, with the typed reason.
+    Failed(FailBucket),
+}
+
 /// The typed reason a task aborted, recorded for every failure so the aggregate
 /// histogram shows *where* the harness loses.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FailBucket {
     /// Couldn't establish a stable pass/fail signal at checkout.

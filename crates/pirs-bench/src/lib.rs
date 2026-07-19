@@ -6,7 +6,9 @@
 //! `PIRS-BENCH-PLAN.md` for the full design.
 
 pub mod gate;
+pub mod report;
 pub mod types;
 
 pub use gate::{evaluate, Verdict};
-pub use types::{FailBucket, Ring, Snapshot, TestId, TestOutcome};
+pub use report::Attribution;
+pub use types::{FailBucket, Outcome, Ring, Snapshot, TestId, TestOutcome};
