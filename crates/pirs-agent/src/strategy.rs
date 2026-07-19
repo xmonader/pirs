@@ -191,6 +191,66 @@ pub fn run_strategy(
     Ok(())
 }
 
+/// The async twin of [`PhaseDriver`], for hosts that are already inside a Tokio
+/// runtime (the interactive/one-shot product agent) and cannot block on it.
+/// Same contract as [`PhaseDriver`]; drive it with [`run_strategy_async`]. The
+/// futures are not required to be `Send`: the runner is awaited directly on the
+/// product agent's task, never spawned onto another thread.
+#[async_trait::async_trait(?Send)]
+pub trait AsyncPhaseDriver {
+    /// Run one fully-rendered phase and return its text output.
+    async fn run_phase(&mut self, req: &PhaseReq) -> anyhow::Result<String>;
+
+    /// Run several phases concurrently, one result per request in order. The
+    /// default awaits them sequentially; a host should override to dispatch the
+    /// (read-only) branches at once.
+    async fn run_parallel(&mut self, reqs: &[PhaseReq]) -> Vec<anyhow::Result<String>> {
+        let mut out = Vec::with_capacity(reqs.len());
+        for r in reqs {
+            out.push(self.run_phase(r).await);
+        }
+        out
+    }
+}
+
+/// Async counterpart of [`run_strategy`]: identical phase-walking and `{prev}`
+/// threading, but awaited so it composes with an existing runtime. Used by the
+/// product agent to run a `--strategy` on the real agent loop.
+pub async fn run_strategy_async(
+    strategy: &Strategy,
+    driver: &mut dyn AsyncPhaseDriver,
+    task: &Task,
+) -> anyhow::Result<()> {
+    let fresh = !strategy.persist_across_attempts;
+    let mut prev = String::new();
+    for (i, step) in strategy.steps.iter().enumerate() {
+        match step {
+            Step::Solo(phase) => {
+                let id = format!("{}#{i}", strategy.name);
+                let req = req_for(id, phase, task, &prev, fresh);
+                prev = driver.run_phase(&req).await?;
+            }
+            Step::Fan { branches, join } => {
+                let reqs: Vec<PhaseReq> = branches
+                    .iter()
+                    .enumerate()
+                    .map(|(b, phase)| {
+                        let id = format!("{}#{i}.{b}", strategy.name);
+                        req_for(id, phase, task, &prev, fresh)
+                    })
+                    .collect();
+                let results = driver.run_parallel(&reqs).await;
+                let outs: Vec<String> = results.into_iter().filter_map(|r| r.ok()).collect();
+                if outs.is_empty() {
+                    anyhow::bail!("all parallel branches failed at step {i}");
+                }
+                prev = merge(*join, &outs);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Build a rendered request for one phase under the given `phase_id`.
 fn req_for(phase_id: String, phase: &Phase, task: &Task, prev: &str, fresh: bool) -> PhaseReq {
     PhaseReq {
@@ -622,5 +682,48 @@ mod tests {
         let concat = merge(Join::Concat, &outs);
         assert!(concat.contains("## Branch 1\nA"));
         assert!(concat.contains("## Branch 2\nB"));
+    }
+
+    /// Async driver mirroring `RecordingDriver`, to prove `run_strategy_async`
+    /// walks phases and threads `{prev}` exactly like the sync engine.
+    #[derive(Default)]
+    struct AsyncRecorder {
+        calls: Vec<(String, String)>, // (phase_id, rendered prompt)
+    }
+    #[async_trait::async_trait(?Send)]
+    impl AsyncPhaseDriver for AsyncRecorder {
+        async fn run_phase(&mut self, req: &PhaseReq) -> anyhow::Result<String> {
+            self.calls.push((req.phase_id.clone(), req.prompt.clone()));
+            Ok(format!("OUT[{}]", req.phase_id))
+        }
+    }
+
+    #[tokio::test]
+    async fn async_runner_threads_prev_through_phases() {
+        let mut d = AsyncRecorder::default();
+        run_strategy_async(&Strategy::plan_exec(), &mut d, &task())
+            .await
+            .unwrap();
+        assert_eq!(d.calls.len(), 2);
+        // The executor phase's prompt must carry the planner's output via {prev}.
+        assert!(
+            d.calls[1].1.contains("OUT[plan-exec#0]"),
+            "exec prompt missing prev: {}",
+            d.calls[1].1
+        );
+    }
+
+    #[tokio::test]
+    async fn async_runner_fans_out_and_merges() {
+        let mut d = AsyncRecorder::default();
+        run_strategy_async(&Strategy::wide_plan_exec(3), &mut d, &task())
+            .await
+            .unwrap();
+        // 3 planners (default sequential run_parallel) + 1 executor.
+        assert_eq!(d.calls.len(), 4);
+        let exec_prompt = &d.calls[3].1;
+        assert!(exec_prompt.contains("## Branch 1"));
+        assert!(exec_prompt.contains("OUT[wide-plan-exec#0.0]"));
+        assert!(exec_prompt.contains("OUT[wide-plan-exec#0.2]"));
     }
 }

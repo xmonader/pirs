@@ -5,6 +5,7 @@ pub mod delegate;
 pub mod events;
 pub mod jobs;
 pub mod memory;
+pub mod phase_agent;
 pub mod profile;
 pub mod steering;
 pub mod strategy;
