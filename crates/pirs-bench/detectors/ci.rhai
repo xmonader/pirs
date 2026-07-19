@@ -87,11 +87,13 @@ fn detect() {
         installs.push("pip install -e . 2>/dev/null || true");
     }
 
+    // Resolve the interpreter at runtime (python3 or python), matching pytest.rhai.
+    let py = "PY=$(command -v python3 || command -v python); ";
     specs.push(#{
         framework: "pytest-ci",
         install: installs,
-        list_cmd: "python -m pytest --collect-only -q 2>/dev/null | head -n 5",
-        test_cmd: "python -m pytest {tests} --junitxml={junit} -p no:cacheprovider -q",
+        list_cmd: py + "\"$PY\" -m pytest --collect-only -q 2>/dev/null | head -n 5",
+        test_cmd: py + "\"$PY\" -m pytest {tests} --junitxml={junit} -p no:cacheprovider -q",
         timeout_secs: 1200,
         parallel: false,
     });

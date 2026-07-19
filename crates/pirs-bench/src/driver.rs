@@ -7,10 +7,11 @@
 
 use std::collections::BTreeSet;
 
-use crate::baseline::{capture_stable, targets_reproduce};
+use crate::baseline::{capture_stable, capture_stable_cached, targets_reproduce};
+use crate::cache::BaselineCache;
 use crate::gate::Verdict;
 use crate::run::{verify, TestRunner, VerifyPlan};
-use crate::types::{FailBucket, Outcome, Ring, TestId};
+use crate::types::{FailBucket, Outcome, Ring, Snapshot, TestId};
 
 /// The inputs that define a task.
 pub struct TaskSpec {
@@ -26,6 +27,13 @@ pub trait Executor {
     fn attempt(&mut self, attempt: u32, last: Option<&Verdict>) -> anyhow::Result<bool>;
 }
 
+/// Regression scope = targets ∪ keep_green, deduped and stable-ordered.
+fn compute_scope(spec: &TaskSpec) -> Vec<TestId> {
+    let mut set: BTreeSet<TestId> = spec.targets.iter().cloned().collect();
+    set.extend(spec.keep_green.iter().cloned());
+    set.into_iter().collect()
+}
+
 /// Run one task to a terminal [`Outcome`]. Bootstrap/discovery happen upstream
 /// (they produce the `runner`); this drives baseline → reproduce → fix/verify.
 pub fn run_task(
@@ -34,19 +42,43 @@ pub fn run_task(
     executor: &mut dyn Executor,
     max_attempts: u32,
 ) -> anyhow::Result<Outcome> {
-    // Regression scope = targets ∪ keep_green, deduped and stable-ordered.
-    let scope: Vec<TestId> = {
-        let mut set: BTreeSet<TestId> = spec.targets.iter().cloned().collect();
-        set.extend(spec.keep_green.iter().cloned());
-        set.into_iter().collect()
-    };
-
-    // Baseline over the whole scope, captured stably (guards against flakiness).
+    let scope = compute_scope(spec);
     let baseline = match capture_stable(runner, &scope, Ring::Scoped)? {
         Some(b) => b,
         None => return Ok(Outcome::Failed(FailBucket::BaselineUnusable)),
     };
+    drive(spec, &scope, baseline, runner, executor, max_attempts)
+}
 
+/// Like [`run_task`] but captures the baseline through a SHA-keyed
+/// [`BaselineCache`], so repeated attempts/tasks at the same checkout skip the
+/// double-run. Falls back to a fresh capture for uncached tests.
+pub fn run_task_cached(
+    spec: &TaskSpec,
+    runner: &dyn TestRunner,
+    executor: &mut dyn Executor,
+    max_attempts: u32,
+    cache: &mut BaselineCache,
+    base_sha: &str,
+) -> anyhow::Result<Outcome> {
+    let scope = compute_scope(spec);
+    let baseline = match capture_stable_cached(runner, &scope, Ring::Scoped, cache, base_sha)? {
+        Some(b) => b,
+        None => return Ok(Outcome::Failed(FailBucket::BaselineUnusable)),
+    };
+    drive(spec, &scope, baseline, runner, executor, max_attempts)
+}
+
+/// The reproduce gate + fix/verify loop over an already-captured baseline. Shared
+/// by the cached and uncached entry points.
+fn drive(
+    spec: &TaskSpec,
+    scope: &[TestId],
+    baseline: Snapshot,
+    runner: &dyn TestRunner,
+    executor: &mut dyn Executor,
+    max_attempts: u32,
+) -> anyhow::Result<Outcome> {
     // Reproduce: every target must be red at baseline, or there is nothing to fix.
     if targets_reproduce(&baseline, &spec.targets).is_err() {
         return Ok(Outcome::Failed(FailBucket::ReproFailed));
@@ -74,7 +106,7 @@ pub fn run_task(
             return Ok(Outcome::Solved);
         }
         // Targets flipped — now (and only now) pay for the regression ring.
-        let scoped = VerifyPlan { targets: &spec.targets, scope: &scope, baseline: &baseline };
+        let scoped = VerifyPlan { targets: &spec.targets, scope, baseline: &baseline };
         let scoped_verdict = verify(runner, &scoped, Ring::Scoped)?;
         if scoped_verdict.is_done() {
             return Ok(Outcome::Solved);
