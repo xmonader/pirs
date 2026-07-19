@@ -21,6 +21,8 @@ use pirs_bench::{
     Timings, Verdict,
 };
 
+use pirs_agent::trace::Recorder;
+
 use crate::metrics::UsageByModel;
 use crate::{build_provider, AgentConfig, AgentExecutor, Provider, Strategy};
 
@@ -326,7 +328,12 @@ fn issue_for(proj: &Project) -> String {
 /// Generate and run `count` projects under `dir`, returning the attribution and
 /// the list of failed ids. Deterministic in [`Mode::Oracle`]; safe to re-run
 /// (each project dir is recreated).
-pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<SelftestReport> {
+pub fn run_selftest(
+    dir: &Path,
+    count: usize,
+    mode: &Mode,
+    recorder: Option<&Arc<Recorder>>,
+) -> anyhow::Result<SelftestReport> {
     std::fs::create_dir_all(dir).with_context(|| format!("create {dir:?}"))?;
     let host = DetectorHost::with_bundled().context("load detectors")?;
     // In agent mode, build the provider once and share it across executors.
@@ -388,6 +395,7 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<Sel
                         max_turns_per_attempt: *max_turns,
                         provider: Arc::clone(provider.as_ref().expect("provider in agent mode")),
                         strategy: strategy.clone(),
+                        recorder: recorder.cloned(),
                     },
                 )?);
             }
@@ -398,8 +406,25 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<Sel
             _ => unreachable!("one executor is always built"),
         };
 
+        if let Some(r) = recorder {
+            r.event(
+                "instance.start",
+                serde_json::json!({ "id": proj.id, "targets": proj.targets }),
+            );
+        }
         let report = run_instance(&inst, &host, &mut cache, exec, 3, Some(&ws))?;
         attribution.record(&report.outcome);
+        if let Some(r) = recorder {
+            r.event(
+                "instance.end",
+                serde_json::json!({
+                    "id": proj.id,
+                    "outcome": format!("{:?}", report.outcome),
+                    "accepted": report.outcome.is_accepted(),
+                    "timing_ms": report.timings.total().as_millis() as u64,
+                }),
+            );
+        }
         total_timings.merge(&report.timings);
 
         let mark = if report.outcome.is_accepted() {

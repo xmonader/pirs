@@ -22,6 +22,7 @@ use std::time::Instant;
 
 use pirs_agent::agent_loop::{run_agent_loop, Budgets, LoopConfig};
 use pirs_agent::strategy::{self, PhaseDriver, ToolScope};
+use pirs_agent::trace::Recorder;
 use pirs_agent::{AgentEvent, AgentTool, Emit, ExecutionMode, Hooks};
 use pirs_ai::anthropic::AnthropicClient;
 use pirs_ai::{CompletionOptions, Context, LlmProvider, Message, OpenAiCompat, Usage};
@@ -77,6 +78,9 @@ pub struct AgentConfig {
     pub provider: Arc<dyn LlmProvider>,
     /// The loop strategy to drive the fix with (a built-in or a user script).
     pub strategy: Strategy,
+    /// Optional flight recorder; when set, every agent event (full messages, tool
+    /// args/results, turns) plus phase/attempt boundaries are traced to JSONL.
+    pub recorder: Option<Arc<Recorder>>,
 }
 
 /// The agent-backed executor and a [`PhaseDriver`]: it holds the assembled tools,
@@ -96,6 +100,11 @@ pub struct AgentExecutor {
     /// strategies reuse a phase's context across attempts; split strategies get a
     /// fresh one each attempt (the driver honours the `fresh` flag).
     phase_contexts: HashMap<String, Context>,
+    /// Optional flight recorder shared across the whole run.
+    recorder: Option<Arc<Recorder>>,
+    /// Attempt counter, so trace events can be scoped to the attempt they belong
+    /// to (the harness may call `attempt` several times per instance).
+    attempt_no: u32,
     model: String,
     api_key: String,
     max_turns_per_attempt: usize,
@@ -165,6 +174,8 @@ impl AgentExecutor {
             planner_tools,
             strategy: config.strategy,
             phase_contexts: HashMap::new(),
+            recorder: config.recorder,
+            attempt_no: 0,
             model: config.model,
             api_key: config.api_key,
             max_turns_per_attempt: config.max_turns_per_attempt,
@@ -249,35 +260,46 @@ impl AgentExecutor {
         tools: &[Arc<dyn AgentTool>],
         context: &mut Context,
         prompt: String,
+        recorder: Option<&Arc<Recorder>>,
+        phase_id: &str,
     ) -> Vec<Message> {
         // Live behavior stats + per-tool wall-clock, correlated by tool_call_id.
         let stats = Arc::clone(stats);
         let pending: Arc<Mutex<HashMap<String, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
-        let emit: Emit = Arc::new(move |ev| match ev {
-            AgentEvent::ToolExecutionStart {
-                tool_call_id,
-                tool_name,
-                ..
-            } => {
-                stats.lock().unwrap().record_tool(&tool_name);
-                pending.lock().unwrap().insert(tool_call_id, Instant::now());
+        let rec = recorder.cloned();
+        let phase = phase_id.to_string();
+        let emit: Emit = Arc::new(move |ev| {
+            // Full-fidelity trace: capture EVERY event verbatim (messages, tool
+            // args/results, turn boundaries) before deriving the running stats.
+            if let Some(r) = &rec {
+                r.agent_event(&phase, &ev);
             }
-            AgentEvent::ToolExecutionEnd {
-                tool_call_id,
-                tool_name,
-                ..
-            } => {
-                if let Some(start) = pending.lock().unwrap().remove(&tool_call_id) {
-                    stats
-                        .lock()
-                        .unwrap()
-                        .add_tool_time(&tool_name, start.elapsed());
+            match ev {
+                AgentEvent::ToolExecutionStart {
+                    tool_call_id,
+                    tool_name,
+                    ..
+                } => {
+                    stats.lock().unwrap().record_tool(&tool_name);
+                    pending.lock().unwrap().insert(tool_call_id, Instant::now());
                 }
+                AgentEvent::ToolExecutionEnd {
+                    tool_call_id,
+                    tool_name,
+                    ..
+                } => {
+                    if let Some(start) = pending.lock().unwrap().remove(&tool_call_id) {
+                        stats
+                            .lock()
+                            .unwrap()
+                            .add_tool_time(&tool_name, start.elapsed());
+                    }
+                }
+                AgentEvent::TurnEnd { .. } => {
+                    stats.lock().unwrap().turns += 1;
+                }
+                _ => {}
             }
-            AgentEvent::TurnEnd { .. } => {
-                stats.lock().unwrap().turns += 1;
-            }
-            _ => {}
         });
         let cancel = CancellationToken::new();
         rt.block_on(async {
@@ -320,6 +342,20 @@ impl PhaseDriver for AgentExecutor {
             );
         }
 
+        if let Some(r) = &self.recorder {
+            r.event(
+                "phase.start",
+                serde_json::json!({
+                    "phase": phase_id,
+                    "attempt": self.attempt_no,
+                    "scope": format!("{scope:?}"),
+                    "fresh": fresh,
+                    "model": self.model,
+                    "prompt": prompt,
+                }),
+            );
+        }
+
         let cfg = self.loop_config();
         let tools: &[Arc<dyn AgentTool>] = match scope {
             ToolScope::ReadOnly => &self.planner_tools,
@@ -337,14 +373,40 @@ impl PhaseDriver for AgentExecutor {
             tools,
             ctx,
             prompt.to_string(),
+            self.recorder.as_ref(),
+            phase_id,
         );
         self.fold_usage(&msgs);
-        Ok(last_assistant_text(&msgs))
+        let output = last_assistant_text(&msgs);
+        if let Some(r) = &self.recorder {
+            r.event(
+                "phase.end",
+                serde_json::json!({
+                    "phase": phase_id,
+                    "attempt": self.attempt_no,
+                    "messages": msgs.len(),
+                    "output": output,
+                }),
+            );
+        }
+        Ok(output)
     }
 }
 
 impl Executor for AgentExecutor {
-    fn attempt(&mut self, _attempt: u32, last: Option<&Verdict>) -> anyhow::Result<bool> {
+    fn attempt(&mut self, attempt: u32, last: Option<&Verdict>) -> anyhow::Result<bool> {
+        self.attempt_no = attempt;
+        if let Some(r) = &self.recorder {
+            r.event(
+                "attempt.start",
+                serde_json::json!({
+                    "attempt": attempt,
+                    "strategy": self.strategy.name,
+                    "prior_verdict": last.map(|v| format!("{v:?}")),
+                }),
+            );
+        }
+
         // Snapshot the tree so we can tell whether this attempt actually edited
         // anything — if the agent made no change, there is nothing new to verify.
         let before = self.ws.diff().unwrap_or_default();
@@ -367,7 +429,14 @@ impl Executor for AgentExecutor {
 
         let after = self.ws.diff().unwrap_or_default();
         // A candidate worth verifying exists iff the (non-test) tree changed.
-        Ok(after != before)
+        let changed = after != before;
+        if let Some(r) = &self.recorder {
+            r.event(
+                "attempt.end",
+                serde_json::json!({ "attempt": attempt, "changed": changed }),
+            );
+        }
+        Ok(changed)
     }
 }
 
@@ -388,6 +457,7 @@ mod tests {
                 max_turns_per_attempt: 1,
                 provider: build_provider(&Provider::Anthropic),
                 strategy,
+                recorder: None,
             },
         )
         .unwrap()

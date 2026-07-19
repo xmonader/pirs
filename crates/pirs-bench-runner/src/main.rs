@@ -13,9 +13,12 @@
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context as _};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use pirs_agent::trace::Recorder;
 use pirs_bench::{
     is_git_repo, run_instance, Attribution, BaselineCache, DetectorHost, GitWorkspace, Instance,
     InstanceReport,
@@ -83,6 +86,10 @@ struct Common {
     /// Path to a user-authored strategy (`.rhai`). Overrides `--strategy`.
     #[arg(long, global = true)]
     strategy_script: Option<PathBuf>,
+    /// Write a full JSONL event trace (every message, tool call, phase, attempt,
+    /// outcome) to this file — the flight recorder for long sessions.
+    #[arg(long, global = true)]
+    trace: Option<PathBuf>,
 }
 
 impl Common {
@@ -93,6 +100,23 @@ impl Common {
             Some(path) => pirs_rhai::strategy_script::load_strategy_file(path),
             None => Ok(self.strategy.into()),
         }
+    }
+
+    /// Build the flight recorder if `--trace` was given. The run id encodes the
+    /// start time and pid so parallel runs never collide.
+    fn make_recorder(&self) -> anyhow::Result<Option<Arc<Recorder>>> {
+        let Some(path) = &self.trace else {
+            return Ok(None);
+        };
+        let unix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let run_id = format!("run-{unix}-{}", std::process::id());
+        let rec = Recorder::to_file(path, &run_id, unix)
+            .with_context(|| format!("open trace file {path:?}"))?;
+        eprintln!("trace: {} -> {path:?}", run_id);
+        Ok(Some(rec))
     }
 }
 
@@ -204,6 +228,7 @@ fn main() -> ExitCode {
 
 /// One unit of work for [`solve_one`].
 struct Job {
+    id: String,
     repo: PathBuf,
     targets: Vec<String>,
     keep_green: Vec<String>,
@@ -220,6 +245,8 @@ struct SolveCtx<'a> {
     host: &'a DetectorHost,
     /// The resolved loop strategy (built-in or user script), reused per instance.
     strategy: Strategy,
+    /// Optional flight recorder, shared across every instance in the run.
+    recorder: Option<Arc<Recorder>>,
 }
 
 /// Run one instance through the full harness. Shared by `solve` and `batch`.
@@ -244,6 +271,18 @@ fn solve_one(
         (None, None) => None,
     };
 
+    if let Some(r) = &ctx.recorder {
+        r.event(
+            "instance.start",
+            serde_json::json!({
+                "id": job.id,
+                "strategy": ctx.strategy.name,
+                "model": ctx.common.model,
+                "targets": job.targets,
+            }),
+        );
+    }
+
     let mut executor = AgentExecutor::new(
         repo.clone(),
         job.issue,
@@ -255,6 +294,7 @@ fn solve_one(
             max_turns_per_attempt: ctx.common.max_turns,
             provider: build_provider(ctx.provider),
             strategy: ctx.strategy.clone(),
+            recorder: ctx.recorder.clone(),
         },
     )
     .context("build agent executor")?;
@@ -284,6 +324,28 @@ fn solve_one(
     if !tool_time.is_empty() {
         eprintln!("  fix→tools: {tool_time}");
     }
+
+    // Instance summary into the trace: outcome, tokens, timing, behaviour — so the
+    // JSONL is a complete record, not just the fine-grained events.
+    if let Some(r) = &ctx.recorder {
+        let usage = executor.session_usage().total();
+        r.event(
+            "instance.end",
+            serde_json::json!({
+                "id": job.id,
+                "outcome": format!("{:?}", report.outcome),
+                "accepted": report.outcome.is_accepted(),
+                "turns": stats.turns,
+                "tool_calls": stats.tool_calls,
+                "tokens": {
+                    "input": usage.input, "output": usage.output,
+                    "cache_read": usage.cache_read, "cache_write": usage.cache_write,
+                    "reasoning": usage.reasoning, "total": usage.total_tokens,
+                },
+                "timing_ms": report.timings.total().as_millis() as u64,
+            }),
+        );
+    }
     Ok(report)
 }
 
@@ -298,15 +360,18 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
     };
     let host = DetectorHost::with_bundled().context("load detectors")?;
     let mut cache = BaselineCache::in_memory();
+    let recorder = a.common.make_recorder()?;
     let ctx = SolveCtx {
         common: &a.common,
         provider: &provider,
         api_key: &key,
         host: &host,
         strategy,
+        recorder,
     };
 
     let job = Job {
+        id: "solve".to_string(),
         repo: a.repo,
         targets: a.targets,
         keep_green: a.keep_green,
@@ -347,6 +412,7 @@ fn run_batch(a: BatchArgs) -> anyhow::Result<()> {
         api_key: &key,
         host: &host,
         strategy,
+        recorder: a.common.make_recorder()?,
     };
     let mut attribution = Attribution::new();
     let mut timings = pirs_bench::Timings::new();
@@ -361,6 +427,7 @@ fn run_batch(a: BatchArgs) -> anyhow::Result<()> {
         let id = inst.id.clone();
 
         let job = Job {
+            id: id.clone(),
             repo: inst.repo,
             targets: inst.targets,
             keep_green: inst.keep_green,
@@ -406,7 +473,8 @@ fn run_selftest(a: SelftestArgs) -> anyhow::Result<u8> {
         selftest::Mode::Oracle
     };
 
-    let report = selftest::run_selftest(&a.dir, a.count, &mode)?;
+    let recorder = a.common.make_recorder()?;
+    let report = selftest::run_selftest(&a.dir, a.count, &mode, recorder.as_ref())?;
     println!("{}", report.attribution.report());
     if !report.usage.is_empty() {
         println!("{}", report.usage.report());
