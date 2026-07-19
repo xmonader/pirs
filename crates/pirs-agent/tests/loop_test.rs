@@ -407,7 +407,10 @@ impl AgentTool for SpanTool {
     }
 }
 
-fn spans_overlap(a: &(String, std::time::Instant, std::time::Instant), b: &(String, std::time::Instant, std::time::Instant)) -> bool {
+fn spans_overlap(
+    a: &(String, std::time::Instant, std::time::Instant),
+    b: &(String, std::time::Instant, std::time::Instant),
+) -> bool {
     a.1 < b.2 && b.1 < a.2
 }
 

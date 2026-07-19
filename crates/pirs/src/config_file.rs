@@ -58,7 +58,10 @@ pub fn load_layer(path: &Path) -> FileConfig {
     match toml::from_str(&text) {
         Ok(cfg) => cfg,
         Err(e) => {
-            eprintln!("[warning: {} is malformed, ignoring it: {e}]", path.display());
+            eprintln!(
+                "[warning: {} is malformed, ignoring it: {e}]",
+                path.display()
+            );
             FileConfig::default()
         }
     }
@@ -187,11 +190,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir_all(root.join(".pirs")).unwrap();
-        std::fs::write(
-            root.join(".pirs").join("config.toml"),
-            "model = \"far\"\n",
-        )
-        .unwrap();
+        std::fs::write(root.join(".pirs").join("config.toml"), "model = \"far\"\n").unwrap();
         let nested = root.join("nested");
         std::fs::create_dir_all(nested.join(".pirs")).unwrap();
         std::fs::write(

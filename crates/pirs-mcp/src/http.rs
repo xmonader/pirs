@@ -264,7 +264,8 @@ async fn drain_response_into_pending(
                                     .to_string();
                                 let _ = tx.send(Err(msg));
                             } else {
-                                let _ = tx.send(Ok(v.get("result").cloned().unwrap_or(Value::Null)));
+                                let _ =
+                                    tx.send(Ok(v.get("result").cloned().unwrap_or(Value::Null)));
                             }
                         }
                     }
@@ -637,9 +638,20 @@ mod tests {
         assert_eq!(reconnect_backoff(1), Duration::from_millis(1000));
         assert_eq!(reconnect_backoff(2), Duration::from_millis(2000));
         assert_eq!(reconnect_backoff(3), Duration::from_millis(4000));
-        assert_eq!(reconnect_backoff(6), Duration::from_secs(32).min(RECONNECT_MAX));
-        assert_eq!(reconnect_backoff(6), RECONNECT_MAX, "must cap at 30s, not keep doubling");
-        assert_eq!(reconnect_backoff(50), RECONNECT_MAX, "must never overflow for a long-flapping connection");
+        assert_eq!(
+            reconnect_backoff(6),
+            Duration::from_secs(32).min(RECONNECT_MAX)
+        );
+        assert_eq!(
+            reconnect_backoff(6),
+            RECONNECT_MAX,
+            "must cap at 30s, not keep doubling"
+        );
+        assert_eq!(
+            reconnect_backoff(50),
+            RECONNECT_MAX,
+            "must never overflow for a long-flapping connection"
+        );
     }
 
     #[test]

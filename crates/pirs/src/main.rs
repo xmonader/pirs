@@ -342,8 +342,7 @@ async fn main() -> anyhow::Result<()> {
     // that distinction is what lets project/user config.toml layers fill in
     // underneath CLI/env without ever overriding something the user set.
     let matches = Cli::command().get_matches();
-    let mut cli =
-        Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    let mut cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
     // Flatten trailing args into the single prompt string the rest of main
     // (and the pseudo-subcommands) expect.
     let cli = Cli {

@@ -370,9 +370,7 @@ fn telemetry_records_metadata_but_never_content() {
             timestamp: 0,
         }),
     });
-    listener(pirs_agent::AgentEvent::AgentEnd {
-        messages: vec![],
-    });
+    listener(pirs_agent::AgentEvent::AgentEnd { messages: vec![] });
 
     let errs = host.drain_hook_errors();
     assert!(errs.is_empty(), "hook errors: {errs:?}");
