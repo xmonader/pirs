@@ -89,8 +89,14 @@ impl AgentTool for EditTool {
             }
         }
 
+        // Apply from the highest byte offset down so each replacement leaves
+        // earlier offsets valid. Must iterate in sorted position order (`order`),
+        // NOT input order reversed — edits supplied later-position-first would
+        // otherwise apply at stale offsets and corrupt the file (or panic).
         let mut edited = body.clone();
-        for &(start, end, ref new) in spans.iter().rev() {
+        for &i in order.iter().rev() {
+            let (start, end, new) = &spans[i];
+            let (start, end) = (*start, *end);
             let mut replacement = new.clone();
             if end > start && body[..end].ends_with('\n') && !replacement.ends_with('\n') {
                 replacement.push('\n');
@@ -299,5 +305,33 @@ mod tests {
             h.await.unwrap().unwrap();
         }
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "A\nB\nC\nD\n");
+    }
+
+    #[tokio::test]
+    async fn multi_edit_applies_regardless_of_input_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("f.txt");
+        std::fs::write(&path, "first\nsecond\nthird\n").unwrap();
+        let tool = EditTool::new(dir.path().to_path_buf());
+        // Edits supplied later-position-first: with the old bug this applied at
+        // stale offsets (panic or wrong bytes). Both must land correctly.
+        tool.execute(pirs_agent::ToolExecContext {
+            tool_call_id: "t".into(),
+            args: serde_json::json!({
+                "path": "f.txt",
+                "edits": [
+                    {"oldText": "third", "newText": "THIRD"},
+                    {"oldText": "first", "newText": "FIRST"}
+                ]
+            }),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            on_update: None,
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "FIRST\nsecond\nTHIRD\n"
+        );
     }
 }
