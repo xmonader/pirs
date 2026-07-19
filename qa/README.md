@@ -88,6 +88,7 @@ to lexical+graph if the service is down or the index is empty.
 | 13 | `semantic_search` (embedding-only, superseded) | `live/13-semantic-search.log` | Historical: the original embedding-only tool on `all-minilm` returned plausible-but-wrong hits (`diff`/`not_found_error`) for a staleness query — the weakness that motivated the hybrid. |
 | 14 | `code_search` hybrid (BM25+embeddings+graph) | `live/14-code-search-hybrid.log` | On the pirs repo, `all-minilm` embedded **all 2124 symbols**; the tool reports `[lexical+semantic+graph]`. **Same query as #13** now ranks the real incremental-refresh/staleness symbol #1. An exact-identifier query returns `store_embeddings`/`ensure_model`/model-guard test as ranks 1-3 — BM25's exact-term strength that cosine alone lacked. |
 | 15 | Background indexer + nomic quality | `live/15-background-index-and-nomic.log` | An idle `repl` built the full **2137-symbol** `nomic-embed-text` index in the background (64→2137 in ~7 min) while staying responsive; count persisted across a kill. **Honest finding:** nomic-embed-text is *not* meaningfully better than all-minilm on these queries — both are general models; the steering query still misses `steer`. Confirms a code-specific embedder is the real quality lever. |
+| 16 | Code-specific embedder proven the lever | `live/16-code-embedder-vs-general.log` | Isolating the semantic arm (pure cosine, no BM25, on queries with zero lexical overlap): three **general** models (all-minilm, nomic, OpenAI text-embedding-3-small) all miss `steer`; **`codestral-embed`** (code-trained) ranks `steer` + both steering tests top-6, and at 4000-char chunks puts the real `refresh` function #1. Earlier "all embedders look alike" was a BM25-domination artifact. Cost: ~$0.04 to index the whole repo. |
 
 Correctness/robustness is also test-pinned:
 - `crates/pirs-graph/tests/bg_index_test.rs` — the background indexer fills the
@@ -109,15 +110,22 @@ Correctness/robustness is also test-pinned:
   A second test asserts the tool still returns BM25 results when the embedding
   service is dead (graceful lexical+graph fallback).
 
-**Honest quality note.** The hybrid closes most of the gap the embedding-only
-tool had on `all-minilm`: BM25 anchors exact terms and identifiers, so a weak
-general embedding model no longer sinks a query. We then *tested* a bigger
-general model (`nomic-embed-text`, 768-dim) end to end (#15) — it was **not**
-meaningfully better; both are general text models and both miss domain-term
-concepts (a "steer the running turn" query surfaces `run_turn`, never `steer`).
-The real quality lever is a **code-specific** embedder (nomic-embed-code,
-jina-code, voyage-code-3), exposed via `--embed-model`; the background indexer
-and service client are ready to consume one. Not a wiring gap — a model choice.
+**Quality lever — settled (#16).** BM25 anchors exact terms so a weak embedder
+never sinks a query, but the *semantic* arm's quality is entirely the model's.
+Three **general** models (all-minilm, nomic-embed-text, OpenAI
+text-embedding-3-small) all fail domain-concept queries — none maps "inject an
+instruction mid-flight" to `steer`. A **code-trained** model, `codestral-embed`,
+nails it (isolated-semantic proof in #16), and fuller chunks (`--embed-max-chars
+4000`, within its 8K window) push the real target function to rank #1. So for
+meaningful semantic code search, use a code embedder:
+
+    --semantic --embed-base-url https://openrouter.ai/api/v1 \
+    --embed-model mistralai/codestral-embed-2505 --embed-api-key <key> \
+    --embed-max-chars 4000
+
+It's a one-time ~$0.04 to index this repo; the background indexer and OpenAI-
+compatible client already consume it. Not a wiring gap — a model choice. (Cloud
+embeddings send code off-machine: fine for a public repo, weigh for private.)
 
 ## Discovery
 

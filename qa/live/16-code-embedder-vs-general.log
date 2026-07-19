@@ -1,0 +1,82 @@
+Code-specific vs general embedders — the semantic quality lever, proven
+========================================================================
+
+Question: does a CODE-TRAINED embedding model beat general text embedders for
+code search? Earlier fused [lexical+semantic+graph] runs were inconclusive
+because BM25 dominates any query that shares words with symbol names. To judge
+the EMBEDDER alone, this test isolates the semantic arm: embed the query, cosine
+over the stored vectors, NO BM25, NO graph. Queries are phrased with ZERO
+lexical overlap with the target code, so BM25 could not have helped anyway.
+
+Models compared (all via their /v1/embeddings endpoints; keys scrubbed):
+  - all-minilm            (general, local, 384-dim)
+  - nomic-embed-text      (general, local, 768-dim)
+  - openai/text-embedding-3-small (general, cloud, 1536-dim)
+  - mistralai/codestral-embed-2505 (CODE-trained, cloud, 1536-dim, 8K context)
+
+--------------------------------------------------------------------
+THE DISCRIMINATING QUERY (no word overlap with the steering code):
+  "inject a new instruction to redirect the assistant mid-flight without
+   restarting"   -> ground truth: steer / job_steer / agent.steer, agent_loop
+--------------------------------------------------------------------
+
+General models (fused view, all three): top hits were run_turn / run_agent_loop
+/ Agent — NEVER the steering mechanism. They cannot map the concept to the
+domain term "steer".
+
+Codestral (code model), PURE SEMANTIC, chunk=512:
+  0.617 append_thinking            (agent_loop.rs:445)   <- mid-run msg inject
+  0.613 replace_last               (agent_loop.rs:456)
+  0.604 append_delta_to_last       (agent_loop.rs:464)
+  0.603 continue_                  (agent.rs:272)
+  0.602 steer                      (agent.rs:235)        <- THE function
+  0.598 steering_message_injected_mid_run (loop_test.rs:269)
+
+Codestral, PURE SEMANTIC, chunk=4000 (fuller bodies, within its 8K window):
+  0.660 steering_message_injected_mid_run   (loop_test.rs:269)
+  0.646 on_steering_injects_message_mid_run (loop_hooks_test.rs:146)
+  0.617 append_thinking                     (agent_loop.rs:445)
+  0.613 replace_last                        (agent_loop.rs:456)
+  0.610 steering_queue_primitive_injects_mid_run (loop_test.rs:283)
+  0.604 append_delta_to_last                (agent_loop.rs:464)
+  -> top 5 are ALL steering / mid-run injection. Fuller context ranks the
+     steering tests even higher.
+
+Second concept query "detect that a file was modified so its cached parse must
+be rebuilt" (ground truth: refresh / reparse), Codestral pure semantic:
+  chunk=512:   RefreshStats #1, reparse_check #2, read_cached, parse_file
+  chunk=4000:  refresh (store.rs:108) #1  <- the ACTUAL function, top hit;
+               RefreshStats #2, reparse_check #3
+
+--------------------------------------------------------------------
+END TO END (the product, not an offline script): fused code_search with the
+Codestral index on the lexically-neutral steering query:
+  1. steering_queue_primitive_injects_mid_run (loop_test.rs:283)
+  2. steering_message_injected_mid_run         (loop_test.rs:269)
+  3. assistant                                 (compaction.rs:255)
+  4. steer                                     (agent.rs:235)  [10 callers]
+  -> top 4 are steering. The hybrid surfaces the right code when BM25 isn't
+     hijacking the query.
+
+--------------------------------------------------------------------
+VERDICT
+--------------------------------------------------------------------
+A code-specific embedder is the real semantic-quality lever — proven, not
+assumed. General models (any size, local or cloud) miss domain-concept queries;
+Codestral maps "inject an instruction mid-flight" -> `steer` effortlessly. The
+earlier "all embedders look the same" reading was a BM25-domination artifact in
+the fused view, exposed by isolating the semantic arm.
+
+Fuller chunks help (512 -> 4000 pushed the real target function to #1).
+
+Cost (OpenRouter): codestral-embed-2505 is $0.15 / 1M input tokens. A full
+2137-symbol index of pirs (~270K tokens) costs ~$0.04, one time; queries embed
+one short string (~10 tokens); re-index touches only changed files. Negligible.
+
+Wiring: zero code changes — the OpenAI-compatible embed client + background
+indexer already consume it:
+  --semantic --embed-base-url https://openrouter.ai/api/v1 \
+  --embed-model mistralai/codestral-embed-2505 --embed-api-key <key> \
+  --embed-max-chars 4000
+(Cloud embeddings mean code leaves the machine — a privacy/cost trade, fine for
+a public repo, weigh it for private code.)
