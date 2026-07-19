@@ -16,14 +16,26 @@ pub fn build_system_prompt(cwd: &Path, tools: &[Arc<dyn AgentTool>]) -> String {
         }
     }
 
+    let has_code_search = tools.iter().any(|t| t.name() == "code_search");
+
     prompt.push_str(
         "\nGuidelines:\n\
         - Be concise and direct.\n\
         - Show file paths when referencing code.\n\
-        - Use read to inspect files, edit to make targeted changes, write for new files.\n\
-        - Use grep/find/ls to explore the codebase instead of guessing paths.\n\
-        - Use bash for builds, tests, and git operations.\n",
+        - Use read to inspect files, edit to make targeted changes, write for new files.\n",
     );
+    if has_code_search {
+        prompt.push_str(
+            "- To locate code, call code_search FIRST: one ranked call maps a symbol, \
+             error string, or plain-language description of behavior to the most \
+             relevant file:line hits. Read those hits directly. Only fall back to grep \
+             for literal strings in non-code files or to confirm an exact match — do \
+             not open a broad grep/read hunt when code_search would answer in one call.\n",
+        );
+    } else {
+        prompt.push_str("- Use grep/find/ls to explore the codebase instead of guessing paths.\n");
+    }
+    prompt.push_str("- Use bash for builds, tests, and git operations.\n");
 
     prompt.push_str(&format!("\nCurrent working directory: {}\n", cwd.display()));
     prompt

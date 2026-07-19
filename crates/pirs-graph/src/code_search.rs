@@ -245,7 +245,11 @@ impl AgentTool for CodeSearchTool {
     }
 
     fn prompt_snippet(&self) -> Option<&str> {
-        Some("code_search: hybrid keyword+meaning search over the code graph; read the file:line hits")
+        Some(
+            "code_search: your FIRST stop to find where code lives — one call ranks the \
+             most relevant symbols as file:line for a symbol, error string, or \
+             natural-language description of behavior. Use it before grep/read hunts.",
+        )
     }
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
