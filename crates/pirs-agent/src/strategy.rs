@@ -36,6 +36,10 @@ pub struct Phase {
     /// empty on the first attempt).
     pub prompt: String,
     pub scope: ToolScope,
+    /// Model override for this phase. `None` uses the run's default model. This is
+    /// the "Oracle" lever: run e.g. the critic phase on a stronger reasoning model
+    /// than the executor — a *different* model for the second opinion.
+    pub model: Option<String>,
 }
 
 /// A named, ordered sequence of phases.
@@ -74,6 +78,7 @@ pub trait PhaseDriver {
         prompt: &str,
         scope: ToolScope,
         fresh: bool,
+        model: Option<&str>,
     ) -> anyhow::Result<String>;
 }
 
@@ -126,7 +131,14 @@ pub fn run_strategy(
         // Persistent strategies continue their context across attempts; split
         // strategies always start each phase clean.
         let fresh = !strategy.persist_across_attempts;
-        prev = driver.run_phase(&phase_id, &phase.system, &prompt, phase.scope, fresh)?;
+        prev = driver.run_phase(
+            &phase_id,
+            &phase.system,
+            &prompt,
+            phase.scope,
+            fresh,
+            phase.model.as_deref(),
+        )?;
     }
     Ok(())
 }
@@ -223,17 +235,23 @@ const CRITIC_PROMPT: &str = "\
 
 Review and output the final plan to execute.";
 
+/// A phase on the run's default model.
+fn phase(system: &str, prompt: &str, scope: ToolScope) -> Phase {
+    Phase {
+        system: system.into(),
+        prompt: prompt.into(),
+        scope,
+        model: None,
+    }
+}
+
 impl Strategy {
     /// One self-correcting loop in a persistent context. The baseline.
     pub fn monolithic() -> Self {
         Strategy {
             name: "monolithic".into(),
             persist_across_attempts: true,
-            phases: vec![Phase {
-                system: MONO_SYSTEM.into(),
-                prompt: MONO_PROMPT.into(),
-                scope: ToolScope::Full,
-            }],
+            phases: vec![phase(MONO_SYSTEM, MONO_PROMPT, ToolScope::Full)],
         }
     }
 
@@ -243,16 +261,8 @@ impl Strategy {
             name: "plan-exec".into(),
             persist_across_attempts: false,
             phases: vec![
-                Phase {
-                    system: PLAN_SYSTEM.into(),
-                    prompt: PLAN_PROMPT.into(),
-                    scope: ToolScope::ReadOnly,
-                },
-                Phase {
-                    system: EXEC_SYSTEM.into(),
-                    prompt: EXEC_PROMPT.into(),
-                    scope: ToolScope::Full,
-                },
+                phase(PLAN_SYSTEM, PLAN_PROMPT, ToolScope::ReadOnly),
+                phase(EXEC_SYSTEM, EXEC_PROMPT, ToolScope::Full),
             ],
         }
     }
@@ -263,21 +273,26 @@ impl Strategy {
             name: "plan-critic-exec".into(),
             persist_across_attempts: false,
             phases: vec![
-                Phase {
-                    system: PLAN_SYSTEM.into(),
-                    prompt: PLAN_PROMPT.into(),
-                    scope: ToolScope::ReadOnly,
-                },
-                Phase {
-                    system: CRITIC_SYSTEM.into(),
-                    prompt: CRITIC_PROMPT.into(),
-                    scope: ToolScope::ReadOnly,
-                },
-                Phase {
-                    system: EXEC_SYSTEM.into(),
-                    prompt: EXEC_PROMPT.into(),
-                    scope: ToolScope::Full,
-                },
+                phase(PLAN_SYSTEM, PLAN_PROMPT, ToolScope::ReadOnly),
+                phase(CRITIC_SYSTEM, CRITIC_PROMPT, ToolScope::ReadOnly),
+                phase(EXEC_SYSTEM, EXEC_PROMPT, ToolScope::Full),
+            ],
+        }
+    }
+
+    /// Plan → **Oracle critic on a different model** → execute. The Amp pattern:
+    /// the second opinion comes from a stronger/other model than the executor.
+    /// `oracle_model` runs only the critic phase; the rest use the run default.
+    pub fn plan_oracle_exec(oracle_model: &str) -> Self {
+        let mut critic = phase(CRITIC_SYSTEM, CRITIC_PROMPT, ToolScope::ReadOnly);
+        critic.model = Some(oracle_model.to_string());
+        Strategy {
+            name: "plan-oracle-exec".into(),
+            persist_across_attempts: false,
+            phases: vec![
+                phase(PLAN_SYSTEM, PLAN_PROMPT, ToolScope::ReadOnly),
+                critic,
+                phase(EXEC_SYSTEM, EXEC_PROMPT, ToolScope::Full),
             ],
         }
     }
@@ -301,7 +316,7 @@ mod tests {
     /// next phase's `{prev}` can be checked.
     #[derive(Default)]
     struct RecordingDriver {
-        calls: Vec<(String, ToolScope, bool, String)>,
+        calls: Vec<(String, ToolScope, bool, String, Option<String>)>,
     }
     impl PhaseDriver for RecordingDriver {
         fn run_phase(
@@ -311,9 +326,15 @@ mod tests {
             prompt: &str,
             scope: ToolScope,
             fresh: bool,
+            model: Option<&str>,
         ) -> anyhow::Result<String> {
-            self.calls
-                .push((phase_id.to_string(), scope, fresh, prompt.to_string()));
+            self.calls.push((
+                phase_id.to_string(),
+                scope,
+                fresh,
+                prompt.to_string(),
+                model.map(str::to_string),
+            ));
             // Return a phase-specific marker to trace it into the next {prev}.
             Ok(format!("OUTPUT_OF[{phase_id}]"))
         }
@@ -349,7 +370,7 @@ mod tests {
         let mut d = RecordingDriver::default();
         run_strategy(&Strategy::monolithic(), &mut d, &task()).unwrap();
         assert_eq!(d.calls.len(), 1);
-        let (id, scope, fresh, prompt) = &d.calls[0];
+        let (id, scope, fresh, prompt, _model) = &d.calls[0];
         assert_eq!(id, "monolithic#0");
         assert_eq!(*scope, ToolScope::Full);
         assert!(!*fresh, "monolithic persists context across attempts");
@@ -388,5 +409,16 @@ mod tests {
     fn builtin_lookup_matches_names_and_rejects_unknown() {
         assert_eq!(Strategy::builtin("plan-exec").unwrap().phases.len(), 2);
         assert!(Strategy::builtin("nope").is_none());
+    }
+
+    #[test]
+    fn oracle_runs_the_critic_phase_on_a_different_model() {
+        let mut d = RecordingDriver::default();
+        run_strategy(&Strategy::plan_oracle_exec("strong-model"), &mut d, &task()).unwrap();
+        assert_eq!(d.calls.len(), 3);
+        // Plan and exec use the default (None); only the critic overrides.
+        assert_eq!(d.calls[0].4, None);
+        assert_eq!(d.calls[1].4, Some("strong-model".to_string()));
+        assert_eq!(d.calls[2].4, None);
     }
 }

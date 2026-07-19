@@ -89,10 +89,13 @@ fn strategy_from_dynamic(value: Dynamic, default_name: &str) -> anyhow::Result<S
             "full" => ToolScope::Full,
             other => bail!("phase {i} has unknown scope {other:?} (use \"readonly\" or \"full\")"),
         };
+        // Optional per-phase model override — the Oracle lever.
+        let model = get_str(&pm, "model");
         phases.push(Phase {
             system,
             prompt,
             scope,
+            model,
         });
     }
 
@@ -134,6 +137,22 @@ mod tests {
         let s = load_strategy_str(src, "fallback").unwrap();
         assert_eq!(s.name, "fallback");
         assert_eq!(s.phases[0].scope, ToolScope::Full);
+        assert_eq!(s.phases[0].model, None);
+    }
+
+    #[test]
+    fn per_phase_model_defines_an_oracle() {
+        let src = r#"
+            #{ phases: [
+                #{ system: "plan", prompt: "p", scope: "readonly" },
+                #{ system: "critic", prompt: "c {prev}", scope: "readonly", model: "deepseek-v4-pro" },
+                #{ system: "exec", prompt: "e {prev}", scope: "full" },
+            ] }
+        "#;
+        let s = load_strategy_str(src, "x").unwrap();
+        assert_eq!(s.phases[0].model, None);
+        assert_eq!(s.phases[1].model, Some("deepseek-v4-pro".to_string()));
+        assert_eq!(s.phases[2].model, None);
     }
 
     #[test]

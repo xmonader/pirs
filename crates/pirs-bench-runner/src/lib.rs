@@ -328,6 +328,7 @@ impl PhaseDriver for AgentExecutor {
         prompt: &str,
         scope: ToolScope,
         fresh: bool,
+        model: Option<&str>,
     ) -> anyhow::Result<String> {
         // A fresh phase, or one never seen, starts from a clean context holding
         // only its system prompt — the plan/execute split's core mechanic.
@@ -342,6 +343,9 @@ impl PhaseDriver for AgentExecutor {
             );
         }
 
+        // The phase may override the run's default model — the Oracle lever.
+        let phase_model = model.unwrap_or(&self.model).to_string();
+
         if let Some(r) = &self.recorder {
             r.event(
                 "phase.start",
@@ -350,13 +354,14 @@ impl PhaseDriver for AgentExecutor {
                     "attempt": self.attempt_no,
                     "scope": format!("{scope:?}"),
                     "fresh": fresh,
-                    "model": self.model,
+                    "model": phase_model,
                     "prompt": prompt,
                 }),
             );
         }
 
-        let cfg = self.loop_config();
+        let mut cfg = self.loop_config();
+        cfg.model = phase_model;
         let tools: &[Arc<dyn AgentTool>] = match scope {
             ToolScope::ReadOnly => &self.planner_tools,
             ToolScope::Full => &self.tools,
