@@ -314,10 +314,22 @@ Prior: `BaselineUnusable` + `EnvSetup` dominate early and are under-anticipated.
   *Remaining:* LSP-based localization as a second signal alongside the graph.
 - **Capstone — end-to-end harness. ✅ DONE + PROVEN.** `run_instance` composes
   discover → bootstrap → runner → cached baseline → reproduce → fix/verify, each
-  failure mapped to a typed `FailBucket`. A real pytest e2e (`tests/e2e_pytest`)
-  fixes a real bug via a real file edit through the whole pipeline, and asserts an
-  unpatched bug is never a false pass. Fixed en route: `python3`-only interpreter
+  failure mapped to a typed `FailBucket`, returning an `InstanceReport {outcome,
+  patch}`. Git workspace: patch extraction on accept, pristine rollback on
+  failure. A real pytest e2e (`tests/e2e_pytest`) fixes a real bug via a real file
+  edit through the whole pipeline, extracts the patch, and asserts an unpatched
+  bug is never a false pass. Fixed en route: `python3`-only interpreter
   resolution; per-framework `test_join` (Go `-run` regex alternation).
+- **Agent integration + CLI. ✅ DONE (`crates/pirs-bench-runner`).** The real
+  pirs coding agent is the injected `Executor`: `AgentExecutor` drives
+  `run_agent_loop` with the base + code-graph tools and **no `ExtensionHost`**, so
+  the task repo's own `.pirs`/hooks/MCP never load — bench isolation is
+  structural. Cumulative `Context` across attempts; gate verdict fed back as the
+  retry prompt; tree-change detection decides whether a candidate exists. `pirs-bench`
+  binary: `solve` (one instance, prints/writes the patch) and `batch` (JSONL
+  dataset → per-instance patches + attribution histogram). *Remaining to run a
+  real SWE-bench split:* a dataset fetch/checkout step (the CLI assumes repos are
+  pre-checked-out at their base commit) and live A/B of the M6 planner/steerer.
 - **M6 — Strong-model planner/steerer. ✅ DONE (Rhai policy pending).**
   `ModelOracle` (`ask_model`) trait; `plan_next` returns a `PlanDecision` that is
   hard-validated to a reorder/filter of the real candidate set (invented paths
