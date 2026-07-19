@@ -5,6 +5,8 @@
 //! orchestration policy live in Rhai scripts layered on top. See
 //! `PIRS-BENCH-PLAN.md` for the full design.
 
+pub mod baseline;
+pub mod bootstrap;
 pub mod command;
 pub mod detect;
 pub mod gate;
@@ -15,6 +17,8 @@ pub mod report;
 pub mod run;
 pub mod types;
 
+pub use baseline::{capture_stable, targets_reproduce};
+pub use bootstrap::{bootstrap, Bootstrap};
 pub use command::CommandRunner;
 pub use detect::{discover, DetectorHost, Discovery};
 pub use gate::{evaluate, Verdict};
