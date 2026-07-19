@@ -412,7 +412,7 @@ async fn main() -> anyhow::Result<()> {
             if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
                 anyhow::bail!("refusing to install without confirmation (pass --yes)");
             }
-            eprint!("install into ~/.pirs/extensions? [y/N] ");
+            eprint!("install into ~/.pirs/packs? [y/N] ");
             let mut line = String::new();
             std::io::stdin().read_line(&mut line)?;
             if !matches!(line.trim(), "y" | "yes" | "Y") {
@@ -420,11 +420,20 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         let home = std::env::var("HOME").context("HOME not set")?;
-        let dest = std::path::Path::new(&home).join(".pirs").join("extensions");
+        // Installed packs go to ~/.pirs/packs, which is trust-gated (hash-bound)
+        // on load — NOT ~/.pirs/extensions, which is auto-run. So remote code
+        // can't execute just by landing on disk: the first run prompts (showing
+        // caps) and a later tamper/pull re-prompts. --yes skips the *install*
+        // confirmation only, never the load-time trust decision.
+        let dest = std::path::Path::new(&home).join(".pirs").join("packs");
         let installed = pack::install_scripts(&scripts, &dest, force)?;
         for p in &installed {
             println!("installed {}", p.display());
         }
+        println!(
+            "note: installed packs are trust-gated; the next `pirs` run will \
+             ask to trust ~/.pirs/packs before loading them."
+        );
         return Ok(());
     }
     if let Some(spec) = cli

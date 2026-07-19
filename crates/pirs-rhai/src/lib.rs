@@ -389,6 +389,21 @@ impl ExtensionHost {
             if !dirs.contains(&global) {
                 dirs.push(global);
             }
+            // Packs installed via `pirs pack install` land here. Unlike the
+            // hand-curated extensions dir, this holds remote code, so it is
+            // trust-gated (hash-bound) exactly like a project dir — it never
+            // auto-runs just because a file was written to it.
+            let packs = Path::new(&home).join(".pirs").join("packs");
+            if packs.exists() && !dirs.contains(&packs) {
+                match trust_decider(&packs) {
+                    TrustDecision::Allow => dirs.push(packs),
+                    TrustDecision::Deny => self.load_errors.push(format!(
+                        "{}: skipped (untrusted installed packs)",
+                        packs.display()
+                    )),
+                    TrustDecision::Skip => {}
+                }
+            }
         }
         for dir in dirs {
             let Ok(read) = std::fs::read_dir(&dir) else {

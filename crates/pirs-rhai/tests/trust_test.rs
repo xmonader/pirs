@@ -51,6 +51,47 @@ fn home_dir_extensions_always_trusted() {
 }
 
 #[test]
+fn installed_packs_dir_is_trust_gated() {
+    let _g = ENV_LOCK.lock().unwrap();
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tmp.path().join("home");
+    let packs = home.join(".pirs/packs");
+    std::fs::create_dir_all(&packs).unwrap();
+    std::fs::write(
+        packs.join("remote.rhai"),
+        "register_tool(\"z\", \"z\", #{ type: \"object\" }); fn tool_z(args) { \"z\" }",
+    )
+    .unwrap();
+    let prev_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", &home);
+
+    let proj = tmp.path().join("proj"); // no project extensions
+    std::fs::create_dir_all(&proj).unwrap();
+
+    // Denied: an installed pack must NOT run just because it's on disk —
+    // unlike the hand-curated ~/.pirs/extensions dir, this one is gated.
+    let mut h1 = ExtensionHost::new();
+    h1.load_default_dirs_with_trust(&proj, &mut |_| TrustDecision::Deny);
+    let h1 = std::sync::Arc::new(h1);
+    assert!(
+        h1.tools().is_empty(),
+        "untrusted installed pack must not load"
+    );
+    assert!(h1.load_errors.iter().any(|e| e.contains("installed packs")));
+
+    // Allowed: loads.
+    let mut h2 = ExtensionHost::new();
+    h2.load_default_dirs_with_trust(&proj, &mut |_| TrustDecision::Allow);
+    let h2 = std::sync::Arc::new(h2);
+    assert_eq!(h2.tools().len(), 1, "trusted installed pack loads");
+
+    match prev_home {
+        Some(h) => std::env::set_var("HOME", h),
+        None => std::env::remove_var("HOME"),
+    }
+}
+
+#[test]
 fn trust_directory_roundtrips_through_load() {
     let _g = ENV_LOCK.lock().unwrap();
     let tmp = tempfile::tempdir().unwrap();
