@@ -64,12 +64,12 @@ pub fn resolve_strategy_in(arg: &str, roots: &[PathBuf]) -> Result<Strategy> {
     if let Some(path) = find_named(roots, "strategies", arg) {
         return load_strategy_file(&path);
     }
-    if let Some(strategy) = Strategy::builtin(arg) {
+    if let Some(strategy) = crate::builtins::builtin(arg) {
         return Ok(strategy);
     }
     bail!(
         "unknown strategy {arg:?}: not a built-in ({}) and no {arg}.rhai found under {}",
-        Strategy::builtin_names().join(", "),
+        crate::builtins::builtin_names().join(", "),
         roots_display(roots, "strategies"),
     )
 }

@@ -71,7 +71,7 @@ fn strategy_field(map: &Map, default_name: &str) -> anyhow::Result<Strategy> {
         .ok_or_else(|| anyhow!("profile is missing a `strategy` (a built-in name or a map)"))?;
 
     if let Some(name) = dyn_val.clone().into_string().ok().filter(|s| !s.is_empty()) {
-        return Strategy::builtin(&name)
+        return crate::builtins::builtin(&name)
             .ok_or_else(|| anyhow!("unknown built-in strategy {name:?}"));
     }
     let sm = dyn_val
