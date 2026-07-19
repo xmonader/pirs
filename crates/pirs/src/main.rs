@@ -622,7 +622,9 @@ async fn main() -> anyhow::Result<()> {
                 let cwd2 = cwd.clone();
                 let f: pirs_agent::events::AfterToolCallHook =
                     std::sync::Arc::new(move |_id, name, result| {
-                        if (name != "edit" && name != "write") || result.is_error {
+                        if (name != "edit" && name != "write" && name != "ast_edit")
+                            || result.is_error
+                        {
                             return None;
                         }
                         let path = result
@@ -660,6 +662,12 @@ async fn main() -> anyhow::Result<()> {
                                 ));
                             }
                         }
+                        // Mark the index stale on EVERY edit — before any early
+                        // return — so the next graph query rebuilds against the
+                        // edited tree. (Previously this ran only when notes were
+                        // non-empty and was skipped entirely when a rhai after-
+                        // hook returned Some, freezing the graph.)
+                        g.invalidate();
                         if notes.is_empty() {
                             return None;
                         }
@@ -674,18 +682,21 @@ async fn main() -> anyhow::Result<()> {
                             total_callers,
                             notes.join(", ")
                         )));
-                        let patch = Some(pirs_agent::ToolResultPatch {
+                        Some(pirs_agent::ToolResultPatch {
                             content: Some(content),
                             ..Default::default()
-                        });
-                        g.invalidate();
-                        patch
+                        })
                     });
                 f
             });
             hooks.after_tool_call = match (rhai_after, graph_after) {
+                // Always run the graph hook (for its invalidation side-effect),
+                // then prefer the rhai patch, falling back to the blast-radius
+                // note. Running graph_after unconditionally is what keeps the
+                // index fresh when an extension's after-hook returns Some.
                 (Some(r), Some(g)) => Some(std::sync::Arc::new(move |id, name, result| {
-                    r(id, name, result).or_else(|| g(id, name, result))
+                    let graph_patch = g(id, name, result);
+                    r(id, name, result).or(graph_patch)
                 })),
                 (a, b) => a.or(b),
             };

@@ -20,39 +20,41 @@ fn load_pack() -> Arc<ExtensionHost> {
     Arc::new(host)
 }
 
+fn plan(host: &Arc<ExtensionHost>, path: &str) -> rhai::Map {
+    let arg = rhai::Dynamic::from(path.to_string());
+    host.call_extension_for_test(0, "impact_plan", (arg,))
+        .unwrap()
+        .cast::<rhai::Map>()
+}
+
 #[test]
-fn impact_gate_records_command_and_extracts_path() {
+fn impact_plan_scopes_to_graph_tests() {
     let host = load_pack();
-    let hooks = host.hooks();
-    let after = hooks.after_tool_call.expect("after hook");
-
-    // write tool: path parsed from result text ("... to <path>").
-    let wr = pirs_ai::ToolResultMessage {
-        tool_call_id: "1".into(),
-        tool_name: "write".into(),
-        content: vec![pirs_ai::ContentBlock::text(
-            "Successfully wrote 42 bytes to src/lib.rs",
-        )],
-        details: None,
-        is_error: false,
-        terminate: false,
-        timestamp: 0,
-    };
-    let patch = after("1", "write", &wr);
-    // Not dry_run: the pack actually ran cargo. We only assert it produced a
-    // verdict patch referencing the impacted tests command.
-    let text = patch
-        .and_then(|p| p.content)
-        .and_then(|c| c[0].as_text().map(|s| s.to_string()))
-        .unwrap_or_default();
+    let m = plan(&host, "src/lib.rs");
+    let cmd = m.get("cmd").unwrap().clone().cast::<String>();
+    assert!(m.get("scoped").unwrap().as_bool().unwrap());
     assert!(
-        text.contains("cargo test -- test_parse_config test_helper")
-            || text.contains("cargo test -- test_helper test_parse_config"),
-        "{text}"
+        cmd.contains("cargo test -- test_parse_config test_helper")
+            || cmd.contains("cargo test -- test_helper test_parse_config"),
+        "{cmd}"
     );
-    assert!(text.contains("[impact"), "{text}");
+}
 
-    // Non-edit tool: ignored (no patch).
+#[test]
+fn impact_plan_fails_open_to_full_suite_when_no_tests() {
+    // The graph finds no tests reaching src/other.rs. The gate must run the
+    // FULL suite (fail open), not silently skip — the old behavior returned
+    // nothing here, letting an unverified edit look green.
+    let host = load_pack();
+    let m = plan(&host, "src/other.rs");
+    assert!(!m.get("scoped").unwrap().as_bool().unwrap());
+    assert_eq!(m.get("cmd").unwrap().clone().cast::<String>(), "cargo test");
+}
+
+#[test]
+fn non_edit_and_error_results_are_ignored() {
+    let host = load_pack();
+    let after = host.hooks().after_tool_call.expect("after hook");
     let other = pirs_ai::ToolResultMessage {
         tool_call_id: "2".into(),
         tool_name: "bash".into(),
@@ -63,18 +65,4 @@ fn impact_gate_records_command_and_extracts_path() {
         timestamp: 0,
     };
     assert!(after("2", "bash", &other).is_none());
-
-    // Edit of a file with no impacted tests: no patch.
-    let none = pirs_ai::ToolResultMessage {
-        tool_call_id: "3".into(),
-        tool_name: "edit".into(),
-        content: vec![pirs_ai::ContentBlock::text(
-            "Successfully replaced 1 block(s) in src/other.rs",
-        )],
-        details: None,
-        is_error: false,
-        terminate: false,
-        timestamp: 0,
-    };
-    assert!(after("3", "edit", &none).is_none());
 }
