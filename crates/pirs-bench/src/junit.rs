@@ -7,7 +7,7 @@
 //! never produced as [`TestOutcome::NotCollected`], never as a pass.
 
 use quick_xml::events::Event;
-use quick_xml::Reader;
+use quick_xml::{Reader, XmlVersion};
 
 use crate::types::{Snapshot, TestId, TestOutcome};
 
@@ -37,8 +37,20 @@ pub fn parse(xml: &str) -> anyhow::Result<Vec<JunitCase>> {
         let (mut classname, mut name) = (String::new(), String::new());
         for attr in e.attributes().flatten() {
             match attr.key.as_ref() {
-                b"classname" => classname = attr.unescape_value().unwrap_or_default().into_owned(),
-                b"name" => name = attr.unescape_value().unwrap_or_default().into_owned(),
+                // JUnit XML is XML 1.0; normalize attribute values accordingly
+                // (replaces the deprecated `unescape_value`).
+                b"classname" => {
+                    classname = attr
+                        .normalized_value(XmlVersion::Implicit1_0)
+                        .unwrap_or_default()
+                        .into_owned()
+                }
+                b"name" => {
+                    name = attr
+                        .normalized_value(XmlVersion::Implicit1_0)
+                        .unwrap_or_default()
+                        .into_owned()
+                }
                 _ => {}
             }
         }
