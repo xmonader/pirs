@@ -118,6 +118,26 @@ struct Cli {
     #[arg(long)]
     persist_graph: bool,
 
+    /// Enable the semantic_search tool: natural-language code search via an
+    /// embedding service (implies --persist-graph for the vector store). Point
+    /// it at any OpenAI-compatible /v1/embeddings endpoint with the flags below.
+    #[arg(long)]
+    semantic: bool,
+
+    /// Embeddings endpoint base URL (OpenAI-compatible), e.g. Ollama's
+    /// http://localhost:11434/v1 [env: PIRS_EMBED_BASE_URL]
+    #[arg(long, env = "PIRS_EMBED_BASE_URL")]
+    embed_base_url: Option<String>,
+
+    /// Embedding model id [env: PIRS_EMBED_MODEL]
+    #[arg(long, env = "PIRS_EMBED_MODEL")]
+    embed_model: Option<String>,
+
+    /// API key for the embeddings endpoint (optional for local servers)
+    /// [env: PIRS_EMBED_API_KEY]
+    #[arg(long, env = "PIRS_EMBED_API_KEY")]
+    embed_api_key: Option<String>,
+
     /// Start with only core tools loaded; model loads more via use_tool
     #[arg(long)]
     tool_diet: bool,
@@ -560,13 +580,14 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // Semantic search needs the vector store, so it implies the persistent graph.
+    let graph_db = cwd.join(".pirs").join("graph.db");
     let graph: Option<std::sync::Arc<pirs_graph::LazyGraph>> = if cli.no_graph {
         None
-    } else if cli.persist_graph {
-        let db = cwd.join(".pirs").join("graph.db");
+    } else if cli.persist_graph || cli.semantic {
         Some(std::sync::Arc::new(pirs_graph::LazyGraph::persistent(
             cwd.clone(),
-            db,
+            graph_db.clone(),
         )))
     } else {
         Some(std::sync::Arc::new(pirs_graph::LazyGraph::new(cwd.clone())))
@@ -582,6 +603,34 @@ async fn main() -> anyhow::Result<()> {
         tools.push(ast_tool.clone());
         sub_tools.push(map_tool);
         sub_tools.push(ast_tool);
+
+        if cli.semantic {
+            match cli.embed_model.clone() {
+                Some(model) => {
+                    let base = cli
+                        .embed_base_url
+                        .clone()
+                        .unwrap_or_else(|| "http://localhost:11434/v1".to_string());
+                    let embedder =
+                        pirs_ai::EmbeddingClient::new(base, model, cli.embed_api_key.clone());
+                    let sem =
+                        std::sync::Arc::new(pirs_graph::semantic_search::SemanticSearchTool::new(
+                            std::sync::Arc::clone(g),
+                            cwd.clone(),
+                            graph_db.clone(),
+                            embedder,
+                        ));
+                    tools.push(sem.clone());
+                    sub_tools.push(sem);
+                }
+                None => {
+                    eprintln!(
+                        "warning: --semantic requires --embed-model (or PIRS_EMBED_MODEL); \
+                         semantic_search tool not loaded"
+                    );
+                }
+            }
+        }
     }
     {
         let manifests = [

@@ -1,6 +1,7 @@
 pub mod ast_edit;
 pub mod code_map;
 pub mod graph;
+pub mod semantic_search;
 pub mod store;
 
 pub use graph::{Graph, Lang, SymKind, Symbol};
