@@ -67,7 +67,13 @@ impl AgentTool for EditTool {
             std::fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
         let original = String::from_utf8_lossy(&raw).into_owned();
 
-        let (body, bom, crlf) = normalize_file(&original);
+        let Norm {
+            body,
+            without_bom,
+            bom,
+            crlf,
+            map,
+        } = normalize_file(&original);
         let mut spans: Vec<(usize, usize, String)> = Vec::new();
         for op in &args.edits {
             if op.old_text.is_empty() {
@@ -93,31 +99,45 @@ impl AgentTool for EditTool {
         // earlier offsets valid. Must iterate in sorted position order (`order`),
         // NOT input order reversed — edits supplied later-position-first would
         // otherwise apply at stale offsets and corrupt the file (or panic).
-        let mut edited = body.clone();
+        // Apply edits to the ORIGINAL bytes (via the offset map) rather than to
+        // the LF-normalized body, so untouched lines keep their exact original
+        // endings. New content inherits the line-ending style of the region it
+        // replaces (or the file's dominant style when the region has none), so a
+        // mixed-EOL file is not silently rewritten to a single style.
+        let mut edited_orig = without_bom.clone();
         for &i in order.iter().rev() {
-            let (start, end, new) = &spans[i];
-            let (start, end) = (*start, *end);
+            let (bstart, bend, new) = &spans[i];
+            let ostart = map[*bstart];
+            let oend = map[*bend];
+            let region = &without_bom[ostart..oend];
+            let use_crlf = region.contains("\r\n")
+                || (crlf && !region.contains('\n') && !region.contains('\r'));
             let mut replacement = new.clone();
-            if end > start && body[..end].ends_with('\n') && !replacement.ends_with('\n') {
+            if oend > ostart
+                && without_bom[..oend].ends_with('\n')
+                && !replacement.ends_with('\n')
+            {
                 replacement.push('\n');
             }
-            edited.replace_range(start..end, &replacement);
+            if use_crlf {
+                replacement = replacement.replace('\n', "\r\n");
+            }
+            edited_orig.replace_range(ostart..oend, &replacement);
         }
 
         let mut out = String::new();
         if bom {
             out.push('\u{feff}');
         }
-        if crlf {
-            out.push_str(&edited.replace('\n', "\r\n"));
-        } else {
-            out.push_str(&edited);
-        }
+        out.push_str(&edited_orig);
         std::fs::write(&path, out.as_bytes())
             .with_context(|| format!("failed to write {}", path.display()))?;
 
-        let first_changed = first_changed_line(&body, &edited);
-        let patch = unified_patch(&body, &edited, &args.path);
+        // Report the diff in LF terms so line-ending bytes never show up as
+        // spurious changes in the patch.
+        let edited_lf = edited_orig.replace("\r\n", "\n");
+        let first_changed = first_changed_line(&body, &edited_lf);
+        let patch = unified_patch(&body, &edited_lf, &args.path);
         Ok(ToolOutput::text(format!(
             "Successfully replaced {} block(s) in {}",
             spans.len(),
@@ -130,7 +150,21 @@ impl AgentTool for EditTool {
     }
 }
 
-fn normalize_file(content: &str) -> (String, bool, bool) {
+/// Result of normalizing a file for editing. `body` is LF-normalized so that
+/// `oldText`/`newText` (which use `\n`) match regardless of the file's line
+/// endings, while `without_bom` keeps the file's exact original bytes so edits
+/// can be written back without disturbing the line endings of untouched lines.
+/// `map[i]` is the byte offset in `without_bom` that body byte `i` came from
+/// (length `body.len() + 1`, with a trailing sentinel = `without_bom.len()`).
+struct Norm {
+    body: String,
+    without_bom: String,
+    bom: bool,
+    crlf: bool,
+    map: Vec<usize>,
+}
+
+fn normalize_file(content: &str) -> Norm {
     let bom = content.starts_with('\u{feff}');
     let without_bom = if bom { &content[3..] } else { content };
     let crlf = without_bom.contains("\r\n");
@@ -139,7 +173,31 @@ fn normalize_file(content: &str) -> (String, bool, bool) {
     } else {
         without_bom.to_string()
     };
-    (body, bom, crlf)
+
+    // Build the body→original offset map. Only `\r\n` is collapsed (to a single
+    // `\n`), so every body byte corresponds to one original byte except the
+    // `\n` of a former `\r\n`, which maps to the `\r`; the next entry then
+    // naturally points past the pair. Lone `\r` and `\n` pass through 1:1.
+    let ob = without_bom.as_bytes();
+    let mut map = Vec::with_capacity(body.len() + 1);
+    let mut oi = 0usize;
+    while oi < ob.len() {
+        map.push(oi);
+        if ob[oi] == b'\r' && ob.get(oi + 1) == Some(&b'\n') {
+            oi += 2;
+        } else {
+            oi += 1;
+        }
+    }
+    map.push(ob.len());
+
+    Norm {
+        body,
+        without_bom: without_bom.to_string(),
+        bom,
+        crlf,
+        map,
+    }
 }
 
 fn locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
@@ -272,10 +330,54 @@ mod tests {
 
     #[test]
     fn normalize_file_crlf() {
-        let (body, bom, crlf) = normalize_file("a\r\nb\r\n");
-        assert_eq!(body, "a\nb\n");
-        assert!(!bom);
-        assert!(crlf);
+        let n = normalize_file("a\r\nb\r\n");
+        assert_eq!(n.body, "a\nb\n");
+        assert!(!n.bom);
+        assert!(n.crlf);
+        // Map: each body byte points back to its original offset. "a\r\nb\r\n"
+        // -> body "a\nb\n"; body '\n' (idx 1) maps to the '\r' at orig idx 1.
+        assert_eq!(n.map, vec![0, 1, 3, 4, 6]);
+    }
+
+    async fn edit_file(dir: &std::path::Path, initial: &[u8], old: &str, new: &str) -> Vec<u8> {
+        let path = dir.join("f.txt");
+        std::fs::write(&path, initial).unwrap();
+        let tool = EditTool::new(dir.to_path_buf());
+        tool.execute(pirs_agent::ToolExecContext {
+            tool_call_id: "t".into(),
+            args: serde_json::json!({
+                "path": "f.txt",
+                "edits": [{"oldText": old, "newText": new}]
+            }),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            on_update: None,
+        })
+        .await
+        .unwrap();
+        std::fs::read(&path).unwrap()
+    }
+
+    #[tokio::test]
+    async fn crlf_file_keeps_crlf() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = edit_file(dir.path(), b"a\r\nb\r\nc\r\n", "b", "X").await;
+        assert_eq!(out, b"a\r\nX\r\nc\r\n");
+    }
+
+    #[tokio::test]
+    async fn lf_file_keeps_lf() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = edit_file(dir.path(), b"a\nb\nc\n", "b", "X").await;
+        assert_eq!(out, b"a\nX\nc\n");
+    }
+
+    #[tokio::test]
+    async fn mixed_eol_untouched_lines_keep_their_endings() {
+        // Lines 1 and 3 are CRLF, line 2 is LF. Editing line 3 must NOT rewrite
+        // lines 1-2's endings — only the touched region changes.
+        let dir = tempfile::tempdir().unwrap();
+        let out = edit_file(dir.path(), b"a\r\nb\nc\r\n", "c", "X").await;
+        assert_eq!(out, b"a\r\nb\nX\r\n");
     }
 
     #[tokio::test]
