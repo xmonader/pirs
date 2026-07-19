@@ -52,18 +52,34 @@ pub fn run_task(
         return Ok(Outcome::Failed(FailBucket::ReproFailed));
     }
 
-    // Fix/verify loop. Only a gate `Done` yields `Solved`.
+    // Concentric rings (cost control). Each refinement attempt verifies only the
+    // Inner ring (the targets) — the cheap signal. The full regression ring runs
+    // at most once *per flip*, only after the Inner ring goes green, so a failing
+    // attempt never pays for the whole keep-green suite. With no keep_green the
+    // two rings coincide and the second pass is skipped.
+    let has_regression_ring = scope.len() > spec.targets.len();
+
     let mut last: Option<Verdict> = None;
     for attempt in 1..=max_attempts {
         if !executor.attempt(attempt, last.as_ref())? {
             break; // executor gave up
         }
-        let plan = VerifyPlan { targets: &spec.targets, scope: &scope, baseline: &baseline };
-        let verdict = verify(runner, &plan, Ring::Scoped)?;
-        if verdict.is_done() {
+        let inner = VerifyPlan { targets: &spec.targets, scope: &spec.targets, baseline: &baseline };
+        let verdict = verify(runner, &inner, Ring::Inner)?;
+        if !verdict.is_done() {
+            last = Some(verdict);
+            continue;
+        }
+        if !has_regression_ring {
             return Ok(Outcome::Solved);
         }
-        last = Some(verdict);
+        // Targets flipped — now (and only now) pay for the regression ring.
+        let scoped = VerifyPlan { targets: &spec.targets, scope: &scope, baseline: &baseline };
+        let scoped_verdict = verify(runner, &scoped, Ring::Scoped)?;
+        if scoped_verdict.is_done() {
+            return Ok(Outcome::Solved);
+        }
+        last = Some(scoped_verdict); // e.g. the fix regressed a keep-green test
     }
 
     // Exhausted (or the executor stopped). Attribute the last verdict's bucket,
@@ -164,6 +180,86 @@ mod tests {
             run_task(&spec, &Flaky { n: Cell::new(0) }, &mut NoExec, 3).unwrap(),
             Outcome::Failed(FailBucket::BaselineUnusable)
         );
+    }
+
+    /// Before the fix: target red, victim green. After: target green but the fix
+    /// broke the victim (a keep-green test). Models a regressing fix.
+    struct RegressRunner<'a> {
+        fixed: &'a Cell<bool>,
+        target: &'a str,
+        victim: &'a str,
+        runs: &'a Cell<u32>,
+    }
+    impl TestRunner for RegressRunner<'_> {
+        fn run(&self, ids: &[TestId], _r: Ring) -> anyhow::Result<Snapshot> {
+            self.runs.set(self.runs.get() + 1);
+            let fixed = self.fixed.get();
+            Ok(Snapshot::from_pairs(ids.iter().map(|id| {
+                let o = if id == self.target {
+                    if fixed { Pass } else { Fail }
+                } else if id == self.victim {
+                    if fixed { Fail } else { Pass } // fix breaks the victim
+                } else {
+                    Pass
+                };
+                (id.clone(), o)
+            })))
+        }
+    }
+
+    #[test]
+    fn fix_that_regresses_keep_green_is_failed() {
+        let fixed = Cell::new(false);
+        let runs = Cell::new(0);
+        let runner = RegressRunner { fixed: &fixed, target: "t1", victim: "k", runs: &runs };
+        let mut exec = FlagExecutor { fixed: &fixed, fix_on: 1 };
+        let spec = TaskSpec { targets: ids(&["t1"]), keep_green: ids(&["k"]) };
+        assert_eq!(
+            run_task(&spec, &runner, &mut exec, 3).unwrap(),
+            Outcome::Failed(FailBucket::Regressed)
+        );
+    }
+
+    /// Counts how often the `victim` (keep-green) id is included in a run, so we
+    /// can prove the regression ring fires only after the Inner ring flips.
+    struct VictimCountRunner<'a> {
+        fixed: &'a Cell<bool>,
+        target: &'a str,
+        victim: &'a str,
+        victim_runs: &'a Cell<u32>,
+    }
+    impl TestRunner for VictimCountRunner<'_> {
+        fn run(&self, ids: &[TestId], _r: Ring) -> anyhow::Result<Snapshot> {
+            if ids.iter().any(|id| id == self.victim) {
+                self.victim_runs.set(self.victim_runs.get() + 1);
+            }
+            let fixed = self.fixed.get();
+            Ok(Snapshot::from_pairs(ids.iter().map(|id| {
+                let o = if id == self.target && !fixed { Fail } else { Pass };
+                (id.clone(), o)
+            })))
+        }
+    }
+
+    #[test]
+    fn regression_ring_runs_only_after_a_flip() {
+        // Executor fixes on attempt 3; attempts 1–2 keep the Inner ring red, so
+        // the regression (scoped) ring must never run in them.
+        let fixed = Cell::new(false);
+        let victim_runs = Cell::new(0);
+        let runner = VictimCountRunner {
+            fixed: &fixed,
+            target: "t1",
+            victim: "k",
+            victim_runs: &victim_runs,
+        };
+        let mut exec = FlagExecutor { fixed: &fixed, fix_on: 3 };
+        let spec = TaskSpec { targets: ids(&["t1"]), keep_green: ids(&["k"]) };
+        assert_eq!(run_task(&spec, &runner, &mut exec, 3).unwrap(), Outcome::Solved);
+        // Baseline runs the scope (incl. victim) twice; then the victim appears
+        // only in the single scoped pass after the flip (post + post2-is-targets).
+        // So victim is included in: 2 (baseline) + 1 (scoped post) = 3 runs.
+        assert_eq!(victim_runs.get(), 3, "victim ran outside baseline+one scoped pass");
     }
 
     #[test]
