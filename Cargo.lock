@@ -1454,6 +1454,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "libc",
+ "pirs-graph",
  "quick-xml",
  "rhai",
  "serde",
@@ -1461,6 +1462,25 @@ dependencies = [
  "tempfile",
  "tracing",
  "wait-timeout",
+]
+
+[[package]]
+name = "pirs-bench-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "pirs-agent",
+ "pirs-ai",
+ "pirs-bench",
+ "pirs-graph",
+ "pirs-tools",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
