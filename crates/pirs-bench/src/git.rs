@@ -71,6 +71,24 @@ impl GitWorkspace {
         self.git("clean -fdq").context("remove untracked files")?;
         Ok(())
     }
+
+    /// Restore specific tracked paths to their HEAD version, discarding any edits
+    /// to them. Used to keep test files pristine so a fix cannot pass by editing
+    /// the tests. Paths that don't exist at HEAD (e.g. an agent-created file) are
+    /// skipped rather than erroring. No-op for an empty list.
+    pub fn restore_paths(&self, paths: &[&str]) -> anyhow::Result<()> {
+        for p in paths {
+            // `--` guards against a path that looks like a flag; ignore failures
+            // for paths not tracked at HEAD.
+            let _ = self.git(&format!("checkout HEAD -- {}", shell_quote(p)));
+        }
+        Ok(())
+    }
+}
+
+/// Minimal single-quote shell escaping for a path embedded in a git command.
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 /// Whether `git` is usable in `dir` (a repo with at least one commit). Lets the

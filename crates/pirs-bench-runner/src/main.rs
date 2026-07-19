@@ -2,10 +2,10 @@
 //! trustworthy verification harness, and emit fixes as patches.
 //!
 //! Modes:
-//!   * `solve`    — one instance from CLI flags; prints the patch (or `--out`).
-//!   * `batch`    — a JSONL dataset; per-instance patches + attribution histogram.
-//!   * `selftest` — generate small buggy projects and run the harness over them
-//!                  (oracle fix by default; `--agent` drives the real model).
+//! - `solve` — one instance from CLI flags; prints the patch (or `--out`).
+//! - `batch` — a JSONL dataset; per-instance patches + attribution histogram.
+//! - `selftest` — generate small buggy projects and run the harness over them
+//!   (oracle fix by default; `--agent` drives the real model).
 //!
 //! Each repo is expected to already be checked out at its base commit. The agent
 //! edits in place; an accepted outcome yields the unified diff, a failed one
@@ -20,7 +20,7 @@ use pirs_bench::{
     is_git_repo, run_instance, Attribution, BaselineCache, DetectorHost, GitWorkspace, Instance,
     InstanceReport,
 };
-use pirs_bench_runner::{build_provider, selftest, AgentExecutor, Provider};
+use pirs_bench_runner::{build_provider, selftest, AgentConfig, AgentExecutor, Provider};
 use serde::Deserialize;
 
 #[derive(Parser, Debug)]
@@ -198,15 +198,22 @@ fn solve_one(job: Job, ctx: &SolveCtx, cache: &mut BaselineCache) -> anyhow::Res
         repo.clone(),
         job.issue,
         job.targets.clone(),
-        ctx.common.model.clone(),
-        ctx.api_key.to_string(),
-        ctx.common.max_turns,
-        build_provider(ctx.provider),
+        job.keep_green.clone(),
+        AgentConfig {
+            model: ctx.common.model.clone(),
+            api_key: ctx.api_key.to_string(),
+            max_turns_per_attempt: ctx.common.max_turns,
+            provider: build_provider(ctx.provider),
+        },
     )
     .context("build agent executor")?;
 
     let inst = Instance { repo_root: repo, targets: job.targets, keep_green: job.keep_green, base_sha };
-    run_instance(&inst, ctx.host, cache, &mut executor, ctx.common.max_attempts, workspace.as_ref())
+    let report = run_instance(&inst, ctx.host, cache, &mut executor, ctx.common.max_attempts, workspace.as_ref())?;
+    // Surface this session's behavior + token cost.
+    eprintln!("session: {}", executor.session_stats().summary());
+    eprintln!("{}", executor.session_usage().report());
+    Ok(report)
 }
 
 fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
@@ -306,14 +313,17 @@ fn run_selftest(a: SelftestArgs) -> anyhow::Result<u8> {
         selftest::Mode::Oracle
     };
 
-    let (attribution, failures) = selftest::run_selftest(&a.dir, a.count, &mode)?;
-    println!("{}", attribution.report());
+    let report = selftest::run_selftest(&a.dir, a.count, &mode)?;
+    println!("{}", report.attribution.report());
+    if !report.usage.is_empty() {
+        println!("{}", report.usage.report());
+    }
 
     // Oracle mode must solve everything — any miss is a harness defect. Agent
     // mode is model-limited, so we report but don't hard-fail on misses.
-    if !failures.is_empty() {
-        eprintln!("{} instance(s) not solved:", failures.len());
-        for f in &failures {
+    if !report.failures.is_empty() {
+        eprintln!("{} instance(s) not solved:", report.failures.len());
+        for f in &report.failures {
             eprintln!("  {f}");
         }
         if !a.agent {

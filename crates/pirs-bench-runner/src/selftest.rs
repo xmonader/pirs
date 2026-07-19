@@ -20,7 +20,8 @@ use pirs_bench::{
     run_instance, Attribution, BaselineCache, DetectorHost, Executor, GitWorkspace, Instance, Verdict,
 };
 
-use crate::{build_provider, AgentExecutor, Provider};
+use crate::metrics::UsageByModel;
+use crate::{build_provider, AgentConfig, AgentExecutor, Provider};
 
 /// How the self-test's "fix" step is driven.
 pub enum Mode {
@@ -281,7 +282,7 @@ fn issue_for(proj: &Project) -> String {
 /// Generate and run `count` projects under `dir`, returning the attribution and
 /// the list of failed ids. Deterministic in [`Mode::Oracle`]; safe to re-run
 /// (each project dir is recreated).
-pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<(Attribution, Vec<String>)> {
+pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<SelftestReport> {
     std::fs::create_dir_all(dir).with_context(|| format!("create {dir:?}"))?;
     let host = DetectorHost::with_bundled().context("load detectors")?;
     // In agent mode, build the provider once and share it across executors.
@@ -291,6 +292,7 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<(At
     };
     let mut attribution = Attribution::new();
     let mut failures = Vec::new();
+    let mut total_usage = UsageByModel::default();
 
     for i in 0..count {
         let proj = TEMPLATES[i % TEMPLATES.len()](i);
@@ -315,38 +317,62 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<(At
             base_sha: None,
         };
 
-        // Build the fix step (oracle or real agent) for this project.
-        let mut oracle;
-        let mut agent;
-        let exec: &mut dyn Executor = match mode {
+        // Build the fix step (oracle or real agent). `Option`s keep the concrete
+        // agent reachable after the run so we can read its per-session metrics.
+        let mut oracle: Option<OracleExecutor> = None;
+        let mut agent: Option<AgentExecutor> = None;
+        match mode {
             Mode::Oracle => {
-                oracle = OracleExecutor::new(root.clone(), proj.oracle.clone());
-                &mut oracle
+                oracle = Some(OracleExecutor::new(root.clone(), proj.oracle.clone()));
             }
             Mode::Agent { model, api_key, max_turns, .. } => {
-                agent = AgentExecutor::new(
+                agent = Some(AgentExecutor::new(
                     root.clone(),
                     issue_for(&proj),
                     proj.targets.clone(),
-                    model.clone(),
-                    api_key.clone(),
-                    *max_turns,
-                    Arc::clone(provider.as_ref().expect("provider built in agent mode")),
-                )?;
-                &mut agent
+                    proj.keep_green.clone(),
+                    AgentConfig {
+                        model: model.clone(),
+                        api_key: api_key.clone(),
+                        max_turns_per_attempt: *max_turns,
+                        provider: Arc::clone(provider.as_ref().expect("provider in agent mode")),
+                    },
+                )?);
             }
+        }
+        let exec: &mut dyn Executor = match (&mut oracle, &mut agent) {
+            (Some(o), _) => o,
+            (_, Some(a)) => a,
+            _ => unreachable!("one executor is always built"),
         };
 
         let report = run_instance(&inst, &host, &mut cache, exec, 3, Some(&ws))?;
         attribution.record(&report.outcome);
+
         let mark = if report.outcome.is_accepted() { "ok " } else { "FAIL" };
-        eprintln!("[{mark}] {} -> {:?}", proj.id, report.outcome);
+        // In agent mode, surface per-session behavior + token cost.
+        let extra = match &agent {
+            Some(a) => {
+                let u = a.session_usage();
+                total_usage.merge(&u);
+                format!(" | {} | {}", a.session_stats().summary(), UsageByModel::line(&u.total()))
+            }
+            None => String::new(),
+        };
+        eprintln!("[{mark}] {} -> {:?}{extra}", proj.id, report.outcome);
         if !report.outcome.is_accepted() {
             failures.push(format!("{} ({:?})", proj.id, report.outcome));
         }
     }
 
-    Ok((attribution, failures))
+    Ok(SelftestReport { attribution, failures, usage: total_usage })
+}
+
+/// Aggregate outcome of a self-test run.
+pub struct SelftestReport {
+    pub attribution: Attribution,
+    pub failures: Vec<String>,
+    pub usage: UsageByModel,
 }
 
 /// `git init` + commit the current tree so `GitWorkspace` has a base to diff and

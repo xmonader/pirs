@@ -12,13 +12,15 @@
 //! `pirs_rhai::ExtensionHost`. There is therefore no path by which the task
 //! repo's own `.pirs/extensions`, hooks, or MCP config load into this run.
 
+pub mod metrics;
 pub mod selftest;
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use pirs_agent::agent_loop::{run_agent_loop, Budgets, LoopConfig};
-use pirs_agent::{AgentTool, Emit, ExecutionMode, Hooks};
+use pirs_agent::{AgentEvent, AgentTool, Emit, ExecutionMode, Hooks};
 use pirs_ai::anthropic::AnthropicClient;
 use pirs_ai::{CompletionOptions, Context, LlmProvider, Message, OpenAiCompat, Usage};
 use pirs_bench::{Executor, GitWorkspace, Verdict};
@@ -26,6 +28,8 @@ use pirs_graph::ast_edit::AstEditTool;
 use pirs_graph::code_map::CodeMapTool;
 use pirs_graph::LazyGraph;
 use tokio_util::sync::CancellationToken;
+
+use crate::metrics::{SessionStats, UsageByModel};
 
 /// Which LLM backend to drive the agent with.
 #[derive(Debug, Clone)]
@@ -71,6 +75,14 @@ Rules:
 - You may run the project's tests to check your work.
 - When the target tests pass and you have not broken others, stop.";
 
+/// Model/provider/budget knobs for an [`AgentExecutor`].
+pub struct AgentConfig {
+    pub model: String,
+    pub api_key: String,
+    pub max_turns_per_attempt: usize,
+    pub provider: Arc<dyn LlmProvider>,
+}
+
 /// The agent-backed executor. Holds the assembled tools, the LLM provider, and a
 /// persistent [`Context`] so successive attempts refine cumulatively rather than
 /// starting cold. Runs the async agent loop on an owned Tokio runtime.
@@ -82,26 +94,31 @@ pub struct AgentExecutor {
     model: String,
     api_key: String,
     max_turns_per_attempt: usize,
-    /// Watches the tree so we can tell whether an attempt actually changed code.
+    /// Watches the tree, extracts diffs, and restores protected test files.
     ws: GitWorkspace,
     issue: String,
     targets: Vec<String>,
+    /// Test files (derived from targets + keep_green) restored to base after each
+    /// attempt so a fix can never pass by editing the tests.
+    protected: Vec<String>,
     started: bool,
+    /// Per-session token usage, keyed by model.
+    usage: UsageByModel,
+    /// Per-session behavior stats, updated live from the agent event stream.
+    stats: Arc<Mutex<SessionStats>>,
 }
 
 impl AgentExecutor {
-    /// Build an executor rooted at `repo_root`. `issue` is the task/problem
-    /// statement; `targets` are the failing test ids being fixed (used only to
-    /// tell the agent what to make pass — the harness owns actual verification).
-    /// `provider` is any [`LlmProvider`] (see [`build_provider`]).
+    /// Build an executor rooted at `repo_root`. `issue` is the problem statement;
+    /// `targets` are the failing test ids to fix and `keep_green` those that must
+    /// stay green — both contribute their test files to the protected set. The
+    /// harness, not the agent, owns actual verification.
     pub fn new(
         repo_root: PathBuf,
         issue: String,
         targets: Vec<String>,
-        model: String,
-        api_key: String,
-        max_turns_per_attempt: usize,
-        provider: Arc<dyn LlmProvider>,
+        keep_green: Vec<String>,
+        config: AgentConfig,
     ) -> anyhow::Result<Self> {
         let rt = Arc::new(
             tokio::runtime::Builder::new_multi_thread()
@@ -122,19 +139,44 @@ impl AgentExecutor {
             tools: Vec::new(),
         };
 
+        // The test file of an id is the segment before "::" (pytest/go/nextest
+        // node ids all share this shape).
+        let protected: Vec<String> = targets
+            .iter()
+            .chain(keep_green.iter())
+            .filter_map(|id| id.split("::").next())
+            .filter(|f| !f.is_empty())
+            .map(|f| f.to_string())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+
         Ok(AgentExecutor {
             rt,
-            provider,
+            provider: config.provider,
             tools,
             context,
-            model,
-            api_key,
-            max_turns_per_attempt,
+            model: config.model,
+            api_key: config.api_key,
+            max_turns_per_attempt: config.max_turns_per_attempt,
             ws: GitWorkspace::new(repo_root),
             issue,
             targets,
+            protected,
             started: false,
+            usage: UsageByModel::default(),
+            stats: Arc::new(Mutex::new(SessionStats::default())),
         })
+    }
+
+    /// This session's per-model token usage so far.
+    pub fn session_usage(&self) -> UsageByModel {
+        self.usage.clone()
+    }
+
+    /// This session's observed behavior (turns, tool calls).
+    pub fn session_stats(&self) -> SessionStats {
+        self.stats.lock().unwrap().clone()
     }
 
     fn loop_config(&self) -> LoopConfig {
@@ -202,13 +244,24 @@ impl Executor for AgentExecutor {
         let before = self.ws.diff().unwrap_or_default();
 
         let config = self.loop_config();
-        let emit: Emit = Arc::new(|_ev| {});
+        // Live behavior stats: count turns and tool calls off the event stream so
+        // we can tell a real fix from a model that only produced prose.
+        let stats = Arc::clone(&self.stats);
+        let emit: Emit = Arc::new(move |ev| match ev {
+            AgentEvent::ToolExecutionStart { tool_name, .. } => {
+                stats.lock().unwrap().record_tool(&tool_name);
+            }
+            AgentEvent::TurnEnd { .. } => {
+                stats.lock().unwrap().turns += 1;
+            }
+            _ => {}
+        });
         let cancel = CancellationToken::new();
         let provider = Arc::clone(&self.provider);
         let rt = Arc::clone(&self.rt);
 
-        rt.block_on(async {
-            let _ = run_agent_loop(
+        let new_messages = rt.block_on(async {
+            let (msgs, _budget) = run_agent_loop(
                 vec![Message::user(prompt)],
                 &mut self.context,
                 &self.tools,
@@ -218,10 +271,25 @@ impl Executor for AgentExecutor {
                 cancel,
             )
             .await;
+            msgs
         });
 
+        // Token accounting: fold each assistant message's usage into this
+        // session's per-model totals.
+        for msg in &new_messages {
+            if let Message::Assistant(a) = msg {
+                self.usage.add(&a.model, &a.usage);
+            }
+        }
+
+        // Integrity: revert any edits the agent made to protected test files, so
+        // verification always runs against the original tests. A fix that only
+        // touched a test therefore leaves the tree unchanged and cannot pass.
+        let protected: Vec<&str> = self.protected.iter().map(String::as_str).collect();
+        let _ = self.ws.restore_paths(&protected);
+
         let after = self.ws.diff().unwrap_or_default();
-        // A candidate worth verifying exists iff the tree changed this attempt.
+        // A candidate worth verifying exists iff the (non-test) tree changed.
         Ok(after != before)
     }
 }
