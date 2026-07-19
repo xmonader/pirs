@@ -59,3 +59,27 @@ What this proves live, end to end:
   - Fully graceful: with no --semantic the same tool runs [lexical+graph]; unit
     tests cover a dead embedding service (falls back to lexical) and an
     oversized chunk (truncated per-item, not fatal).
+
+------------------------------------------------------------------------
+Query 3 (ISOLATION: --persist-graph WITHOUT --semantic -> lexical+graph only):
+  "store_embeddings wipe on model mismatch"
+
+Purpose: prove the BM25/tantivy arm works on its own, with NO embedding arm
+and NO LLM re-ranking — the tag confirms only lexical+graph fired.
+
+> code_search
+Top 8 for "store_embeddings wipe on model mismatch" [lexical+graph]:
+1. store_embeddings (crates/pirs-graph/src/store.rs:333)  [2 callers]
+2. ensure_model (crates/pirs-graph/src/store.rs:261)  [1 callers]
+3. model (crates/pirs-ai/src/embed.rs:48)  [1 callers]
+4. run_on_steering (crates/pirs-rhai/src/lib.rs:1006)  [1 callers]
+5. on_exit (crates/pirs-orchestrator/src/rpc_process.rs:171)  [1 callers]
+6. count_mismatch_is_rejected (crates/pirs-ai/tests/embed_client_test.rs:67)  [0 callers]
+7. oracle_runs_the_critic_phase_on_a_different_model (crates/pirs-agent/src/strategy.rs:449)  [0 callers]
+8. run_on_follow_up (crates/pirs-rhai/src/lib.rs:1017)  [1 callers]
+
+Pure BM25 (+ graph centrality) puts store_embeddings / ensure_model / model /
+count_mismatch_is_rejected at 1,2,3,6 — the exact-term match works standalone.
+This is the tantivy arm proven in isolation, complementing the unit tests in
+crates/pirs-graph/tests/lexical_test.rs (exact-term owner ranked first;
+punctuated/empty queries safe).
