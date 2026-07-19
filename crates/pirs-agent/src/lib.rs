@@ -5,6 +5,7 @@ pub mod delegate;
 pub mod events;
 pub mod jobs;
 pub mod memory;
+pub mod strategy;
 pub mod tool;
 pub mod usage;
 pub mod use_tool;
