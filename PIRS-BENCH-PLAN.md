@@ -309,8 +309,15 @@ Prior: `BaselineUnusable` + `EnvSetup` dominate early and are under-anticipated.
   `parse_traceback` (Python/pytest/Rust/Go) → `rank_candidates` (graph-backed:
   project>vendored, source>test, symbol-confirmed ×1.5) → `scoped_tests` via
   `Graph::affected_tests`; `driver::run_task` state machine that *structurally*
-  makes `Solved` require a gate `Done`. *Remaining:* LSP-based localization as a
-  second signal alongside the graph.
+  makes `Solved` require a gate `Done`. Concentric rings: refinement verifies the
+  Inner ring (targets) only; the regression ring runs at most once, after a flip.
+  *Remaining:* LSP-based localization as a second signal alongside the graph.
+- **Capstone — end-to-end harness. ✅ DONE + PROVEN.** `run_instance` composes
+  discover → bootstrap → runner → cached baseline → reproduce → fix/verify, each
+  failure mapped to a typed `FailBucket`. A real pytest e2e (`tests/e2e_pytest`)
+  fixes a real bug via a real file edit through the whole pipeline, and asserts an
+  unpatched bug is never a false pass. Fixed en route: `python3`-only interpreter
+  resolution; per-framework `test_join` (Go `-run` regex alternation).
 - **M6 — Strong-model planner/steerer. ✅ DONE (Rhai policy pending).**
   `ModelOracle` (`ask_model`) trait; `plan_next` returns a `PlanDecision` that is
   hard-validated to a reorder/filter of the real candidate set (invented paths
