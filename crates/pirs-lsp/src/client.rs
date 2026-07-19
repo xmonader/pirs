@@ -454,6 +454,12 @@ async fn read_message(
     if content_length == 0 {
         bail!("missing Content-Length");
     }
+    // A bad/hostile header (e.g. Content-Length: 8589934592) must not trigger a
+    // multi-gigabyte allocation. Real LSP messages are well under this.
+    const MAX_MESSAGE: usize = 64 * 1024 * 1024;
+    if content_length > MAX_MESSAGE {
+        bail!("Content-Length {content_length} exceeds {MAX_MESSAGE} limit");
+    }
     let mut body = vec![0u8; content_length];
     reader.read_exact(&mut body).await?;
     let value: Value = serde_json::from_slice(&body)?;
