@@ -483,6 +483,14 @@ fn error_result(id: &str, name: &str, message: &str) -> ToolResultMessage {
     }
 }
 
+/// The filesystem path a tool call's args target, if any — the key concurrent
+/// calls in one batch must not interleave on. All of pirs's file-touching
+/// tools (read/edit/write) use a single `path` argument, so this is a plain
+/// lookup rather than pirs-tools-specific logic living in the loop.
+fn tool_path_for_lock(args: &Value) -> Option<String> {
+    args.get("path")?.as_str().map(str::to_string)
+}
+
 fn schema_summary(schema: &Value) -> String {
     let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
         return "(any object)".to_string();
@@ -703,6 +711,22 @@ async fn execute_tool_calls(
                 ready => prepared.push(ready),
             }
         }
+        // Same-path calls in this batch must not interleave (two concurrent
+        // edits to one file can otherwise race and clobber each other);
+        // different paths run fully concurrently. Built once, up front, so
+        // every task in the batch shares the same lock instance per path.
+        let mut path_locks: std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>> =
+            std::collections::HashMap::new();
+        for p in &prepared {
+            if let Prepared::Ready { args, .. } = p {
+                if let Some(path) = tool_path_for_lock(args) {
+                    path_locks
+                        .entry(path)
+                        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())));
+                }
+            }
+        }
+
         let mut in_flight = FuturesUnordered::new();
         for p in prepared {
             if let Prepared::Ready {
@@ -714,7 +738,12 @@ async fn execute_tool_calls(
             } = p
             {
                 let cancel = cancel.clone();
+                let path_lock = tool_path_for_lock(&args).map(|path| path_locks[&path].clone());
                 in_flight.push(async move {
+                    let _guard = match &path_lock {
+                        Some(lock) => Some(lock.lock().await),
+                        None => None,
+                    };
                     let outcome =
                         run_tool(tool, id.clone(), name.clone(), args, cancel, emit).await;
                     (index, id, name, outcome)

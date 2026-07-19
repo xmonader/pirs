@@ -382,6 +382,89 @@ async fn parallel_results_in_source_order() {
     assert_eq!(results, vec!["echo: 1", "echo: 2"]);
 }
 
+/// Records a (path, start, end) span for every call, sleeping briefly mid-call
+/// so overlapping calls are actually observable as overlapping spans.
+struct SpanTool(Arc<Mutex<Vec<(String, std::time::Instant, std::time::Instant)>>>);
+
+#[async_trait]
+impl AgentTool for SpanTool {
+    fn name(&self) -> &str {
+        "touch"
+    }
+    fn description(&self) -> &str {
+        "Touches a path, recording when it ran"
+    }
+    fn parameters(&self) -> Value {
+        json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"]})
+    }
+    async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+        let path = ctx.args["path"].as_str().unwrap_or("").to_string();
+        let start = std::time::Instant::now();
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        let end = std::time::Instant::now();
+        self.0.lock().unwrap().push((path, start, end));
+        Ok(ToolOutput::text("touched"))
+    }
+}
+
+fn spans_overlap(a: &(String, std::time::Instant, std::time::Instant), b: &(String, std::time::Instant, std::time::Instant)) -> bool {
+    a.1 < b.2 && b.1 < a.2
+}
+
+#[tokio::test]
+async fn same_path_calls_serialize_but_different_paths_stay_concurrent() {
+    let spans = Arc::new(Mutex::new(Vec::new()));
+    let provider = MockProvider::new(vec![
+        AssistantMessage {
+            content: vec![
+                ContentBlock::ToolCall {
+                    id: "a".into(),
+                    name: "touch".into(),
+                    arguments: json!({"path": "same.txt"}),
+                    thought_signature: None,
+                },
+                ContentBlock::ToolCall {
+                    id: "b".into(),
+                    name: "touch".into(),
+                    arguments: json!({"path": "same.txt"}),
+                    thought_signature: None,
+                },
+                ContentBlock::ToolCall {
+                    id: "c".into(),
+                    name: "touch".into(),
+                    arguments: json!({"path": "other.txt"}),
+                    thought_signature: None,
+                },
+            ],
+            stop_reason: StopReason::ToolUse,
+            ..Default::default()
+        },
+        text_msg("done"),
+    ]);
+    let mut agent = make_agent(provider, vec![Arc::new(SpanTool(spans.clone()))])
+        .with_tool_execution(ExecutionMode::Parallel);
+    agent.prompt("go").await.unwrap();
+
+    let spans = spans.lock().unwrap();
+    assert_eq!(spans.len(), 3);
+    let same_a = spans.iter().find(|(p, ..)| p == "same.txt").unwrap();
+    let same_b = spans
+        .iter()
+        .filter(|(p, ..)| p == "same.txt")
+        .nth(1)
+        .unwrap();
+    let other = spans.iter().find(|(p, ..)| p == "other.txt").unwrap();
+
+    assert!(
+        !spans_overlap(same_a, same_b),
+        "two calls on the same path must not run concurrently: {same_a:?} vs {same_b:?}"
+    );
+    assert!(
+        spans_overlap(same_a, other) || spans_overlap(same_b, other),
+        "a call on a different path must still run concurrently with the same-path calls"
+    );
+}
+
 #[tokio::test]
 async fn error_stop_reason_ends_run() {
     let provider = MockProvider::new(vec![AssistantMessage {
