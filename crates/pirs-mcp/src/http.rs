@@ -171,14 +171,107 @@ impl HttpClient {
     }
 }
 
+/// Reconnect backoff: doubles from `INITIAL` up to `MAX`, reset to `INITIAL`
+/// on every successful (re)connect. A flapping legacy-SSE server must not be
+/// hammered with an instant-retry loop, but also must not stay dead for the
+/// rest of the session after one transient drop.
+const RECONNECT_INITIAL: Duration = Duration::from_millis(500);
+const RECONNECT_MAX: Duration = Duration::from_secs(30);
+
+fn reconnect_backoff(attempt: u32) -> Duration {
+    // `attempt` is 0-based; saturating so a long-lived flapping connection
+    // can never overflow the shift into a bogus (or panicking) duration.
+    let scale = 1u64 << attempt.min(20);
+    (RECONNECT_INITIAL.saturating_mul(scale as u32)).min(RECONNECT_MAX)
+}
+
 /// Legacy HTTP+SSE transport (2024-11-05): GET <url> opens an SSE stream; the
 /// server sends an `endpoint` event with the POST path; responses to POSTed
-/// requests arrive on the SSE stream.
+/// requests arrive on the SSE stream. The GET stream is reconnected with
+/// exponential backoff if the server drops it — previously a single dropped
+/// connection (network blip, server restart) killed the MCP integration for
+/// the rest of the session with no way to recover.
 pub struct LegacySseClient {
-    post_url: String,
+    /// The original SSE GET endpoint, kept so a dropped stream can be reopened.
+    #[allow(dead_code)] // kept for symmetry/debuggability; reconnect closes over its own copy
+    url: String,
+    post_url: Arc<Mutex<String>>,
     client: reqwest::Client,
     pending: PendingMap,
     next_id: AtomicU64,
+    cancel: tokio_util::sync::CancellationToken,
+}
+
+impl Drop for LegacySseClient {
+    fn drop(&mut self) {
+        // Otherwise the background reconnect-reader task outlives every
+        // handle to this client and spins forever against a dead server.
+        self.cancel.cancel();
+    }
+}
+
+/// Open one SSE GET stream and read its `endpoint` event, without spawning
+/// the background reader. Shared by the initial connect and every reconnect.
+async fn open_sse_stream(
+    client: &reqwest::Client,
+    url: &str,
+) -> anyhow::Result<(reqwest::Response, String)> {
+    let response = client
+        .get(url)
+        .header("accept", "text/event-stream")
+        .send()
+        .await
+        .context("failed to open SSE stream")?;
+    if !response.status().is_success() {
+        bail!("SSE connect failed: HTTP {}", response.status());
+    }
+    Ok((response, url.to_string()))
+}
+
+/// Drain one SSE response stream, resolving `pending` requests as their
+/// matching-id message arrives, and reporting the resolved `endpoint` (the
+/// POST path) back through `on_endpoint` as soon as it's seen. Returns when
+/// the stream ends (server closed it, or a chunk read failed).
+async fn drain_response_into_pending(
+    response: reqwest::Response,
+    pending: &PendingMap,
+    mut on_endpoint: impl FnMut(String),
+) {
+    let mut stream = response.bytes_stream();
+    let mut buf = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let Ok(bytes) = chunk else { break };
+        buf.extend_from_slice(&bytes);
+        for (event, data) in drain_sse_events(&mut buf) {
+            if event == "endpoint" {
+                on_endpoint(data);
+            } else if event == "message" {
+                if let Ok(v) = serde_json::from_str::<Value>(&data) {
+                    // Only a message WITHOUT "method" is a response. A
+                    // server-initiated request/notification also carries an
+                    // id whose space collides with ours; never consume a
+                    // pending response for it.
+                    if v.get("method").is_some() {
+                        // server request/notification: not ours to resolve
+                    } else if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
+                        let tx = pending.lock().unwrap().remove(&id);
+                        if let Some(tx) = tx {
+                            if let Some(err) = v.get("error") {
+                                let msg = err
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or("unknown error")
+                                    .to_string();
+                                let _ = tx.send(Err(msg));
+                            } else {
+                                let _ = tx.send(Ok(v.get("result").cloned().unwrap_or(Value::Null)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl LegacySseClient {
@@ -202,82 +295,111 @@ impl LegacySseClient {
 
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
         let (endpoint_tx, endpoint_rx) = oneshot::channel::<String>();
-        let response = client
-            .get(url)
-            .header("accept", "text/event-stream")
-            .send()
-            .await
-            .context("failed to open SSE stream")?;
-        if !response.status().is_success() {
-            bail!("SSE connect failed: HTTP {}", response.status());
-        }
+        let (response, url) = open_sse_stream(&client, url).await?;
+
+        let base = base_url(&url);
+        let compute_post_url = move |endpoint: String| {
+            if endpoint.starts_with("http") {
+                endpoint
+            } else {
+                format!("{base}{}", endpoint.trim_start_matches('/'))
+            }
+        };
+
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let post_url = Arc::new(Mutex::new(String::new()));
 
         {
             let pending = Arc::clone(&pending);
+            let post_url = Arc::clone(&post_url);
+            let reader_client = client.clone();
+            let reader_url = url.clone();
+            let cancel = cancel.clone();
+            let mut first_response = Some(response);
             let mut endpoint_tx = Some(endpoint_tx);
+            let compute_post_url = compute_post_url.clone();
             tokio::spawn(async move {
-                let mut stream = response.bytes_stream();
-                let mut buf = Vec::new();
-                while let Some(chunk) = stream.next().await {
-                    let Ok(bytes) = chunk else { break };
-                    buf.extend_from_slice(&bytes);
-                    for (event, data) in drain_sse_events(&mut buf) {
-                        if event == "endpoint" {
-                            if let Some(tx) = endpoint_tx.take() {
-                                let _ = tx.send(data);
+                let mut attempt: u32 = 0;
+                loop {
+                    if cancel.is_cancelled() {
+                        return;
+                    }
+                    let response = match first_response.take() {
+                        Some(r) => Ok(r),
+                        None => open_sse_stream(&reader_client, &reader_url)
+                            .await
+                            .map(|(r, _)| r),
+                    };
+                    let response = match response {
+                        Ok(r) => {
+                            attempt = 0; // connected — reset backoff
+                            r
+                        }
+                        Err(e) => {
+                            tracing::warn!("MCP SSE reconnect attempt {attempt} failed: {e:#}");
+                            tokio::select! {
+                                _ = tokio::time::sleep(reconnect_backoff(attempt)) => {}
+                                _ = cancel.cancelled() => return,
                             }
-                        } else if event == "message" {
-                            if let Ok(v) = serde_json::from_str::<Value>(&data) {
-                                // Only a message WITHOUT "method" is a response.
-                                // A server-initiated request/notification also
-                                // carries an id whose space collides with ours;
-                                // never consume a pending response for it.
-                                if v.get("method").is_some() {
-                                    // server request/notification: not ours to resolve
-                                } else if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
-                                    let tx = pending.lock().unwrap().remove(&id);
-                                    if let Some(tx) = tx {
-                                        if let Some(err) = v.get("error") {
-                                            let msg = err
-                                                .get("message")
-                                                .and_then(|m| m.as_str())
-                                                .unwrap_or("unknown error")
-                                                .to_string();
-                                            let _ = tx.send(Err(msg));
-                                        } else {
-                                            let _ = tx.send(Ok(v
-                                                .get("result")
-                                                .cloned()
-                                                .unwrap_or(Value::Null)));
-                                        }
-                                    }
-                                }
-                            }
+                            attempt = attempt.saturating_add(1);
+                            continue;
+                        }
+                    };
+                    let pending = Arc::clone(&pending);
+                    let post_url = Arc::clone(&post_url);
+                    let compute_post_url = compute_post_url.clone();
+                    let on_endpoint = |endpoint: String| {
+                        let resolved = compute_post_url(endpoint);
+                        *post_url.lock().unwrap() = resolved.clone();
+                        if let Some(tx) = endpoint_tx.take() {
+                            let _ = tx.send(resolved);
+                        }
+                    };
+                    tokio::select! {
+                        _ = drain_response_into_pending(response, &pending, on_endpoint) => {}
+                        _ = cancel.cancelled() => return,
+                    }
+                    if cancel.is_cancelled() {
+                        return;
+                    }
+                    tracing::warn!(
+                        "MCP SSE stream closed unexpectedly, reconnecting in {:?}",
+                        reconnect_backoff(attempt)
+                    );
+                    // In-flight requests at the moment of the drop are lost —
+                    // a fresh stream can't answer a request tied to the old
+                    // one — but this reconnect loop means *future* requests
+                    // recover instead of every subsequent call failing for
+                    // the rest of the session.
+                    {
+                        let mut all = pending.lock().unwrap();
+                        for (_, tx) in all.drain() {
+                            let _ = tx.send(Err("SSE stream closed".to_string()));
                         }
                     }
-                }
-                let mut all = pending.lock().unwrap();
-                for (_, tx) in all.drain() {
-                    let _ = tx.send(Err("SSE stream closed".to_string()));
+                    tokio::select! {
+                        _ = tokio::time::sleep(reconnect_backoff(attempt)) => {}
+                        _ = cancel.cancelled() => return,
+                    }
+                    attempt = attempt.saturating_add(1);
                 }
             });
         }
 
-        let endpoint = tokio::time::timeout(Duration::from_secs(15), endpoint_rx)
+        // The reader task already wrote the resolved URL into `post_url`
+        // before sending on this channel — awaiting it is purely to bound
+        // how long we wait for the initial handshake.
+        tokio::time::timeout(Duration::from_secs(15), endpoint_rx)
             .await
             .context("timed out waiting for SSE endpoint event")??;
-        let base = base_url(url);
-        let post_url = if endpoint.starts_with("http") {
-            endpoint
-        } else {
-            format!("{base}{}", endpoint.trim_start_matches('/'))
-        };
 
         let client = Arc::new(LegacySseClient {
+            url,
             post_url,
             client,
             pending,
             next_id: AtomicU64::new(1),
+            cancel,
         });
         client.initialize().await?;
         Ok(client)
@@ -306,7 +428,8 @@ impl LegacySseClient {
     }
 
     async fn send(&self, body: &Value) -> anyhow::Result<()> {
-        let response = self.client.post(&self.post_url).json(body).send().await?;
+        let post_url = self.post_url.lock().unwrap().clone();
+        let response = self.client.post(&post_url).json(body).send().await?;
         if !response.status().is_success() && response.status().as_u16() != 202 {
             let status = response.status().as_u16();
             let text = response.text().await.unwrap_or_default();
@@ -504,6 +627,20 @@ fn base_url(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reconnect_backoff_doubles_then_caps() {
+        // Pinned exact values, not just "increasing" — a real production
+        // incident elsewhere came from a backoff formula that looked right
+        // but was actually `n^attempt` instead of `initial * 2^attempt`.
+        assert_eq!(reconnect_backoff(0), Duration::from_millis(500));
+        assert_eq!(reconnect_backoff(1), Duration::from_millis(1000));
+        assert_eq!(reconnect_backoff(2), Duration::from_millis(2000));
+        assert_eq!(reconnect_backoff(3), Duration::from_millis(4000));
+        assert_eq!(reconnect_backoff(6), Duration::from_secs(32).min(RECONNECT_MAX));
+        assert_eq!(reconnect_backoff(6), RECONNECT_MAX, "must cap at 30s, not keep doubling");
+        assert_eq!(reconnect_backoff(50), RECONNECT_MAX, "must never overflow for a long-flapping connection");
+    }
 
     #[test]
     fn drain_events_parses() {

@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TOOLS = [{"name": "echo", "description": "Echo text", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}]
 sse_clients = []
+flaky_drops = 0
 
 def rpc(method, params, mid):
     if method == "initialize":
@@ -40,6 +41,34 @@ class H(BaseHTTPRequestHandler):
                     data = q.get(timeout=300)
                     self.wfile.write(f"event: message\ndata: {data}\n\n".encode())
                     self.wfile.flush()
+            except Exception:
+                pass
+            finally:
+                if q in sse_clients:
+                    sse_clients.remove(q)
+        elif self.path == "/sse-flaky":
+            # Relays messages like /sse, but the *first* connection ever made
+            # drops itself right after relaying one message — simulating a
+            # server restart / network blip mid-session. Every later GET
+            # (i.e. the client's reconnect) behaves like a normal, stable
+            # stream. This lets a test prove: the call in flight when the
+            # drop happens still completes (bytes were already flushed), and
+            # the *next* call also succeeds once the client reconnects.
+            global flaky_drops
+            self._sse_headers()
+            q = queue.Queue()
+            sse_clients.append(q)
+            self.wfile.write(b"event: endpoint\ndata: /messages\n\n")
+            self.wfile.flush()
+            drop_after_one = flaky_drops < 1
+            try:
+                while True:
+                    data = q.get(timeout=300)
+                    self.wfile.write(f"event: message\ndata: {data}\n\n".encode())
+                    self.wfile.flush()
+                    if drop_after_one:
+                        flaky_drops += 1
+                        return
             except Exception:
                 pass
             finally:
