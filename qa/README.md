@@ -10,7 +10,7 @@ the real secret); no keys or secrets are committed.
 
 | Gate | Proof | Result |
 |------|-------|--------|
-| Full test suite | `test-suite.txt` | **491 passed, 0 failed** |
+| Full test suite | `test-suite.txt` | **505 passed, 0 failed** |
 | Formatting | `fmt.txt` | clean (`cargo fmt --check`, exit 0) |
 | Lint | `clippy.txt` | clean (`clippy -D warnings`, exit 0) |
 | CLI surface | `cli-help.txt` | `--help` renders all flags |
@@ -69,36 +69,43 @@ incrementally-refreshed graph is set-equivalent to a from-scratch parse across
 adds, changes, and deletes; `corrupt_db_is_recreated_not_fatal` proves a garbage
 cache is wiped and rebuilt rather than breaking the agent.
 
-## Semantic code search (`--semantic`)
+## Hybrid code search (`code_search`)
 
-Natural-language retrieval over the code graph via an OpenAI-compatible
-embedding service (no native ONNX dep in pirs). Embeddings are stored per-symbol
-in the graph store, stamped with the model so a swap re-embeds.
+One tool fuses three complementary retrieval signals with reciprocal-rank
+fusion (RRF, k=60): **BM25 lexical** (tantivy, in-RAM), **embedding cosine**
+(optional, OpenAI-compatible service, no native ONNX dep), and **graph
+centrality** (caller count). BM25 needs no model and builds instantly, so the
+tool works the moment the graph exists; it registers whenever the graph is on.
+The embedding arm activates under `--semantic` + `--embed-model`, is bounded
+(`--embed-batch-cap`, default 256 symbols/call, persisted), and degrades
+silently to lexical+graph if the service is down or the index is empty.
 
 | # | Feature | Proof | What it demonstrates |
 |---|---------|-------|----------------------|
-| 13 | `semantic_search` end to end | `live/13-semantic-search.log` | On the pirs repo, pointed at a local Ollama `all-minilm`: the tool embedded **2107 symbols**, cosine-searched a natural-language query, reranked by graph centrality, and returned ranked `file:line` hits with similarity + caller counts. |
+| 13 | `semantic_search` (embedding-only, superseded) | `live/13-semantic-search.log` | Historical: the original embedding-only tool on `all-minilm` returned plausible-but-wrong hits (`diff`/`not_found_error`) for a staleness query — the weakness that motivated the hybrid. |
+| 14 | `code_search` hybrid (BM25+embeddings+graph) | `live/14-code-search-hybrid.log` | On the pirs repo, `all-minilm` embedded **all 2124 symbols**; the tool reports `[lexical+semantic+graph]`. **Same query as #13** now ranks the real incremental-refresh/staleness symbol #1. An exact-identifier query returns `store_embeddings`/`ensure_model`/model-guard test as ranks 1-3 — BM25's exact-term strength that cosine alone lacked. |
 
 Correctness/robustness is also test-pinned:
 - `crates/pirs-ai/tests/embed_client_test.rs` — the embeddings client parses
   responses, realigns out-of-order indexes, rejects count mismatches, surfaces
   non-2xx as errors.
+- `crates/pirs-graph/tests/lexical_test.rs` — BM25 ranks the exact-term owner
+  first; punctuated/empty natural-language queries are safe (no tantivy grammar
+  errors).
 - `crates/pirs-graph/tests/store_test.rs::semantic_embed_store_search_and_model_guard`
   — embed/store/search ranking, the model-swap wipe guard, incremental re-embed
   on file change.
-- `crates/pirs-graph/tests/semantic_fallback_test.rs` — **a bug this live run
-  caught**: small-context models (all-minilm, 256 tokens) reject dense chunks.
-  The fix truncates the offending chunk per-item so one oversized symbol never
-  aborts the whole index; the test drives the real tool against a mock server
-  that 400s over-long inputs and asserts both symbols still embed.
+- `crates/pirs-graph/tests/code_search_test.rs` — **a bug live testing caught**:
+  small-context models (all-minilm, 256 tokens) reject dense chunks; the fix
+  truncates the offender per-item so one oversized symbol never aborts the index.
+  A second test asserts the tool still returns BM25 results when the embedding
+  service is dead (graceful lexical+graph fallback).
 
-**Honest quality note.** The *mechanism* is proven, but retrieval *quality* is
-model-bound. `all-minilm` is a tiny general-English model and is weak on code:
-in the live run its top hits for a "detect file changed / staleness" query were
-`diff`/`edit` symbols, not the store's actual `refresh()`/mtime logic. Semantic
-search is a better *first hop* into the graph, not a substitute for it — and a
-code-specific embedding model (e.g. nomic-embed-code, jina-code) is needed for
-results good enough to lead exploration. That is a model choice, exposed via
+**Honest quality note.** The hybrid closes most of the gap the embedding-only
+tool had on `all-minilm`: BM25 anchors exact terms and identifiers, so a weak
+general-English embedding model no longer sinks a query. A code-specific
+embedding model (nomic-embed-code, jina-code) would still lift the *semantic*
+arm further for purely conceptual queries — a model choice exposed via
 `--embed-model`, not a wiring gap.
 
 ## Discovery
@@ -114,4 +121,4 @@ results good enough to lead exploration. That is a model choice, exposed via
   overrides and additions (e.g. `plan-oracle-exec`, `general-*`) resolve by name
   with project-then-home precedence.
 - The extension packs are cataloged in `../extensions/README.md` and loaded by
-  the `pirs-rhai` integration tests, counted in the 491 above.
+  the `pirs-rhai` integration tests, counted in the 505 above.

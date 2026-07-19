@@ -1,2 +1,1 @@
-    Checking pirs v0.1.0 (/home/xmonader/wspace/k3play/pirs/crates/pirs)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s

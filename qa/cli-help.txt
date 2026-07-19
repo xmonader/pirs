@@ -40,6 +40,20 @@ Options:
           Model context window in tokens (drives compaction threshold) [default: 128000]
       --no-graph
           Disable the code graph (code_map/ast_edit tools, blast-radius notes)
+      --persist-graph
+          Cache the code graph in .pirs/graph.db and refresh it incrementally (re-parse only changed files). Speeds up warm starts on large repos; off by default. The cache is disposable and never source of truth
+      --semantic
+          Enable the semantic_search tool: natural-language code search via an embedding service (implies --persist-graph for the vector store). Point it at any OpenAI-compatible /v1/embeddings endpoint with the flags below
+      --embed-base-url <EMBED_BASE_URL>
+          Embeddings endpoint base URL (OpenAI-compatible), e.g. Ollama's http://localhost:11434/v1 [env: PIRS_EMBED_BASE_URL] [env: PIRS_EMBED_BASE_URL=]
+      --embed-model <EMBED_MODEL>
+          Embedding model id [env: PIRS_EMBED_MODEL] [env: PIRS_EMBED_MODEL=]
+      --embed-api-key <EMBED_API_KEY>
+          API key for the embeddings endpoint (optional for local servers) [env: PIRS_EMBED_API_KEY] [env: PIRS_EMBED_API_KEY=]
+      --embed-max-chars <EMBED_MAX_CHARS>
+          Max source chars embedded per symbol. Lower it for small-context models (e.g. 512 for all-minilm) to avoid the truncating fallback; big-context models can leave the default [env: PIRS_EMBED_MAX_CHARS] [env: PIRS_EMBED_MAX_CHARS=]
+      --embed-batch-cap <EMBED_BATCH_CAP>
+          Max symbols code_search embeds per call (default 256). Keeps a first search from blocking on a full cold index; raise it to index everything in one pass with a fast model [env: PIRS_EMBED_BATCH_CAP] [env: PIRS_EMBED_BATCH_CAP=]
       --tool-diet
           Start with only core tools loaded; model loads more via use_tool
       --sequential

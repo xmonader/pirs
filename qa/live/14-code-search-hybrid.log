@@ -1,0 +1,61 @@
+Live proof — hybrid code_search (BM25 + embeddings + graph, RRF fusion)
+========================================================================
+
+Setup: pirs on its OWN repo, LLM = DeepSeek (deepseek-v4-flash), embeddings =
+local Ollama all-minilm (384-dim). Flags: --semantic --embed-model all-minilm
+--embed-max-chars 512 --embed-batch-cap 4000. Cold DB wiped first; the run
+embedded all 2124/2124 symbols (verified in .pirs/graph.db). API key scrubbed;
+no key appears in this log or the raw capture.
+
+The tool reports which arms fired in brackets: [lexical+semantic+graph].
+
+------------------------------------------------------------------------
+Query 1 (natural language — the SAME query as log 13's semantic-only run):
+  "decide whether a source file has changed and needs re-parsing for
+   incremental indexing or staleness detection"
+
+> code_search
+Top 8 for "decide whether a source file has changed and needs re-parsing for incremental indexing or staleness detection" [lexical+semantic+graph]:
+1. incremental_refresh_equals_full_parse_across_add_change_delete (crates/pirs-graph/tests/store_test.rs:54)  [0 callers]
+2. load_source (crates/pirs-rhai/src/lib.rs:447)  [30 callers]
+3. server_for_file (crates/pirs-lsp/src/client.rs:57)  [4 callers]
+4. uri_for (crates/pirs-lsp/src/client.rs:454)  [5 callers]
+5. diff (crates/pirs-bench/src/git.rs:63)  [3 callers]
+6. for_each_with (crates/pirs-rhai/src/lib.rs:941)  [5 callers]
+7. cands (crates/pirs-bench/src/orchestrate.rs:209)  [5 callers]
+8. execute (crates/pirs-lsp/src/rename.rs:89)  [64 callers]
+
+BEFORE/AFTER: log 13 (semantic-only, all-minilm) topped out at `diff` and
+`not_found_error` — plausible-but-wrong. The hybrid pulls the actual
+incremental-refresh / staleness symbol to #1, because BM25 rewards the exact
+topic terms ("incremental", "re-parsing", "change") that the general embedding
+model blurred. This is the "similar != relevant" fix the lexical arm exists for.
+
+------------------------------------------------------------------------
+Query 2 (exact-identifier — BM25's core strength; warm index, no re-embed):
+  "store_embeddings wipe on model mismatch"
+
+> code_search
+Top 8 for "store_embeddings wipe on model mismatch" [lexical+semantic+graph]:
+1. store_embeddings (crates/pirs-graph/src/store.rs:333)  [2 callers]
+2. ensure_model (crates/pirs-graph/src/store.rs:261)  [1 callers]
+3. semantic_embed_store_search_and_model_guard (crates/pirs-graph/tests/store_test.rs:146)  [0 callers]
+4. count_mismatch_is_rejected (crates/pirs-ai/tests/embed_client_test.rs:67)  [0 callers]
+5. add (crates/pirs-bench-runner/src/metrics.rs:23)  [11 callers]
+6. list (crates/pirs-orchestrator/src/supervisor.rs:146)  [7 callers]
+7. model (crates/pirs-ai/src/embed.rs:48)  [1 callers]
+8. load_server_specs_with_trust (crates/pirs-mcp/src/config.rs:87)  [5 callers]
+
+Ranks 1-3 are exactly the relevant symbols: the storer, the model-mismatch
+guard it calls, and the test that exercises both. Exact-term retrieval that
+embedding-cosine alone does not guarantee.
+
+------------------------------------------------------------------------
+What this proves live, end to end:
+  - BM25 (tantivy) + embedding cosine + graph centrality fuse via RRF (k=60).
+  - The [lexical+semantic+graph] tag confirms all three arms contributed.
+  - --embed-batch-cap indexed all 2124 symbols in one pass with a fast model;
+    default (256/call) keeps a first search from blocking on a cold index.
+  - Fully graceful: with no --semantic the same tool runs [lexical+graph]; unit
+    tests cover a dead embedding service (falls back to lexical) and an
+    oversized chunk (truncated per-item, not fatal).
