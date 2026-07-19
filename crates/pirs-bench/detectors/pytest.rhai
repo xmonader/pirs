@@ -25,6 +25,12 @@ fn detect() {
             list_cmd: py + "\"$PY\" -m pytest --collect-only -q 2>/dev/null | head -n 5",
             // Space-joined node ids in {tests}; empty {tests} runs the whole suite.
             test_cmd: py + "\"$PY\" -m pytest {tests} --junitxml={junit} -p no:cacheprovider -q",
+            // {tests} lands as bare shell words in test_cmd below; some real
+            // pytest node ids (parametrized with quotes/commas, e.g.
+            // `test_x[('fixt', 'val')]`) contain shell metacharacters that
+            // would otherwise corrupt the whole command for every id in the
+            // batch, not just the offending one.
+            shell_quote_tests: true,
             timeout_secs: 1200,
             parallel: false,
         });

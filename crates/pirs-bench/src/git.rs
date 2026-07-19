@@ -94,8 +94,8 @@ impl GitWorkspace {
     }
 }
 
-/// Minimal single-quote shell escaping for a path embedded in a git command.
-fn shell_quote(s: &str) -> String {
+/// Minimal single-quote shell escaping for a value embedded in a shell command.
+pub(crate) fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 

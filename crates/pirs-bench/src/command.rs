@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context as _};
 
+use crate::git::shell_quote;
 use crate::junit;
 use crate::proc::run_capture;
 use crate::run::TestRunner;
@@ -34,10 +35,18 @@ impl TestRunner for CommandRunner {
         let junit_file = junit_dir.path().join("report.xml");
         let junit_path = junit_file.to_string_lossy().into_owned();
 
+        let joined = if self.spec.shell_quote_tests {
+            ids.iter()
+                .map(|id| shell_quote(id))
+                .collect::<Vec<_>>()
+                .join(&self.spec.test_join)
+        } else {
+            ids.join(&self.spec.test_join)
+        };
         let cmd = self
             .spec
             .test_cmd
-            .replace("{tests}", &ids.join(&self.spec.test_join))
+            .replace("{tests}", &joined)
             .replace("{junit}", &junit_path);
 
         let cap = run_capture(&cmd, &self.work_dir, self.spec.timeout_secs)?;
@@ -76,6 +85,7 @@ mod tests {
             list_cmd: "true".into(),
             test_cmd: test_cmd.into(),
             test_join: " ".into(),
+            shell_quote_tests: false,
             timeout_secs: timeout,
             parallel: false,
         }
@@ -111,6 +121,27 @@ mod tests {
             .unwrap();
         let joined = std::fs::read_to_string(dir.path().join("joined.txt")).unwrap();
         assert_eq!(joined, "a|b");
+    }
+
+    #[test]
+    fn shell_quote_tests_survives_ids_with_shell_metacharacters() {
+        // Regression test: a real SWE-bench pytest id from a parametrized test
+        // (`test_x[('fixt', 'val')]`) has an odd number of quotes. Run via a raw
+        // shell command with `sh -c`, an unescaped id corrupts the whole command
+        // for every id in the batch — not a parse error on just that one id.
+        let dir = tempfile::tempdir().unwrap();
+        let xml = r#"<testsuite><testcase classname="m" name="a"/></testsuite>"#;
+        let cmd =
+            format!("printf '%s' \"{{tests}}\" > joined.txt; cat > {{junit}} <<'EOF'\n{xml}\nEOF");
+        let mut s = spec(&cmd, 30);
+        s.shell_quote_tests = true;
+        let runner = CommandRunner::new(s, dir.path().to_path_buf());
+        let tricky = "testing/python/fixtures.py::test_x[('fixt', 'val')]".to_string();
+        runner
+            .run(&["a".to_string(), tricky.clone()], Ring::Inner)
+            .unwrap();
+        let joined = std::fs::read_to_string(dir.path().join("joined.txt")).unwrap();
+        assert_eq!(joined, format!("'a' '{}'", tricky.replace('\'', "'\\''")));
     }
 
     #[test]

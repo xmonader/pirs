@@ -51,6 +51,7 @@ mod tests {
             list_cmd: list_cmd.into(),
             test_cmd: "true".into(),
             test_join: " ".into(),
+            shell_quote_tests: false,
             timeout_secs: 10,
             parallel: false,
         }

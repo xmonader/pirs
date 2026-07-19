@@ -89,6 +89,16 @@ pub struct RunnerSpec {
     /// matches nothing.
     #[serde(default = "default_test_join")]
     pub test_join: String,
+    /// Whether each id must be single-quote shell-escaped before joining.
+    /// Needed when `{tests}` sits as bare, unquoted shell words in `test_cmd`
+    /// (pytest, cargo) — a real SWE-bench pytest id like
+    /// `test_x[('fixt', 'val')]` contains unbalanced quotes that otherwise
+    /// corrupt the *entire* command for the whole batch, not just that id.
+    /// Never set this when `{tests}` is already embedded inside a quoted shell
+    /// argument (e.g. Go's `-run "{tests}"`, a regex context) — adding quotes
+    /// there would corrupt the regex instead of protecting the shell.
+    #[serde(default)]
+    pub shell_quote_tests: bool,
     /// Per-run wall-clock budget in seconds.
     pub timeout_secs: u64,
     #[serde(default)]
