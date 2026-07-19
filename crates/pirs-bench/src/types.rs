@@ -68,6 +68,27 @@ impl Snapshot {
     }
 }
 
+/// How to install, probe, and run a project's tests. Produced by a Rhai
+/// detector (heuristic, per-ecosystem) and consumed by the Rust runner. The
+/// `test_cmd` template carries two placeholders:
+///   * `{tests}` — the space-joined test ids to run (empty ⇒ the whole suite);
+///   * `{junit}` — the path the run must write JUnit XML to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunnerSpec {
+    pub framework: String,
+    /// Commands to establish a usable environment (editable install, build).
+    #[serde(default)]
+    pub install: Vec<String>,
+    /// Collect-only / dry-run that proves the runner works (lists tests).
+    pub list_cmd: String,
+    /// Test command template with `{tests}` and `{junit}` placeholders.
+    pub test_cmd: String,
+    /// Per-run wall-clock budget in seconds.
+    pub timeout_secs: u64,
+    #[serde(default)]
+    pub parallel: bool,
+}
+
 /// Concentric cost tiers. Verification runs the smallest ring that answers the
 /// current question; the full suite is paid at most once per task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
