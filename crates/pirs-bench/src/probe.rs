@@ -23,11 +23,7 @@ pub struct ProbeResult {
 /// Run the spec's `list_cmd` and decide whether the runner is trustworthy.
 pub fn probe(spec: &RunnerSpec, work_dir: &Path) -> anyhow::Result<ProbeResult> {
     let cap = run_capture(&spec.list_cmd, work_dir, spec.timeout_secs)?;
-    let listed = cap
-        .stdout
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .count();
+    let listed = cap.stdout.lines().filter(|l| !l.trim().is_empty()).count();
     Ok(ProbeResult {
         // A clean exit that enumerates nothing is NOT a confirmation — an empty
         // collection means the runner didn't actually find this project's tests.
@@ -72,7 +68,11 @@ mod tests {
     #[test]
     fn failing_probe_keeps_stderr_as_repair_signal() {
         let dir = tempfile::tempdir().unwrap();
-        let p = probe(&spec("echo 'ModuleNotFoundError: no_dep' 1>&2; exit 1"), dir.path()).unwrap();
+        let p = probe(
+            &spec("echo 'ModuleNotFoundError: no_dep' 1>&2; exit 1"),
+            dir.path(),
+        )
+        .unwrap();
         assert!(!p.confirmed);
         assert!(p.stderr.contains("ModuleNotFoundError"), "{}", p.stderr);
     }

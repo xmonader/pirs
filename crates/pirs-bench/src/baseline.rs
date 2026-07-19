@@ -62,7 +62,11 @@ pub fn capture_stable_cached(
         cache.save()?;
     }
 
-    Ok(Some(Snapshot { states, build_ok, runs: 2 }))
+    Ok(Some(Snapshot {
+        states,
+        build_ok,
+        runs: 2,
+    }))
 }
 
 /// The reproduce gate: every target must be red (Fail/Errored) at baseline.
@@ -111,7 +115,9 @@ mod tests {
             ],
             i: RefCell::new(0),
         };
-        let snap = capture_stable(&runner, &ids(&["t"]), Ring::Inner).unwrap().unwrap();
+        let snap = capture_stable(&runner, &ids(&["t"]), Ring::Inner)
+            .unwrap()
+            .unwrap();
         assert_eq!(snap.get("t"), Some(Fail));
         assert_eq!(snap.runs, 2);
     }
@@ -125,7 +131,9 @@ mod tests {
             ],
             i: RefCell::new(0),
         };
-        assert!(capture_stable(&runner, &ids(&["t"]), Ring::Inner).unwrap().is_none());
+        assert!(capture_stable(&runner, &ids(&["t"]), Ring::Inner)
+            .unwrap()
+            .is_none());
     }
 
     /// A runner that panics if asked to run — proves the cache path never calls it.
@@ -141,9 +149,15 @@ mod tests {
         let mut cache = BaselineCache::in_memory();
         cache.put("sha", "t1", Fail);
         cache.put("sha", "t2", Pass);
-        let snap = capture_stable_cached(&NeverRunner, &ids(&["t1", "t2"]), Ring::Inner, &mut cache, "sha")
-            .unwrap()
-            .unwrap();
+        let snap = capture_stable_cached(
+            &NeverRunner,
+            &ids(&["t1", "t2"]),
+            Ring::Inner,
+            &mut cache,
+            "sha",
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(snap.get("t1"), Some(Fail));
         assert_eq!(snap.get("t2"), Some(Pass));
     }
@@ -160,9 +174,10 @@ mod tests {
         };
         let mut cache = BaselineCache::in_memory();
         cache.put("sha", "t1", Pass);
-        let snap = capture_stable_cached(&runner, &ids(&["t1", "t2"]), Ring::Inner, &mut cache, "sha")
-            .unwrap()
-            .unwrap();
+        let snap =
+            capture_stable_cached(&runner, &ids(&["t1", "t2"]), Ring::Inner, &mut cache, "sha")
+                .unwrap()
+                .unwrap();
         assert_eq!(snap.get("t1"), Some(Pass));
         assert_eq!(snap.get("t2"), Some(Fail));
         // t2 got backfilled into the cache.
@@ -175,9 +190,15 @@ mod tests {
         assert!(targets_reproduce(&base, &ids(&["t1", "t2"])).is_ok());
 
         let green = Snapshot::from_pairs([("t1", Pass)]);
-        assert_eq!(targets_reproduce(&green, &ids(&["t1"])), Err("t1".to_string()));
+        assert_eq!(
+            targets_reproduce(&green, &ids(&["t1"])),
+            Err("t1".to_string())
+        );
 
         let missing = Snapshot::default();
-        assert_eq!(targets_reproduce(&missing, &ids(&["t1"])), Err("t1".to_string()));
+        assert_eq!(
+            targets_reproduce(&missing, &ids(&["t1"])),
+            Err("t1".to_string())
+        );
     }
 }

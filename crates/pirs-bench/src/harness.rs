@@ -56,7 +56,13 @@ pub fn run_instance(
     workspace: Option<&GitWorkspace>,
 ) -> anyhow::Result<InstanceReport> {
     let mut timings = Timings::new();
-    let bail = |outcome, timings| Ok(InstanceReport { outcome, patch: None, timings });
+    let bail = |outcome, timings| {
+        Ok(InstanceReport {
+            outcome,
+            patch: None,
+            timings,
+        })
+    };
 
     // 1. Discover and probe-confirm a runner. No confirmed runner → we can't get
     //    a pass/fail signal at all. (No edits yet, so no rollback needed.)
@@ -84,12 +90,21 @@ pub fn run_instance(
     //    real tree; the outcome decides whether we keep or discard those edits.
     //    (baseline/fix/verify phases are timed inside the driver.)
     let runner = CommandRunner::new(spec, inst.repo_root.clone());
-    let task = TaskSpec { targets: inst.targets.clone(), keep_green: inst.keep_green.clone() };
+    let task = TaskSpec {
+        targets: inst.targets.clone(),
+        keep_green: inst.keep_green.clone(),
+    };
 
     let outcome = match &inst.base_sha {
-        Some(sha) => {
-            run_task_cached(&task, &runner, executor, max_attempts, cache, sha, &mut timings)?
-        }
+        Some(sha) => run_task_cached(
+            &task,
+            &runner,
+            executor,
+            max_attempts,
+            cache,
+            sha,
+            &mut timings,
+        )?,
         None => run_task(&task, &runner, executor, max_attempts, &mut timings)?,
     };
 
@@ -103,7 +118,11 @@ pub fn run_instance(
         None => None,
     };
 
-    Ok(InstanceReport { outcome, patch, timings })
+    Ok(InstanceReport {
+        outcome,
+        patch,
+        timings,
+    })
 }
 
 #[cfg(test)]
@@ -131,9 +150,11 @@ mod tests {
             keep_green: vec![],
             base_sha: None,
         };
-        let report =
-            run_instance(&inst, &host, &mut cache, &mut NeverExecutor, 3, None).unwrap();
-        assert_eq!(report.outcome, Outcome::Failed(FailBucket::RunnerUndetected));
+        let report = run_instance(&inst, &host, &mut cache, &mut NeverExecutor, 3, None).unwrap();
+        assert_eq!(
+            report.outcome,
+            Outcome::Failed(FailBucket::RunnerUndetected)
+        );
         assert!(report.patch.is_none());
     }
 }

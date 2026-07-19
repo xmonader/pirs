@@ -120,7 +120,10 @@ mod tests {
         let base = Snapshot::from_pairs([("t1", Fail), ("keep", Pass)]);
         let post = Snapshot::from_pairs([("t1", Pass), ("keep", Pass)]);
         let post2 = Snapshot::from_pairs([("t1", Pass)]);
-        assert_eq!(evaluate(&targets, &scope, &base, &post, &post2), Verdict::Done);
+        assert_eq!(
+            evaluate(&targets, &scope, &base, &post, &post2),
+            Verdict::Done
+        );
     }
 
     #[test]
@@ -130,7 +133,10 @@ mod tests {
         let base = Snapshot::from_pairs([("t1", Errored)]);
         let post = Snapshot::from_pairs([("t1", Pass)]);
         let post2 = post.clone();
-        assert_eq!(evaluate(&targets, &targets, &base, &post, &post2), Verdict::Done);
+        assert_eq!(
+            evaluate(&targets, &targets, &base, &post, &post2),
+            Verdict::Done
+        );
     }
 
     #[test]
@@ -190,7 +196,10 @@ mod tests {
         let base = Snapshot::from_pairs([("t1", Fail), ("already_broken", Fail)]);
         let post = Snapshot::from_pairs([("t1", Pass), ("already_broken", Fail)]);
         let post2 = Snapshot::from_pairs([("t1", Pass)]);
-        assert_eq!(evaluate(&targets, &scope, &base, &post, &post2), Verdict::Done);
+        assert_eq!(
+            evaluate(&targets, &scope, &base, &post, &post2),
+            Verdict::Done
+        );
     }
 
     #[test]

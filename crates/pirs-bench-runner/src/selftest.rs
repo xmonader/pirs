@@ -30,7 +30,12 @@ pub enum Mode {
     Oracle,
     /// The real pirs agent — validates the whole thing end to end (needs an
     /// LLM backend + key).
-    Agent { provider: Provider, model: String, api_key: String, max_turns: usize },
+    Agent {
+        provider: Provider,
+        model: String,
+        api_key: String,
+        max_turns: usize,
+    },
 }
 
 /// A scripted edit the oracle applies: replace the first `find` in `file` with
@@ -52,7 +57,11 @@ pub struct OracleExecutor {
 
 impl OracleExecutor {
     pub fn new(root: PathBuf, edits: Vec<OracleEdit>) -> Self {
-        OracleExecutor { root, edits, applied: false }
+        OracleExecutor {
+            root,
+            edits,
+            applied: false,
+        }
     }
 }
 
@@ -65,8 +74,8 @@ impl Executor for OracleExecutor {
         let mut changed = false;
         for e in &self.edits {
             let path = self.root.join(&e.file);
-            let src = std::fs::read_to_string(&path)
-                .with_context(|| format!("oracle read {path:?}"))?;
+            let src =
+                std::fs::read_to_string(&path).with_context(|| format!("oracle read {path:?}"))?;
             if let Some(pos) = src.find(&e.find) {
                 let mut fixed = String::with_capacity(src.len());
                 fixed.push_str(&src[..pos]);
@@ -91,7 +100,11 @@ struct Project {
 }
 
 fn edit(file: &str, find: &str, replace: &str) -> OracleEdit {
-    OracleEdit { file: file.into(), find: find.into(), replace: replace.into() }
+    OracleEdit {
+        file: file.into(),
+        find: find.into(),
+        replace: replace.into(),
+    }
 }
 
 const PYPROJECT: &str = "[project]\nname = \"demo\"\nversion = \"0.0.0\"\n";
@@ -104,7 +117,8 @@ const PYPROJECT: &str = "[project]\nname = \"demo\"\nversion = \"0.0.0\"\n";
 /// bugs.
 const TEMPLATES: &[fn(usize) -> Project] = &[
     // A — top-level module, top-level function test, arithmetic bug.
-    |i| Project {
+    |i| {
+        Project {
         id: format!("proj-{i:03}-toplevel"),
         files: vec![
             ("pyproject.toml".into(), PYPROJECT.into()),
@@ -117,9 +131,11 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
         targets: vec!["test_calc.py::test_compute".into()],
         keep_green: vec![],
         oracle: vec![edit("calc.py", "a - b", "a + b")],
+    }
     },
     // B — class-based test (JUnit classname carries the class).
-    |i| Project {
+    |i| {
+        Project {
         id: format!("proj-{i:03}-class"),
         files: vec![
             ("pyproject.toml".into(), PYPROJECT.into()),
@@ -132,9 +148,11 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
         targets: vec!["test_strutil.py::TestShout::test_upper".into()],
         keep_green: vec![],
         oracle: vec![edit("strutil.py", "s.lower()", "s.upper()")],
+    }
     },
     // C — package under src/, path added via conftest (import shape).
-    |i| Project {
+    |i| {
+        Project {
         id: format!("proj-{i:03}-package"),
         files: vec![
             ("pyproject.toml".into(), PYPROJECT.into()),
@@ -152,9 +170,11 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
         targets: vec!["tests/test_core.py::test_scale".into()],
         keep_green: vec![],
         oracle: vec![edit("src/pkg/core.py", "x * 0", "x * 2")],
+    }
     },
     // D — one bug, two failing targets.
-    |i| Project {
+    |i| {
+        Project {
         id: format!("proj-{i:03}-multi"),
         files: vec![
             ("pyproject.toml".into(), PYPROJECT.into()),
@@ -167,9 +187,11 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
         targets: vec!["test_math2.py::test_a".into(), "test_math2.py::test_b".into()],
         keep_green: vec![],
         oracle: vec![edit("math2.py", "x + x + 1", "x + x")],
+    }
     },
     // E — keep-green regression: fix one function without breaking its twin.
-    |i| Project {
+    |i| {
+        Project {
         id: format!("proj-{i:03}-keepgreen"),
         files: vec![
             ("pyproject.toml".into(), PYPROJECT.into()),
@@ -185,16 +207,24 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
         targets: vec!["test_ops.py::test_inc".into()],
         keep_green: vec!["test_ops.py::test_dec".into()],
         oracle: vec![edit("ops.py", "def inc(x):\n    return x - 1", "def inc(x):\n    return x + 1")],
+    }
     },
     // F — detection via setup.cfg only (no pyproject).
     |i| Project {
         id: format!("proj-{i:03}-setupcfg"),
         files: vec![
-            ("setup.cfg".into(), "[metadata]\nname = demo\nversion = 0.0.0\n".into()),
-            ("thing.py".into(), "def area(w, h):\n    return w + h\n".into()),
+            (
+                "setup.cfg".into(),
+                "[metadata]\nname = demo\nversion = 0.0.0\n".into(),
+            ),
+            (
+                "thing.py".into(),
+                "def area(w, h):\n    return w + h\n".into(),
+            ),
             (
                 "test_thing.py".into(),
-                "from thing import area\n\n\ndef test_area():\n    assert area(3, 4) == 12\n".into(),
+                "from thing import area\n\n\ndef test_area():\n    assert area(3, 4) == 12\n"
+                    .into(),
             ),
         ],
         targets: vec!["test_thing.py::test_area".into()],
@@ -206,10 +236,14 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
         id: format!("proj-{i:03}-tox"),
         files: vec![
             ("tox.ini".into(), "[tox]\nenvlist = py3\n".into()),
-            ("widget.py".into(), "def price(n):\n    return n * 10 - 1\n".into()),
+            (
+                "widget.py".into(),
+                "def price(n):\n    return n * 10 - 1\n".into(),
+            ),
             (
                 "test_widget.py".into(),
-                "from widget import price\n\n\ndef test_price():\n    assert price(4) == 40\n".into(),
+                "from widget import price\n\n\ndef test_price():\n    assert price(4) == 40\n"
+                    .into(),
             ),
         ],
         targets: vec!["test_widget.py::test_price".into()],
@@ -228,7 +262,8 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
             ("deep.py".into(), "def flip(b):\n    return b\n".into()),
             (
                 "tests/unit/test_deep.py".into(),
-                "from deep import flip\n\n\ndef test_flip():\n    assert flip(True) is False\n".into(),
+                "from deep import flip\n\n\ndef test_flip():\n    assert flip(True) is False\n"
+                    .into(),
             ),
         ],
         targets: vec!["tests/unit/test_deep.py::test_flip".into()],
@@ -236,7 +271,8 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
         oracle: vec![edit("deep.py", "return b\n", "return not b\n")],
     },
     // I — comparison-operator bug (boundary).
-    |i| Project {
+    |i| {
+        Project {
         id: format!("proj-{i:03}-compare"),
         files: vec![
             ("pyproject.toml".into(), PYPROJECT.into()),
@@ -249,6 +285,7 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
         targets: vec!["test_age.py::test_boundary".into()],
         keep_green: vec![],
         oracle: vec![edit("age.py", "age > 18", "age >= 18")],
+    }
     },
     // J — loop accumulation bug (assignment vs augmented assignment).
     |i| Project {
@@ -261,7 +298,8 @@ const TEMPLATES: &[fn(usize) -> Project] = &[
             ),
             (
                 "test_agg.py".into(),
-                "from agg import total\n\n\ndef test_total():\n    assert total([1, 2, 3]) == 6\n".into(),
+                "from agg import total\n\n\ndef test_total():\n    assert total([1, 2, 3]) == 6\n"
+                    .into(),
             ),
         ],
         targets: vec!["test_agg.py::test_total".into()],
@@ -276,7 +314,11 @@ fn issue_for(proj: &Project) -> String {
         "One or more tests fail because of a bug in this project's SOURCE code. \
          Find and fix the bug in the source so these tests pass. Do NOT modify the tests.\n\n\
          Failing tests:\n{}",
-        proj.targets.iter().map(|t| format!("- {t}")).collect::<Vec<_>>().join("\n")
+        proj.targets
+            .iter()
+            .map(|t| format!("- {t}"))
+            .collect::<Vec<_>>()
+            .join("\n")
     )
 }
 
@@ -327,7 +369,12 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<Sel
             Mode::Oracle => {
                 oracle = Some(OracleExecutor::new(root.clone(), proj.oracle.clone()));
             }
-            Mode::Agent { model, api_key, max_turns, .. } => {
+            Mode::Agent {
+                model,
+                api_key,
+                max_turns,
+                ..
+            } => {
                 agent = Some(AgentExecutor::new(
                     root.clone(),
                     issue_for(&proj),
@@ -352,13 +399,21 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<Sel
         attribution.record(&report.outcome);
         total_timings.merge(&report.timings);
 
-        let mark = if report.outcome.is_accepted() { "ok " } else { "FAIL" };
+        let mark = if report.outcome.is_accepted() {
+            "ok "
+        } else {
+            "FAIL"
+        };
         // In agent mode, surface per-session behavior + token cost.
         let extra = match &agent {
             Some(a) => {
                 let u = a.session_usage();
                 total_usage.merge(&u);
-                format!(" | {} | {}", a.session_stats().summary(), UsageByModel::line(&u.total()))
+                format!(
+                    " | {} | {}",
+                    a.session_stats().summary(),
+                    UsageByModel::line(&u.total())
+                )
             }
             None => String::new(),
         };
@@ -381,7 +436,12 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<Sel
         }
     }
 
-    Ok(SelftestReport { attribution, failures, usage: total_usage, timings: total_timings })
+    Ok(SelftestReport {
+        attribution,
+        failures,
+        usage: total_usage,
+        timings: total_timings,
+    })
 }
 
 /// Aggregate outcome of a self-test run.

@@ -42,7 +42,11 @@ pub fn parse(xml: &str) -> anyhow::Result<Vec<JunitCase>> {
                 _ => {}
             }
         }
-        JunitCase { classname, name, outcome: TestOutcome::Pass }
+        JunitCase {
+            classname,
+            name,
+            outcome: TestOutcome::Pass,
+        }
     }
 
     let mut reader = Reader::from_str(xml);
@@ -98,7 +102,11 @@ pub fn to_snapshot(requested: &[TestId], cases: &[JunitCase], build_ok: bool) ->
         let outcome = hit.map(|c| c.outcome).unwrap_or(TestOutcome::NotCollected);
         states.insert(id.clone(), outcome);
     }
-    Snapshot { states, build_ok, runs: 1 }
+    Snapshot {
+        states,
+        build_ok,
+        runs: 1,
+    }
 }
 
 /// Whether a JUnit `classname` plausibly belongs to the requested node id: each
@@ -161,14 +169,25 @@ mod tests {
         let cases = parse(SAMPLE).unwrap();
         let requested = vec!["tests/test_math.py::test_deleted".to_string()];
         let snap = to_snapshot(&requested, &cases, true);
-        assert_eq!(snap.get("tests/test_math.py::test_deleted"), Some(NotCollected));
+        assert_eq!(
+            snap.get("tests/test_math.py::test_deleted"),
+            Some(NotCollected)
+        );
     }
 
     #[test]
     fn same_leaf_disambiguated_by_classname() {
         let cases = vec![
-            JunitCase { classname: "pkg.mod_a".into(), name: "test_it".into(), outcome: Pass },
-            JunitCase { classname: "pkg.mod_b".into(), name: "test_it".into(), outcome: Fail },
+            JunitCase {
+                classname: "pkg.mod_a".into(),
+                name: "test_it".into(),
+                outcome: Pass,
+            },
+            JunitCase {
+                classname: "pkg.mod_b".into(),
+                name: "test_it".into(),
+                outcome: Fail,
+            },
         ];
         let requested = vec!["pkg/mod_b.py::test_it".to_string()];
         let snap = to_snapshot(&requested, &cases, true);

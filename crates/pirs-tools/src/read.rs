@@ -37,8 +37,8 @@ fn read_cached(path: &std::path::Path) -> anyhow::Result<String> {
         }
     }
     use std::io::Read as _;
-    let file = std::fs::File::open(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let file =
+        std::fs::File::open(path).with_context(|| format!("failed to read {}", path.display()))?;
     let mut raw = Vec::new();
     // take() bounds the read so a huge or growing file can't exhaust memory.
     file.take(MAX_READ_BYTES)
@@ -220,7 +220,11 @@ mod tests {
             .await
             .unwrap();
         let text = out.content[0].as_text().unwrap();
-        assert!(text.contains("exceeds"), "expected byte-cap notice: {}", &text[text.len().saturating_sub(200)..]);
+        assert!(
+            text.contains("exceeds"),
+            "expected byte-cap notice: {}",
+            &text[text.len().saturating_sub(200)..]
+        );
     }
 
     #[tokio::test]

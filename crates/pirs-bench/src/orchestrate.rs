@@ -117,8 +117,14 @@ fn validate_plan(parsed: &serde_json::Value, candidates: &[Candidate]) -> PlanDe
         }
     }
 
-    let give_up = parsed.get("give_up").and_then(|v| v.as_bool()).unwrap_or(false);
-    PlanDecision { ordered_files: ordered, give_up }
+    let give_up = parsed
+        .get("give_up")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    PlanDecision {
+        ordered_files: ordered,
+        give_up,
+    }
 }
 
 /// An advisory steering hint to fold into the executor's context before its next
@@ -220,7 +226,11 @@ mod tests {
         // Model's order first, then the omitted candidate (b) re-appended.
         assert_eq!(
             plan.ordered_files,
-            vec![PathBuf::from("c.py"), PathBuf::from("a.py"), PathBuf::from("b.py")]
+            vec![
+                PathBuf::from("c.py"),
+                PathBuf::from("a.py"),
+                PathBuf::from("b.py")
+            ]
         );
         assert!(!plan.give_up);
     }
@@ -231,8 +241,14 @@ mod tests {
         // Model tries to smuggle in a path that is not a candidate.
         let oracle = FixedOracle(r#"{"files": ["/etc/passwd", "b.py"], "give_up": false}"#);
         let plan = plan_next(&oracle, &c, None);
-        assert_eq!(plan.ordered_files, vec![PathBuf::from("b.py"), PathBuf::from("a.py")]);
-        assert!(!plan.ordered_files.iter().any(|p| p.to_str() == Some("/etc/passwd")));
+        assert_eq!(
+            plan.ordered_files,
+            vec![PathBuf::from("b.py"), PathBuf::from("a.py")]
+        );
+        assert!(!plan
+            .ordered_files
+            .iter()
+            .any(|p| p.to_str() == Some("/etc/passwd")));
     }
 
     #[test]
@@ -240,7 +256,10 @@ mod tests {
         let c = cands(&["a.py", "b.py"]);
         let oracle = FixedOracle("I think you should look at the parser, honestly.");
         let plan = plan_next(&oracle, &c, None);
-        assert_eq!(plan.ordered_files, vec![PathBuf::from("a.py"), PathBuf::from("b.py")]);
+        assert_eq!(
+            plan.ordered_files,
+            vec![PathBuf::from("a.py"), PathBuf::from("b.py")]
+        );
         assert!(!plan.give_up);
     }
 
@@ -248,7 +267,10 @@ mod tests {
     fn oracle_error_degrades_safe() {
         let c = cands(&["a.py", "b.py"]);
         let plan = plan_next(&FailingOracle, &c, Some("FixNoFlip"));
-        assert_eq!(plan.ordered_files, vec![PathBuf::from("a.py"), PathBuf::from("b.py")]);
+        assert_eq!(
+            plan.ordered_files,
+            vec![PathBuf::from("a.py"), PathBuf::from("b.py")]
+        );
     }
 
     #[test]

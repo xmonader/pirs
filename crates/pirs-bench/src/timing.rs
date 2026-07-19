@@ -51,8 +51,13 @@ impl Timings {
             e.0 += *d;
             e.1 += 1;
         }
-        let mut rows: Vec<(String, Duration, usize)> =
-            order.into_iter().map(|l| { let (d, n) = sums[&l]; (l, d, n) }).collect();
+        let mut rows: Vec<(String, Duration, usize)> = order
+            .into_iter()
+            .map(|l| {
+                let (d, n) = sums[&l];
+                (l, d, n)
+            })
+            .collect();
         rows.sort_by_key(|r| std::cmp::Reverse(r.1));
         rows
     }
@@ -64,8 +69,15 @@ impl Timings {
         let mut out = format!("timing (total {:.2}s):\n", total.as_secs_f64());
         for (label, d, n) in self.by_label() {
             let pct = 100.0 * d.as_secs_f64() / total_s;
-            let count = if n > 1 { format!(" n={n}") } else { String::new() };
-            out.push_str(&format!("  {label}: {:.2}s ({pct:.0}%{count})\n", d.as_secs_f64()));
+            let count = if n > 1 {
+                format!(" n={n}")
+            } else {
+                String::new()
+            };
+            out.push_str(&format!(
+                "  {label}: {:.2}s ({pct:.0}%{count})\n",
+                d.as_secs_f64()
+            ));
         }
         out.trim_end().to_string()
     }

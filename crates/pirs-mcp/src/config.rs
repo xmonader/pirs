@@ -189,7 +189,10 @@ fn save_trusted_key(key: String) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(&path, serde_json::to_string_pretty(&set).unwrap_or_default());
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&set).unwrap_or_default(),
+    );
 }
 
 /// Trust key binds the config path to a hash of its contents, so editing a

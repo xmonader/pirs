@@ -299,7 +299,13 @@ where
         }
         ("GET", "/state") => {
             if !bearer_matches(&authorization, &state.token) {
-                respond(&mut write, 403, "text/plain", "missing or invalid bearer token").await?;
+                respond(
+                    &mut write,
+                    403,
+                    "text/plain",
+                    "missing or invalid bearer token",
+                )
+                .await?;
                 return Ok(());
             }
             let body = {

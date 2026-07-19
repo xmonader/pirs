@@ -26,7 +26,10 @@ pub struct GitWorkspace {
 
 impl GitWorkspace {
     pub fn new(root: PathBuf) -> Self {
-        GitWorkspace { root, timeout_secs: 120 }
+        GitWorkspace {
+            root,
+            timeout_secs: 120,
+        }
     }
 
     /// Run a git subcommand in the tree, returning trimmed stdout. Fails loudly
@@ -39,7 +42,11 @@ impl GitWorkspace {
             bail!("git command timed out after {}s: {cmd}", self.timeout_secs);
         }
         if !cap.success {
-            bail!("`{cmd}` failed (exit {:?}): {}", cap.code, cap.stderr.trim());
+            bail!(
+                "`{cmd}` failed (exit {:?}): {}",
+                cap.code,
+                cap.stderr.trim()
+            );
         }
         Ok(cap.stdout.trim().to_string())
     }
@@ -67,7 +74,8 @@ impl GitWorkspace {
     /// delete untracked files/dirs the attempt created. After this, `diff()` is
     /// empty.
     pub fn reset(&self) -> anyhow::Result<()> {
-        self.git("reset --hard HEAD").context("revert tracked changes")?;
+        self.git("reset --hard HEAD")
+            .context("revert tracked changes")?;
         self.git("clean -fdq").context("remove untracked files")?;
         Ok(())
     }
@@ -130,21 +138,41 @@ mod tests {
         assert!(ws.diff().unwrap().is_empty());
 
         // Apply a fix and a brand-new file.
-        std::fs::write(dir.path().join("mymod.py"), "def add(a, b):\n    return a + b\n").unwrap();
+        std::fs::write(
+            dir.path().join("mymod.py"),
+            "def add(a, b):\n    return a + b\n",
+        )
+        .unwrap();
         std::fs::write(dir.path().join("NEW.txt"), "hello\n").unwrap();
 
         let patch = ws.diff().unwrap();
-        assert!(patch.contains("return a + b"), "patch must show the edit:\n{patch}");
-        assert!(patch.contains("NEW.txt"), "patch must include the new file:\n{patch}");
+        assert!(
+            patch.contains("return a + b"),
+            "patch must show the edit:\n{patch}"
+        );
+        assert!(
+            patch.contains("NEW.txt"),
+            "patch must include the new file:\n{patch}"
+        );
         // diff() must not have left a staged index behind.
         let status = run_capture("git status --porcelain", dir.path(), 30).unwrap();
-        assert!(status.stdout.contains(" M mymod.py"), "index should be unstaged: {}", status.stdout);
+        assert!(
+            status.stdout.contains(" M mymod.py"),
+            "index should be unstaged: {}",
+            status.stdout
+        );
 
         // Reset returns to pristine: edit reverted, new file gone, diff empty.
         ws.reset().unwrap();
         let restored = std::fs::read_to_string(dir.path().join("mymod.py")).unwrap();
-        assert!(restored.contains("return a - b"), "reset must revert the edit");
-        assert!(!dir.path().join("NEW.txt").exists(), "reset must remove untracked files");
+        assert!(
+            restored.contains("return a - b"),
+            "reset must revert the edit"
+        );
+        assert!(
+            !dir.path().join("NEW.txt").exists(),
+            "reset must remove untracked files"
+        );
         assert!(ws.diff().unwrap().is_empty());
     }
 
@@ -166,7 +194,10 @@ mod tests {
 
         // mymod.py is back to its committed content; other.py keeps its edit.
         let restored = std::fs::read_to_string(dir.path().join("mymod.py")).unwrap();
-        assert!(restored.contains("return a - b"), "protected file must be reverted");
+        assert!(
+            restored.contains("return a - b"),
+            "protected file must be reverted"
+        );
         let other = std::fs::read_to_string(dir.path().join("other.py")).unwrap();
         assert_eq!(other, "x = 2\n", "unprotected file must keep its edit");
     }

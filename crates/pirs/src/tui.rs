@@ -136,10 +136,7 @@ impl ChatItem {
                     Span::styled("you", theme.user_label),
                 ])];
                 for l in text.lines() {
-                    out.push(Line::from(Span::styled(
-                        format!("  {l}"),
-                        theme.user_text,
-                    )));
+                    out.push(Line::from(Span::styled(format!("  {l}"), theme.user_text)));
                 }
                 out.push(Line::from(""));
                 out
@@ -160,10 +157,7 @@ impl ChatItem {
                     out.extend(render_markdown(text, theme, width.saturating_sub(2)));
                 }
                 if let Some(err) = error {
-                    out.push(Line::from(Span::styled(
-                        format!("  ⚠ {err}"),
-                        theme.error,
-                    )));
+                    out.push(Line::from(Span::styled(format!("  ⚠ {err}"), theme.error)));
                 }
                 out.push(Line::from(""));
                 out
@@ -231,7 +225,10 @@ fn tool_icon(name: &str) -> &'static str {
 fn truncate_chars(s: &str, max: usize) -> String {
     let s = s.replace('\n', " ");
     if s.chars().count() > max {
-        format!("{}…", s.chars().take(max.saturating_sub(1)).collect::<String>())
+        format!(
+            "{}…",
+            s.chars().take(max.saturating_sub(1)).collect::<String>()
+        )
     } else {
         s
     }
@@ -281,10 +278,7 @@ fn render_markdown(text: &str, theme: &Theme, width: usize) -> Vec<Line<'static>
                 } else {
                     code_lang.clone()
                 };
-                out.push(Line::from(Span::styled(
-                    format!("  ╭─ {label}"),
-                    theme.dim,
-                )));
+                out.push(Line::from(Span::styled(format!("  ╭─ {label}"), theme.dim)));
             }
             continue;
         }
@@ -297,17 +291,11 @@ fn render_markdown(text: &str, theme: &Theme, width: usize) -> Vec<Line<'static>
         }
 
         if let Some(rest) = line.strip_prefix("### ") {
-            out.push(Line::from(Span::styled(
-                format!("  {rest}"),
-                theme.heading,
-            )));
+            out.push(Line::from(Span::styled(format!("  {rest}"), theme.heading)));
             continue;
         }
         if let Some(rest) = line.strip_prefix("## ") {
-            out.push(Line::from(Span::styled(
-                format!("  {rest}"),
-                theme.heading,
-            )));
+            out.push(Line::from(Span::styled(format!("  {rest}"), theme.heading)));
             continue;
         }
         if let Some(rest) = line.strip_prefix("# ") {
@@ -1092,10 +1080,7 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme)
     let usage_w = unicode_width::UnicodeWidthStr::width(usage.as_str()) as u16;
     let parts = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(20),
-            Constraint::Length(usage_w.max(1)),
-        ])
+        .constraints([Constraint::Min(20), Constraint::Length(usage_w.max(1))])
         .split(area);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
@@ -1160,8 +1145,15 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
         if !text.trim().is_empty() {
             logical.extend(render_markdown(text, theme, width.saturating_sub(2)));
         }
-        let cursor = if (app.tick / 4).is_multiple_of(2) { "▌" } else { " " };
-        logical.push(Line::from(Span::styled(format!("  {cursor}"), theme.accent)));
+        let cursor = if (app.tick / 4).is_multiple_of(2) {
+            "▌"
+        } else {
+            " "
+        };
+        logical.push(Line::from(Span::styled(
+            format!("  {cursor}"),
+            theme.accent,
+        )));
         live_rows = flatten_rows(&logical, width);
     }
 
@@ -1223,10 +1215,7 @@ fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Th
     let approval_q = app.pending_approval.lock().unwrap().clone();
     if let Some(q) = approval_q {
         parts.push(Span::styled(" ⚠ approval ", theme.approval));
-        parts.push(Span::styled(
-            truncate_chars(&q, 60),
-            theme.approval,
-        ));
+        parts.push(Span::styled(truncate_chars(&q, 60), theme.approval));
         parts.push(Span::styled("  [y]es [n]o [a]ll  esc=deny", theme.dim));
     } else if app.running {
         let spin = FRAMES[(app.tick / 2 % 10) as usize];
@@ -1242,19 +1231,13 @@ fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Th
         parts.push(Span::styled(" ○ ", theme.dim));
         parts.push(Span::styled("ready", theme.status));
         if !app.status_msg.is_empty() {
-            parts.push(Span::styled(
-                format!("  ·  {}", app.status_msg),
-                theme.dim,
-            ));
+            parts.push(Span::styled(format!("  ·  {}", app.status_msg), theme.dim));
         }
         parts.push(Span::styled("  ·  ? help", theme.dim));
     }
 
     if app.scroll > 0 {
-        parts.push(Span::styled(
-            format!("  ·  ↑{} ", app.scroll),
-            theme.accent,
-        ));
+        parts.push(Span::styled(format!("  ·  ↑{} ", app.scroll), theme.accent));
     }
 
     let clipped = clip_spans(parts, area.width as usize);
@@ -1268,7 +1251,10 @@ fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme) 
     } else if app.running {
         (" message · steers the running turn ", theme.input_border)
     } else {
-        (" message · enter send · alt+enter newline ", theme.input_border)
+        (
+            " message · enter send · alt+enter newline ",
+            theme.input_border,
+        )
     };
 
     let block = Block::default()
@@ -1342,17 +1328,50 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
 
     let lines = vec![
         Line::from(Span::styled("Keys", theme.heading)),
-        Line::from(Span::styled("  enter            send message", theme.assistant_text)),
-        Line::from(Span::styled("  shift/alt+enter  newline (or ctrl-j)", theme.assistant_text)),
-        Line::from(Span::styled("  ↑ / ↓            input history", theme.assistant_text)),
-        Line::from(Span::styled("  pgup / pgdn      scroll chat", theme.assistant_text)),
-        Line::from(Span::styled("  mouse wheel      scroll chat", theme.assistant_text)),
-        Line::from(Span::styled("  esc              cancel run / clear input", theme.assistant_text)),
-        Line::from(Span::styled("  ctrl-c           cancel (or quit if idle)", theme.assistant_text)),
-        Line::from(Span::styled("  ctrl-d           quit", theme.assistant_text)),
-        Line::from(Span::styled("  ctrl-l           clear screen", theme.assistant_text)),
-        Line::from(Span::styled("  ctrl-u           clear input", theme.assistant_text)),
-        Line::from(Span::styled("  ?                this help", theme.assistant_text)),
+        Line::from(Span::styled(
+            "  enter            send message",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  shift/alt+enter  newline (or ctrl-j)",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  ↑ / ↓            input history",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  pgup / pgdn      scroll chat",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  mouse wheel      scroll chat",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  esc              cancel run / clear input",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  ctrl-c           cancel (or quit if idle)",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  ctrl-d           quit",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  ctrl-l           clear screen",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  ctrl-u           clear input",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  ?                this help",
+            theme.assistant_text,
+        )),
         Line::from(""),
         Line::from(Span::styled("Commands", theme.heading)),
         Line::from(Span::styled("  /help  /clear  /quit", theme.assistant_text)),
@@ -1630,7 +1649,9 @@ mod tests {
     #[test]
     fn wrap_words_respects_width() {
         let lines = wrap_words("hello beautiful world", 10);
-        assert!(lines.iter().all(|l| unicode_width::UnicodeWidthStr::width(l.as_str()) <= 10));
+        assert!(lines
+            .iter()
+            .all(|l| unicode_width::UnicodeWidthStr::width(l.as_str()) <= 10));
         assert!(lines.len() >= 2);
     }
 

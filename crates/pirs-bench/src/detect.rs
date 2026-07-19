@@ -74,7 +74,11 @@ impl DetectorHost {
             });
         }
 
-        DetectorHost { engine, detectors: Vec::new(), root }
+        DetectorHost {
+            engine,
+            detectors: Vec::new(),
+            root,
+        }
     }
 
     /// A host preloaded with the bundled, trusted detectors (pytest, go, rust),
@@ -164,7 +168,10 @@ pub fn discover(host: &DetectorHost, repo_root: &Path) -> anyhow::Result<Discove
     for spec in specs {
         let p = crate::probe::probe(&spec, repo_root)?;
         if p.confirmed {
-            return Ok(Discovery::Confirmed { spec, listed: p.listed });
+            return Ok(Discovery::Confirmed {
+                spec,
+                listed: p.listed,
+            });
         }
         if !p.stderr.trim().is_empty() {
             hint = p.stderr;
@@ -177,7 +184,11 @@ pub fn discover(host: &DetectorHost, repo_root: &Path) -> anyhow::Result<Discove
 /// absolute paths and `..` escapes — defense in depth even for trusted scripts.
 fn resolve(root: &Arc<Mutex<PathBuf>>, rel: &str) -> Option<PathBuf> {
     let rel = Path::new(rel);
-    if rel.is_absolute() || rel.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+    if rel.is_absolute()
+        || rel
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
         return None;
     }
     Some(root.lock().unwrap().join(rel))
@@ -250,7 +261,10 @@ mod tests {
         std::fs::write(dir.path().join("pyproject.toml"), "[project]\nname='x'\n").unwrap();
         let host = DetectorHost::with_bundled().unwrap();
         let specs = host.detect(dir.path());
-        let py = specs.iter().find(|s| s.framework == "pytest").expect("pytest spec");
+        let py = specs
+            .iter()
+            .find(|s| s.framework == "pytest")
+            .expect("pytest spec");
         assert!(py.test_cmd.contains("--junitxml={junit}"));
         assert!(py.test_cmd.contains("{tests}"));
     }
@@ -272,10 +286,19 @@ mod tests {
         let specs = host.detect(dir.path());
 
         // CI oracle ranks first.
-        assert_eq!(specs[0].framework, "pytest-ci", "CI oracle must be highest trust");
+        assert_eq!(
+            specs[0].framework, "pytest-ci",
+            "CI oracle must be highest trust"
+        );
         // Real installs were extracted, the `&& pytest` tail was cut off.
-        assert!(specs[0].install.iter().any(|c| c.contains("requirements-test.txt")));
-        assert!(specs[0].install.iter().any(|c| c.contains("pip install -e .[dev]")));
+        assert!(specs[0]
+            .install
+            .iter()
+            .any(|c| c.contains("requirements-test.txt")));
+        assert!(specs[0]
+            .install
+            .iter()
+            .any(|c| c.contains("pip install -e .[dev]")));
         assert!(
             !specs[0].install.iter().any(|c| c.contains("pytest")),
             "chain delimiter must strip the trailing `&& pytest`: {:?}",

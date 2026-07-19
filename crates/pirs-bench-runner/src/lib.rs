@@ -250,17 +250,27 @@ impl Executor for AgentExecutor {
         let stats = Arc::clone(&self.stats);
         // Correlate start→end by tool_call_id to attribute wall-clock per tool,
         // so "where every second went" separates LLM latency from tool execution.
-        let pending: Arc<Mutex<HashMap<String, Instant>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let pending: Arc<Mutex<HashMap<String, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
         let emit: Emit = Arc::new(move |ev| match ev {
-            AgentEvent::ToolExecutionStart { tool_call_id, tool_name, .. } => {
+            AgentEvent::ToolExecutionStart {
+                tool_call_id,
+                tool_name,
+                ..
+            } => {
                 stats.lock().unwrap().record_tool(&tool_name);
                 pending.lock().unwrap().insert(tool_call_id, Instant::now());
             }
-            AgentEvent::ToolExecutionEnd { tool_call_id, tool_name, .. } => {
+            AgentEvent::ToolExecutionEnd {
+                tool_call_id,
+                tool_name,
+                ..
+            } => {
                 let start = pending.lock().unwrap().remove(&tool_call_id);
                 if let Some(start) = start {
-                    stats.lock().unwrap().add_tool_time(&tool_name, start.elapsed());
+                    stats
+                        .lock()
+                        .unwrap()
+                        .add_tool_time(&tool_name, start.elapsed());
                 }
             }
             AgentEvent::TurnEnd { .. } => {
@@ -312,7 +322,10 @@ mod tests {
 
     #[test]
     fn initial_prompt_names_issue_and_targets() {
-        let p = initial_prompt("The add() function subtracts.", &["test_mymod.py::test_add".into()]);
+        let p = initial_prompt(
+            "The add() function subtracts.",
+            &["test_mymod.py::test_add".into()],
+        );
         assert!(p.contains("The add() function subtracts."));
         assert!(p.contains("test_mymod.py::test_add"));
         assert!(p.contains("minimal"));

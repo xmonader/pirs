@@ -48,12 +48,19 @@ impl BaselineCache {
         let entries = match std::fs::read(path) {
             Ok(bytes) => serde_json::from_slice::<HashMap<String, TestOutcome>>(&bytes)
                 .unwrap_or_else(|e| {
-                    tracing::warn!("baseline cache {} is corrupt, ignoring: {e}", path.display());
+                    tracing::warn!(
+                        "baseline cache {} is corrupt, ignoring: {e}",
+                        path.display()
+                    );
                     HashMap::new()
                 }),
             Err(_) => HashMap::new(),
         };
-        BaselineCache { path: Some(path.to_path_buf()), entries, dirty: false }
+        BaselineCache {
+            path: Some(path.to_path_buf()),
+            entries,
+            dirty: false,
+        }
     }
 
     /// The cached stable outcome for a test at a checkout, if known.
@@ -75,7 +82,9 @@ impl BaselineCache {
     /// nothing changed. Writes atomically (temp file + rename) so a crash mid-write
     /// can't leave a truncated, corrupt cache.
     pub fn save(&mut self) -> anyhow::Result<()> {
-        let Some(path) = &self.path else { return Ok(()) };
+        let Some(path) = &self.path else {
+            return Ok(());
+        };
         if !self.dirty {
             return Ok(());
         }

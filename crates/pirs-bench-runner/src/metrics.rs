@@ -32,7 +32,9 @@ impl UsageByModel {
 
     /// Combined usage across all models.
     pub fn total(&self) -> Usage {
-        self.per_model.values().fold(Usage::default(), |acc, u| acc + u.clone())
+        self.per_model
+            .values()
+            .fold(Usage::default(), |acc, u| acc + u.clone())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -98,7 +100,10 @@ impl SessionStats {
             .map(|(n, c)| format!("{n}:{c}"))
             .collect::<Vec<_>>()
             .join(" ");
-        format!("turns={} tools={} [{}]", self.turns, self.tool_calls, breakdown)
+        format!(
+            "turns={} tools={} [{}]",
+            self.turns, self.tool_calls, breakdown
+        )
     }
 
     /// Per-tool wall-clock breakdown, biggest first, e.g. `bash:4.10s edit:0.02s`.
@@ -118,7 +123,12 @@ mod tests {
     use super::*;
 
     fn usage(input: u64, output: u64) -> Usage {
-        Usage { input, output, total_tokens: input + output, ..Default::default() }
+        Usage {
+            input,
+            output,
+            total_tokens: input + output,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -147,7 +157,10 @@ mod tests {
 
     #[test]
     fn stats_summary_counts_tools() {
-        let mut s = SessionStats { turns: 3, ..Default::default() };
+        let mut s = SessionStats {
+            turns: 3,
+            ..Default::default()
+        };
         s.record_tool("edit");
         s.record_tool("edit");
         s.record_tool("read");

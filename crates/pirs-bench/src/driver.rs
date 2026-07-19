@@ -45,11 +45,20 @@ pub fn run_task(
     timings: &mut Timings,
 ) -> anyhow::Result<Outcome> {
     let scope = compute_scope(spec);
-    let baseline = match timings.time("baseline", || capture_stable(runner, &scope, Ring::Scoped))? {
-        Some(b) => b,
-        None => return Ok(Outcome::Failed(FailBucket::BaselineUnusable)),
-    };
-    drive(spec, &scope, baseline, runner, executor, max_attempts, timings)
+    let baseline =
+        match timings.time("baseline", || capture_stable(runner, &scope, Ring::Scoped))? {
+            Some(b) => b,
+            None => return Ok(Outcome::Failed(FailBucket::BaselineUnusable)),
+        };
+    drive(
+        spec,
+        &scope,
+        baseline,
+        runner,
+        executor,
+        max_attempts,
+        timings,
+    )
 }
 
 /// Like [`run_task`] but captures the baseline through a SHA-keyed
@@ -65,13 +74,21 @@ pub fn run_task_cached(
     timings: &mut Timings,
 ) -> anyhow::Result<Outcome> {
     let scope = compute_scope(spec);
-    let baseline = match timings
-        .time("baseline", || capture_stable_cached(runner, &scope, Ring::Scoped, cache, base_sha))?
-    {
+    let baseline = match timings.time("baseline", || {
+        capture_stable_cached(runner, &scope, Ring::Scoped, cache, base_sha)
+    })? {
         Some(b) => b,
         None => return Ok(Outcome::Failed(FailBucket::BaselineUnusable)),
     };
-    drive(spec, &scope, baseline, runner, executor, max_attempts, timings)
+    drive(
+        spec,
+        &scope,
+        baseline,
+        runner,
+        executor,
+        max_attempts,
+        timings,
+    )
 }
 
 /// The reproduce gate + fix/verify loop over an already-captured baseline. Shared
@@ -103,7 +120,11 @@ fn drive(
         if !timings.time("fix", || executor.attempt(attempt, last.as_ref()))? {
             break; // executor gave up
         }
-        let inner = VerifyPlan { targets: &spec.targets, scope: &spec.targets, baseline: &baseline };
+        let inner = VerifyPlan {
+            targets: &spec.targets,
+            scope: &spec.targets,
+            baseline: &baseline,
+        };
         let verdict = timings.time("verify", || verify(runner, &inner, Ring::Inner))?;
         if !verdict.is_done() {
             last = Some(verdict);
@@ -113,7 +134,11 @@ fn drive(
             return Ok(Outcome::Solved);
         }
         // Targets flipped — now (and only now) pay for the regression ring.
-        let scoped = VerifyPlan { targets: &spec.targets, scope, baseline: &baseline };
+        let scoped = VerifyPlan {
+            targets: &spec.targets,
+            scope,
+            baseline: &baseline,
+        };
         let scoped_verdict = timings.time("verify", || verify(runner, &scoped, Ring::Scoped))?;
         if scoped_verdict.is_done() {
             return Ok(Outcome::Solved);
@@ -150,12 +175,10 @@ mod tests {
     impl TestRunner for FlagRunner<'_> {
         fn run(&self, ids: &[TestId], _ring: Ring) -> anyhow::Result<Snapshot> {
             let outcome = if self.fixed.get() { Pass } else { Fail };
-            Ok(Snapshot::from_pairs(
-                ids.iter().map(|id| {
-                    let o = if id == self.target { outcome } else { Pass };
-                    (id.clone(), o)
-                }),
-            ))
+            Ok(Snapshot::from_pairs(ids.iter().map(|id| {
+                let o = if id == self.target { outcome } else { Pass };
+                (id.clone(), o)
+            })))
         }
     }
 
@@ -176,18 +199,39 @@ mod tests {
     #[test]
     fn fix_on_first_attempt_solves() {
         let fixed = Cell::new(false);
-        let runner = FlagRunner { fixed: &fixed, target: "t1" };
-        let mut exec = FlagExecutor { fixed: &fixed, fix_on: 1 };
-        let spec = TaskSpec { targets: ids(&["t1"]), keep_green: ids(&["k"]) };
-        assert_eq!(run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(), Outcome::Solved);
+        let runner = FlagRunner {
+            fixed: &fixed,
+            target: "t1",
+        };
+        let mut exec = FlagExecutor {
+            fixed: &fixed,
+            fix_on: 1,
+        };
+        let spec = TaskSpec {
+            targets: ids(&["t1"]),
+            keep_green: ids(&["k"]),
+        };
+        assert_eq!(
+            run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(),
+            Outcome::Solved
+        );
     }
 
     #[test]
     fn never_fixing_exhausts_to_fix_no_flip() {
         let fixed = Cell::new(false);
-        let runner = FlagRunner { fixed: &fixed, target: "t1" };
-        let mut exec = FlagExecutor { fixed: &fixed, fix_on: 0 };
-        let spec = TaskSpec { targets: ids(&["t1"]), keep_green: vec![] };
+        let runner = FlagRunner {
+            fixed: &fixed,
+            target: "t1",
+        };
+        let mut exec = FlagExecutor {
+            fixed: &fixed,
+            fix_on: 0,
+        };
+        let spec = TaskSpec {
+            targets: ids(&["t1"]),
+            keep_green: vec![],
+        };
         assert_eq!(
             run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(),
             Outcome::Failed(FailBucket::FixNoFlip)
@@ -214,9 +258,19 @@ mod tests {
                 panic!("must not reach the fix loop on an unusable baseline")
             }
         }
-        let spec = TaskSpec { targets: ids(&["t1"]), keep_green: vec![] };
+        let spec = TaskSpec {
+            targets: ids(&["t1"]),
+            keep_green: vec![],
+        };
         assert_eq!(
-            run_task(&spec, &Flaky { n: Cell::new(0) }, &mut NoExec, 3, &mut Timings::new()).unwrap(),
+            run_task(
+                &spec,
+                &Flaky { n: Cell::new(0) },
+                &mut NoExec,
+                3,
+                &mut Timings::new()
+            )
+            .unwrap(),
             Outcome::Failed(FailBucket::BaselineUnusable)
         );
     }
@@ -235,9 +289,17 @@ mod tests {
             let fixed = self.fixed.get();
             Ok(Snapshot::from_pairs(ids.iter().map(|id| {
                 let o = if id == self.target {
-                    if fixed { Pass } else { Fail }
+                    if fixed {
+                        Pass
+                    } else {
+                        Fail
+                    }
                 } else if id == self.victim {
-                    if fixed { Fail } else { Pass } // fix breaks the victim
+                    if fixed {
+                        Fail
+                    } else {
+                        Pass
+                    } // fix breaks the victim
                 } else {
                     Pass
                 };
@@ -250,9 +312,20 @@ mod tests {
     fn fix_that_regresses_keep_green_is_failed() {
         let fixed = Cell::new(false);
         let runs = Cell::new(0);
-        let runner = RegressRunner { fixed: &fixed, target: "t1", victim: "k", runs: &runs };
-        let mut exec = FlagExecutor { fixed: &fixed, fix_on: 1 };
-        let spec = TaskSpec { targets: ids(&["t1"]), keep_green: ids(&["k"]) };
+        let runner = RegressRunner {
+            fixed: &fixed,
+            target: "t1",
+            victim: "k",
+            runs: &runs,
+        };
+        let mut exec = FlagExecutor {
+            fixed: &fixed,
+            fix_on: 1,
+        };
+        let spec = TaskSpec {
+            targets: ids(&["t1"]),
+            keep_green: ids(&["k"]),
+        };
         assert_eq!(
             run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(),
             Outcome::Failed(FailBucket::Regressed)
@@ -274,7 +347,11 @@ mod tests {
             }
             let fixed = self.fixed.get();
             Ok(Snapshot::from_pairs(ids.iter().map(|id| {
-                let o = if id == self.target && !fixed { Fail } else { Pass };
+                let o = if id == self.target && !fixed {
+                    Fail
+                } else {
+                    Pass
+                };
                 (id.clone(), o)
             })))
         }
@@ -292,26 +369,45 @@ mod tests {
             victim: "k",
             victim_runs: &victim_runs,
         };
-        let mut exec = FlagExecutor { fixed: &fixed, fix_on: 3 };
-        let spec = TaskSpec { targets: ids(&["t1"]), keep_green: ids(&["k"]) };
-        assert_eq!(run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(), Outcome::Solved);
+        let mut exec = FlagExecutor {
+            fixed: &fixed,
+            fix_on: 3,
+        };
+        let spec = TaskSpec {
+            targets: ids(&["t1"]),
+            keep_green: ids(&["k"]),
+        };
+        assert_eq!(
+            run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(),
+            Outcome::Solved
+        );
         // Baseline runs the scope (incl. victim) twice; then the victim appears
         // only in the single scoped pass after the flip (post + post2-is-targets).
         // So victim is included in: 2 (baseline) + 1 (scoped post) = 3 runs.
-        assert_eq!(victim_runs.get(), 3, "victim ran outside baseline+one scoped pass");
+        assert_eq!(
+            victim_runs.get(),
+            3,
+            "victim ran outside baseline+one scoped pass"
+        );
     }
 
     #[test]
     fn already_green_target_is_repro_failed() {
         let fixed = Cell::new(true); // target already green at baseline
-        let runner = FlagRunner { fixed: &fixed, target: "t1" };
+        let runner = FlagRunner {
+            fixed: &fixed,
+            target: "t1",
+        };
         struct NoExec;
         impl Executor for NoExec {
             fn attempt(&mut self, _a: u32, _l: Option<&Verdict>) -> anyhow::Result<bool> {
                 panic!("must not fix when reproduction failed")
             }
         }
-        let spec = TaskSpec { targets: ids(&["t1"]), keep_green: vec![] };
+        let spec = TaskSpec {
+            targets: ids(&["t1"]),
+            keep_green: vec![],
+        };
         assert_eq!(
             run_task(&spec, &runner, &mut NoExec, 3, &mut Timings::new()).unwrap(),
             Outcome::Failed(FailBucket::ReproFailed)

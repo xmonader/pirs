@@ -24,7 +24,10 @@ use pirs_bench_runner::{build_provider, selftest, AgentConfig, AgentExecutor, Pr
 use serde::Deserialize;
 
 #[derive(Parser, Debug)]
-#[command(name = "pirs-bench", about = "Run the pirs agent against benchmark tasks under verification")]
+#[command(
+    name = "pirs-bench",
+    about = "Run the pirs agent against benchmark tasks under verification"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Command,
@@ -180,8 +183,15 @@ struct SolveCtx<'a> {
 }
 
 /// Run one instance through the full harness. Shared by `solve` and `batch`.
-fn solve_one(job: Job, ctx: &SolveCtx, cache: &mut BaselineCache) -> anyhow::Result<InstanceReport> {
-    let repo = job.repo.canonicalize().with_context(|| format!("repo path {:?}", job.repo))?;
+fn solve_one(
+    job: Job,
+    ctx: &SolveCtx,
+    cache: &mut BaselineCache,
+) -> anyhow::Result<InstanceReport> {
+    let repo = job
+        .repo
+        .canonicalize()
+        .with_context(|| format!("repo path {:?}", job.repo))?;
 
     let workspace = if job.use_workspace && is_git_repo(&repo) {
         Some(GitWorkspace::new(repo.clone()))
@@ -208,8 +218,20 @@ fn solve_one(job: Job, ctx: &SolveCtx, cache: &mut BaselineCache) -> anyhow::Res
     )
     .context("build agent executor")?;
 
-    let inst = Instance { repo_root: repo, targets: job.targets, keep_green: job.keep_green, base_sha };
-    let report = run_instance(&inst, ctx.host, cache, &mut executor, ctx.common.max_attempts, workspace.as_ref())?;
+    let inst = Instance {
+        repo_root: repo,
+        targets: job.targets,
+        keep_green: job.keep_green,
+        base_sha,
+    };
+    let report = run_instance(
+        &inst,
+        ctx.host,
+        cache,
+        &mut executor,
+        ctx.common.max_attempts,
+        workspace.as_ref(),
+    )?;
     // Surface this session's behavior + token cost.
     let stats = executor.session_stats();
     eprintln!("session: {}", stats.summary());
@@ -233,7 +255,12 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
     };
     let host = DetectorHost::with_bundled().context("load detectors")?;
     let mut cache = BaselineCache::in_memory();
-    let ctx = SolveCtx { common: &a.common, provider: &provider, api_key: &key, host: &host };
+    let ctx = SolveCtx {
+        common: &a.common,
+        provider: &provider,
+        api_key: &key,
+        host: &host,
+    };
 
     let job = Job {
         repo: a.repo,
@@ -268,7 +295,12 @@ fn run_batch(a: BatchArgs) -> anyhow::Result<()> {
 
     let host = DetectorHost::with_bundled().context("load detectors")?;
     let mut cache = BaselineCache::in_memory();
-    let ctx = SolveCtx { common: &a.common, provider: &provider, api_key: &key, host: &host };
+    let ctx = SolveCtx {
+        common: &a.common,
+        provider: &provider,
+        api_key: &key,
+        host: &host,
+    };
     let mut attribution = Attribution::new();
     let mut timings = pirs_bench::Timings::new();
 

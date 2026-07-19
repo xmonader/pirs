@@ -6,10 +6,10 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context as _};
 
+use crate::junit;
 use crate::proc::run_capture;
 use crate::run::TestRunner;
 use crate::types::{Ring, RunnerSpec, Snapshot, TestId};
-use crate::junit;
 
 pub struct CommandRunner {
     pub spec: RunnerSpec,
@@ -42,7 +42,10 @@ impl TestRunner for CommandRunner {
 
         let cap = run_capture(&cmd, &self.work_dir, self.spec.timeout_secs)?;
         if cap.timed_out {
-            bail!("test run exceeded {}s budget: {cmd}", self.spec.timeout_secs);
+            bail!(
+                "test run exceeded {}s budget: {cmd}",
+                self.spec.timeout_secs
+            );
         }
 
         // The runner must have produced JUnit XML. Its absence (or an empty
@@ -98,11 +101,14 @@ mod tests {
         // exactly how the ids were joined.
         let dir = tempfile::tempdir().unwrap();
         let xml = r#"<testsuite><testcase classname="m" name="a"/></testsuite>"#;
-        let cmd = format!("printf '%s' \"{{tests}}\" > joined.txt; cat > {{junit}} <<'EOF'\n{xml}\nEOF");
+        let cmd =
+            format!("printf '%s' \"{{tests}}\" > joined.txt; cat > {{junit}} <<'EOF'\n{xml}\nEOF");
         let mut s = spec(&cmd, 30);
         s.test_join = "|".into(); // Go-style regex alternation
         let runner = CommandRunner::new(s, dir.path().to_path_buf());
-        runner.run(&["a".to_string(), "b".to_string()], Ring::Inner).unwrap();
+        runner
+            .run(&["a".to_string(), "b".to_string()], Ring::Inner)
+            .unwrap();
         let joined = std::fs::read_to_string(dir.path().join("joined.txt")).unwrap();
         assert_eq!(joined, "a|b");
     }

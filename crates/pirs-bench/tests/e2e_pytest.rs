@@ -11,7 +11,8 @@ use std::process::Command;
 
 use pirs_bench::gate::Verdict;
 use pirs_bench::{
-    is_git_repo, run_instance, BaselineCache, DetectorHost, Executor, GitWorkspace, Instance, Outcome,
+    is_git_repo, run_instance, BaselineCache, DetectorHost, Executor, GitWorkspace, Instance,
+    Outcome,
 };
 
 fn pytest_available() -> bool {
@@ -57,7 +58,11 @@ fn solves_a_real_pytest_bug_end_to_end() {
     let root = dir.path();
 
     // A minimal Python project: the pytest detector fires on pyproject.toml.
-    write(root, "pyproject.toml", "[project]\nname = \"demo\"\nversion = \"0.0.0\"\n");
+    write(
+        root,
+        "pyproject.toml",
+        "[project]\nname = \"demo\"\nversion = \"0.0.0\"\n",
+    );
     // The bug: subtraction where addition is intended.
     write(root, "mymod.py", "def add(a, b):\n    return a - b\n");
     write(
@@ -71,7 +76,10 @@ fn solves_a_real_pytest_bug_end_to_end() {
 
     let host = DetectorHost::with_bundled().unwrap();
     let mut cache = BaselineCache::in_memory();
-    let mut exec = PatchExecutor { source: root.join("mymod.py"), patched: false };
+    let mut exec = PatchExecutor {
+        source: root.join("mymod.py"),
+        patched: false,
+    };
     let ws = GitWorkspace::new(root.to_path_buf());
     let inst = Instance {
         repo_root: root.to_path_buf(),
@@ -81,7 +89,11 @@ fn solves_a_real_pytest_bug_end_to_end() {
     };
 
     let report = run_instance(&inst, &host, &mut cache, &mut exec, 2, Some(&ws)).unwrap();
-    assert_eq!(report.outcome, Outcome::Solved, "the real bug should be solved end-to-end");
+    assert_eq!(
+        report.outcome,
+        Outcome::Solved,
+        "the real bug should be solved end-to-end"
+    );
     assert!(exec.patched, "the executor should have applied its patch");
 
     // And the fix is actually on disk.
@@ -89,16 +101,28 @@ fn solves_a_real_pytest_bug_end_to_end() {
     assert!(final_src.contains("return a + b"));
 
     // The harness extracted the fix as a patch.
-    let patch = report.patch.expect("an accepted outcome should yield a patch");
-    assert!(patch.contains("return a + b"), "patch should contain the fix:\n{patch}");
-    assert!(patch.contains("mymod.py"), "patch should name the file:\n{patch}");
+    let patch = report
+        .patch
+        .expect("an accepted outcome should yield a patch");
+    assert!(
+        patch.contains("return a + b"),
+        "patch should contain the fix:\n{patch}"
+    );
+    assert!(
+        patch.contains("mymod.py"),
+        "patch should name the file:\n{patch}"
+    );
 }
 
 /// Initialize a git repo committing the current tree, so `GitWorkspace` has a
 /// base to diff/reset against. No-op-skips if git is unavailable.
 fn git_init_commit(root: &Path) {
     let sh = |args: &[&str]| {
-        Command::new("git").args(args).current_dir(root).output().unwrap();
+        Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap();
     };
     sh(&["init", "-q"]);
     sh(&["config", "user.email", "t@t"]);
@@ -117,7 +141,11 @@ fn unpatched_bug_is_not_a_false_pass() {
 
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    write(root, "pyproject.toml", "[project]\nname = \"demo\"\nversion = \"0.0.0\"\n");
+    write(
+        root,
+        "pyproject.toml",
+        "[project]\nname = \"demo\"\nversion = \"0.0.0\"\n",
+    );
     write(root, "mymod.py", "def add(a, b):\n    return a - b\n");
     write(
         root,
@@ -144,5 +172,9 @@ fn unpatched_bug_is_not_a_false_pass() {
 
     let report = run_instance(&inst, &host, &mut cache, &mut NoopExecutor, 2, None).unwrap();
     // The target never flipped, so it must NOT be reported solved.
-    assert_ne!(report.outcome, Outcome::Solved, "an unfixed bug must never read as solved");
+    assert_ne!(
+        report.outcome,
+        Outcome::Solved,
+        "an unfixed bug must never read as solved"
+    );
 }

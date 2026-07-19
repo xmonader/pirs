@@ -82,7 +82,11 @@ fn parse_python_file_line(line: &str) -> Option<Frame> {
         .strip_prefix(", in ")
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
-    Some(Frame { file: PathBuf::from(path), line: num, symbol })
+    Some(Frame {
+        file: PathBuf::from(path),
+        line: num,
+        symbol,
+    })
 }
 
 /// Generic `<path>.<ext>:<line>` fragment (pytest `path.py:12: in f`, Rust
@@ -120,7 +124,11 @@ fn parse_generic_file_line(line: &str) -> Option<Frame> {
         .strip_prefix("in ")
         .map(|s| s.split_whitespace().next().unwrap_or("").to_string())
         .filter(|s| !s.is_empty());
-    Some(Frame { file: strip_path_prefix(path), line: num, symbol })
+    Some(Frame {
+        file: strip_path_prefix(path),
+        line: num,
+        symbol,
+    })
 }
 
 /// Drop a leading `./` so paths match how the graph stores them (relative).
@@ -165,7 +173,11 @@ pub fn rank_candidates(graph: &Graph, frames: &[Frame], root: &Path) -> Vec<Cand
     let n = frames.len();
     let mut best: Vec<Candidate> = Vec::new();
     for (i, f) in frames.iter().enumerate() {
-        let abs = if f.file.is_absolute() { f.file.clone() } else { root.join(&f.file) };
+        let abs = if f.file.is_absolute() {
+            f.file.clone()
+        } else {
+            root.join(&f.file)
+        };
         // Depth: later frame → higher base in (0, 1].
         let depth = (i + 1) as f64 / n as f64;
         let mut score = depth;
@@ -189,10 +201,18 @@ pub fn rank_candidates(graph: &Graph, frames: &[Frame], root: &Path) -> Vec<Cand
                 c.symbol = f.symbol.clone();
             }
             Some(_) => {}
-            None => best.push(Candidate { file: f.file.clone(), symbol: f.symbol.clone(), score }),
+            None => best.push(Candidate {
+                file: f.file.clone(),
+                symbol: f.symbol.clone(),
+                score,
+            }),
         }
     }
-    best.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    best.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     best
 }
 
@@ -202,7 +222,11 @@ pub fn rank_candidates(graph: &Graph, frames: &[Frame], root: &Path) -> Vec<Cand
 pub fn scoped_tests(graph: &Graph, files: &[PathBuf], root: &Path) -> Vec<String> {
     let mut out: BTreeSet<String> = BTreeSet::new();
     for f in files {
-        let abs = if f.is_absolute() { f.clone() } else { root.join(f) };
+        let abs = if f.is_absolute() {
+            f.clone()
+        } else {
+            root.join(f)
+        };
         for t in graph.affected_tests(&abs) {
             out.insert(t);
         }
@@ -277,8 +301,16 @@ ValueError: boom
         let root = Path::new("/repo");
         let g = empty_graph();
         let frames = vec![
-            Frame { file: PathBuf::from("/usr/lib/python3.11/json/decoder.py"), line: 5, symbol: None },
-            Frame { file: PathBuf::from("/repo/app/core.py"), line: 42, symbol: None },
+            Frame {
+                file: PathBuf::from("/usr/lib/python3.11/json/decoder.py"),
+                line: 5,
+                symbol: None,
+            },
+            Frame {
+                file: PathBuf::from("/repo/app/core.py"),
+                line: 42,
+                symbol: None,
+            },
         ];
         let ranked = rank_candidates(&g, &frames, root);
         // Project frame wins despite being innermost-vendored competitor.
@@ -291,8 +323,16 @@ ValueError: boom
         let root = Path::new("/repo");
         let g = empty_graph();
         let frames = vec![
-            Frame { file: PathBuf::from("/repo/app/core.py"), line: 42, symbol: None },
-            Frame { file: PathBuf::from("/repo/tests/test_core.py"), line: 9, symbol: None },
+            Frame {
+                file: PathBuf::from("/repo/app/core.py"),
+                line: 42,
+                symbol: None,
+            },
+            Frame {
+                file: PathBuf::from("/repo/tests/test_core.py"),
+                line: 9,
+                symbol: None,
+            },
         ];
         let ranked = rank_candidates(&g, &frames, root);
         assert_eq!(ranked[0].file, PathBuf::from("/repo/app/core.py"));

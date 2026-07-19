@@ -49,7 +49,14 @@ fn build_plan_scopes_tests_via_graph() {
         "{cmd}"
     );
     assert!(m.get("scoped").unwrap().as_bool().unwrap());
-    assert_eq!(m.get("untested").unwrap().clone().cast::<rhai::Array>().len(), 0);
+    assert_eq!(
+        m.get("untested")
+            .unwrap()
+            .clone()
+            .cast::<rhai::Array>()
+            .len(),
+        0
+    );
 }
 
 #[test]
@@ -79,14 +86,20 @@ fn on_tool_result_records_only_source_files() {
     assert!(after(
         "1",
         "write",
-        &tool_result("write", "Successfully wrote 10 bytes to crates/x/src/lib.rs")
+        &tool_result(
+            "write",
+            "Successfully wrote 10 bytes to crates/x/src/lib.rs"
+        )
     )
     .is_none());
     // Test-file edit -> filtered out by is_source_rs.
     assert!(after(
         "2",
         "edit",
-        &tool_result("edit", "Successfully replaced 1 block(s) in crates/x/tests/foo_test.rs")
+        &tool_result(
+            "edit",
+            "Successfully replaced 1 block(s) in crates/x/tests/foo_test.rs"
+        )
     )
     .is_none());
 

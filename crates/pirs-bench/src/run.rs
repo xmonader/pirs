@@ -49,7 +49,11 @@ mod tests {
     }
     impl MockRunner {
         fn new(scripted: Vec<Snapshot>) -> Self {
-            MockRunner { scripted, calls: RefCell::new(vec![]), idx: RefCell::new(0) }
+            MockRunner {
+                scripted,
+                calls: RefCell::new(vec![]),
+                idx: RefCell::new(0),
+            }
         }
         fn call_count(&self) -> usize {
             self.calls.borrow().len()
@@ -77,7 +81,11 @@ mod tests {
             Snapshot::from_pairs([("t1", Pass)]), // post
             Snapshot::from_pairs([("t1", Pass)]), // post2 (confirmation)
         ]);
-        let plan = VerifyPlan { targets: &targets, scope: &targets, baseline: &base };
+        let plan = VerifyPlan {
+            targets: &targets,
+            scope: &targets,
+            baseline: &base,
+        };
         assert_eq!(verify(&runner, &plan, Ring::Inner).unwrap(), Verdict::Done);
         assert_eq!(runner.call_count(), 2, "confirmation run must happen");
     }
@@ -89,8 +97,15 @@ mod tests {
         let runner = MockRunner::new(vec![
             Snapshot::from_pairs([("t1", Fail)]), // post: not flipped
         ]);
-        let plan = VerifyPlan { targets: &targets, scope: &targets, baseline: &base };
-        assert_eq!(verify(&runner, &plan, Ring::Inner).unwrap(), Verdict::NotYet("t1".into()));
+        let plan = VerifyPlan {
+            targets: &targets,
+            scope: &targets,
+            baseline: &base,
+        };
+        assert_eq!(
+            verify(&runner, &plan, Ring::Inner).unwrap(),
+            Verdict::NotYet("t1".into())
+        );
         // The second (subprocess-costly) run must be skipped.
         assert_eq!(runner.call_count(), 1, "no confirmation run when unfixed");
     }
@@ -103,8 +118,15 @@ mod tests {
         let runner = MockRunner::new(vec![
             Snapshot::from_pairs([("t1", Pass), ("n", Fail)]), // post: regressed n
         ]);
-        let plan = VerifyPlan { targets: &targets, scope: &scope, baseline: &base };
-        assert_eq!(verify(&runner, &plan, Ring::Scoped).unwrap(), Verdict::Regressed("n".into()));
+        let plan = VerifyPlan {
+            targets: &targets,
+            scope: &scope,
+            baseline: &base,
+        };
+        assert_eq!(
+            verify(&runner, &plan, Ring::Scoped).unwrap(),
+            Verdict::Regressed("n".into())
+        );
         assert_eq!(runner.call_count(), 1);
     }
 
@@ -116,8 +138,15 @@ mod tests {
             Snapshot::from_pairs([("t1", Pass)]), // post: flipped
             Snapshot::from_pairs([("t1", Fail)]), // post2: didn't hold
         ]);
-        let plan = VerifyPlan { targets: &targets, scope: &targets, baseline: &base };
-        assert_eq!(verify(&runner, &plan, Ring::Inner).unwrap(), Verdict::Flaky("t1".into()));
+        let plan = VerifyPlan {
+            targets: &targets,
+            scope: &targets,
+            baseline: &base,
+        };
+        assert_eq!(
+            verify(&runner, &plan, Ring::Inner).unwrap(),
+            Verdict::Flaky("t1".into())
+        );
         assert_eq!(runner.call_count(), 2);
     }
 }

@@ -303,7 +303,11 @@ fn full_item_span(func: tree_sitter::Node, source: &str, lang: Lang) -> (usize, 
         }
         // A blank line between this sibling and the item below means it belongs
         // to something else (or nothing), not to our function — stop there.
-        if source[prev.end_byte()..node.start_byte()].matches('\n').count() > 1 {
+        if source[prev.end_byte()..node.start_byte()]
+            .matches('\n')
+            .count()
+            > 1
+        {
             break;
         }
         start = prev.start_byte();

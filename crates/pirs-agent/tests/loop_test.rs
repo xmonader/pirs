@@ -193,9 +193,9 @@ async fn errored_turn_with_tool_call_gets_synthetic_result() {
         .position(|m| matches!(m, Message::Assistant(a) if !a.tool_calls().is_empty()))
         .expect("assistant with tool call present");
     assert!(
-        new[assistant_idx + 1..].iter().any(
-            |m| matches!(m, Message::ToolResult(r) if r.tool_call_id == "c1" && r.is_error)
-        ),
+        new[assistant_idx + 1..]
+            .iter()
+            .any(|m| matches!(m, Message::ToolResult(r) if r.tool_call_id == "c1" && r.is_error)),
         "errored turn must be followed by a synthetic tool_result for c1"
     );
 }

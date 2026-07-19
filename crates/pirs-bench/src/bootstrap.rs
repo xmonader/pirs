@@ -83,6 +83,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         // First install fails, but the runner still enumerates tests.
         let s = spec(vec!["false", "true"], "printf 'test_a\\n'");
-        assert!(matches!(bootstrap(&s, dir.path()).unwrap(), Bootstrap::Ready(_)));
+        assert!(matches!(
+            bootstrap(&s, dir.path()).unwrap(),
+            Bootstrap::Ready(_)
+        ));
     }
 }

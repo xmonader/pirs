@@ -930,10 +930,7 @@ mod tests {
         let tail = msgs.last().unwrap();
         assert_eq!(tail["role"], "user");
         let blocks = tail["content"].as_array().unwrap();
-        assert_eq!(
-            blocks.last().unwrap()["cache_control"]["type"],
-            "ephemeral"
-        );
+        assert_eq!(blocks.last().unwrap()["cache_control"]["type"], "ephemeral");
     }
 
     #[test]

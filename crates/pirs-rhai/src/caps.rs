@@ -59,11 +59,51 @@ impl Caps {
 /// allowlist and shell-metachar block cannot narrow it. Used to warn the user
 /// at trust time rather than pretend the grant is scoped.
 pub const SHELL_CAPABLE_BINARIES: &[&str] = &[
-    "git", "cargo", "make", "cmake", "npm", "npx", "yarn", "pnpm", "node",
-    "deno", "bun", "python", "python2", "python3", "ruby", "perl", "php", "lua",
-    "sh", "bash", "zsh", "fish", "dash", "env", "xargs", "find", "sed", "awk",
-    "docker", "podman", "ssh", "scp", "rsync", "gcc", "g++", "cc", "clang",
-    "rustc", "go", "vim", "nvim", "emacs", "gdb", "lldb", "systemctl",
+    "git",
+    "cargo",
+    "make",
+    "cmake",
+    "npm",
+    "npx",
+    "yarn",
+    "pnpm",
+    "node",
+    "deno",
+    "bun",
+    "python",
+    "python2",
+    "python3",
+    "ruby",
+    "perl",
+    "php",
+    "lua",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "dash",
+    "env",
+    "xargs",
+    "find",
+    "sed",
+    "awk",
+    "docker",
+    "podman",
+    "ssh",
+    "scp",
+    "rsync",
+    "gcc",
+    "g++",
+    "cc",
+    "clang",
+    "rustc",
+    "go",
+    "vim",
+    "nvim",
+    "emacs",
+    "gdb",
+    "lldb",
+    "systemctl",
 ];
 
 /// The subset of a pack's exec allowlist that grants effectively unrestricted
@@ -228,7 +268,10 @@ mod tests {
             exec: Some(vec!["/usr/bin/bash".to_string()]),
             ..Default::default()
         };
-        assert_eq!(coarse_exec_grants(&qualified), vec!["/usr/bin/bash".to_string()]);
+        assert_eq!(
+            coarse_exec_grants(&qualified),
+            vec!["/usr/bin/bash".to_string()]
+        );
 
         // A narrow, non-shell tool is NOT flagged — no false alarm.
         let narrow = Caps {
@@ -236,7 +279,11 @@ mod tests {
             ..Default::default()
         };
         assert!(coarse_exec_grants(&narrow).is_empty());
-        assert!(!narrow.summary().contains("arbitrary code"), "{}", narrow.summary());
+        assert!(
+            !narrow.summary().contains("arbitrary code"),
+            "{}",
+            narrow.summary()
+        );
     }
 
     #[test]

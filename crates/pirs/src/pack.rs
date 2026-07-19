@@ -114,9 +114,7 @@ pub fn clone_pinned(url: &str, pin: Option<&str>) -> anyhow::Result<(tempfile::T
     }
     let tmp = tempfile::tempdir()?;
     let repo = tmp.path().join("repo");
-    let repo_str = repo
-        .to_str()
-        .context("temp repo path is not valid UTF-8")?;
+    let repo_str = repo.to_str().context("temp repo path is not valid UTF-8")?;
     // `-c protocol.*.allow` disables the transport helpers that turn a clone
     // into code execution; `--` stops a hostile url being read as an option.
     let mut clone_args: Vec<&str> = vec![

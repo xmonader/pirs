@@ -47,7 +47,12 @@ fn cap_tail(s: &mut String, max: usize) {
 /// particular the `looks_like_daemon` heuristic must NOT auto-background under
 /// a sandbox — otherwise a command like `cp ~/.ssh/id_rsa /tmp/x # serve`
 /// escapes the sandbox onto the host.
-fn should_background(sandbox_is_local: bool, background: bool, auto_restart: bool, cmd: &str) -> bool {
+fn should_background(
+    sandbox_is_local: bool,
+    background: bool,
+    auto_restart: bool,
+    cmd: &str,
+) -> bool {
     if !sandbox_is_local {
         return false;
     }
@@ -386,9 +391,19 @@ mod tests {
     #[test]
     fn daemon_heuristic_never_backgrounds_under_sandbox() {
         // `serve` looks like a daemon; on a local sandbox it auto-backgrounds.
-        assert!(should_background(true, false, false, "python -m http.server"));
+        assert!(should_background(
+            true,
+            false,
+            false,
+            "python -m http.server"
+        ));
         // Under a sandbox the same command must NOT spawn a host job.
-        assert!(!should_background(false, false, false, "python -m http.server"));
+        assert!(!should_background(
+            false,
+            false,
+            false,
+            "python -m http.server"
+        ));
         // Even explicit background/auto_restart cannot escape a sandbox here
         // (the caller bails earlier, but the predicate is defensive too).
         assert!(!should_background(false, true, false, "sleep 1"));

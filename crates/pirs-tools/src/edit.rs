@@ -113,9 +113,7 @@ impl AgentTool for EditTool {
             let use_crlf = region.contains("\r\n")
                 || (crlf && !region.contains('\n') && !region.contains('\r'));
             let mut replacement = new.clone();
-            if oend > ostart
-                && without_bom[..oend].ends_with('\n')
-                && !replacement.ends_with('\n')
+            if oend > ostart && without_bom[..oend].ends_with('\n') && !replacement.ends_with('\n')
             {
                 replacement.push('\n');
             }
