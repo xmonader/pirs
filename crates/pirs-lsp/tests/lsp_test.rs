@@ -12,6 +12,39 @@ fn rust_analyzer_available() -> bool {
         .unwrap_or(false)
 }
 
+/// rust-analyzer indexes a crate asynchronously, so a cross-file query issued
+/// right after `open_document` can return an empty result until indexing
+/// completes — a race that only bites under concurrent load (several servers
+/// competing for CPU). Poll `produce` until its text contains `needle`, up to
+/// ~30s, mirroring how a real LSP client waits for readiness. `produce` returns
+/// the query's text payload (already extracted), so this works for both the raw
+/// client (serialized JSON) and the tool (rendered output).
+async fn poll_until<F, Fut>(needle: &str, mut produce: F) -> String
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = String>,
+{
+    for _ in 0..60 {
+        let text = produce().await;
+        if text.contains(needle) {
+            return text;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    // One last try so the assertion failure carries the real payload.
+    produce().await
+}
+
+/// Serialize a client query's result to a JSON string for `poll_until`.
+async fn json_of(
+    fut: impl std::future::Future<Output = anyhow::Result<serde_json::Value>>,
+) -> String {
+    match fut.await {
+        Ok(v) => serde_json::to_string(&v).unwrap(),
+        Err(_) => String::new(),
+    }
+}
+
 fn fixture_crate() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(
@@ -44,16 +77,10 @@ async fn lsp_definition_across_files() {
         .await
         .unwrap();
 
-    client
-        .open_document(&dir.path().join("src/main.rs"), "rust")
-        .await
-        .unwrap();
-    let result = client
-        .definition(&dir.path().join("src/main.rs"), 2, 22)
-        .await
-        .unwrap();
-
-    let text = serde_json::to_string(&result).unwrap();
+    let main_rs = dir.path().join("src/main.rs");
+    client.open_document(&main_rs, "rust").await.unwrap();
+    // Wait for cross-file indexing before asserting (see `poll_until`).
+    let text = poll_until("lib.rs", || json_of(client.definition(&main_rs, 2, 22))).await;
     assert!(
         text.contains("lib.rs"),
         "definition should point to lib.rs: {text}"
@@ -80,21 +107,15 @@ async fn lsp_references_and_symbols() {
         .open_document(&dir.path().join("src/main.rs"), "rust")
         .await
         .unwrap();
-    let refs = client
-        .references(&dir.path().join("src/lib.rs"), 1, 8)
-        .await
-        .unwrap();
-    let text = serde_json::to_string(&refs).unwrap();
+    let lib = dir.path().join("src/lib.rs");
+    // Wait for cross-file indexing before asserting (see `poll_until`).
+    let text = poll_until("main.rs", || json_of(client.references(&lib, 1, 8))).await;
     assert!(
         text.contains("main.rs"),
         "references should include main.rs: {text}"
     );
 
-    let syms = client
-        .document_symbols(&dir.path().join("src/lib.rs"))
-        .await
-        .unwrap();
-    let text = serde_json::to_string(&syms).unwrap();
+    let text = poll_until("target_fn", || json_of(client.document_symbols(&lib))).await;
     assert!(text.contains("target_fn"), "{text}");
     client.shutdown().await;
 }
@@ -107,32 +128,35 @@ async fn lsp_tool_end_to_end() {
     }
     let dir = fixture_crate();
     let tool = LspTool::new(dir.path().to_path_buf());
-    let out = tool
-        .execute(pirs_agent::ToolExecContext {
-            tool_call_id: "t".into(),
-            args: serde_json::json!({
-                "action": "definition",
-                "path": "src/main.rs",
-                "line": 2,
-                "character": 22
-            }),
-            cancel: tokio_util::sync::CancellationToken::new(),
-            on_update: None,
-        })
-        .await
-        .unwrap();
-    assert!(out.content[0].as_text().unwrap().contains("src/lib.rs"));
+    // Run one tool action and return its rendered text (empty on error/cancel).
+    let run = |args: serde_json::Value| async {
+        match tool
+            .execute(pirs_agent::ToolExecContext {
+                tool_call_id: "t".into(),
+                args,
+                cancel: tokio_util::sync::CancellationToken::new(),
+                on_update: None,
+            })
+            .await
+        {
+            Ok(out) => out.content[0]
+                .as_text()
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
+            Err(_) => String::new(),
+        }
+    };
 
-    let out2 = tool
-        .execute(pirs_agent::ToolExecContext {
-            tool_call_id: "t".into(),
-            args: serde_json::json!({"action": "symbols", "path": "src/lib.rs"}),
-            cancel: tokio_util::sync::CancellationToken::new(),
-            on_update: None,
-        })
-        .await
-        .unwrap();
-    assert!(out2.content[0].as_text().unwrap().contains("target_fn"));
+    // Wait for cross-file indexing before asserting (see `poll_until`).
+    let def = serde_json::json!({
+        "action": "definition", "path": "src/main.rs", "line": 2, "character": 22
+    });
+    let text = poll_until("src/lib.rs", || run(def.clone())).await;
+    assert!(text.contains("src/lib.rs"), "{text}");
+
+    let syms = serde_json::json!({"action": "symbols", "path": "src/lib.rs"});
+    let text = poll_until("target_fn", || run(syms.clone())).await;
+    assert!(text.contains("target_fn"), "{text}");
     tool.shutdown_all().await;
 }
 
