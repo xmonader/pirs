@@ -225,8 +225,15 @@ struct Accumulator {
     stop_reason: Option<String>,
 }
 
+/// Upper bound on content blocks in one response. A hostile/buggy provider can
+/// send an absurd `index` (e.g. u64::MAX); resize_with(index+1) would then
+/// overflow-panic (in the spawned task, so no Done{Error} is ever emitted) or
+/// allocate gigabytes. Clamp instead: real responses never approach this.
+const MAX_BLOCKS: usize = 4096;
+
 impl Accumulator {
     fn block_mut(&mut self, index: usize) -> &mut BlockAcc {
+        let index = index.min(MAX_BLOCKS - 1);
         if self.blocks.len() <= index {
             self.blocks.resize_with(index + 1, BlockAcc::default);
         }

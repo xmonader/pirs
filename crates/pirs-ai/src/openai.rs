@@ -7,6 +7,9 @@ use crate::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
+/// Upper bound on streamed tool calls in one response; clamps a hostile
+/// `index` before it can overflow index+1 or trigger a huge allocation.
+const MAX_TOOL_CALLS: usize = 4096;
 
 pub struct OpenAiCompat {
     base_url: String,
@@ -423,7 +426,10 @@ impl Accumulator {
 
     fn apply_tool_call(&mut self, call: &Value) {
         let id = call.get("id").and_then(|v| v.as_str());
-        let index = call.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        // Clamp: a hostile `index` (up to u64::MAX) must not overflow index+1
+        // and panic, nor allocate gigabytes. Real responses stay tiny.
+        let index = (call.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize)
+            .min(MAX_TOOL_CALLS - 1);
 
         let slot = if self.tool_calls.len() > index {
             index
@@ -809,6 +815,18 @@ mod tests {
             }
             _ => panic!("expected tool call"),
         }
+    }
+
+    #[test]
+    fn accumulator_survives_hostile_tool_call_index() {
+        // A provider sending index=u64::MAX must not overflow index+1 or OOM.
+        let mut acc = Accumulator::default();
+        acc.apply_chunk(&json!({"choices":[{"delta":{"tool_calls":[
+            {"index": u64::MAX, "id":"x","function":{"name":"t","arguments":"{}"}}
+        ]},"finish_reason":"tool_calls"}]}));
+        assert!(acc.tool_calls.len() <= MAX_TOOL_CALLS);
+        // does not panic:
+        let _ = acc.into_message("p", "m");
     }
 
     #[test]
