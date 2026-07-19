@@ -699,6 +699,17 @@ pub fn messages_to_anthropic(ctx: &Context) -> Vec<Value> {
                         "text": s,
                         "cache_control": { "type": "ephemeral" }
                     }]);
+                } else if let Some(arr) = content.as_array_mut() {
+                    // The tail in a tool loop is a user message whose content is
+                    // an array of tool_result blocks — the dominant call pattern.
+                    // Without this the breakpoint never lands and history is
+                    // re-billed uncached every turn. Mark the last block.
+                    if let Some(obj) = arr.last_mut().and_then(|b| b.as_object_mut()) {
+                        obj.insert(
+                            "cache_control".to_string(),
+                            serde_json::json!({ "type": "ephemeral" }),
+                        );
+                    }
                 }
             }
         }
@@ -823,6 +834,45 @@ mod tests {
         assert_eq!(body["system"][0]["text"], "sys");
         assert_eq!(body["system"][0]["cache_control"]["type"], "ephemeral");
         assert_eq!(body["max_tokens"], DEFAULT_MAX_TOKENS);
+    }
+
+    #[test]
+    fn cache_breakpoint_lands_on_tool_result_tail() {
+        // Tail is a user message of tool_result blocks (the tool-loop pattern);
+        // the breakpoint must land on the last block, not be skipped.
+        let ctx = Context {
+            system_prompt: Some("sys".into()),
+            messages: vec![
+                Message::Assistant(AssistantMessage {
+                    content: vec![ContentBlock::ToolCall {
+                        id: "t1".into(),
+                        name: "bash".into(),
+                        arguments: json!({}),
+                        thought_signature: None,
+                    }],
+                    stop_reason: StopReason::ToolUse,
+                    ..Default::default()
+                }),
+                Message::ToolResult(ToolResultMessage {
+                    tool_call_id: "t1".into(),
+                    tool_name: "bash".into(),
+                    content: vec![ContentBlock::text("out")],
+                    details: None,
+                    is_error: false,
+                    terminate: false,
+                    timestamp: 0,
+                }),
+            ],
+            tools: vec![],
+        };
+        let msgs = messages_to_anthropic(&ctx);
+        let tail = msgs.last().unwrap();
+        assert_eq!(tail["role"], "user");
+        let blocks = tail["content"].as_array().unwrap();
+        assert_eq!(
+            blocks.last().unwrap()["cache_control"]["type"],
+            "ephemeral"
+        );
     }
 
     #[test]
