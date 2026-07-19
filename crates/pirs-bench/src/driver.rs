@@ -11,6 +11,7 @@ use crate::baseline::{capture_stable, capture_stable_cached, targets_reproduce};
 use crate::cache::BaselineCache;
 use crate::gate::Verdict;
 use crate::run::{verify, TestRunner, VerifyPlan};
+use crate::timing::Timings;
 use crate::types::{FailBucket, Outcome, Ring, Snapshot, TestId};
 
 /// The inputs that define a task.
@@ -41,13 +42,14 @@ pub fn run_task(
     runner: &dyn TestRunner,
     executor: &mut dyn Executor,
     max_attempts: u32,
+    timings: &mut Timings,
 ) -> anyhow::Result<Outcome> {
     let scope = compute_scope(spec);
-    let baseline = match capture_stable(runner, &scope, Ring::Scoped)? {
+    let baseline = match timings.time("baseline", || capture_stable(runner, &scope, Ring::Scoped))? {
         Some(b) => b,
         None => return Ok(Outcome::Failed(FailBucket::BaselineUnusable)),
     };
-    drive(spec, &scope, baseline, runner, executor, max_attempts)
+    drive(spec, &scope, baseline, runner, executor, max_attempts, timings)
 }
 
 /// Like [`run_task`] but captures the baseline through a SHA-keyed
@@ -60,13 +62,16 @@ pub fn run_task_cached(
     max_attempts: u32,
     cache: &mut BaselineCache,
     base_sha: &str,
+    timings: &mut Timings,
 ) -> anyhow::Result<Outcome> {
     let scope = compute_scope(spec);
-    let baseline = match capture_stable_cached(runner, &scope, Ring::Scoped, cache, base_sha)? {
+    let baseline = match timings
+        .time("baseline", || capture_stable_cached(runner, &scope, Ring::Scoped, cache, base_sha))?
+    {
         Some(b) => b,
         None => return Ok(Outcome::Failed(FailBucket::BaselineUnusable)),
     };
-    drive(spec, &scope, baseline, runner, executor, max_attempts)
+    drive(spec, &scope, baseline, runner, executor, max_attempts, timings)
 }
 
 /// The reproduce gate + fix/verify loop over an already-captured baseline. Shared
@@ -78,6 +83,7 @@ fn drive(
     runner: &dyn TestRunner,
     executor: &mut dyn Executor,
     max_attempts: u32,
+    timings: &mut Timings,
 ) -> anyhow::Result<Outcome> {
     // Reproduce: every target must be red at baseline, or there is nothing to fix.
     if targets_reproduce(&baseline, &spec.targets).is_err() {
@@ -93,11 +99,12 @@ fn drive(
 
     let mut last: Option<Verdict> = None;
     for attempt in 1..=max_attempts {
-        if !executor.attempt(attempt, last.as_ref())? {
+        // The fix step (the agent) — usually the dominant cost.
+        if !timings.time("fix", || executor.attempt(attempt, last.as_ref()))? {
             break; // executor gave up
         }
         let inner = VerifyPlan { targets: &spec.targets, scope: &spec.targets, baseline: &baseline };
-        let verdict = verify(runner, &inner, Ring::Inner)?;
+        let verdict = timings.time("verify", || verify(runner, &inner, Ring::Inner))?;
         if !verdict.is_done() {
             last = Some(verdict);
             continue;
@@ -107,7 +114,7 @@ fn drive(
         }
         // Targets flipped — now (and only now) pay for the regression ring.
         let scoped = VerifyPlan { targets: &spec.targets, scope, baseline: &baseline };
-        let scoped_verdict = verify(runner, &scoped, Ring::Scoped)?;
+        let scoped_verdict = timings.time("verify", || verify(runner, &scoped, Ring::Scoped))?;
         if scoped_verdict.is_done() {
             return Ok(Outcome::Solved);
         }
@@ -172,7 +179,7 @@ mod tests {
         let runner = FlagRunner { fixed: &fixed, target: "t1" };
         let mut exec = FlagExecutor { fixed: &fixed, fix_on: 1 };
         let spec = TaskSpec { targets: ids(&["t1"]), keep_green: ids(&["k"]) };
-        assert_eq!(run_task(&spec, &runner, &mut exec, 3).unwrap(), Outcome::Solved);
+        assert_eq!(run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(), Outcome::Solved);
     }
 
     #[test]
@@ -182,7 +189,7 @@ mod tests {
         let mut exec = FlagExecutor { fixed: &fixed, fix_on: 0 };
         let spec = TaskSpec { targets: ids(&["t1"]), keep_green: vec![] };
         assert_eq!(
-            run_task(&spec, &runner, &mut exec, 3).unwrap(),
+            run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(),
             Outcome::Failed(FailBucket::FixNoFlip)
         );
     }
@@ -209,7 +216,7 @@ mod tests {
         }
         let spec = TaskSpec { targets: ids(&["t1"]), keep_green: vec![] };
         assert_eq!(
-            run_task(&spec, &Flaky { n: Cell::new(0) }, &mut NoExec, 3).unwrap(),
+            run_task(&spec, &Flaky { n: Cell::new(0) }, &mut NoExec, 3, &mut Timings::new()).unwrap(),
             Outcome::Failed(FailBucket::BaselineUnusable)
         );
     }
@@ -247,7 +254,7 @@ mod tests {
         let mut exec = FlagExecutor { fixed: &fixed, fix_on: 1 };
         let spec = TaskSpec { targets: ids(&["t1"]), keep_green: ids(&["k"]) };
         assert_eq!(
-            run_task(&spec, &runner, &mut exec, 3).unwrap(),
+            run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(),
             Outcome::Failed(FailBucket::Regressed)
         );
     }
@@ -287,7 +294,7 @@ mod tests {
         };
         let mut exec = FlagExecutor { fixed: &fixed, fix_on: 3 };
         let spec = TaskSpec { targets: ids(&["t1"]), keep_green: ids(&["k"]) };
-        assert_eq!(run_task(&spec, &runner, &mut exec, 3).unwrap(), Outcome::Solved);
+        assert_eq!(run_task(&spec, &runner, &mut exec, 3, &mut Timings::new()).unwrap(), Outcome::Solved);
         // Baseline runs the scope (incl. victim) twice; then the victim appears
         // only in the single scoped pass after the flip (post + post2-is-targets).
         // So victim is included in: 2 (baseline) + 1 (scoped post) = 3 runs.
@@ -306,7 +313,7 @@ mod tests {
         }
         let spec = TaskSpec { targets: ids(&["t1"]), keep_green: vec![] };
         assert_eq!(
-            run_task(&spec, &runner, &mut NoExec, 3).unwrap(),
+            run_task(&spec, &runner, &mut NoExec, 3, &mut Timings::new()).unwrap(),
             Outcome::Failed(FailBucket::ReproFailed)
         );
     }

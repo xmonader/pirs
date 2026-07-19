@@ -21,6 +21,7 @@ pub mod probe;
 pub mod proc;
 pub mod report;
 pub mod run;
+pub mod timing;
 pub mod types;
 
 pub use baseline::{capture_stable, capture_stable_cached, targets_reproduce};
@@ -37,4 +38,5 @@ pub use orchestrate::{plan_next, steer_hint, Hint, ModelOracle, PlanDecision};
 pub use probe::{probe, ProbeResult};
 pub use report::Attribution;
 pub use run::{verify, TestRunner, VerifyPlan};
+pub use timing::Timings;
 pub use types::{FailBucket, Outcome, Ring, RunnerSpec, Snapshot, TestId, TestOutcome};

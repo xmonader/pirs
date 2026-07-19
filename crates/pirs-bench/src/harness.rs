@@ -18,6 +18,7 @@ use crate::command::CommandRunner;
 use crate::detect::{discover, DetectorHost, Discovery};
 use crate::driver::{run_task, run_task_cached, Executor, TaskSpec};
 use crate::git::GitWorkspace;
+use crate::timing::Timings;
 use crate::types::{FailBucket, Outcome, TestId};
 
 /// A single benchmark instance to attempt.
@@ -37,6 +38,8 @@ pub struct InstanceReport {
     pub outcome: Outcome,
     /// The extracted patch — `Some` only on an accepted outcome with a workspace.
     pub patch: Option<String>,
+    /// Per-phase wall-clock: discover, bootstrap, baseline, fix, verify, patch.
+    pub timings: Timings,
 }
 
 /// Run one instance to an [`InstanceReport`]. `cache` is threaded through so a
@@ -52,49 +55,55 @@ pub fn run_instance(
     max_attempts: u32,
     workspace: Option<&GitWorkspace>,
 ) -> anyhow::Result<InstanceReport> {
-    let bail = |outcome| Ok(InstanceReport { outcome, patch: None });
+    let mut timings = Timings::new();
+    let bail = |outcome, timings| Ok(InstanceReport { outcome, patch: None, timings });
 
     // 1. Discover and probe-confirm a runner. No confirmed runner → we can't get
     //    a pass/fail signal at all. (No edits yet, so no rollback needed.)
-    let spec = match discover(host, &inst.repo_root)? {
+    let discovered = timings.time("discover", || discover(host, &inst.repo_root))?;
+    let spec = match discovered {
         Discovery::Confirmed { spec, .. } => spec,
         Discovery::Unconfirmed { tried, hint } => {
             tracing::warn!("no runner confirmed ({tried} tried): {hint}");
-            return bail(Outcome::Failed(FailBucket::RunnerUndetected));
+            return bail(Outcome::Failed(FailBucket::RunnerUndetected), timings);
         }
     };
 
     // 2. Make the environment usable (install + re-probe). A broken env is a
     //    distinct failure from an undetected runner.
-    match bootstrap(&spec, &inst.repo_root)? {
+    let boot = timings.time("bootstrap", || bootstrap(&spec, &inst.repo_root))?;
+    match boot {
         Bootstrap::Ready(_) => {}
         Bootstrap::Failed(hint) => {
             tracing::warn!("environment setup failed: {hint}");
-            return bail(Outcome::Failed(FailBucket::EnvSetup));
+            return bail(Outcome::Failed(FailBucket::EnvSetup), timings);
         }
     }
 
     // 3. Build the concrete runner and drive the task. The executor edits the
     //    real tree; the outcome decides whether we keep or discard those edits.
+    //    (baseline/fix/verify phases are timed inside the driver.)
     let runner = CommandRunner::new(spec, inst.repo_root.clone());
     let task = TaskSpec { targets: inst.targets.clone(), keep_green: inst.keep_green.clone() };
 
     let outcome = match &inst.base_sha {
-        Some(sha) => run_task_cached(&task, &runner, executor, max_attempts, cache, sha)?,
-        None => run_task(&task, &runner, executor, max_attempts)?,
+        Some(sha) => {
+            run_task_cached(&task, &runner, executor, max_attempts, cache, sha, &mut timings)?
+        }
+        None => run_task(&task, &runner, executor, max_attempts, &mut timings)?,
     };
 
     // 4. Keep the fix (as a patch) or roll back to pristine.
     let patch = match workspace {
-        Some(ws) if outcome.is_accepted() => Some(ws.diff()?),
+        Some(ws) if outcome.is_accepted() => Some(timings.time("patch", || ws.diff())?),
         Some(ws) => {
-            ws.reset()?; // discard partial/failed edits
+            timings.time("rollback", || ws.reset())?; // discard partial/failed edits
             None
         }
         None => None,
     };
 
-    Ok(InstanceReport { outcome, patch })
+    Ok(InstanceReport { outcome, patch, timings })
 }
 
 #[cfg(test)]
