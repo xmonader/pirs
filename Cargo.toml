@@ -10,6 +10,7 @@ members = [
     "crates/pirs-mcp",
     "crates/pirs-graph",
     "crates/pirs-lsp",
+    "crates/pirs-bench",
 ]
 
 [workspace.package]

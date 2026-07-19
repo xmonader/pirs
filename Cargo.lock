@@ -1449,6 +1449,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pirs-bench"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "pirs-graph"
 version = "0.1.0"
 dependencies = [
