@@ -80,49 +80,32 @@ pub struct Graph {
 
 impl Graph {
     pub fn build(root: &Path) -> Graph {
-        let mut graph = Graph::default();
-        let mut parser = tree_sitter::Parser::new();
+        Graph::from_symbols(parse_tree(root))
+    }
 
-        let walker = ignore::WalkBuilder::new(root)
-            .hidden(false)
-            .require_git(false)
-            .build();
-        for entry in walker.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                continue;
+    /// Build the query indexes (`by_name`/`by_file`/`refs`) and PageRank over a
+    /// flat symbol set. Both the full parse (`build`) and the persistent
+    /// incremental store feed through here, so a from-scratch graph and an
+    /// incrementally-refreshed one over the same symbol set are byte-for-byte the
+    /// same structure — the equivalence guarantee lives in this one function.
+    pub fn from_symbols(symbols: Vec<Symbol>) -> Graph {
+        let mut by_name: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut by_file: HashMap<PathBuf, Vec<usize>> = HashMap::new();
+        let mut refs: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, sym) in symbols.iter().enumerate() {
+            by_name.entry(sym.name.clone()).or_default().push(i);
+            by_file.entry(sym.file.clone()).or_default().push(i);
+            for callee in &sym.calls {
+                refs.entry(callee.clone()).or_default().push(i);
             }
-            let Some(lang) = Lang::from_path(path) else {
-                continue;
-            };
-            let Ok(source) = std::fs::read_to_string(path) else {
-                continue;
-            };
-            if parser.set_language(&lang.grammar()).is_err() {
-                continue;
-            }
-            let Some(tree) = parser.parse(&source, None) else {
-                continue;
-            };
-            let base = graph.symbols.len();
-            let mut file_symbols = extract_symbols(lang, tree.root_node(), &source, path);
-            for (i, sym) in file_symbols.iter().enumerate() {
-                graph
-                    .by_name
-                    .entry(sym.name.clone())
-                    .or_default()
-                    .push(base + i);
-                graph
-                    .by_file
-                    .entry(path.to_path_buf())
-                    .or_default()
-                    .push(base + i);
-                for callee in &sym.calls {
-                    graph.refs.entry(callee.clone()).or_default().push(base + i);
-                }
-            }
-            graph.symbols.append(&mut file_symbols);
         }
+        let mut graph = Graph {
+            symbols,
+            by_name,
+            by_file,
+            refs,
+            pagerank: HashMap::new(),
+        };
         graph.compute_pagerank();
         graph
     }
@@ -251,6 +234,40 @@ impl Graph {
     pub fn find_definition(&self, name: &str, file: &Path) -> Option<&Symbol> {
         self.symbol(name).into_iter().find(|s| s.file == file)
     }
+}
+
+/// Walk `root` (gitignore-aware) and parse every supported source file into a
+/// flat symbol set, in filesystem-walk order.
+pub fn parse_tree(root: &Path) -> Vec<Symbol> {
+    let mut symbols = Vec::new();
+    let walker = ignore::WalkBuilder::new(root)
+        .hidden(false)
+        .require_git(false)
+        .build();
+    for entry in walker.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            continue;
+        }
+        if let Some(mut file_symbols) = parse_file(path) {
+            symbols.append(&mut file_symbols);
+        }
+    }
+    symbols
+}
+
+/// Parse a single file into its symbols, or `None` if it is not a supported
+/// language or cannot be read/parsed. This is the unit the persistent store
+/// caches: re-run it only for files whose bytes changed.
+pub fn parse_file(path: &Path) -> Option<Vec<Symbol>> {
+    let lang = Lang::from_path(path)?;
+    let source = std::fs::read_to_string(path).ok()?;
+    let mut parser = tree_sitter::Parser::new();
+    if parser.set_language(&lang.grammar()).is_err() {
+        return None;
+    }
+    let tree = parser.parse(&source, None)?;
+    Some(extract_symbols(lang, tree.root_node(), &source, path))
 }
 
 fn extract_symbols(lang: Lang, root: tree_sitter::Node, source: &str, path: &Path) -> Vec<Symbol> {
