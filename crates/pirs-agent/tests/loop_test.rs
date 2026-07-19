@@ -468,6 +468,54 @@ async fn same_path_calls_serialize_but_different_paths_stay_concurrent() {
     );
 }
 
+/// Regression test (found via comparison against pi's file-mutation-queue,
+/// which keys its lock on a realpath-resolved path for exactly this reason):
+/// two different *spellings* of the same file — a plain relative path and a
+/// `./`-prefixed one — must still serialize. Without canonicalizing the lock
+/// key, these would hash to different map entries and silently run
+/// concurrently, defeating the whole point of the same-path lock.
+#[tokio::test]
+async fn same_file_via_different_path_spellings_still_serializes() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("same.txt");
+    std::fs::write(&target, "x").unwrap();
+    let plain = target.to_str().unwrap().to_string();
+    let dotted = format!("{}/./same.txt", dir.path().to_str().unwrap());
+
+    let spans = Arc::new(Mutex::new(Vec::new()));
+    let provider = MockProvider::new(vec![
+        AssistantMessage {
+            content: vec![
+                ContentBlock::ToolCall {
+                    id: "a".into(),
+                    name: "touch".into(),
+                    arguments: json!({"path": plain}),
+                    thought_signature: None,
+                },
+                ContentBlock::ToolCall {
+                    id: "b".into(),
+                    name: "touch".into(),
+                    arguments: json!({"path": dotted}),
+                    thought_signature: None,
+                },
+            ],
+            stop_reason: StopReason::ToolUse,
+            ..Default::default()
+        },
+        text_msg("done"),
+    ]);
+    let mut agent = make_agent(provider, vec![Arc::new(SpanTool(spans.clone()))])
+        .with_tool_execution(ExecutionMode::Parallel);
+    agent.prompt("go").await.unwrap();
+
+    let spans = spans.lock().unwrap();
+    assert_eq!(spans.len(), 2);
+    assert!(
+        !spans_overlap(&spans[0], &spans[1]),
+        "two spellings of the same file must still serialize: {spans:?}"
+    );
+}
+
 #[tokio::test]
 async fn error_stop_reason_ends_run() {
     let provider = MockProvider::new(vec![AssistantMessage {

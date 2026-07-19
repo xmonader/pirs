@@ -488,7 +488,28 @@ fn error_result(id: &str, name: &str, message: &str) -> ToolResultMessage {
 /// tools (read/edit/write) use a single `path` argument, so this is a plain
 /// lookup rather than pirs-tools-specific logic living in the loop.
 fn tool_path_for_lock(args: &Value) -> Option<String> {
-    args.get("path")?.as_str().map(str::to_string)
+    let raw = args.get("path")?.as_str()?;
+    Some(normalize_lock_path(raw))
+}
+
+/// Canonicalize a path for use as a lock key, so `src/f.rs`, `./src/f.rs`,
+/// and a symlink alias of the same file all collapse to one key instead of
+/// silently bypassing the same-path lock. `write` and similar tools target
+/// files that may not exist yet, so a missing leaf falls back to
+/// canonicalizing the parent directory and re-attaching the leaf name; if
+/// even the parent can't be resolved, the raw string is used as-is rather
+/// than failing the lookup.
+fn normalize_lock_path(raw: &str) -> String {
+    let path = std::path::Path::new(raw);
+    if let Ok(canon) = std::fs::canonicalize(path) {
+        return canon.to_string_lossy().into_owned();
+    }
+    if let (Some(parent), Some(file_name)) = (path.parent(), path.file_name()) {
+        if let Ok(canon_parent) = std::fs::canonicalize(parent) {
+            return canon_parent.join(file_name).to_string_lossy().into_owned();
+        }
+    }
+    raw.to_string()
 }
 
 fn schema_summary(schema: &Value) -> String {
