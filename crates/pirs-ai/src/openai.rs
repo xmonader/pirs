@@ -510,6 +510,10 @@ pub fn normalize_tool_call_id(id: &str) -> String {
 pub fn map_finish_reason(reason: Option<&str>) -> StopReason {
     match reason {
         Some("stop") | Some("end") | Some("") | None => StopReason::Stop,
+        // content_filter is a definitive terminal outcome: the provider
+        // filtered the response. Retrying the identical request cannot change
+        // it, so map to Stop (terminal) rather than the retryable Error.
+        Some("content_filter") => StopReason::Stop,
         Some("length") => StopReason::Length,
         Some("tool_calls") | Some("function_call") => StopReason::ToolUse,
         _ => StopReason::Error,
@@ -706,7 +710,10 @@ mod tests {
         assert_eq!(map_finish_reason(Some("stop")), StopReason::Stop);
         assert_eq!(map_finish_reason(Some("length")), StopReason::Length);
         assert_eq!(map_finish_reason(Some("tool_calls")), StopReason::ToolUse);
-        assert_eq!(map_finish_reason(Some("content_filter")), StopReason::Error);
+        // content_filter is terminal, not retryable: retrying the identical
+        // request cannot change a filtered response.
+        assert_eq!(map_finish_reason(Some("content_filter")), StopReason::Stop);
+        assert_eq!(map_finish_reason(Some("other")), StopReason::Error);
     }
 
     #[test]

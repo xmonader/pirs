@@ -414,6 +414,10 @@ impl Accumulator {
 pub fn map_stop_reason(reason: Option<&str>) -> StopReason {
     match reason {
         Some("end_turn") | Some("stop_sequence") | Some("") | None => StopReason::Stop,
+        // A refusal is a definitive, content-bearing completion: the model
+        // declined and said so. Retrying the identical request cannot change
+        // it, so map to Stop (terminal) rather than the retryable Error.
+        Some("refusal") => StopReason::Stop,
         Some("max_tokens") => StopReason::Length,
         Some("tool_use") => StopReason::ToolUse,
         _ => StopReason::Error,
@@ -785,6 +789,13 @@ mod tests {
         assert_eq!(map_stop_reason(Some("max_tokens")), StopReason::Length);
         assert_eq!(map_stop_reason(Some("tool_use")), StopReason::ToolUse);
         assert_eq!(map_stop_reason(Some("other")), StopReason::Error);
+    }
+
+    #[test]
+    fn refusal_is_terminal_not_retryable() {
+        // A refusal must not be treated as a retryable Error: retrying the
+        // identical request just burns max_retries round-trips to the same end.
+        assert_eq!(map_stop_reason(Some("refusal")), StopReason::Stop);
     }
 
     #[test]
