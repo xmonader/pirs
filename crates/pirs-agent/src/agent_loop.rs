@@ -405,6 +405,12 @@ async fn stream_once(
         if partial.error_message.is_none() {
             partial.error_message = Some(err);
         }
+        // A transport drop after an Error frame (no Done) leaves stop_reason at
+        // its default Stop, so the loop would treat a failed turn as a clean
+        // final answer. Force Error unless a Done already set a terminal reason.
+        if partial.stop_reason == StopReason::Stop {
+            partial.stop_reason = StopReason::Error;
+        }
     }
 
     replace_last(context, &partial);

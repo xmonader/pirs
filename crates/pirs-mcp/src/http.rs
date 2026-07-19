@@ -302,10 +302,9 @@ impl LegacySseClient {
         if !response.status().is_success() && response.status().as_u16() != 202 {
             let status = response.status().as_u16();
             let text = response.text().await.unwrap_or_default();
-            bail!(
-                "MCP SSE POST error {status}: {}",
-                &text[..text.len().min(300)]
-            );
+            // char-based truncation: byte-slicing a multibyte error page panics
+            let truncated: String = text.chars().take(300).collect();
+            bail!("MCP SSE POST error {status}: {truncated}");
         }
         Ok(())
     }
