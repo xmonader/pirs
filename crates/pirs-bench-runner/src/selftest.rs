@@ -22,7 +22,7 @@ use pirs_bench::{
 };
 
 use crate::metrics::UsageByModel;
-use crate::{build_provider, AgentConfig, AgentExecutor, Provider};
+use crate::{build_provider, AgentConfig, AgentExecutor, Provider, Strategy};
 
 /// How the self-test's "fix" step is driven.
 pub enum Mode {
@@ -35,6 +35,7 @@ pub enum Mode {
         model: String,
         api_key: String,
         max_turns: usize,
+        strategy: Strategy,
     },
 }
 
@@ -373,6 +374,7 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<Sel
                 model,
                 api_key,
                 max_turns,
+                strategy,
                 ..
             } => {
                 agent = Some(AgentExecutor::new(
@@ -385,6 +387,7 @@ pub fn run_selftest(dir: &Path, count: usize, mode: &Mode) -> anyhow::Result<Sel
                         api_key: api_key.clone(),
                         max_turns_per_attempt: *max_turns,
                         provider: Arc::clone(provider.as_ref().expect("provider in agent mode")),
+                        strategy: strategy.clone(),
                     },
                 )?);
             }

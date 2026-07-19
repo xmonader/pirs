@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use pirs_agent::agent_loop::{run_agent_loop, Budgets, LoopConfig};
+use pirs_agent::strategy::{self, PhaseDriver, ToolScope};
 use pirs_agent::{AgentEvent, AgentTool, Emit, ExecutionMode, Hooks};
 use pirs_ai::anthropic::AnthropicClient;
 use pirs_ai::{CompletionOptions, Context, LlmProvider, Message, OpenAiCompat, Usage};
@@ -31,6 +32,10 @@ use pirs_graph::LazyGraph;
 use tokio_util::sync::CancellationToken;
 
 use crate::metrics::{SessionStats, UsageByModel};
+
+/// The general loop-strategy type lives in `pirs-agent`; re-exported so the bench
+/// CLI and any other consumer name it from one place.
+pub use pirs_agent::strategy::Strategy;
 
 /// Which LLM backend to drive the agent with.
 #[derive(Debug, Clone)]
@@ -64,34 +69,33 @@ pub fn build_provider(provider: &Provider) -> Arc<dyn LlmProvider> {
     }
 }
 
-/// Bench-mode system prompt: fix the code so the failing tests pass, minimally,
-/// and never by editing the tests themselves.
-const SYSTEM_PROMPT: &str = "\
-You are fixing a bug in a real code repository so that specific failing tests pass.
-
-Rules:
-- Make the SMALLEST change that makes the failing tests pass. Do not refactor.
-- Fix the SOURCE code, never the tests. Do not edit, delete, or weaken any test.
-- Use the code-graph and read tools to locate the real cause before editing.
-- You may run the project's tests to check your work.
-- When the target tests pass and you have not broken others, stop.";
-
 /// Model/provider/budget knobs for an [`AgentExecutor`].
 pub struct AgentConfig {
     pub model: String,
     pub api_key: String,
     pub max_turns_per_attempt: usize,
     pub provider: Arc<dyn LlmProvider>,
+    /// The loop strategy to drive the fix with (a built-in or a user script).
+    pub strategy: Strategy,
 }
 
-/// The agent-backed executor. Holds the assembled tools, the LLM provider, and a
-/// persistent [`Context`] so successive attempts refine cumulatively rather than
-/// starting cold. Runs the async agent loop on an owned Tokio runtime.
+/// The agent-backed executor and a [`PhaseDriver`]: it holds the assembled tools,
+/// the LLM provider, and one [`Context`] per strategy phase. It runs whatever
+/// [`Strategy`] it is configured with (built-in or user-authored) on an owned
+/// Tokio runtime, and is the bench harness's fix `Executor`.
 pub struct AgentExecutor {
     rt: Arc<tokio::runtime::Runtime>,
     provider: Arc<dyn LlmProvider>,
     tools: Vec<Arc<dyn AgentTool>>,
-    context: Context,
+    /// Read-only subset of `tools` (no edit/write/ast_edit/bash) used by any
+    /// read-only phase so planning cannot mutate the tree.
+    planner_tools: Vec<Arc<dyn AgentTool>>,
+    /// The loop strategy (phase list) this executor runs.
+    strategy: Strategy,
+    /// One conversation per strategy phase, keyed by phase id. Persistent
+    /// strategies reuse a phase's context across attempts; split strategies get a
+    /// fresh one each attempt (the driver honours the `fresh` flag).
+    phase_contexts: HashMap<String, Context>,
     model: String,
     api_key: String,
     max_turns_per_attempt: usize,
@@ -102,7 +106,6 @@ pub struct AgentExecutor {
     /// Test files (derived from targets + keep_green) restored to base after each
     /// attempt so a fix can never pass by editing the tests.
     protected: Vec<String>,
-    started: bool,
     /// Per-session token usage, keyed by model.
     usage: UsageByModel,
     /// Per-session behavior stats, updated live from the agent event stream.
@@ -134,11 +137,14 @@ impl AgentExecutor {
         tools.push(Arc::new(CodeMapTool::new(graph, repo_root.clone())));
         tools.push(Arc::new(AstEditTool::new(repo_root.clone())));
 
-        let context = Context {
-            system_prompt: Some(SYSTEM_PROMPT.to_string()),
-            messages: Vec::new(),
-            tools: Vec::new(),
-        };
+        // Planner tools: everything that can't mutate the tree, so the plan phase
+        // localizes without editing. bash is excluded too (it can write via shell).
+        const MUTATING: &[&str] = &["edit", "write", "ast_edit", "bash"];
+        let planner_tools: Vec<Arc<dyn AgentTool>> = tools
+            .iter()
+            .filter(|t| !MUTATING.contains(&t.name()))
+            .cloned()
+            .collect();
 
         // The test file of an id is the segment before "::" (pytest/go/nextest
         // node ids all share this shape).
@@ -156,7 +162,9 @@ impl AgentExecutor {
             rt,
             provider: config.provider,
             tools,
-            context,
+            planner_tools,
+            strategy: config.strategy,
+            phase_contexts: HashMap::new(),
             model: config.model,
             api_key: config.api_key,
             max_turns_per_attempt: config.max_turns_per_attempt,
@@ -164,7 +172,6 @@ impl AgentExecutor {
             issue,
             targets,
             protected,
-            started: false,
             usage: UsageByModel::default(),
             stats: Arc::new(Mutex::new(SessionStats::default())),
         })
@@ -203,53 +210,48 @@ impl AgentExecutor {
     }
 }
 
-/// The prompt that kicks off the first attempt.
-fn initial_prompt(issue: &str, targets: &[String]) -> String {
-    let mut p = String::from("Fix the following issue in this repository.\n\n## Issue\n");
-    p.push_str(issue.trim());
-    p.push_str("\n\n## Tests that must pass after your fix\n");
-    for t in targets {
-        p.push_str("- ");
-        p.push_str(t);
-        p.push('\n');
+/// The last non-empty assistant text in a message list — the phase's output
+/// (a plan, or a critic's vetted plan).
+fn last_assistant_text(msgs: &[Message]) -> String {
+    msgs.iter()
+        .rev()
+        .find_map(|m| match m {
+            Message::Assistant(a) => {
+                let t = a.text();
+                (!t.trim().is_empty()).then_some(t)
+            }
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+impl AgentExecutor {
+    /// Fold each assistant message's token usage into the session totals.
+    fn fold_usage(&mut self, msgs: &[Message]) {
+        for msg in msgs {
+            if let Message::Assistant(a) = msg {
+                self.usage.add(&a.model, &a.usage);
+            }
+        }
     }
-    p.push_str("\nLocate the cause, make the minimal source change, and verify.");
-    p
-}
 
-/// The nudge after a verification that did not flip the targets. Feeds the gate's
-/// verdict back so the agent steers on the concrete failure, not a vague retry.
-fn retry_prompt(last: Option<&Verdict>) -> String {
-    let detail = match last {
-        Some(v) => format!("{v:?}"),
-        None => "the target tests still fail".to_string(),
-    };
-    format!(
-        "The target tests are still not passing (gate verdict: {detail}). \
-         Re-examine your change against the failing test, find what you missed, \
-         and fix the source. Do not modify tests."
-    )
-}
-
-impl Executor for AgentExecutor {
-    fn attempt(&mut self, _attempt: u32, last: Option<&Verdict>) -> anyhow::Result<bool> {
-        let prompt = if self.started {
-            retry_prompt(last)
-        } else {
-            self.started = true;
-            initial_prompt(&self.issue, &self.targets)
-        };
-
-        // Snapshot the tree so we can tell whether this attempt actually edited
-        // anything — if the agent made no change, there is nothing new to verify.
-        let before = self.ws.diff().unwrap_or_default();
-
-        let config = self.loop_config();
-        // Live behavior stats: count turns and tool calls off the event stream so
-        // we can tell a real fix from a model that only produced prose.
-        let stats = Arc::clone(&self.stats);
-        // Correlate start→end by tool_call_id to attribute wall-clock per tool,
-        // so "where every second went" separates LLM latency from tool execution.
+    /// Run one agent loop over `context` with `tools`, seeded by `prompt`. Builds
+    /// the event hook (behavior stats + per-tool timing), runs to the turn budget,
+    /// and returns the raw messages produced. Token usage is folded by the caller
+    /// (via [`fold_usage`]) so this stays a plain associated fn and sidesteps
+    /// borrowing `self` while a `self`-owned context is passed in.
+    #[allow(clippy::too_many_arguments)]
+    fn run_loop(
+        rt: &Arc<tokio::runtime::Runtime>,
+        provider: &Arc<dyn LlmProvider>,
+        cfg: &LoopConfig,
+        stats: &Arc<Mutex<SessionStats>>,
+        tools: &[Arc<dyn AgentTool>],
+        context: &mut Context,
+        prompt: String,
+    ) -> Vec<Message> {
+        // Live behavior stats + per-tool wall-clock, correlated by tool_call_id.
+        let stats = Arc::clone(stats);
         let pending: Arc<Mutex<HashMap<String, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
         let emit: Emit = Arc::new(move |ev| match ev {
             AgentEvent::ToolExecutionStart {
@@ -265,8 +267,7 @@ impl Executor for AgentExecutor {
                 tool_name,
                 ..
             } => {
-                let start = pending.lock().unwrap().remove(&tool_call_id);
-                if let Some(start) = start {
+                if let Some(start) = pending.lock().unwrap().remove(&tool_call_id) {
                     stats
                         .lock()
                         .unwrap()
@@ -279,34 +280,88 @@ impl Executor for AgentExecutor {
             _ => {}
         });
         let cancel = CancellationToken::new();
-        let provider = Arc::clone(&self.provider);
-        let rt = Arc::clone(&self.rt);
-
-        let new_messages = rt.block_on(async {
+        rt.block_on(async {
             let (msgs, _budget) = run_agent_loop(
                 vec![Message::user(prompt)],
-                &mut self.context,
-                &self.tools,
-                &provider,
-                &config,
+                context,
+                tools,
+                provider,
+                cfg,
                 &emit,
                 cancel,
             )
             .await;
             msgs
-        });
+        })
+    }
+}
 
-        // Token accounting: fold each assistant message's usage into this
-        // session's per-model totals.
-        for msg in &new_messages {
-            if let Message::Assistant(a) = msg {
-                self.usage.add(&a.model, &a.usage);
-            }
+impl PhaseDriver for AgentExecutor {
+    /// Run one strategy phase: pick the scoped tool set, get or (re)create the
+    /// phase's context, drive the loop, fold usage, and return the phase's text.
+    fn run_phase(
+        &mut self,
+        phase_id: &str,
+        system: &str,
+        prompt: &str,
+        scope: ToolScope,
+        fresh: bool,
+    ) -> anyhow::Result<String> {
+        // A fresh phase, or one never seen, starts from a clean context holding
+        // only its system prompt — the plan/execute split's core mechanic.
+        if fresh || !self.phase_contexts.contains_key(phase_id) {
+            self.phase_contexts.insert(
+                phase_id.to_string(),
+                Context {
+                    system_prompt: Some(system.to_string()),
+                    messages: Vec::new(),
+                    tools: Vec::new(),
+                },
+            );
         }
 
-        // Integrity: revert any edits the agent made to protected test files, so
-        // verification always runs against the original tests. A fix that only
-        // touched a test therefore leaves the tree unchanged and cannot pass.
+        let cfg = self.loop_config();
+        let tools: &[Arc<dyn AgentTool>] = match scope {
+            ToolScope::ReadOnly => &self.planner_tools,
+            ToolScope::Full => &self.tools,
+        };
+        let ctx = self
+            .phase_contexts
+            .get_mut(phase_id)
+            .expect("context inserted above");
+        let msgs = Self::run_loop(
+            &self.rt,
+            &self.provider,
+            &cfg,
+            &self.stats,
+            tools,
+            ctx,
+            prompt.to_string(),
+        );
+        self.fold_usage(&msgs);
+        Ok(last_assistant_text(&msgs))
+    }
+}
+
+impl Executor for AgentExecutor {
+    fn attempt(&mut self, _attempt: u32, last: Option<&Verdict>) -> anyhow::Result<bool> {
+        // Snapshot the tree so we can tell whether this attempt actually edited
+        // anything — if the agent made no change, there is nothing new to verify.
+        let before = self.ws.diff().unwrap_or_default();
+
+        // Drive the configured strategy. Cloned so the engine can borrow it while
+        // `self` is the mutable driver.
+        let strategy = self.strategy.clone();
+        let task = strategy::Task {
+            issue: self.issue.clone(),
+            targets: self.targets.clone(),
+            verdict: last.map(|v| format!("{v:?}")),
+        };
+        strategy::run_strategy(&strategy, self, &task)?;
+
+        // Integrity: revert any edits to protected test files, so verification
+        // always runs against the original tests. A fix that only touched a test
+        // therefore leaves the tree unchanged and cannot pass.
         let protected: Vec<&str> = self.protected.iter().map(String::as_str).collect();
         let _ = self.ws.restore_paths(&protected);
 
@@ -320,21 +375,49 @@ impl Executor for AgentExecutor {
 mod tests {
     use super::*;
 
-    #[test]
-    fn initial_prompt_names_issue_and_targets() {
-        let p = initial_prompt(
-            "The add() function subtracts.",
-            &["test_mymod.py::test_add".into()],
-        );
-        assert!(p.contains("The add() function subtracts."));
-        assert!(p.contains("test_mymod.py::test_add"));
-        assert!(p.contains("minimal"));
+    fn test_executor(strategy: Strategy) -> AgentExecutor {
+        // new() does no I/O beyond spawning a runtime, so a bogus path is fine.
+        AgentExecutor::new(
+            ".".into(),
+            "issue".into(),
+            vec!["t.py::test_x".into()],
+            vec![],
+            AgentConfig {
+                model: "m".into(),
+                api_key: "k".into(),
+                max_turns_per_attempt: 1,
+                provider: build_provider(&Provider::Anthropic),
+                strategy,
+            },
+        )
+        .unwrap()
     }
 
     #[test]
-    fn retry_prompt_carries_the_verdict_and_forbids_test_edits() {
-        let p = retry_prompt(Some(&Verdict::NotYet("t1".into())));
-        assert!(p.contains("NotYet"));
-        assert!(p.to_lowercase().contains("do not modify tests"));
+    fn planner_tools_exclude_mutating_tools() {
+        let ex = test_executor(Strategy::plan_exec());
+        let planner: Vec<&str> = ex.planner_tools.iter().map(|t| t.name()).collect();
+        // Planner can localize but not mutate the tree.
+        assert!(planner.contains(&"read"), "planner keeps read: {planner:?}");
+        for banned in ["edit", "write", "ast_edit", "bash"] {
+            assert!(
+                !planner.contains(&banned),
+                "planner must exclude {banned}: {planner:?}"
+            );
+        }
+        // The full executor set still has the mutating tools.
+        let full: Vec<&str> = ex.tools.iter().map(|t| t.name()).collect();
+        assert!(full.contains(&"edit") && full.contains(&"bash"), "{full:?}");
+    }
+
+    #[test]
+    fn read_only_phase_uses_planner_tools_full_phase_uses_all() {
+        // A read-only phase must never expose a mutating tool to the model.
+        let ex = test_executor(Strategy::plan_exec());
+        let ro: Vec<&str> = match ToolScope::ReadOnly {
+            ToolScope::ReadOnly => ex.planner_tools.iter().map(|t| t.name()).collect(),
+            ToolScope::Full => ex.tools.iter().map(|t| t.name()).collect(),
+        };
+        assert!(!ro.contains(&"edit") && !ro.contains(&"write"));
     }
 }

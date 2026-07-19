@@ -20,7 +20,7 @@ use pirs_bench::{
     is_git_repo, run_instance, Attribution, BaselineCache, DetectorHost, GitWorkspace, Instance,
     InstanceReport,
 };
-use pirs_bench_runner::{build_provider, selftest, AgentConfig, AgentExecutor, Provider};
+use pirs_bench_runner::{build_provider, selftest, AgentConfig, AgentExecutor, Provider, Strategy};
 use serde::Deserialize;
 
 #[derive(Parser, Debug)]
@@ -77,6 +77,30 @@ struct Common {
     /// Max agent turns per attempt (the per-attempt budget).
     #[arg(long, default_value_t = 40, global = true)]
     max_turns: usize,
+    /// Agent loop strategy. All are judged identically, so this is the A/B knob.
+    #[arg(long, value_enum, default_value_t = StrategyKind::Monolithic, global = true)]
+    strategy: StrategyKind,
+}
+
+/// CLI selector for the agent loop [`Strategy`].
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum StrategyKind {
+    /// One growing-context loop that localizes, edits, and self-corrects.
+    Monolithic,
+    /// Read-only planner → fresh executor seeded with only the plan.
+    PlanExec,
+    /// Planner → critic gate → fresh executor.
+    PlanCriticExec,
+}
+
+impl From<StrategyKind> for Strategy {
+    fn from(k: StrategyKind) -> Self {
+        match k {
+            StrategyKind::Monolithic => Strategy::monolithic(),
+            StrategyKind::PlanExec => Strategy::plan_exec(),
+            StrategyKind::PlanCriticExec => Strategy::plan_critic_exec(),
+        }
+    }
 }
 
 #[derive(Args, Debug)]
@@ -214,6 +238,7 @@ fn solve_one(
             api_key: ctx.api_key.to_string(),
             max_turns_per_attempt: ctx.common.max_turns,
             provider: build_provider(ctx.provider),
+            strategy: ctx.common.strategy.into(),
         },
     )
     .context("build agent executor")?;
@@ -247,6 +272,7 @@ fn solve_one(
 }
 
 fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
+    eprintln!("strategy: {}", Strategy::from(a.common.strategy).name);
     let (provider, key) = a.common.provider.resolve()?;
     let issue = match (a.issue, a.issue_file) {
         (Some(s), _) => s,
@@ -286,6 +312,7 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
 }
 
 fn run_batch(a: BatchArgs) -> anyhow::Result<()> {
+    eprintln!("strategy: {}", Strategy::from(a.common.strategy).name);
     let (provider, key) = a.common.provider.resolve()?;
     let text = std::fs::read_to_string(&a.dataset)
         .with_context(|| format!("read dataset {:?}", a.dataset))?;
@@ -344,6 +371,9 @@ fn run_batch(a: BatchArgs) -> anyhow::Result<()> {
 }
 
 fn run_selftest(a: SelftestArgs) -> anyhow::Result<u8> {
+    if a.agent {
+        eprintln!("strategy: {}", Strategy::from(a.common.strategy).name);
+    }
     let mode = if a.agent {
         let (provider, api_key) = a.common.provider.resolve()?;
         selftest::Mode::Agent {
@@ -351,6 +381,7 @@ fn run_selftest(a: SelftestArgs) -> anyhow::Result<u8> {
             model: a.common.model.clone(),
             api_key,
             max_turns: a.common.max_turns,
+            strategy: a.common.strategy.into(),
         }
     } else {
         selftest::Mode::Oracle
