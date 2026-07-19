@@ -37,11 +37,11 @@ fn every_shipped_strategy_script_loads() {
 }
 
 #[test]
-fn wide_plan_exec_script_fans_out_then_executes() {
+fn general_wide_plan_exec_script_fans_out_then_executes() {
     use pirs_agent::strategy::{Step, ToolScope};
 
-    let path = strategies_dir().join("wide-plan-exec.rhai");
-    let strat = load_strategy_file(&path).expect("wide-plan-exec loads");
+    let path = strategies_dir().join("general-wide-plan-exec.rhai");
+    let strat = load_strategy_file(&path).expect("general-wide-plan-exec loads");
     assert_eq!(strat.steps.len(), 2);
     match &strat.steps[0] {
         Step::Fan { branches, .. } => {
