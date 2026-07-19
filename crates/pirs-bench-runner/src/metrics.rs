@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use pirs_ai::pricing::PriceTable;
 use pirs_ai::Usage;
 
 /// Token usage aggregated by model id. `Usage` carries input/output plus
@@ -49,15 +50,37 @@ impl UsageByModel {
         )
     }
 
-    /// A multi-line report: one line per model, then a TOTAL line.
+    /// A multi-line report: one line per model, then a TOTAL line. When a price is
+    /// known for a model, its USD cost is appended; unknown models show no cost and
+    /// are excluded from the total's dollar figure (labelled as such).
     pub fn report(&self) -> String {
+        let prices = PriceTable::builtin();
         let mut models: Vec<_> = self.per_model.iter().collect();
         models.sort_by(|a, b| a.0.cmp(b.0));
         let mut out = String::from("tokens by model:\n");
+        let mut priced_usd = 0.0;
+        let mut any_unpriced = false;
         for (model, u) in models {
-            out.push_str(&format!("  {model}: {}\n", Self::line(u)));
+            match prices.cost(model, u) {
+                Some(c) => {
+                    priced_usd += c;
+                    out.push_str(&format!("  {model}: {} — ${c:.4}\n", Self::line(u)));
+                }
+                None => {
+                    any_unpriced = true;
+                    out.push_str(&format!("  {model}: {} — $?\n", Self::line(u)));
+                }
+            }
         }
-        out.push_str(&format!("  TOTAL: {}", Self::line(&self.total())));
+        let note = if any_unpriced {
+            " (priced models only)"
+        } else {
+            ""
+        };
+        out.push_str(&format!(
+            "  TOTAL: {} — ${priced_usd:.4}{note}",
+            Self::line(&self.total())
+        ));
         out
     }
 }
@@ -142,6 +165,23 @@ mod tests {
         assert_eq!(total.output, 56);
         assert!(u.report().contains("m1:"));
         assert!(u.report().contains("TOTAL:"));
+    }
+
+    #[test]
+    fn report_prices_known_models_and_flags_unknown() {
+        let mut u = UsageByModel::default();
+        // 1M output on opus @ $25/M = $25.0000.
+        u.add("claude-opus-4-8", &usage(0, 1_000_000));
+        let priced = u.report();
+        assert!(priced.contains("$25.0000"), "{priced}");
+        assert!(priced.contains("TOTAL:"));
+        assert!(!priced.contains("$?"), "all models priced: {priced}");
+
+        // An unknown model shows $? and the total is flagged partial.
+        u.add("mystery-model-9", &usage(0, 1_000_000));
+        let mixed = u.report();
+        assert!(mixed.contains("$?"), "{mixed}");
+        assert!(mixed.contains("priced models only"), "{mixed}");
     }
 
     #[test]

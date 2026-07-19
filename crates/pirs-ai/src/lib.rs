@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod anthropic;
 pub mod openai;
+pub mod pricing;
 pub mod sse;
 pub use anthropic::AnthropicClient;
 pub use openai::OpenAiCompat;
