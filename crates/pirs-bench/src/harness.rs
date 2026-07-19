@@ -17,6 +17,7 @@ use crate::cache::BaselineCache;
 use crate::command::CommandRunner;
 use crate::detect::{discover, DetectorHost, Discovery};
 use crate::driver::{run_task, run_task_cached, Executor, TaskSpec};
+use crate::git::GitWorkspace;
 use crate::types::{FailBucket, Outcome, TestId};
 
 /// A single benchmark instance to attempt.
@@ -29,23 +30,37 @@ pub struct Instance {
     pub base_sha: Option<String>,
 }
 
-/// Run one instance to a terminal [`Outcome`]. `cache` is threaded through so a
-/// batch of instances at the same checkout reuses baselines; pass a fresh
-/// [`BaselineCache::in_memory`] to disable caching.
+/// The result of attempting one instance: the terminal [`Outcome`] and, when the
+/// fix was accepted and a workspace was supplied, the unified diff of the fix.
+#[derive(Debug, Clone)]
+pub struct InstanceReport {
+    pub outcome: Outcome,
+    /// The extracted patch — `Some` only on an accepted outcome with a workspace.
+    pub patch: Option<String>,
+}
+
+/// Run one instance to an [`InstanceReport`]. `cache` is threaded through so a
+/// batch of instances at the same checkout reuses baselines. When `workspace` is
+/// `Some`, an accepted outcome yields the fix as a patch and any other outcome
+/// rolls the tree back to pristine — so a failed attempt never leaves partial
+/// edits on disk.
 pub fn run_instance(
     inst: &Instance,
     host: &DetectorHost,
     cache: &mut BaselineCache,
     executor: &mut dyn Executor,
     max_attempts: u32,
-) -> anyhow::Result<Outcome> {
+    workspace: Option<&GitWorkspace>,
+) -> anyhow::Result<InstanceReport> {
+    let bail = |outcome| Ok(InstanceReport { outcome, patch: None });
+
     // 1. Discover and probe-confirm a runner. No confirmed runner → we can't get
-    //    a pass/fail signal at all.
+    //    a pass/fail signal at all. (No edits yet, so no rollback needed.)
     let spec = match discover(host, &inst.repo_root)? {
         Discovery::Confirmed { spec, .. } => spec,
         Discovery::Unconfirmed { tried, hint } => {
             tracing::warn!("no runner confirmed ({tried} tried): {hint}");
-            return Ok(Outcome::Failed(FailBucket::RunnerUndetected));
+            return bail(Outcome::Failed(FailBucket::RunnerUndetected));
         }
     };
 
@@ -55,18 +70,31 @@ pub fn run_instance(
         Bootstrap::Ready(_) => {}
         Bootstrap::Failed(hint) => {
             tracing::warn!("environment setup failed: {hint}");
-            return Ok(Outcome::Failed(FailBucket::EnvSetup));
+            return bail(Outcome::Failed(FailBucket::EnvSetup));
         }
     }
 
-    // 3. Build the concrete runner and drive the task.
+    // 3. Build the concrete runner and drive the task. The executor edits the
+    //    real tree; the outcome decides whether we keep or discard those edits.
     let runner = CommandRunner::new(spec, inst.repo_root.clone());
     let task = TaskSpec { targets: inst.targets.clone(), keep_green: inst.keep_green.clone() };
 
-    match &inst.base_sha {
-        Some(sha) => run_task_cached(&task, &runner, executor, max_attempts, cache, sha),
-        None => run_task(&task, &runner, executor, max_attempts),
-    }
+    let outcome = match &inst.base_sha {
+        Some(sha) => run_task_cached(&task, &runner, executor, max_attempts, cache, sha)?,
+        None => run_task(&task, &runner, executor, max_attempts)?,
+    };
+
+    // 4. Keep the fix (as a patch) or roll back to pristine.
+    let patch = match workspace {
+        Some(ws) if outcome.is_accepted() => Some(ws.diff()?),
+        Some(ws) => {
+            ws.reset()?; // discard partial/failed edits
+            None
+        }
+        None => None,
+    };
+
+    Ok(InstanceReport { outcome, patch })
 }
 
 #[cfg(test)]

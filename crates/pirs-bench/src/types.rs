@@ -125,6 +125,14 @@ pub enum Outcome {
     Failed(FailBucket),
 }
 
+impl Outcome {
+    /// Whether the targets were accepted as flipped (fully or scoped-only) — i.e.
+    /// there is a fix worth extracting as a patch, rather than a tree to reset.
+    pub fn is_accepted(&self) -> bool {
+        matches!(self, Outcome::Solved | Outcome::AcceptedScopedOnly)
+    }
+}
+
 /// The typed reason a task aborted, recorded for every failure so the aggregate
 /// histogram shows *where* the harness loses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

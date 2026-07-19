@@ -11,6 +11,7 @@ members = [
     "crates/pirs-graph",
     "crates/pirs-lsp",
     "crates/pirs-bench",
+    "crates/pirs-bench-runner",
 ]
 
 [workspace.package]

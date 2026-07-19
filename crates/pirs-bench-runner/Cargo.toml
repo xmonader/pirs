@@ -1,0 +1,30 @@
+[package]
+name = "pirs-bench-runner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "pirs_bench_runner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pirs-bench"
+path = "src/main.rs"
+
+[dependencies]
+pirs-bench = { path = "../pirs-bench" }
+pirs-agent = { path = "../pirs-agent" }
+pirs-ai = { path = "../pirs-ai" }
+pirs-tools = { path = "../pirs-tools" }
+pirs-graph = { path = "../pirs-graph" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
