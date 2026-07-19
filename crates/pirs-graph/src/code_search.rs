@@ -27,7 +27,6 @@ use crate::lexical::LexicalIndex;
 use crate::store::{EmbedItem, GraphStore};
 
 const DEFAULT_MAX_CHUNK_CHARS: usize = 2000;
-const EMBED_BATCH: usize = 64;
 /// RRF damping constant (standard 60): larger = flatter contribution from rank.
 const RRF_K: f32 = 60.0;
 
@@ -120,22 +119,29 @@ impl CodeSearchTool {
         };
         let dim = qv.len();
 
-        // Bounded index top-up (never a full cold-embed inline).
-        let pending = {
-            let mut store = match GraphStore::open(&self.db_path, &self.root) {
-                Ok(s) => s,
-                Err(_) => return Vec::new(),
+        // Bounded self-build top-up. Skipped entirely when embed_cap == 0, which
+        // is how production runs: the background indexer owns all writes, and
+        // code_search is a pure read-only query over whatever vectors exist. This
+        // both keeps a search from ever blocking on embedding and avoids two
+        // writers (bg indexer + tool) contending on the SQLite file.
+        if self.embed_cap > 0 {
+            let pending = {
+                let mut store = match GraphStore::open(&self.db_path, &self.root) {
+                    Ok(s) => s,
+                    Err(_) => return Vec::new(),
+                };
+                let _ = store.refresh();
+                let _ = store.ensure_model(embedder.model(), dim);
+                store.pending_embeddings(self.max_chars).unwrap_or_default()
             };
-            let _ = store.refresh();
-            let _ = store.ensure_model(embedder.model(), dim);
-            store.pending_embeddings(self.max_chars).unwrap_or_default()
-        };
-        if !pending.is_empty() {
-            let take = pending.len().min(self.embed_cap);
-            let (kept_idx, vecs) = self.embed_batch(embedder, &pending[..take]).await;
-            let kept: Vec<EmbedItem> = kept_idx.iter().map(|&i| pending[i].clone()).collect();
-            if let Ok(mut store) = GraphStore::open(&self.db_path, &self.root) {
-                let _ = store.store_embeddings(&kept, &vecs);
+            if !pending.is_empty() {
+                let take = pending.len().min(self.embed_cap);
+                let (kept_idx, vecs) =
+                    crate::embed_util::embed_batch(embedder, &pending[..take]).await;
+                let kept: Vec<EmbedItem> = kept_idx.iter().map(|&i| pending[i].clone()).collect();
+                if let Ok(mut store) = GraphStore::open(&self.db_path, &self.root) {
+                    let _ = store.store_embeddings(&kept, &vecs);
+                }
             }
         }
         let store = match GraphStore::open(&self.db_path, &self.root) {
@@ -153,55 +159,6 @@ impl CodeSearchTool {
             })
             .collect()
     }
-
-    /// Embed a slice of items, batched, with a per-item truncating fallback so a
-    /// dense chunk exceeding a small model's context can't abort the batch.
-    async fn embed_batch(
-        &self,
-        embedder: &EmbeddingClient,
-        items: &[EmbedItem],
-    ) -> (Vec<usize>, Vec<Vec<f32>>) {
-        let mut idxs = Vec::new();
-        let mut vecs = Vec::new();
-        for (b, chunk) in items.chunks(EMBED_BATCH).enumerate() {
-            let base = b * EMBED_BATCH;
-            let texts: Vec<String> = chunk.iter().map(|i| i.text.clone()).collect();
-            match embedder.embed(&texts).await {
-                Ok(v) => {
-                    for (j, vec) in v.into_iter().enumerate() {
-                        idxs.push(base + j);
-                        vecs.push(vec);
-                    }
-                }
-                Err(_) => {
-                    for (j, item) in chunk.iter().enumerate() {
-                        if let Some(vec) = embed_one(embedder, &item.text).await {
-                            idxs.push(base + j);
-                            vecs.push(vec);
-                        }
-                    }
-                }
-            }
-        }
-        (idxs, vecs)
-    }
-}
-
-async fn embed_one(embedder: &EmbeddingClient, text: &str) -> Option<Vec<f32>> {
-    let mut t = text.to_string();
-    for _ in 0..6 {
-        match embedder.embed(std::slice::from_ref(&t)).await {
-            Ok(mut v) => return v.pop(),
-            Err(_) => {
-                let n = t.chars().count();
-                if n <= 64 {
-                    return None;
-                }
-                t = t.chars().take(n / 2).collect();
-            }
-        }
-    }
-    None
 }
 
 #[derive(Clone)]

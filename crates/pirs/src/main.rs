@@ -144,9 +144,10 @@ struct Cli {
     #[arg(long, env = "PIRS_EMBED_MAX_CHARS")]
     embed_max_chars: Option<usize>,
 
-    /// Max symbols code_search embeds per call (default 256). Keeps a first
-    /// search from blocking on a full cold index; raise it to index everything
-    /// in one pass with a fast model [env: PIRS_EMBED_BATCH_CAP]
+    /// Opt into SYNCHRONOUS inline embedding instead of the default background
+    /// indexer: code_search embeds up to N symbols per call (and no background
+    /// task runs). Useful for a one-shot that must build the index in-process.
+    /// By default, indexing runs in the background and searches never block.
     #[arg(long, env = "PIRS_EMBED_BATCH_CAP")]
     embed_batch_cap: Option<usize>,
 
@@ -642,13 +643,40 @@ async fn main() -> anyhow::Result<()> {
         } else {
             None
         };
+        // Indexing strategy:
+        //  - default: a background indexer fills the embedding index in
+        //    checkpointed batches, and code_search is query-only (embed_cap = 0)
+        //    so a search NEVER blocks on embedding — BM25 answers instantly and
+        //    semantic hits light up as vectors land.
+        //  - --embed-batch-cap N: opt into synchronous inline indexing instead
+        //    (code_search embeds up to N symbols per call, no background task) —
+        //    useful for a one-shot where you want the index built in-process.
+        let inline = cli.embed_batch_cap.is_some();
+        let code_cap = if embedder.is_some() {
+            if inline {
+                cli.embed_batch_cap
+            } else {
+                Some(0)
+            }
+        } else {
+            None
+        };
+        if let (Some(emb), false) = (&embedder, inline) {
+            let bg = pirs_graph::BackgroundIndexer::new(
+                cwd.clone(),
+                graph_db.clone(),
+                emb.clone(),
+                cli.embed_max_chars.unwrap_or(2000),
+            );
+            tokio::spawn(bg.run());
+        }
         let code_search = std::sync::Arc::new(pirs_graph::code_search::CodeSearchTool::new(
             std::sync::Arc::clone(g),
             cwd.clone(),
             graph_db.clone(),
             embedder,
             cli.embed_max_chars,
-            cli.embed_batch_cap,
+            code_cap,
         ));
         tools.push(code_search.clone());
         sub_tools.push(code_search);

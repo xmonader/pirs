@@ -1,10 +1,13 @@
 pub mod ast_edit;
+pub mod bg_index;
 pub mod code_map;
 pub mod code_search;
+pub mod embed_util;
 pub mod graph;
 pub mod lexical;
 pub mod store;
 
+pub use bg_index::BackgroundIndexer;
 pub use code_search::CodeSearchTool;
 pub use graph::{Graph, Lang, SymKind, Symbol};
 pub use store::{full_graph, GraphStore};
