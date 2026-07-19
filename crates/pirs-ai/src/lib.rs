@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 
 pub mod anthropic;
+pub mod embed;
 pub mod openai;
 pub mod pricing;
 pub mod sse;
 pub use anthropic::AnthropicClient;
+pub use embed::{cosine, EmbeddingClient};
 pub use openai::OpenAiCompat;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -246,6 +248,8 @@ pub enum AiError {
     Network(#[from] reqwest::Error),
     #[error("stream error: {0}")]
     Stream(String),
+    #[error("decode error: {0}")]
+    Decode(String),
 }
 
 #[async_trait::async_trait]
