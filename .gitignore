@@ -1,3 +1,5 @@
 target/
 *.log
 .pirs/sessions/
+.pirs/memory.db
+.pirs/mutants/
