@@ -37,7 +37,7 @@ impl TestRunner for CommandRunner {
         let cmd = self
             .spec
             .test_cmd
-            .replace("{tests}", &ids.join(" "))
+            .replace("{tests}", &ids.join(&self.spec.test_join))
             .replace("{junit}", &junit_path);
 
         let cap = run_capture(&cmd, &self.work_dir, self.spec.timeout_secs)?;
@@ -72,6 +72,7 @@ mod tests {
             install: vec![],
             list_cmd: "true".into(),
             test_cmd: test_cmd.into(),
+            test_join: " ".into(),
             timeout_secs: timeout,
             parallel: false,
         }
@@ -89,6 +90,21 @@ mod tests {
         let snap = runner.run(&ids, Ring::Inner).unwrap();
         assert_eq!(snap.get("m::test_ok"), Some(Pass));
         assert_eq!(snap.get("m::test_bad"), Some(Fail));
+    }
+
+    #[test]
+    fn test_join_controls_how_ids_are_combined() {
+        // A runner that records the substituted {tests} to a file, so we can see
+        // exactly how the ids were joined.
+        let dir = tempfile::tempdir().unwrap();
+        let xml = r#"<testsuite><testcase classname="m" name="a"/></testsuite>"#;
+        let cmd = format!("printf '%s' \"{{tests}}\" > joined.txt; cat > {{junit}} <<'EOF'\n{xml}\nEOF");
+        let mut s = spec(&cmd, 30);
+        s.test_join = "|".into(); // Go-style regex alternation
+        let runner = CommandRunner::new(s, dir.path().to_path_buf());
+        runner.run(&["a".to_string(), "b".to_string()], Ring::Inner).unwrap();
+        let joined = std::fs::read_to_string(dir.path().join("joined.txt")).unwrap();
+        assert_eq!(joined, "a|b");
     }
 
     #[test]

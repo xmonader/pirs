@@ -50,6 +50,7 @@ mod tests {
             install: install.into_iter().map(String::from).collect(),
             list_cmd: list_cmd.into(),
             test_cmd: "true".into(),
+            test_join: " ".into(),
             timeout_secs: 10,
             parallel: false,
         }

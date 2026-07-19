@@ -232,6 +232,19 @@ mod tests {
     }
 
     #[test]
+    fn bundled_go_detector_uses_regex_alternation_join() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("go.mod"), "module x\n").unwrap();
+        let host = DetectorHost::with_bundled().unwrap();
+        let go = host
+            .detect(dir.path())
+            .into_iter()
+            .find(|s| s.framework == "go")
+            .expect("go spec");
+        assert_eq!(go.test_join, "|", "Go must join ids as a regex alternation");
+    }
+
+    #[test]
     fn bundled_pytest_detects_python_project() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("pyproject.toml"), "[project]\nname='x'\n").unwrap();

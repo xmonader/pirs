@@ -71,7 +71,7 @@ impl Snapshot {
 /// How to install, probe, and run a project's tests. Produced by a Rhai
 /// detector (heuristic, per-ecosystem) and consumed by the Rust runner. The
 /// `test_cmd` template carries two placeholders:
-///   * `{tests}` — the space-joined test ids to run (empty ⇒ the whole suite);
+///   * `{tests}` — the test ids to run, joined by `test_join` (empty ⇒ whole suite);
 ///   * `{junit}` — the path the run must write JUnit XML to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunnerSpec {
@@ -83,10 +83,20 @@ pub struct RunnerSpec {
     pub list_cmd: String,
     /// Test command template with `{tests}` and `{junit}` placeholders.
     pub test_cmd: String,
+    /// Separator for joining multiple test ids into `{tests}`. Defaults to a
+    /// space (pytest node ids); Go's `-run` takes a regex, so its detector sets
+    /// `"|"` to form an alternation instead of a space-containing regex that
+    /// matches nothing.
+    #[serde(default = "default_test_join")]
+    pub test_join: String,
     /// Per-run wall-clock budget in seconds.
     pub timeout_secs: u64,
     #[serde(default)]
     pub parallel: bool,
+}
+
+fn default_test_join() -> String {
+    " ".to_string()
 }
 
 /// Concentric cost tiers. Verification runs the smallest ring that answers the
