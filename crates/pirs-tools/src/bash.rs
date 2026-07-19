@@ -23,6 +23,20 @@ struct BashArgs {
     auto_restart: Option<bool>,
 }
 
+/// Decide whether a bash call becomes a detached host job.
+///
+/// `spawn_bash_job` always runs on the host, outside any Docker/SSH sandbox,
+/// so backgrounding is only ever allowed when the sandbox is local. In
+/// particular the `looks_like_daemon` heuristic must NOT auto-background under
+/// a sandbox — otherwise a command like `cp ~/.ssh/id_rsa /tmp/x # serve`
+/// escapes the sandbox onto the host.
+fn should_background(sandbox_is_local: bool, background: bool, auto_restart: bool, cmd: &str) -> bool {
+    if !sandbox_is_local {
+        return false;
+    }
+    background || auto_restart || crate::job_tools::looks_like_daemon(cmd)
+}
+
 pub struct BashTool {
     cwd: PathBuf,
 }
@@ -65,10 +79,12 @@ impl AgentTool for BashTool {
                 crate::sandbox::from_env().name()
             );
         }
-        if args.background.unwrap_or(false)
-            || args.auto_restart.unwrap_or(false)
-            || crate::job_tools::looks_like_daemon(&args.command)
-        {
+        if should_background(
+            sandbox_is_local,
+            args.background.unwrap_or(false),
+            args.auto_restart.unwrap_or(false),
+            &args.command,
+        ) {
             let (id, path) = crate::job_tools::spawn_bash_job(
                 &self.cwd,
                 &args.command,
@@ -337,6 +353,20 @@ fn sanitize_id(id: &str) -> String {
 mod tests {
     use super::*;
     use tokio_util::sync::CancellationToken;
+
+    #[test]
+    fn daemon_heuristic_never_backgrounds_under_sandbox() {
+        // `serve` looks like a daemon; on a local sandbox it auto-backgrounds.
+        assert!(should_background(true, false, false, "python -m http.server"));
+        // Under a sandbox the same command must NOT spawn a host job.
+        assert!(!should_background(false, false, false, "python -m http.server"));
+        // Even explicit background/auto_restart cannot escape a sandbox here
+        // (the caller bails earlier, but the predicate is defensive too).
+        assert!(!should_background(false, true, false, "sleep 1"));
+        assert!(!should_background(false, false, true, "sleep 1"));
+        // Plain commands never auto-background.
+        assert!(!should_background(true, false, false, "ls -la"));
+    }
 
     fn ctx(args: Value) -> ToolExecContext {
         ToolExecContext {
