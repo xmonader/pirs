@@ -21,6 +21,11 @@ fn cache(
     READ_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
+/// Cap on bytes loaded per file. A read tool paged by line offset must never
+/// pull a multi-gigabyte file fully into memory (and into the 500-entry cache);
+/// beyond this the content is truncated and the caller flags it.
+pub const MAX_READ_BYTES: u64 = 20 * 1024 * 1024;
+
 fn read_cached(path: &std::path::Path) -> anyhow::Result<String> {
     let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
     if let Some(mtime) = mtime {
@@ -31,7 +36,14 @@ fn read_cached(path: &std::path::Path) -> anyhow::Result<String> {
             }
         }
     }
-    let raw = std::fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+    use std::io::Read as _;
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let mut raw = Vec::new();
+    // take() bounds the read so a huge or growing file can't exhaust memory.
+    file.take(MAX_READ_BYTES)
+        .read_to_end(&mut raw)
+        .with_context(|| format!("failed to read {}", path.display()))?;
     let content = String::from_utf8_lossy(&raw).into_owned();
     if let Some(mtime) = mtime {
         let mut map = cache().lock().unwrap();
@@ -126,6 +138,7 @@ impl AgentTool for ReadTool {
             }
         }
 
+        let byte_capped = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) > MAX_READ_BYTES;
         let content = std::borrow::Cow::from(read_cached(&path)?);
         let offset = args.offset.unwrap_or(1);
         let total_lines = content.lines().count();
@@ -149,6 +162,13 @@ impl AgentTool for ReadTool {
                 window.end_line,
                 window.total_lines,
                 window.end_line + 1
+            ));
+        }
+        if byte_capped {
+            text.push_str(&format!(
+                "\n[File exceeds {} MB; only the first {} MB were read. Use bash (e.g. tail/sed) for the rest.]",
+                MAX_READ_BYTES / (1024 * 1024),
+                MAX_READ_BYTES / (1024 * 1024)
             ));
         }
 
@@ -186,6 +206,21 @@ mod tests {
         let text = out.content[0].as_text().unwrap();
         assert!(text.starts_with("l2\nl3"));
         assert!(text.contains("offset=4"));
+    }
+
+    #[tokio::test]
+    async fn oversized_file_is_byte_capped() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("big.txt");
+        // Just over the cap so only a prefix is read.
+        let line_count = (MAX_READ_BYTES as usize / 3) + 1000;
+        std::fs::write(&file, "ab\n".repeat(line_count)).unwrap();
+        let tool = ReadTool::new(dir.path().to_path_buf());
+        let out = run(&tool, serde_json::json!({"path": "big.txt"}))
+            .await
+            .unwrap();
+        let text = out.content[0].as_text().unwrap();
+        assert!(text.contains("exceeds"), "expected byte-cap notice: {}", &text[text.len().saturating_sub(200)..]);
     }
 
     #[tokio::test]

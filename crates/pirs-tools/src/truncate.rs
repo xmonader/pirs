@@ -1,6 +1,10 @@
 pub const MAX_LINES: usize = 2000;
 pub const MAX_BYTES: usize = 50 * 1024;
 pub const GREP_LINE_MAX: usize = 500;
+/// Files larger than this are skipped by grep rather than read fully into
+/// memory — a guard against OOM on multi-gigabyte files that are not useful
+/// source-search targets.
+pub const GREP_FILE_MAX: u64 = 20 * 1024 * 1024;
 
 #[derive(Debug, PartialEq)]
 pub struct Window {

@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::paths;
-use crate::truncate::{truncate_line, GREP_LINE_MAX, MAX_BYTES};
+use crate::truncate::{truncate_line, GREP_FILE_MAX, GREP_LINE_MAX, MAX_BYTES};
 
 #[derive(Deserialize, JsonSchema)]
 struct GrepArgs {
@@ -101,6 +101,12 @@ impl AgentTool for GrepTool {
                     continue;
                 }
             }
+            // Skip pathologically large files: reading a multi-gigabyte file
+            // fully into memory to grep it risks OOM, and such files are almost
+            // never a useful source-search target.
+            if std::fs::metadata(path).map(|m| m.len()).unwrap_or(0) > GREP_FILE_MAX {
+                continue;
+            }
             let Ok(content) = std::fs::read_to_string(path) else {
                 continue;
             };
@@ -182,6 +188,22 @@ mod tests {
         let text = out.content[0].as_text().unwrap();
         assert!(text.contains("a.txt:1: hello"));
         assert!(text.contains("a.txt:3: hello again"));
+    }
+
+    #[tokio::test]
+    async fn skips_oversized_files() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("small.txt"), "needle here\n").unwrap();
+        // Just over the cap; contains the pattern but must be skipped.
+        let big = "needle\n".repeat((GREP_FILE_MAX as usize / 7) + 1000);
+        std::fs::write(dir.path().join("huge.txt"), big).unwrap();
+        let tool = GrepTool::new(dir.path().to_path_buf());
+        let out = run(&tool, serde_json::json!({"pattern": "needle"}))
+            .await
+            .unwrap();
+        let text = out.content[0].as_text().unwrap();
+        assert!(text.contains("small.txt"), "small file should match");
+        assert!(!text.contains("huge.txt"), "oversized file must be skipped");
     }
 
     #[tokio::test]
