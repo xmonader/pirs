@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use pirs_ai::{CompletionOptions, LlmProvider, Message};
+use pirs_ai::{CompletionOptions, LlmProvider, Message, StopReason};
 use serde_json::{json, Value};
 
 use crate::agent::Agent;
@@ -72,7 +72,14 @@ impl DelegateTool {
                 .build()
             {
                 Ok(rt) => rt,
-                Err(_) => return,
+                Err(e) => {
+                    // Don't strand the job as Running forever if the runtime
+                    // can't be built.
+                    crate::jobs::registry().set_status(id, crate::jobs::JobStatus::Exited(-1));
+                    crate::jobs::registry()
+                        .notify(format!("background agent #{id} failed to start: {e}"));
+                    return;
+                }
             };
             rt.block_on(async move {
                 let mut hooks = Hooks::default();
@@ -107,17 +114,40 @@ impl DelegateTool {
                 let result = agent.prompt(&task_for_thread).await;
                 let (status, answer) = match result {
                     Ok(new) => {
-                        let text = new
-                            .iter()
-                            .rev()
-                            .find_map(|m| match m {
-                                pirs_ai::Message::Assistant(a) if !a.text().trim().is_empty() => {
-                                    Some(a.text())
-                                }
-                                _ => None,
-                            })
-                            .unwrap_or_else(|| "(no answer)".to_string());
-                        (0, text)
+                        // A run whose last assistant ended in Error is a failure
+                        // even though prompt() returned Ok (errors are messages,
+                        // per the loop contract). Reporting exited(0) here would
+                        // silently drop the sub-agent's failure.
+                        let last_assistant = new.iter().rev().find_map(|m| match m {
+                            pirs_ai::Message::Assistant(a) => Some(a),
+                            _ => None,
+                        });
+                        match last_assistant {
+                            Some(a) if a.stop_reason == StopReason::Error => (
+                                1,
+                                format!(
+                                    "error: {}",
+                                    a.error_message
+                                        .clone()
+                                        .unwrap_or_else(|| "sub-agent ended with an error".into())
+                                ),
+                            ),
+                            _ => {
+                                let text = new
+                                    .iter()
+                                    .rev()
+                                    .find_map(|m| match m {
+                                        pirs_ai::Message::Assistant(a)
+                                            if !a.text().trim().is_empty() =>
+                                        {
+                                            Some(a.text())
+                                        }
+                                        _ => None,
+                                    })
+                                    .unwrap_or_else(|| "(no answer)".to_string());
+                                (0, text)
+                            }
+                        }
                     }
                     Err(e) => (1, format!("error: {e}")),
                 };
@@ -227,6 +257,23 @@ impl AgentTool for DelegateTool {
         let result = agent.prompt(&task).await;
         watcher.abort();
         let new_messages = result?;
+
+        // Surface a sub-agent failure to the parent as a tool error (errors are
+        // messages per the loop contract, so prompt() returned Ok). Otherwise
+        // the parent sees a bland "(no answer)" and has no signal to retry.
+        if let Some(a) = new_messages.iter().rev().find_map(|m| match m {
+            Message::Assistant(a) => Some(a),
+            _ => None,
+        }) {
+            if a.stop_reason == StopReason::Error {
+                anyhow::bail!(
+                    "sub-agent failed: {}",
+                    a.error_message
+                        .clone()
+                        .unwrap_or_else(|| "ended with an error".into())
+                );
+            }
+        }
 
         let answer = new_messages
             .iter()
