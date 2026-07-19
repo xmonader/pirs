@@ -120,9 +120,27 @@ pub async fn run_agent_loop(
                 assistant.stop_reason,
                 StopReason::Error | StopReason::Aborted
             ) {
+                // An errored/aborted assistant can still carry ToolCall blocks
+                // (partial Done). Persisting a tool_use with no following
+                // tool_result makes the next Anthropic request 400 forever,
+                // permanently wedging the session. Synthesize error results for
+                // any dangling calls so the history stays valid.
+                let dangling = extract_tool_calls(&assistant);
+                let mut tool_results = Vec::new();
+                for call in &dangling {
+                    let r = error_result(
+                        &call.id,
+                        &call.name,
+                        "Tool call was not executed: the turn ended with an error or was aborted.",
+                    );
+                    let msg = Message::ToolResult(r.clone());
+                    context.messages.push(msg.clone());
+                    new_messages.push(msg);
+                    tool_results.push(r);
+                }
                 emit(AgentEvent::TurnEnd {
                     message: Box::new(assistant),
-                    tool_results: vec![],
+                    tool_results,
                 });
                 emit(AgentEvent::AgentEnd {
                     messages: new_messages.clone(),

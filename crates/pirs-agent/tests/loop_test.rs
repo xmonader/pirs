@@ -177,6 +177,30 @@ async fn tool_error_becomes_error_result_and_loop_continues() {
 }
 
 #[tokio::test]
+async fn errored_turn_with_tool_call_gets_synthetic_result() {
+    // Assistant emits a tool_use but the turn ends in Error (e.g. transport
+    // drop mid-stream). Without a matching tool_result the next Anthropic
+    // request 400s forever, so the loop must synthesize one.
+    let mut errored = tool_call_msg("c1", "echo", json!({"text": "hi"}));
+    errored.stop_reason = StopReason::Error;
+    let provider = MockProvider::new(vec![errored]);
+    let mut agent = make_agent(provider, vec![Arc::new(EchoTool)]);
+    let new = agent.prompt("go").await.unwrap();
+
+    // History must be valid: the tool_use is followed by a tool_result for c1.
+    let assistant_idx = new
+        .iter()
+        .position(|m| matches!(m, Message::Assistant(a) if !a.tool_calls().is_empty()))
+        .expect("assistant with tool call present");
+    assert!(
+        new[assistant_idx + 1..].iter().any(
+            |m| matches!(m, Message::ToolResult(r) if r.tool_call_id == "c1" && r.is_error)
+        ),
+        "errored turn must be followed by a synthetic tool_result for c1"
+    );
+}
+
+#[tokio::test]
 async fn invalid_args_rejected_without_executing() {
     let provider = MockProvider::new(vec![
         tool_call_msg("c1", "echo", json!({"wrong": 1})),
