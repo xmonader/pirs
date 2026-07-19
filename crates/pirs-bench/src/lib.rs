@@ -29,7 +29,7 @@ pub use bootstrap::{bootstrap, Bootstrap};
 pub use command::CommandRunner;
 pub use detect::{discover, DetectorHost, Discovery};
 pub use driver::{run_task, run_task_cached, Executor, TaskSpec};
-pub use harness::{run_instance, Instance};
+pub use harness::{run_instance, Instance, InstanceReport};
 pub use gate::{evaluate, Verdict};
 pub use git::{is_git_repo, GitWorkspace};
 pub use localize::{parse_traceback, rank_candidates, scoped_tests, Candidate, Frame};
