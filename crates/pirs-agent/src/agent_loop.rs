@@ -163,15 +163,19 @@ pub async fn run_agent_loop(
                     .await;
                 }
                 for r in &results {
-                    // Spill every tool result to searchable session memory.
-                    if let Some(mem) = crate::memory::global() {
-                        let text: String = r
-                            .content
-                            .iter()
-                            .filter_map(|b| b.as_text())
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        mem.add("tool_result", &r.tool_name, &text);
+                    // Spill every tool result to searchable session memory —
+                    // except recall's own output, which would recursively
+                    // pollute the store with copies of past hits.
+                    if r.tool_name != "recall" {
+                        if let Some(mem) = crate::memory::global() {
+                            let text: String = r
+                                .content
+                                .iter()
+                                .filter_map(|b| b.as_text())
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            mem.add("tool_result", &r.tool_name, &text);
+                        }
                     }
                     let msg = Message::ToolResult(r.clone());
                     emit(AgentEvent::MessageStart {

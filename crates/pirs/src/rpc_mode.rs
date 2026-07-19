@@ -142,6 +142,8 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     pirs_rhai::set_session_meta(&session_id, &opts.model);
     if let Err(e) = pirs_agent::memory::init_global(&cwd.join(".pirs").join("memory.db")) {
         tracing::warn!("memory disabled: {e}");
+    } else {
+        pirs_agent::memory::set_session(&session_id);
     }
 
     let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<String>();

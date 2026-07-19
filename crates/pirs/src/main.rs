@@ -870,6 +870,15 @@ async fn main() -> anyhow::Result<()> {
     );
     if let Err(e) = pirs_agent::memory::init_global(&cwd.join(".pirs").join("memory.db")) {
         eprintln!("[memory disabled: {e}]");
+    } else {
+        // Scope recall to this session so it doesn't surface stale hits from
+        // unrelated past tasks in the same repo.
+        pirs_agent::memory::set_session(
+            &session_path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unknown".to_string()),
+        );
     }
     if cli.resume {
         match session::load_latest(&cwd) {
