@@ -98,19 +98,16 @@ impl LspClient {
                 loop {
                     match read_message(&mut reader).await {
                         Ok(Some(value)) => {
-                            if let Some(id) = value.get("id").and_then(|i| i.as_u64()) {
-                                let tx = pending.lock().unwrap().remove(&id);
-                                if let Some(tx) = tx {
-                                    if let Some(err) = value.get("error") {
-                                        let _ = tx.send(Err(err.to_string()));
-                                    } else {
-                                        let _ = tx.send(Ok(value
-                                            .get("result")
-                                            .cloned()
-                                            .unwrap_or(Value::Null)));
-                                    }
-                                } else if let Some(method) =
-                                    value.get("method").and_then(|m| m.as_str())
+                            // Dispatch on "method" first: a server-initiated
+                            // request/notification carries an id from the server's
+                            // own space, which collides with our client ids (both
+                            // start at 1). Treating it as a response would resolve
+                            // the wrong pending future and drop the real reply.
+                            if let Some(method) = value.get("method").and_then(|m| m.as_str()) {
+                                let Some(id) = value.get("id").and_then(|i| i.as_u64()) else {
+                                    // notification (no id): nothing to answer
+                                    continue;
+                                };
                                 {
                                     // Server-initiated request: respond so the server isn't stuck.
                                     let reply = match method {
@@ -136,6 +133,19 @@ impl LspClient {
                                             .as_bytes(),
                                         )
                                         .await;
+                                }
+                            } else if let Some(id) = value.get("id").and_then(|i| i.as_u64()) {
+                                // Response to one of our requests.
+                                let tx = pending.lock().unwrap().remove(&id);
+                                if let Some(tx) = tx {
+                                    if let Some(err) = value.get("error") {
+                                        let _ = tx.send(Err(err.to_string()));
+                                    } else {
+                                        let _ = tx.send(Ok(value
+                                            .get("result")
+                                            .cloned()
+                                            .unwrap_or(Value::Null)));
+                                    }
                                 }
                             }
                         }

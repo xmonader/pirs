@@ -76,24 +76,17 @@ impl StdioClient {
                             let Ok(v) = serde_json::from_str::<Value>(&line) else {
                                 continue;
                             };
-                            let Some(id) = v.get("id").and_then(|i| i.as_u64()) else {
-                                continue;
-                            };
-                            let tx = pending.lock().unwrap().remove(&id);
-                            if let Some(tx) = tx {
-                                if let Some(err) = v.get("error") {
-                                    let msg = err
-                                        .get("message")
-                                        .and_then(|m| m.as_str())
-                                        .unwrap_or("unknown error")
-                                        .to_string();
-                                    let _ = tx.send(Err(msg));
-                                } else {
-                                    let _ = tx
-                                        .send(Ok(v.get("result").cloned().unwrap_or(Value::Null)));
-                                }
-                            } else if let Some(method) = v.get("method").and_then(|m| m.as_str()) {
-                                // Server-initiated request (not a response): answer it.
+                            // A message carrying "method" is a server-initiated
+                            // request/notification, NOT a response — even when it
+                            // also has an id (server and client id spaces both
+                            // start at 1 and collide). Dispatch on method first so
+                            // a server `ping` id 1 doesn't consume our pending
+                            // initialize id 1.
+                            if let Some(method) = v.get("method").and_then(|m| m.as_str()) {
+                                let Some(id) = v.get("id").and_then(|i| i.as_u64()) else {
+                                    // notification (no id): nothing to answer
+                                    continue;
+                                };
                                 let reply = if method == "ping" {
                                     serde_json::json!({"jsonrpc": "2.0", "id": id, "result": {}})
                                 } else {
@@ -105,6 +98,24 @@ impl StdioClient {
                                 let body = serde_json::to_string(&reply).unwrap_or_default();
                                 let mut stdin = stdin_writer.lock().await;
                                 let _ = stdin.write_all(format!("{body}\n").as_bytes()).await;
+                            } else if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
+                                // Response to one of our requests.
+                                let tx = pending.lock().unwrap().remove(&id);
+                                if let Some(tx) = tx {
+                                    if let Some(err) = v.get("error") {
+                                        let msg = err
+                                            .get("message")
+                                            .and_then(|m| m.as_str())
+                                            .unwrap_or("unknown error")
+                                            .to_string();
+                                        let _ = tx.send(Err(msg));
+                                    } else {
+                                        let _ = tx.send(Ok(v
+                                            .get("result")
+                                            .cloned()
+                                            .unwrap_or(Value::Null)));
+                                    }
+                                }
                             }
                         }
                         Ok(None) | Err(_) => {

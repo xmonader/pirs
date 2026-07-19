@@ -220,7 +220,13 @@ impl LegacySseClient {
                             }
                         } else if event == "message" {
                             if let Ok(v) = serde_json::from_str::<Value>(&data) {
-                                if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
+                                // Only a message WITHOUT "method" is a response.
+                                // A server-initiated request/notification also
+                                // carries an id whose space collides with ours;
+                                // never consume a pending response for it.
+                                if v.get("method").is_some() {
+                                    // server request/notification: not ours to resolve
+                                } else if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
                                     let tx = pending.lock().unwrap().remove(&id);
                                     if let Some(tx) = tx {
                                         if let Some(err) = v.get("error") {
