@@ -8,6 +8,13 @@ use serde_json::Value;
 
 use pirs_agent::jobs::{self, JobStatus};
 
+/// Clamp a model-supplied wait timeout (seconds) to a sane ceiling. Without
+/// this, `Instant::now() + Duration::from_secs(u64::MAX)` overflows and panics
+/// the agent (silently killing a background delegate thread).
+fn clamp_wait_secs(secs: u64) -> u64 {
+    secs.min(86_400)
+}
+
 pub const DAEMON_PATTERNS: &[&str] = &[
     "flask run",
     "flask --app",
@@ -391,7 +398,7 @@ impl AgentTool for JobWaitTool {
     }
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: JobWaitArgs = serde_json::from_value(ctx.args)?;
-        let timeout = std::time::Duration::from_secs(args.timeout.unwrap_or(300));
+        let timeout = std::time::Duration::from_secs(clamp_wait_secs(args.timeout.unwrap_or(300)));
         match jobs::registry().wait(args.id, timeout).await {
             Some(_status) => {
                 let job = jobs::registry()
@@ -451,8 +458,8 @@ impl AgentTool for WaitReadyTool {
     }
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: WaitReadyArgs = serde_json::from_value(ctx.args)?;
-        let deadline =
-            std::time::Instant::now() + std::time::Duration::from_secs(args.timeout.unwrap_or(30));
+        let deadline = std::time::Instant::now()
+            + std::time::Duration::from_secs(clamp_wait_secs(args.timeout.unwrap_or(30)));
         loop {
             if let Some(port) = args.port {
                 if tokio::net::TcpStream::connect(("127.0.0.1", port))

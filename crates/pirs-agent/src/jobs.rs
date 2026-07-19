@@ -162,7 +162,12 @@ impl JobRegistry {
     pub async fn wait(&self, id: u64, timeout: std::time::Duration) -> Option<JobStatus> {
         // Register-then-recheck: a status flip between the first check and
         // registration must not sleep the full timeout.
-        let deadline = std::time::Instant::now() + timeout;
+        // checked_add: an absurd caller-supplied timeout must not overflow the
+        // Instant and panic the whole agent.
+        let now = std::time::Instant::now();
+        let deadline = now
+            .checked_add(timeout)
+            .unwrap_or_else(|| now + std::time::Duration::from_secs(86_400));
         loop {
             let rx = {
                 let current = self.get(id)?;
