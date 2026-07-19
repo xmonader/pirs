@@ -68,13 +68,32 @@ pub trait AgentTool: Send + Sync {
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput>;
 }
 
+/// Builds the schema list sent to the model. Later tools win on a name
+/// collision — order preserved from each name's *last* registration — so a
+/// rhai pack can override a native tool (e.g. wrapping `bash` in a sandbox)
+/// by registering another tool under the same name: the model sees exactly
+/// one "bash" entry, the overriding one, never two ambiguous ones. Matches
+/// `prepare_call`'s dispatch lookup, which resolves the same way.
 pub fn tool_defs(tools: &[std::sync::Arc<dyn AgentTool>]) -> Vec<pirs_ai::ToolDef> {
-    tools
-        .iter()
-        .map(|t| pirs_ai::ToolDef {
-            name: t.name().to_string(),
-            description: t.description().to_string(),
-            parameters: t.parameters(),
+    let mut order: Vec<&str> = Vec::new();
+    let mut by_name: std::collections::HashMap<&str, &std::sync::Arc<dyn AgentTool>> =
+        std::collections::HashMap::new();
+    for t in tools {
+        let name = t.name();
+        if !by_name.contains_key(name) {
+            order.push(name);
+        }
+        by_name.insert(name, t);
+    }
+    order
+        .into_iter()
+        .map(|name| {
+            let t = by_name[name];
+            pirs_ai::ToolDef {
+                name: t.name().to_string(),
+                description: t.description().to_string(),
+                parameters: t.parameters(),
+            }
         })
         .collect()
 }

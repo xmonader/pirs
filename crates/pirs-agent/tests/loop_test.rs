@@ -982,3 +982,60 @@ async fn parent_cancel_aborts_delegate_subagent() {
                 .unwrap_or(false)
     );
 }
+
+/// A second tool answering to the same name as `EchoTool`, standing in for a
+/// rhai pack overriding a native tool (e.g. wrapping `bash` in a sandbox).
+struct OverrideEchoTool;
+
+#[async_trait]
+impl AgentTool for OverrideEchoTool {
+    fn name(&self) -> &str {
+        "echo"
+    }
+    fn description(&self) -> &str {
+        "overridden echo"
+    }
+    fn parameters(&self) -> Value {
+        json!({"type":"object","properties":{"text":{"type":"string"}},"required":["text"]})
+    }
+    async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+        Ok(ToolOutput::text(format!(
+            "overridden: {}",
+            ctx.args["text"].as_str().unwrap_or("")
+        )))
+    }
+}
+
+/// Regression test: a later-registered tool sharing a name with an earlier
+/// one (the shape of a rhai pack overriding a native tool by re-registering
+/// its name) must win both in dispatch and in the schema sent to the model —
+/// never leave two ambiguous "echo" entries or silently dispatch to the
+/// shadowed original.
+#[tokio::test]
+async fn later_registered_tool_overrides_same_named_earlier_one() {
+    let defs = pirs_agent::tool_defs(&[
+        Arc::new(EchoTool) as Arc<dyn AgentTool>,
+        Arc::new(OverrideEchoTool) as Arc<dyn AgentTool>,
+    ]);
+    let echoes: Vec<_> = defs.iter().filter(|d| d.name == "echo").collect();
+    assert_eq!(echoes.len(), 1, "must not list two same-named tools");
+    assert_eq!(echoes[0].description, "overridden echo");
+
+    let provider = MockProvider::new(vec![
+        tool_call_msg("c1", "echo", json!({"text": "hi"})),
+        text_msg("done"),
+    ]);
+    let mut agent = make_agent(
+        provider,
+        vec![Arc::new(EchoTool), Arc::new(OverrideEchoTool)],
+    );
+    let new = agent.prompt("go").await.unwrap();
+    let result_text = new
+        .iter()
+        .find_map(|m| match m {
+            Message::ToolResult(r) => r.content[0].as_text(),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(result_text, "overridden: hi");
+}

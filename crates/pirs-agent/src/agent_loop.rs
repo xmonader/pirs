@@ -557,7 +557,11 @@ fn prepare_call(
     hooks: &Hooks,
     visible: &Option<VisibleTools>,
 ) -> Prepared {
-    let Some(tool) = tools.iter().find(|t| t.name() == call.name) else {
+    // Last registration wins on a name collision (matches tool_defs's dedup),
+    // so a rhai pack can override a native tool — e.g. wrapping `bash` in a
+    // sandbox — by registering another tool under the same name later in the
+    // list (native tools are constructed first, rhai packs appended after).
+    let Some(tool) = tools.iter().rev().find(|t| t.name() == call.name) else {
         return Prepared::Failed {
             index,
             result: error_result(
