@@ -1,8 +1,10 @@
 pub mod ast_edit;
 pub mod code_map;
 pub mod graph;
+pub mod store;
 
 pub use graph::{Graph, Lang, SymKind, Symbol};
+pub use store::{full_graph, GraphStore};
 
 /// Builds the graph lazily on first use so CLI startup never blocks on it.
 /// An editing agent invalidates and rebuilds as files change.

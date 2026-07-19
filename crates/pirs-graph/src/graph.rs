@@ -24,6 +24,20 @@ impl SymKind {
             SymKind::Module => "module",
         }
     }
+
+    /// Inverse of [`SymKind::name`], for rehydrating a persisted symbol.
+    pub fn from_name(s: &str) -> Option<SymKind> {
+        Some(match s {
+            "fn" => SymKind::Function,
+            "method" => SymKind::Method,
+            "struct" => SymKind::Struct,
+            "class" => SymKind::Class,
+            "trait" => SymKind::Trait,
+            "enum" => SymKind::Enum,
+            "module" => SymKind::Module,
+            _ => return None,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
