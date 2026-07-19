@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use pirs_agent::agent_loop::{run_agent_loop, Budgets, LoopConfig};
+use pirs_agent::profile::ToolPolicy;
 use pirs_agent::strategy::{self, PhaseDriver, PhaseReq, ToolScope};
 use pirs_agent::trace::Recorder;
 use pirs_agent::{AgentEvent, AgentTool, Emit, ExecutionMode, Hooks};
@@ -78,6 +79,9 @@ pub struct AgentConfig {
     pub provider: Arc<dyn LlmProvider>,
     /// The loop strategy to drive the fix with (a built-in or a user script).
     pub strategy: Strategy,
+    /// Tool allow/deny policy (from a profile). Filters both the full tool set and
+    /// the read-only planner set. Defaults to allow-all.
+    pub tool_policy: ToolPolicy,
     /// Optional flight recorder; when set, every agent event (full messages, tool
     /// args/results, turns) plus phase/attempt boundaries are traced to JSONL.
     pub recorder: Option<Arc<Recorder>>,
@@ -145,6 +149,12 @@ impl AgentExecutor {
         let graph = Arc::new(LazyGraph::new(repo_root.clone()));
         tools.push(Arc::new(CodeMapTool::new(graph, repo_root.clone())));
         tools.push(Arc::new(AstEditTool::new(repo_root.clone())));
+
+        // Apply the profile's tool policy first: a role can restrict which tools
+        // exist at all (e.g. a reviewer with no shell). Everything downstream sees
+        // only the permitted set.
+        let policy = &config.tool_policy;
+        tools.retain(|t| policy.permits(t.name()));
 
         // Planner tools: everything that can't mutate the tree, so the plan phase
         // localizes without editing. bash is excluded too (it can write via shell),
@@ -547,6 +557,26 @@ mod tests {
                 max_turns_per_attempt: 1,
                 provider: build_provider(&Provider::Anthropic),
                 strategy,
+                tool_policy: ToolPolicy::allow_all(),
+                recorder: None,
+            },
+        )
+        .unwrap()
+    }
+
+    fn executor_with_policy(policy: ToolPolicy) -> AgentExecutor {
+        AgentExecutor::new(
+            ".".into(),
+            "issue".into(),
+            vec!["t.py::test_x".into()],
+            vec![],
+            AgentConfig {
+                model: "m".into(),
+                api_key: "k".into(),
+                max_turns_per_attempt: 1,
+                provider: build_provider(&Provider::Anthropic),
+                strategy: Strategy::plan_exec(),
+                tool_policy: policy,
                 recorder: None,
             },
         )
@@ -579,5 +609,34 @@ mod tests {
             ToolScope::Full => ex.tools.iter().map(|t| t.name()).collect(),
         };
         assert!(!ro.contains(&"edit") && !ro.contains(&"write"));
+    }
+
+    #[test]
+    fn profile_tool_policy_removes_denied_tools_everywhere() {
+        // A role that denies the shell must have no `bash` in either tool set.
+        let ex = executor_with_policy(ToolPolicy {
+            allow: None,
+            deny: vec!["bash".into()],
+        });
+        let full: Vec<&str> = ex.tools.iter().map(|t| t.name()).collect();
+        let planner: Vec<&str> = ex.planner_tools.iter().map(|t| t.name()).collect();
+        assert!(!full.contains(&"bash"), "policy must drop bash: {full:?}");
+        assert!(!planner.contains(&"bash"));
+        // Non-denied tools survive.
+        assert!(full.contains(&"read") && full.contains(&"edit"), "{full:?}");
+    }
+
+    #[test]
+    fn profile_allow_list_restricts_to_named_tools() {
+        let ex = executor_with_policy(ToolPolicy {
+            allow: Some(vec!["read".into(), "edit".into()]),
+            deny: vec![],
+        });
+        let full: Vec<&str> = ex.tools.iter().map(|t| t.name()).collect();
+        assert!(full.contains(&"read") && full.contains(&"edit"));
+        assert!(
+            !full.contains(&"bash") && !full.contains(&"write"),
+            "{full:?}"
+        );
     }
 }

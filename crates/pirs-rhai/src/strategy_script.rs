@@ -118,7 +118,12 @@ fn strategy_from_dynamic(value: Dynamic, default_name: &str) -> anyhow::Result<S
     let map = value
         .try_cast::<Map>()
         .ok_or_else(|| anyhow!("script must return a map with a `phases` array"))?;
+    strategy_from_map(map, default_name)
+}
 
+/// Build a [`Strategy`] from an already-cast Rhai map. Shared by the top-level
+/// strategy loader and by profiles that carry an inline strategy.
+pub fn strategy_from_map(map: Map, default_name: &str) -> anyhow::Result<Strategy> {
     let name = get_str(&map, "name").unwrap_or_else(|| default_name.to_string());
     let persist = map
         .get("persist")

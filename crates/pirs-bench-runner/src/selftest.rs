@@ -23,6 +23,8 @@ use pirs_bench::{
 
 use pirs_agent::trace::Recorder;
 
+use pirs_agent::profile::ToolPolicy;
+
 use crate::metrics::UsageByModel;
 use crate::{build_provider, AgentConfig, AgentExecutor, Provider, Strategy};
 
@@ -31,14 +33,19 @@ pub enum Mode {
     /// Deterministic known-good fix — validates the harness pipeline offline.
     Oracle,
     /// The real pirs agent — validates the whole thing end to end (needs an
-    /// LLM backend + key).
-    Agent {
-        provider: Provider,
-        model: String,
-        api_key: String,
-        max_turns: usize,
-        strategy: Strategy,
-    },
+    /// LLM backend + key). Boxed: its payload dwarfs the unit `Oracle` variant.
+    Agent(Box<AgentMode>),
+}
+
+/// The configuration for a real-agent self-test run (the boxed [`Mode::Agent`]
+/// payload).
+pub struct AgentMode {
+    pub provider: Provider,
+    pub model: String,
+    pub api_key: String,
+    pub max_turns: usize,
+    pub strategy: Strategy,
+    pub tool_policy: ToolPolicy,
 }
 
 /// A scripted edit the oracle applies: replace the first `find` in `file` with
@@ -338,7 +345,7 @@ pub fn run_selftest(
     let host = DetectorHost::with_bundled().context("load detectors")?;
     // In agent mode, build the provider once and share it across executors.
     let provider: Option<Arc<dyn LlmProvider>> = match mode {
-        Mode::Agent { provider, .. } => Some(build_provider(provider)),
+        Mode::Agent(agent_mode) => Some(build_provider(&agent_mode.provider)),
         Mode::Oracle => None,
     };
     let mut attribution = Attribution::new();
@@ -377,13 +384,15 @@ pub fn run_selftest(
             Mode::Oracle => {
                 oracle = Some(OracleExecutor::new(root.clone(), proj.oracle.clone()));
             }
-            Mode::Agent {
-                model,
-                api_key,
-                max_turns,
-                strategy,
-                ..
-            } => {
+            Mode::Agent(agent_mode) => {
+                let AgentMode {
+                    model,
+                    api_key,
+                    max_turns,
+                    strategy,
+                    tool_policy,
+                    ..
+                } = agent_mode.as_ref();
                 agent = Some(AgentExecutor::new(
                     root.clone(),
                     issue_for(&proj),
@@ -395,6 +404,7 @@ pub fn run_selftest(
                         max_turns_per_attempt: *max_turns,
                         provider: Arc::clone(provider.as_ref().expect("provider in agent mode")),
                         strategy: strategy.clone(),
+                        tool_policy: tool_policy.clone(),
                         recorder: recorder.cloned(),
                     },
                 )?);

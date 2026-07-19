@@ -18,6 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context as _};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use pirs_agent::profile::{Profile, ToolPolicy};
 use pirs_agent::trace::Recorder;
 use pirs_bench::{
     is_git_repo, run_instance, Attribution, BaselineCache, DetectorHost, GitWorkspace, Instance,
@@ -86,6 +87,10 @@ struct Common {
     /// Path to a user-authored strategy (`.rhai`). Overrides `--strategy`.
     #[arg(long, global = true)]
     strategy_script: Option<PathBuf>,
+    /// Path to a profile (`.rhai`): a role bundling a strategy with a persona,
+    /// model, and tool policy. Overrides `--strategy`/`--strategy-script`.
+    #[arg(long, global = true)]
+    profile: Option<PathBuf>,
     /// Write a full JSONL event trace (every message, tool call, phase, attempt,
     /// outcome) to this file — the flight recorder for long sessions.
     #[arg(long, global = true)]
@@ -93,13 +98,29 @@ struct Common {
 }
 
 impl Common {
-    /// The loop strategy to run: a user script if `--strategy-script` is given,
-    /// otherwise the selected built-in.
+    /// Load the profile if `--profile` was given.
+    fn profile(&self) -> anyhow::Result<Option<Profile>> {
+        match &self.profile {
+            Some(path) => pirs_rhai::profile_script::load_profile_file(path).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// The loop strategy to run. A `--profile` wins (its resolved strategy bakes in
+    /// persona + model), then `--strategy-script`, then the selected built-in.
     fn strategy(&self) -> anyhow::Result<Strategy> {
+        if let Some(profile) = self.profile()? {
+            return Ok(profile.resolved_strategy());
+        }
         match &self.strategy_script {
             Some(path) => pirs_rhai::strategy_script::load_strategy_file(path),
             None => Ok(self.strategy.into()),
         }
+    }
+
+    /// The tool policy for this run: a profile's `tools` policy, or allow-all.
+    fn tool_policy(&self) -> anyhow::Result<ToolPolicy> {
+        Ok(self.profile()?.map(|p| p.tools).unwrap_or_default())
     }
 
     /// Build the flight recorder if `--trace` was given. The run id encodes the
@@ -248,6 +269,8 @@ struct SolveCtx<'a> {
     host: &'a DetectorHost,
     /// The resolved loop strategy (built-in or user script), reused per instance.
     strategy: Strategy,
+    /// Tool allow/deny policy (from a profile, or allow-all), reused per instance.
+    tool_policy: ToolPolicy,
     /// Optional flight recorder, shared across every instance in the run.
     recorder: Option<Arc<Recorder>>,
 }
@@ -297,6 +320,7 @@ fn solve_one(
             max_turns_per_attempt: ctx.common.max_turns,
             provider: build_provider(ctx.provider),
             strategy: ctx.strategy.clone(),
+            tool_policy: ctx.tool_policy.clone(),
             recorder: ctx.recorder.clone(),
         },
     )
@@ -370,6 +394,7 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
         api_key: &key,
         host: &host,
         strategy,
+        tool_policy: a.common.tool_policy()?,
         recorder,
     };
 
@@ -415,6 +440,7 @@ fn run_batch(a: BatchArgs) -> anyhow::Result<()> {
         api_key: &key,
         host: &host,
         strategy,
+        tool_policy: a.common.tool_policy()?,
         recorder: a.common.make_recorder()?,
     };
     let mut attribution = Attribution::new();
@@ -465,13 +491,14 @@ fn run_selftest(a: SelftestArgs) -> anyhow::Result<u8> {
         let strategy = a.common.strategy()?;
         eprintln!("strategy: {}", strategy.name);
         let (provider, api_key) = a.common.provider.resolve()?;
-        selftest::Mode::Agent {
+        selftest::Mode::Agent(Box::new(selftest::AgentMode {
             provider,
             model: a.common.model.clone(),
             api_key,
             max_turns: a.common.max_turns,
             strategy,
-        }
+            tool_policy: a.common.tool_policy()?,
+        }))
     } else {
         selftest::Mode::Oracle
     };
