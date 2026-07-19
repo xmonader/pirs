@@ -89,14 +89,39 @@ pub fn check_exec(caps: &Caps, command: &str) -> Result<(), String> {
     }
 }
 
+/// Lexically resolve `.`/`..` without touching the filesystem (works for
+/// nonexistent paths). Returns `None` if the path is absolute or escapes above
+/// the sandbox base via `..` — either of which must be denied regardless of how
+/// the pattern is written, so a textual `dir/**` or `*.ext` rule can't be
+/// slipped with `dir/../../etc/x` or an absolute `/etc/x.ext`.
+fn contained_normal(path: &str) -> Option<String> {
+    if path.starts_with('/') {
+        return None;
+    }
+    let mut out: Vec<&str> = Vec::new();
+    for comp in path.split('/') {
+        match comp {
+            "" | "." => {}
+            ".." => {
+                out.pop()?;
+            }
+            c => out.push(c),
+        }
+    }
+    Some(out.join("/"))
+}
+
 /// Check a path against the fs capability. Patterns: exact match,
-/// `dir/**` (prefix), `*.ext` (suffix). Paths are compared as strings after
-/// normalizing `./`.
+/// `dir/**` (prefix), `*.ext` (suffix). The path is first lexically contained
+/// (see `contained_normal`); anything absolute or `..`-escaping is denied.
 pub fn check_fs(caps: &Caps, path: &str) -> bool {
     let Some(patterns) = &caps.fs else {
         return true;
     };
-    let norm = path.strip_prefix("./").unwrap_or(path);
+    let Some(norm) = contained_normal(path) else {
+        return false;
+    };
+    let norm = norm.as_str();
     patterns.iter().any(|p| {
         let p = p.strip_prefix("./").unwrap_or(p);
         if let Some(prefix) = p.strip_suffix("/**") {
@@ -118,6 +143,32 @@ pub fn subagents_allowed(caps: &Caps) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn check_fs_rejects_parent_traversal_and_absolute() {
+        let caps = Caps {
+            fs: Some(vec![".pirs/**".to_string()]),
+            ..Default::default()
+        };
+        assert!(check_fs(&caps, ".pirs/ok.txt"));
+        assert!(check_fs(&caps, "./.pirs/ok.txt"));
+        // Escapes the declared sandbox via `..` — textual prefix match would
+        // have allowed these.
+        assert!(!check_fs(&caps, ".pirs/../../etc/cron.d/x"));
+        assert!(!check_fs(&caps, "/etc/passwd"));
+    }
+
+    #[test]
+    fn check_fs_suffix_rule_cannot_escape_via_absolute() {
+        let caps = Caps {
+            fs: Some(vec!["*.log".to_string()]),
+            ..Default::default()
+        };
+        assert!(check_fs(&caps, "app.log"));
+        // A suffix rule must not authorize an absolute write just because the
+        // extension matches.
+        assert!(!check_fs(&caps, "/etc/cron.d/evil.log"));
+    }
 
     #[test]
     fn parses_manifest_from_leading_comment() {
