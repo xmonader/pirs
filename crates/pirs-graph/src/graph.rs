@@ -256,9 +256,15 @@ impl Graph {
 fn extract_symbols(lang: Lang, root: tree_sitter::Node, source: &str, path: &Path) -> Vec<Symbol> {
     let mut out = Vec::new();
     let mut cursor = root.walk();
-    walk_symbols(lang, root, source, path, &mut cursor, &mut out);
+    walk_symbols(lang, root, source, path, &mut cursor, &mut out, 0);
     out
 }
+
+/// Depth ceiling for the AST walkers. tree-sitter parses pathologically nested
+/// input (e.g. 50k open parens) without complaint, and Graph::build walks every
+/// repo file, so unbounded recursion lets one adversarial file stack-overflow
+/// and abort the whole agent. Real source never approaches this.
+const MAX_WALK_DEPTH: usize = 512;
 
 fn walk_symbols(
     lang: Lang,
@@ -267,8 +273,9 @@ fn walk_symbols(
     path: &Path,
     cursor: &mut tree_sitter::TreeCursor,
     out: &mut Vec<Symbol>,
+    depth: usize,
 ) {
-    let go_deeper = true;
+    let go_deeper = depth < MAX_WALK_DEPTH;
     if let Some((kind, name_node)) = definition_info(lang, &node) {
         let name = node_text(name_node, source).to_string();
         if !name.is_empty() {
@@ -290,7 +297,7 @@ fn walk_symbols(
     }
     if go_deeper && cursor.goto_first_child() {
         loop {
-            walk_symbols(lang, cursor.node(), source, path, cursor, out);
+            walk_symbols(lang, cursor.node(), source, path, cursor, out, depth + 1);
             if !cursor.goto_next_sibling() {
                 break;
             }
@@ -349,7 +356,7 @@ fn definition_info<'a>(
 fn collect_calls(lang: Lang, func: tree_sitter::Node, source: &str) -> Vec<String> {
     let mut calls = Vec::new();
     let mut cursor = func.walk();
-    collect_calls_inner(lang, func, source, &mut cursor, &mut calls);
+    collect_calls_inner(lang, func, source, &mut cursor, &mut calls, 0);
     calls.sort();
     calls.dedup();
     calls
@@ -361,7 +368,11 @@ fn collect_calls_inner(
     source: &str,
     cursor: &mut tree_sitter::TreeCursor,
     calls: &mut Vec<String>,
+    depth: usize,
 ) {
+    if depth >= MAX_WALK_DEPTH {
+        return;
+    }
     let kind = node.kind();
     let is_call = matches!(
         (lang, kind),
@@ -379,7 +390,7 @@ fn collect_calls_inner(
     }
     if cursor.goto_first_child() {
         loop {
-            collect_calls_inner(lang, cursor.node(), source, cursor, calls);
+            collect_calls_inner(lang, cursor.node(), source, cursor, calls, depth + 1);
             if !cursor.goto_next_sibling() {
                 break;
             }
