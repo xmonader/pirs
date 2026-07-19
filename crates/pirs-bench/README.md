@@ -75,6 +75,21 @@ Every session reports per-model token usage (input / cache-read / cache-write /
 output / reasoning) and behavior stats (turns, tool calls). `batch` and
 `selftest` also print the aggregate across all instances.
 
+### Timing
+
+Every run reports where the wall-clock went, broken into non-overlapping phases
+(`discover`, `bootstrap`, `baseline`, `fix`, `verify`, `patch`) with each phase's
+share of the total; `fix`/`verify` roll up with an `n=` count across retries. In
+`solve` mode the `fix` phase is further split per-tool (`fix→tools: bash:… edit:…`)
+to separate LLM latency from tool execution. `batch` and `selftest` print the
+aggregate across all instances.
+
+## Running on SWE-bench Lite
+
+See [`docs/SWE-BENCH-LITE.md`](docs/SWE-BENCH-LITE.md) for the full runbook:
+per-instance repo prep (checkout + commit the test patch), the field mapping,
+the environment-setup caveats, and how to read the attribution/timing output.
+
 ## Validation
 
 `selftest` is the reproducible check. The deterministic oracle validates the
