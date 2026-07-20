@@ -756,6 +756,10 @@ async fn main() -> anyhow::Result<()> {
             );
             tokio::spawn(bg.run());
         }
+        // Reused for `recall`'s semantic mode below — cloned before the move
+        // into CodeSearchTool::new, since both tools want the same embedder
+        // rather than each constructing (and each paying for) their own.
+        let recall_embedder = embedder.clone();
         let code_search = std::sync::Arc::new(pirs_graph::code_search::CodeSearchTool::new(
             std::sync::Arc::clone(g),
             cwd.clone(),
@@ -766,6 +770,16 @@ async fn main() -> anyhow::Result<()> {
         ));
         tools.push(code_search.clone());
         sub_tools.push(code_search);
+
+        // Upgrades the bare `recall` tool already in `tools` (from
+        // default_tools()) to one that also supports `mode: "semantic"` —
+        // the later-registered tool with the same name wins on dispatch, so
+        // this doesn't need to remove the earlier one.
+        if let Some(emb) = recall_embedder {
+            let recall = std::sync::Arc::new(pirs_tools::RecallTool::with_embedder(emb));
+            tools.push(recall.clone());
+            sub_tools.push(recall);
+        }
     }
     {
         let manifests = [

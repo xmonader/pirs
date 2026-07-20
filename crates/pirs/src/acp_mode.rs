@@ -189,6 +189,15 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
         .with_compaction(Some(pirs_agent::compaction::CompactionConfig::default()));
 
     let session_path = session::session_path(&cwd)?;
+    let session_id = session_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    if let Err(e) = pirs_agent::memory::init_global(&cwd.join(".pirs").join("memory.db")) {
+        eprintln!("[memory disabled: {e}]");
+    } else {
+        pirs_agent::memory::set_session(&session_id);
+    }
     let session_slot = Arc::new(std::sync::Mutex::new(session_path.clone()));
     {
         let slot = Arc::clone(&session_slot);
