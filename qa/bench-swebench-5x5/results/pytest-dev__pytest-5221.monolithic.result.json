@@ -1,0 +1,12 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "label": "monolithic",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirsbench-pytest-dev--pytest-5221-monolithic",
+  "exit_code": 1,
+  "elapsed_s": 15.3,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 15.21s):\n  discover: 8.59s (56%)\n  bootstrap: 5.70s (37%)\n  baseline: 0.90s (6%)\n  rollback: 0.02s (0%)\noutcome: Failed(ReproFailed)",
+  "patch_copied": false
+}

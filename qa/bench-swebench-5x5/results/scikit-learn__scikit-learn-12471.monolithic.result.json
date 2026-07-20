@@ -1,0 +1,12 @@
+{
+  "id": "scikit-learn__scikit-learn-12471",
+  "model": "deepseek-v4-flash",
+  "label": "monolithic",
+  "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-12471:latest",
+  "container": "pirsbench-scikit-learn--scikit-learn-12471-monolithic",
+  "exit_code": 1,
+  "elapsed_s": 74.3,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nsession: turns=11 tools=13 [read:6 grep:5 find:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=25344 cache_r=182528 cache_w=0 out=4264 reasoning=3209 total=212136 \u2014 $0.0243\n  TOTAL: in=25344 cache_r=182528 cache_w=0 out=4264 reasoning=3209 total=212136 \u2014 $0.0243\ntiming (total 74.25s):\n  fix: 51.46s (69%)\n  discover: 11.76s (16%)\n  bootstrap: 7.94s (11%)\n  baseline: 3.06s (4%)\n  rollback: 0.04s (0%)\n  fix\u2192tools: run_tests:7.81s grep:0.49s find:0.02s read:0.00s\noutcome: Failed(FixNoFlip)",
+  "patch_copied": false
+}

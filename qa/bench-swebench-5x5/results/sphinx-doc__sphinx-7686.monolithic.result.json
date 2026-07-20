@@ -1,0 +1,12 @@
+{
+  "id": "sphinx-doc__sphinx-7686",
+  "model": "deepseek-v4-flash",
+  "label": "monolithic",
+  "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7686:latest",
+  "container": "pirsbench-sphinx-doc--sphinx-7686-monolithic",
+  "exit_code": 1,
+  "elapsed_s": 485.2,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nsession: turns=101 tools=100 [bash:48 read:27 edit:14 grep:7 find:2 ls:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=48116 cache_r=4673664 cache_w=0 out=46906 reasoning=32395 total=4768686 \u2014 $0.3917\n  TOTAL: in=48116 cache_r=4673664 cache_w=0 out=46906 reasoning=32395 total=4768686 \u2014 $0.3917\ntiming (total 485.08s):\n  fix: 470.32s (97% n=3)\n  baseline: 4.28s (1%)\n  discover: 4.07s (1%)\n  bootstrap: 3.64s (1%)\n  verify: 2.75s (1% n=3)\n  rollback: 0.02s (0%)\n  fix\u2192tools: bash:19.30s edit:0.14s find:0.03s run_tests:0.01s read:0.01s ls:0.00s grep:0.00s\noutcome: Failed(FixNoFlip)",
+  "patch_copied": false
+}

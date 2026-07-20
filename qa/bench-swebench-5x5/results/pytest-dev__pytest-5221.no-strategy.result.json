@@ -1,0 +1,12 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "label": "no-strategy",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirsbench-pytest-dev--pytest-5221-no-strategy",
+  "exit_code": 1,
+  "elapsed_s": 22.9,
+  "solved": false,
+  "stderr_tail": "strategy: none\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 22.79s):\n  discover: 11.34s (50%)\n  bootstrap: 9.87s (43%)\n  baseline: 1.54s (7%)\n  rollback: 0.03s (0%)\noutcome: Failed(ReproFailed)",
+  "patch_copied": false
+}

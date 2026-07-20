@@ -1,0 +1,13 @@
+{
+  "id": "sphinx-doc__sphinx-7686",
+  "model": "deepseek-v4-flash",
+  "label": "plan-exec",
+  "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7686:latest",
+  "container": "pirsbench-sphinx-doc--sphinx-7686-plan-exec",
+  "exit_code": 0,
+  "elapsed_s": 2123.3,
+  "solved": true,
+  "stderr_tail": "strategy: plan-pro-exec-flash\nsession: turns=171 tools=175 [read:63 bash:59 grep:28 find:8 run_tests:8 edit:7 code_map:2]\ntokens by model:\n  deepseek-v4-flash: in=64251 cache_r=2405888 cache_w=0 out=48410 reasoning=33725 total=2518549 \u2014 $0.2390\n  deepseek-v4-pro: in=70558 cache_r=1893120 cache_w=0 out=109941 reasoning=102790 total=2073619 \u2014 $0.2725\n  TOTAL: in=134809 cache_r=4299008 cache_w=0 out=158351 reasoning=136515 total=4592168 \u2014 $0.5115\ntiming (total 2123.26s):\n  fix: 2105.81s (99% n=3)\n  verify: 5.67s (0% n=4)\n  baseline: 4.31s (0%)\n  discover: 3.98s (0%)\n  bootstrap: 3.46s (0%)\n  patch: 0.03s (0%)\n  fix\u2192tools: bash:24.51s run_tests:6.35s code_map:0.86s grep:0.37s find:0.15s edit:0.07s read:0.02s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (1903 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 1903
+}

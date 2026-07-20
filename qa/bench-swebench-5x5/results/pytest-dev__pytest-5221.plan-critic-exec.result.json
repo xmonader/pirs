@@ -1,0 +1,12 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "label": "plan-critic-exec",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirsbench-pytest-dev--pytest-5221-plan-critic-exec",
+  "exit_code": 1,
+  "elapsed_s": 13.2,
+  "solved": false,
+  "stderr_tail": "strategy: plan-critic-exec-pro-flash\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 13.18s):\n  discover: 6.50s (49%)\n  bootstrap: 5.77s (44%)\n  baseline: 0.90s (7%)\n  rollback: 0.01s (0%)\noutcome: Failed(ReproFailed)",
+  "patch_copied": false
+}

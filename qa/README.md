@@ -127,6 +127,18 @@ It's a one-time ~$0.04 to index this repo; the background indexer and OpenAI-
 compatible client already consume it. Not a wiring gap — a model choice. (Cloud
 embeddings send code off-machine: fine for a public repo, weigh for private.)
 
+## Strategy comparison benchmark (SWE-bench-lite)
+
+A live, real-API comparison of all 5 execution modes (`no-strategy`,
+`monolithic`, `plan-exec`, `plan-critic-exec`, `wide-plan-exec`) against the
+same 5 SWE-bench-lite instances inside the official eval docker images — 25
+runs, $2.10 total spend. Full methodology, per-run results, and findings in
+[`bench-swebench-5x5.md`](bench-swebench-5x5.md); raw `.result.json`/`.log`
+artifacts in [`bench-swebench-5x5/results/`](bench-swebench-5x5/results/).
+Headline: on this sample, `monolithic` was dominated on every axis (solve
+rate, cost, wall-clock) by the plain `no-strategy` baseline — splitting into a
+phase engine bought nothing unless it also added a planner.
+
 ## Discovery
 
 | Feature | Proof | What it demonstrates |
@@ -139,5 +151,10 @@ embeddings send code off-machine: fine for a public repo, weigh for private.)
   `wide-plan-exec`) are embedded in `pirs-rhai`; project `.pirs/strategies/`
   overrides and additions (e.g. `plan-oracle-exec`, `general-*`) resolve by name
   with project-then-home precedence.
+- `pirs-bench solve`/`batch`/`selftest --agent` also accept `--no-strategy`,
+  which bypasses the strategy engine entirely for a true naive baseline (the
+  interactive CLI's own default when no `--strategy`/`--profile` is given) —
+  see the benchmark above for what that baseline actually costs/solves versus
+  the built-ins.
 - The extension packs are cataloged in `../extensions/README.md` and loaded by
   the `pirs-rhai` integration tests, counted in the 507 above.

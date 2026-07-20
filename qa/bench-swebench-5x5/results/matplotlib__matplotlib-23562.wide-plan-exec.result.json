@@ -1,0 +1,12 @@
+{
+  "id": "matplotlib__matplotlib-23562",
+  "model": "deepseek-v4-flash",
+  "label": "wide-plan-exec",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23562:latest",
+  "container": "pirsbench-matplotlib--matplotlib-23562-wide-plan-exec",
+  "exit_code": 1,
+  "elapsed_s": 256.3,
+  "solved": false,
+  "stderr_tail": "strategy: wide-plan-exec-pro-flash\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 256.24s):\n  bootstrap: 239.60s (94%)\n  discover: 14.76s (6%)\n  baseline: 1.84s (1%)\n  rollback: 0.04s (0%)\noutcome: Failed(ReproFailed)",
+  "patch_copied": false
+}

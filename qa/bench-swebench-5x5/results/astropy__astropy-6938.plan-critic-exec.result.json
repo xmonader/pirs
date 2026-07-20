@@ -1,0 +1,13 @@
+{
+  "id": "astropy__astropy-6938",
+  "model": "deepseek-v4-flash",
+  "label": "plan-critic-exec",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-6938:latest",
+  "container": "pirsbench-astropy--astropy-6938-plan-critic-exec",
+  "exit_code": 0,
+  "elapsed_s": 211.5,
+  "solved": true,
+  "stderr_tail": "strategy: plan-critic-exec-pro-flash\nsession: turns=43 tools=42 [grep:20 read:16 bash:2 run_tests:2 code_map:1 edit:1]\ntokens by model:\n  deepseek-v4-flash: in=5051 cache_r=19072 cache_w=0 out=800 reasoning=84 total=24923 \u2014 $0.0036\n  deepseek-v4-pro: in=39913 cache_r=453632 cache_w=0 out=9177 reasoning=5241 total=502722 \u2014 $0.0526\n  TOTAL: in=44964 cache_r=472704 cache_w=0 out=9977 reasoning=5325 total=527645 \u2014 $0.0562\ntiming (total 211.43s):\n  fix: 182.11s (86%)\n  discover: 14.27s (7%)\n  bootstrap: 9.17s (4%)\n  verify: 3.55s (2% n=2)\n  baseline: 2.30s (1%)\n  patch: 0.02s (0%)\n  fix\u2192tools: run_tests:11.25s code_map:1.99s bash:1.78s grep:0.26s edit:0.02s read:0.01s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (518 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 518
+}

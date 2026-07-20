@@ -1,0 +1,12 @@
+{
+  "id": "matplotlib__matplotlib-23562",
+  "model": "deepseek-v4-flash",
+  "label": "no-strategy",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23562:latest",
+  "container": "pirsbench-matplotlib--matplotlib-23562-no-strategy",
+  "exit_code": 1,
+  "elapsed_s": 224.6,
+  "solved": false,
+  "stderr_tail": "strategy: none\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 224.56s):\n  bootstrap: 207.49s (92%)\n  discover: 14.59s (6%)\n  baseline: 2.40s (1%)\n  rollback: 0.07s (0%)\noutcome: Failed(ReproFailed)",
+  "patch_copied": false
+}
