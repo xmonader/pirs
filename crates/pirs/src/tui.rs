@@ -6,6 +6,7 @@
 //!   status  — spinner / hints / scroll position
 //!   input   — multi-line composer with history
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crossterm::event::{
@@ -506,6 +507,7 @@ struct App {
     strategy: Option<String>,
     model_aliases: Vec<String>,
     approval_mode: String,
+    cwd: PathBuf,
     cwd_label: String,
     usage_summary: String,
     pending_approval: Arc<Mutex<Option<String>>>,
@@ -783,6 +785,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         strategy: opts.strategy.clone(),
         model_aliases: opts.model_aliases.clone(),
         approval_mode: approval_name,
+        cwd: opts.cwd.clone(),
         cwd_label,
         usage_summary: String::new(),
         pending_approval,
@@ -809,6 +812,9 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
 
     let (prompt_tx, prompt_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let (done_tx, mut done_rx) = tokio::sync::mpsc::unbounded_channel::<bool>();
+    // (command, output, record_in_agent_context)
+    let (shell_tx, mut shell_rx) =
+        tokio::sync::mpsc::unbounded_channel::<(String, String, bool)>();
     let agent = Arc::new(tokio::sync::Mutex::new(opts.agent));
     {
         // Strategy runner is `!Send` (Rc in gate/phases). Drive the agent on a
@@ -883,9 +889,6 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
             app.dirty = true;
             let report = {
                 let a = agent.lock().await;
-                // Count tools from any new messages since last sample is hard;
-                // re-absorb full history tool results (idempotent if we reset
-                // tool counters — we don't; only count on live events below).
                 a.usage_report()
             };
             let total = report.grand_total();
@@ -899,6 +902,33 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                 app.push(ChatItem::Notice("run failed".into()));
             }
             app.set_status(String::new());
+        }
+        while let Ok((cmd, output, record)) = shell_rx.try_recv() {
+            app.dirty = true;
+            app.running = false;
+            app.set_status(String::new());
+            let preview: String = output.lines().take(40).collect::<Vec<_>>().join("\n");
+            let is_error = output.starts_with("error:") || output.contains("\nexit:");
+            app.push(ChatItem::ToolEnd {
+                preview: if preview.is_empty() {
+                    "(no output)".into()
+                } else {
+                    preview
+                },
+                is_error,
+            });
+            if record {
+                if let Ok(mut a) = agent.try_lock() {
+                    a.messages.push(Message::user(format!(
+                        "User ran a local command: `{cmd}`\nOutput:\n{output}"
+                    )));
+                }
+            }
+            app.notice(if record {
+                format!("$ {cmd}  (recorded in context)")
+            } else {
+                format!("$ {cmd}  (not recorded)")
+            });
         }
 
         let maybe_event = tokio::time::timeout(
@@ -914,6 +944,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                     &mut app,
                     key,
                     &prompt_tx,
+                    &shell_tx,
                     &agent_for_cmds,
                     &controls_for_cmds,
                 ) || app.should_quit
@@ -1011,7 +1042,7 @@ fn welcome_banner(
         .unwrap_or_default();
     format!(
         "pirs  ·  {model}{plan}{strat}  ·  approval:{approval}  ·  {cwd}\n\
-         /model  /plan-model  /strategy  ·  enter send · ? help · esc cancel · ctrl-d quit"
+         /model  /plan-model  /strategy  ·  !cmd shell  ·  enter send · ? help"
     )
 }
 
@@ -1041,6 +1072,7 @@ fn handle_key(
     app: &mut App,
     key: KeyEvent,
     prompt_tx: &tokio::sync::mpsc::UnboundedSender<String>,
+    shell_tx: &tokio::sync::mpsc::UnboundedSender<(String, String, bool)>,
     agent: &Arc<tokio::sync::Mutex<Agent>>,
     controls: &Arc<Mutex<SessionControls>>,
 ) -> bool {
@@ -1117,7 +1149,7 @@ fn handle_key(
             insert_at_cursor(app, '\n');
         }
         (KeyCode::Enter, _) => {
-            submit_input(app, prompt_tx, agent, controls);
+            submit_input(app, prompt_tx, shell_tx, agent, controls);
         }
         (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
             app.input.clear();
@@ -1277,6 +1309,7 @@ fn history_down(app: &mut App) {
 fn submit_input(
     app: &mut App,
     prompt_tx: &tokio::sync::mpsc::UnboundedSender<String>,
+    shell_tx: &tokio::sync::mpsc::UnboundedSender<(String, String, bool)>,
     agent: &Arc<tokio::sync::Mutex<Agent>>,
     controls: &Arc<Mutex<SessionControls>>,
 ) {
@@ -1318,6 +1351,41 @@ fn submit_input(
         return;
     }
 
+    // Local shell: `!cmd` records output in agent context; `!!cmd` does not.
+    if text.starts_with('!') {
+        if app.running {
+            app.notice("busy — wait for the current run, then try !cmd again");
+            return;
+        }
+        let (record, cmd) = if let Some(rest) = text.strip_prefix("!!") {
+            (false, rest.trim())
+        } else {
+            (true, text[1..].trim())
+        };
+        if cmd.is_empty() {
+            app.notice("usage: !cmd  (record)  or  !!cmd  (no record)");
+            return;
+        }
+        if app.history.last().map(|h| h.as_str()) != Some(text.as_str()) {
+            app.history.push(text.clone());
+        }
+        app.push(ChatItem::User(format!("$ {cmd}")));
+        app.push(ChatItem::ToolStart {
+            name: "bash".into(),
+            summary: cmd.to_string(),
+        });
+        app.running = true;
+        app.set_status(format!("shell: {cmd}"));
+        let cwd = app.cwd.clone();
+        let cmd_owned = cmd.to_string();
+        let shell_tx = shell_tx.clone();
+        std::thread::spawn(move || {
+            let output = run_shell_command(&cwd, &cmd_owned);
+            let _ = shell_tx.send((cmd_owned, output, record));
+        });
+        return;
+    }
+
     if app.history.last().map(|h| h.as_str()) != Some(text.as_str()) {
         app.history.push(text.clone());
     }
@@ -1346,6 +1414,46 @@ fn submit_input(
         };
         app.set_status(status);
         let _ = prompt_tx.send(text);
+    }
+}
+
+/// Run a local shell command (same spirit as REPL `!` / `!!`).
+fn run_shell_command(cwd: &std::path::Path, cmd: &str) -> String {
+    let result = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .current_dir(cwd)
+        .output();
+    match result {
+        Ok(out) => {
+            let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
+            let err = String::from_utf8_lossy(&out.stderr);
+            if !err.is_empty() {
+                if !s.is_empty() {
+                    s.push('\n');
+                }
+                s.push_str(&err);
+            }
+            if !out.status.success() {
+                if !s.is_empty() {
+                    s.push('\n');
+                }
+                s.push_str(&format!("exit: {}", out.status));
+            }
+            if s.is_empty() {
+                "(no output)".into()
+            } else {
+                // Cap huge dumps so the chat stays usable.
+                const MAX: usize = 16_000;
+                if s.len() > MAX {
+                    let tail: String = s.chars().skip(s.chars().count().saturating_sub(MAX)).collect();
+                    format!("…(truncated)\n{tail}")
+                } else {
+                    s
+                }
+            }
+        }
+        Err(e) => format!("error: {e}"),
     }
 }
 
@@ -1961,6 +2069,14 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
         )),
         Line::from(Span::styled(
             "  /stats  /usage  /help  /clear  /quit",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  !cmd              run shell (record in context)",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  !!cmd             run shell (do not record)",
             theme.assistant_text,
         )),
         Line::from(""),
@@ -2601,6 +2717,7 @@ mod tests {
             strategy: None,
             model_aliases: Vec::new(),
             approval_mode: "auto".into(),
+            cwd: PathBuf::from("."),
             cwd_label: ".".into(),
             usage_summary: String::new(),
             pending_approval: Arc::new(Mutex::new(None)),
