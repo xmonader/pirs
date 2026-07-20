@@ -131,38 +131,46 @@ embeddings send code off-machine: fine for a public repo, weigh for private.)
 
 A live, real-API comparison of all 5 execution modes (`no-strategy`,
 `monolithic`, `plan-exec`, `plan-critic-exec`, `wide-plan-exec`) against 10
-SWE-bench-lite instances (two batches of 5) inside the official eval docker
-images — 50 runs attempted, ~$2.90 total spend. Full methodology, per-run
-results, and findings in [`bench-swebench-5x5.md`](bench-swebench-5x5.md); raw
-`.result.json`/`.log` artifacts in
-[`bench-swebench-5x5/results/`](bench-swebench-5x5/results/) and
-[`results_matrix2/`](bench-swebench-5x5/results_matrix2/).
+SWE-bench-lite instances inside the official eval docker images —
+**8 of the 10 now produce real signal, 91 runs total (including reruns while
+chasing down two bugs), ~$4.25 spend.** Full
+methodology, per-run results, and the investigative trail (including two dead
+ends that were worth ruling out) in
+[`bench-swebench-5x5.md`](bench-swebench-5x5.md); raw artifacts in
+[`bench-swebench-5x5/`](bench-swebench-5x5/).
 
-Headline #1: `monolithic`'s original prompt ("make the SMALLEST change... do
-not refactor") was dominated on every axis by the plain `no-strategy`
-baseline — traced to that one instruction pressuring the model into
-minimal-but-wrong fixes. A follow-up experiment rewrote the prompt to focus on
-root cause instead and re-ran it: `monolithic` went from 1/3 to 3/3, closing
-the entire gap. The built-in prompt
-(`crates/pirs-rhai/builtins/monolithic.rhai`) has been fixed accordingly —
-this was a real bug, not just a benchmark footnote.
+**Current result** (8-instance combined comparison, corrected prompt +
+corrected harness): `monolithic` solves **8/8** at the lowest cost of any
+strategy ($0.056 avg); the three planner-based strategies also solve 8/8 but
+cost 1.6-2.3x more for the same outcome; `no-strategy` is the only strategy
+that *doesn't* solve everything (6/8). A well-written single-loop system
+prompt beat both a fully generic prompt and three multi-phase planner
+strategies on cost, for the same solve rate.
 
-Headline #2: only **4 of the 10 attempted instances ever reached the agent**
-— the other 6 failed identically across all five strategies, either
-`Failed(ReproFailed)` (a harness/environment pre-flight gap, 4 instances) or
-`Failed(RunnerUndetected)` (the harness's test-runner detector doesn't
-recognize Django's or sympy's custom test invocation, 2 instances). On the 4
-real instances, every strategy now ties at 4/4 solved (with the fixed
-`monolithic`) — the remaining differentiator is cost, where `no-strategy` and
-`monolithic` are cheapest and the three planner-based strategies cost roughly
-2x more for the same outcome.
+**How it got there** — two real bugs found and fixed along the way:
 
-A follow-up mid-run disk-full incident raised a legitimate question — were
-the `ReproFailed` instances actually disk-I/O victims rather than genuinely
-broken? Tested directly: re-ran all 3 suspect instances (15 runs) with
-450GB+ free throughout. **Refuted** — all 15 failed identically with
-unchanged bootstrap timing, 0/15 solved. These 4 instances are genuinely
-broken for this harness/image combination, independent of disk space.
+1. `monolithic`'s original built-in prompt ("make the SMALLEST change... do
+   not refactor") pressured the model into minimal-but-wrong fixes, dropping
+   its solve rate to 1/3 on the first sample. Rewritten to focus on root
+   cause instead (`crates/pirs-rhai/builtins/monolithic.rhai`) — re-tested at
+   3/3, closing the gap.
+2. 4 of the first 10 instances tried (`matplotlib-23562`, `matplotlib-26011`,
+   `scikit-learn-25570`, `pytest-5221`) initially looked like unsupported
+   instances (`Failed(ReproFailed)`, 0 agent turns, identically across every
+   strategy). Disk pressure was suspected and directly ruled out (15-run
+   re-test with 450GB+ free, still 0/15). The real cause: this cached
+   SWE-bench-lite dataset copy has malformed `PASS_TO_PASS` test ids
+   (parametrize brackets truncated mid-comma), and the harness ran the whole
+   test scope in one combined `pytest` call — one bad id made pytest report
+   zero results for *everything*, including the real, correctly-failing
+   targets. Fixed in `crates/pirs-bench/src/command.rs`: drop exactly the
+   unresolvable ids (identified from pytest's own stderr) and retry. Re-test:
+   18/20 solved — both `matplotlib` instances now go 5/5.
+
+Only `django-11001`/`sympy-15346`'s `Failed(RunnerUndetected)` remains a real,
+open gap (the harness's test-runner detectors don't recognize Django's or
+sympy's custom test invocation) — worth fixing before extending this
+benchmark further.
 
 ## Discovery
 

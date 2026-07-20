@@ -5,6 +5,106 @@ SWE-bench-lite tasks, run inside the official `swebench/sweb.eval.*` docker
 images. Every number below is pulled directly from a captured `.result.json` /
 `.log` pair in `bench-swebench-5x5/results/`; nothing here is estimated.
 
+**Reading order note:** this document is written in the order things were
+actually discovered, including a wrong turn. The first ~150 lines describe
+results from a harness that had a real bug (see
+[Harness fix: unresolvable test ids no longer sink the baseline](#harness-fix-unresolvable-test-ids-no-longer-sink-the-baseline)),
+which made 4 of the first 10 instances misreport as unusable
+(`Failed(ReproFailed)`). That bug is now fixed, and **all 4 turned out to be
+solvable, real instances** once it was — turning a 40%-yield, n=4 comparison
+into an 80%-yield, n=8 one. **If you want the current, complete picture, skip
+to the [combined 8-instance results](#combined-8-instance-results-current)
+after the fix section** — the sections before it are preserved for the
+investigative trail, not as the final numbers.
+
+## Harness fix: unresolvable test ids no longer sink the baseline
+
+**tl;dr: the "40% real-instance yield" and "2 unexplained ReproFailed
+instances" findings below were a harness bug, not a property of these SWE-
+bench-lite instances. Fixed in `crates/pirs-bench/src/command.rs`
+(commit `92caaaa`); all 4 previously-"broken" instances now solve at
+essentially the same rate as everything else.**
+
+Investigating *why* `matplotlib-23562`, `matplotlib-26011`,
+`scikit-learn-25570`, and `pytest-5221` all failed with `Failed(ReproFailed)`
+(after first ruling out disk pressure — see
+[below](#disk-pressure-hypothesis-tested-and-refuted)) led to the real cause:
+this cached copy of the SWE-bench-lite dataset has **malformed `PASS_TO_PASS`
+test ids** — parametrized pytest node ids truncated mid-comma during however
+the dataset file was built, e.g.
+`test_margins_errors[ValueError-args1-kwargs1-margin` (missing the closing
+`, must be...]`). `pirs-bench`'s baseline capture runs the *entire* scope
+(targets + all `PASS_TO_PASS` ids) in one combined `pytest` invocation. A
+single unresolvable node id makes pytest exit with a usage error and report
+**zero** test cases — not just for that one id, for the whole invocation,
+including the real targets. With no case for the targets, the harness
+concludes they never reproduced as red and reports `Failed(ReproFailed)` —
+even though the targets themselves were perfectly fine.
+
+Verified by hand before writing the fix: ran the exact combined command
+`pirs-bench` uses inside a fresh `matplotlib-23562` container — confirmed
+"no tests ran" (exit 4). Stripped just the 10 malformed ids out of 138 and
+re-ran the identical command: it worked, 126 passed, 2 failed (exactly the
+real, correctly-red targets), in 31 seconds.
+
+**Fix:** `CommandRunner::run` (`crates/pirs-bench/src/command.rs`) now detects
+this failure mode — zero JUnit cases from a non-empty batch — and parses
+pytest's own `ERROR: not found: <path>` lines to identify exactly which ids
+it couldn't resolve. Those ids are dropped and the batch is retried once; the
+dropped ids still correctly report as `NotCollected` (they never resolved to
+a real test — that's honest), but every id that *does* resolve gets its real
+outcome instead of being swept into a false "not reproduced." Covered by a new
+unit test, `one_unresolvable_id_no_longer_sinks_the_whole_batch`, with a fake
+runner reproducing the exact all-or-nothing failure shape.
+
+**Re-tested all 4 instances end-to-end** across all 5 strategies (20 runs)
+with the fix live: **18/20 solved.** Both `matplotlib` instances now solve
+5/5 across every strategy. The 2 remaining misses
+(`scikit-learn-25570 [no-strategy]`, `pytest-5221 [no-strategy]`) are genuine
+`Failed(FixNoFlip)` outcomes — real agent turns, real cost, a real (if
+incomplete) fix attempt — not a harness artifact. These 4 instances are now
+folded into the combined results below as first-class data, not exceptions.
+
+Artifacts: [`bench-swebench-5x5/results_fixed_command/`](bench-swebench-5x5/results_fixed_command/),
+[`bench-swebench-5x5/rerun_fixed_command.py`](bench-swebench-5x5/rerun_fixed_command.py).
+
+## Combined 8-instance results (current)
+
+All 8 real instances found across both batches, now that the harness bug is
+fixed — `astropy-6938`, `scikit-learn-12471`, `sphinx-7686`, `astropy-14182`
+(from the original runs) plus `matplotlib-23562`, `matplotlib-26011`,
+`scikit-learn-25570`, `pytest-5221` (newly unlocked by the fix above) — all
+using the corrected `monolithic` prompt:
+
+| Strategy | Solved (of 8) | Total cost | Avg cost | Avg wall-clock |
+|---|---|---|---|---|
+| monolithic | **8/8** | $0.4503 | **$0.0563** | 323.0s |
+| plan-critic-exec | 8/8 | $0.7325 | $0.0916 | 563.3s |
+| plan-exec | 8/8 | $0.7572 | $0.0946 | 566.8s |
+| wide-plan-exec | 8/8 | $1.0393 | $0.1299 | 422.5s |
+| no-strategy | 6/8 | $0.5349 | $0.0669 | 285.2s |
+
+**This flips the earlier picture.** With 4 more real instances added — 2 of
+which (`pytest-5221`, `scikit-learn-25570`) turned out to be the hardest in
+the set for the naive baseline — `no-strategy` is now the only strategy that
+*doesn't* solve everything (6/8), while the fixed `monolithic` prompt solves
+8/8 at the lowest cost of any strategy. The three planner-based strategies
+also solve 8/8, but cost 1.6-2.3x more than `monolithic` for the same outcome.
+`no-strategy`'s two misses were exactly the two instances where a bare, no-
+system-guidance loop apparently wasn't enough — `monolithic`'s corrected
+system prompt (still no strong model, same single growing-context loop)
+picked up the slack that a fully generic prompt didn't.
+
+The honest interpretation: **`monolithic`'s original prompt bug was real and
+worth fixing** (the earlier 1/3-solved finding stands as history), but once
+fixed, `monolithic` isn't just "as good as" `no-strategy` — on this 8-instance
+sample it's better, and the planner-based strategies' extra cost still hasn't
+bought a higher solve rate than the free system-prompt fix did. n=8 is still
+a small sample (see [Limitations](#limitations)), so treat the *ranking* as
+suggestive rather than final, but the *direction* — a well-written single-loop
+prompt beating both a generic loop and three multi-phase planners on cost — is
+a clear, reproducible result from this benchmark.
+
 ## Setup
 
 - **Base model**: `deepseek-v4-flash` for every arm (the executor phase, or the
@@ -59,6 +159,11 @@ scored identically $0 / 0 turns / Failed(ReproFailed) on those two, which would
 otherwise flatten real differences into noise.)
 
 ## Two broken instances (not a strategy effect)
+
+**[Superseded — see the fix above.](#harness-fix-unresolvable-test-ids-no-longer-sink-the-baseline)**
+Both instances below turned out to be a harness bug (malformed test ids
+poisoning the whole baseline run), not genuinely broken. Preserved as-written
+for the investigative trail.
 
 `matplotlib-23562` and `pytest-5221` failed identically under **all five**
 strategies: `turns=0`, `tools=0`, `$0.0000` spent, outcome `Failed(ReproFailed)`.
@@ -215,6 +320,15 @@ Artifacts: [`bench-swebench-5x5/results_rerun/`](bench-swebench-5x5/results_reru
 
 ## Second batch: 5 more instances (and a harness coverage gap)
 
+**Partially superseded — see the [fix](#harness-fix-unresolvable-test-ids-no-longer-sink-the-baseline)
+and [combined results](#combined-8-instance-results-current) above.** The
+`matplotlib-26011`/`scikit-learn-25570` `Failed(ReproFailed)` outcomes below
+were the same harness bug as the first batch's, since fixed and re-tested
+(`matplotlib-26011` now solves 5/5, `scikit-learn-25570` 4/5). Only
+`django-11001`/`sympy-15346`'s `Failed(RunnerUndetected)` remains a real,
+still-open gap — see [Limitations](#limitations). Preserved as-written for
+the investigative trail.
+
 Extended the sample with 5 more instances from the 45 remaining pre-pulled
 docker images, chosen for repo diversity: `astropy__astropy-14182`,
 `django__django-11001`, `matplotlib__matplotlib-26011`,
@@ -297,6 +411,13 @@ Artifacts: [`bench-swebench-5x5/results_matrix2/`](bench-swebench-5x5/results_ma
 
 ## Disk-pressure hypothesis: tested and refuted
 
+This section's conclusion stands — disk pressure was correctly ruled out —
+but its remaining premise (that these instances were "genuinely broken for
+this harness/image combination" for some unidentified reason) was itself
+wrong. Chasing that unidentified reason is exactly what led to the
+[harness fix](#harness-fix-unresolvable-test-ids-no-longer-sink-the-baseline)
+above. Preserved as-written for the investigative trail.
+
 The disk-full incident above raised a legitimate question: were the
 `ReproFailed` instances actually failing because of disk pressure (slow
 overlay-filesystem I/O as the host disk approached capacity), rather than a
@@ -346,24 +467,24 @@ Artifacts: [`bench-swebench-5x5/results_disk_suspects/`](bench-swebench-5x5/resu
 
 ## Limitations
 
-- **n=4 real instances, out of 10 attempted.** 6 of the first 10 SWE-bench-lite
-  instances tried across both batches never exercised the agent at all — 4
-  `Failed(ReproFailed)` (`matplotlib-23562`, `pytest-5221`, `matplotlib-26011`,
-  `scikit-learn-25570`) and 2 `Failed(RunnerUndetected)` (`django-11001`,
-  `sympy-15346`). Every solve-rate/cost claim above rests on the remaining 4
-  (`astropy-6938`, `scikit-learn-12471`, `sphinx-7686`, `astropy-14182`) —
-  directional, not statistically powered. A single flip on one instance moves
-  a strategy's solve rate by 25 percentage points.
-- **~40% real-instance yield from this docker-image set is itself a finding**,
-  not just a sampling nuisance, and it's **not a disk-space artifact** — directly
-  tested (see [Disk-pressure hypothesis](#disk-pressure-hypothesis-tested-and-refuted)):
-  the 4 `ReproFailed` instances still fail identically with 450GB+ free.
-  Extending this benchmark further with more of the 40 remaining images should
-  expect a similar attrition rate until the two underlying gaps are fixed: (a)
-  whatever actually makes `bootstrap` hang/fail on some images (up to 480s
-  before giving up — root cause not yet identified, just confirmed to not be
-  disk pressure), and (b) the harness's test-runner detector not recognizing
-  Django's or sympy's custom test invocation.
+- **n=8 real instances, out of 10 attempted** (current, post-fix — see
+  [combined results](#combined-8-instance-results-current)). Only
+  `django-11001` and `sympy-15346` remain unusable, both
+  `Failed(RunnerUndetected)`: the harness's test-runner detectors don't
+  recognize Django's or sympy's custom test invocation, a real, still-open
+  gap unrelated to the fixed test-id bug. Every solve-rate/cost claim rests on
+  the 8 real instances — directional, not statistically powered. A single
+  flip on one instance moves a strategy's solve rate by 12.5 percentage
+  points.
+- **The earlier "~40% real-instance yield" and "root cause not yet
+  identified" framing (both below, in the pre-fix sections) were wrong** —
+  the yield was a specific, fixed harness bug (see
+  [Harness fix](#harness-fix-unresolvable-test-ids-no-longer-sink-the-baseline)),
+  not an inherent property of this docker-image set. Real yield with the fix
+  is 8/10 (80%); the only remaining gap is the narrower
+  `RunnerUndetected` issue, which affects test frameworks this harness's
+  detectors don't yet cover (Django's and sympy's custom runners), not a
+  general instability.
 - **One trial per (instance, strategy) cell.** LLM agent runs are stochastic;
   no repeated-seed variance is captured here — e.g. `no-strategy`'s own numbers
   moved between its two independent runs on the same 3 instances (see the
@@ -371,15 +492,16 @@ Artifacts: [`bench-swebench-5x5/results_disk_suspects/`](bench-swebench-5x5/resu
   distribution.
 - **`--max-turns 40` / 2400s timeout were reused from an earlier, separately
   validated baseline**, not tuned for this specific comparison. `plan-exec`'s
-  171-turn `sphinx-7686` outlier suggests some strategies may be more sensitive
-  to the turn budget than others in ways this run can't isolate.
+  171-turn `sphinx-7686` outlier (and its 2123s `sphinx-7686` run more
+  generally) suggests some strategies may be more sensitive to the turn budget
+  than others in ways this run can't isolate.
 - **DeepSeek pricing is a snapshot** as of this run; absolute dollar figures
   will drift, though the relative ordering between strategies (which is the
   actual finding) is pricing-model-independent as long as flash/pro's relative
   price ratio holds.
-- **The `ReproFailed` and `RunnerUndetected` instances are unresolved
-  harness/environment gaps**, not a strategy finding — worth root-causing
-  separately before reusing this instance set for a larger run.
+- **The `RunnerUndetected` instances are a real, still-open harness gap** —
+  worth fixing (add Django/sympy test-runner detectors) before reusing this
+  instance set for a larger run, so all 10 (or more) instances contribute.
 
 ## Reproduce
 
@@ -420,12 +542,23 @@ never collide) live in `run_one.py`.
   [`bench-swebench-5x5/rerun_disk_suspects.py`](bench-swebench-5x5/rerun_disk_suspects.py)
   — the 15-run test (3 suspect instances × 5 strategies) that ruled out disk
   pressure as the cause of the `ReproFailed` instances.
+- [`bench-swebench-5x5/results_fixed_command/`](bench-swebench-5x5/results_fixed_command/),
+  [`bench-swebench-5x5/rerun_fixed_command.py`](bench-swebench-5x5/rerun_fixed_command.py)
+  — the 20-run re-test (4 previously-`ReproFailed` instances × 5 strategies,
+  18/20 solved) confirming the harness fix below actually unlocked them.
 - New strategy scripts: `.pirs/strategies/plan-critic-exec-pro-flash.rhai`,
   `.pirs/strategies/wide-plan-exec-pro-flash.rhai` (planner/critic phases
   pinned to `deepseek-v4-pro`, cloned from the built-in phase structure).
 - **Fixed**: `crates/pirs-rhai/builtins/monolithic.rhai`'s system prompt —
   dropped "make the SMALLEST change, do not refactor" in favor of root-cause-
   first guidance, per the follow-up experiment above.
+- **Fixed**: `crates/pirs-bench/src/command.rs`'s `CommandRunner::run` — a
+  single unresolvable test id no longer sinks an entire baseline batch to
+  zero cases; the harness now drops exactly the unresolvable ids (identified
+  from pytest's own stderr) and retries, per the
+  [harness fix](#harness-fix-unresolvable-test-ids-no-longer-sink-the-baseline)
+  above. New regression test:
+  `one_unresolvable_id_no_longer_sinks_the_whole_batch`.
 - New harness feature: `--no-strategy` on `pirs-bench solve`/`batch`/`selftest
   --agent` (`crates/pirs-bench-runner/src/{main,lib}.rs`), unit-tested in both
   crates (`no_strategy_flag_resolves_to_empty_strategy`,

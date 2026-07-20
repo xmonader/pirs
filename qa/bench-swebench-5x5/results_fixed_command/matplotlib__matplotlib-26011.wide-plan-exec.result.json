@@ -1,0 +1,13 @@
+{
+  "id": "matplotlib__matplotlib-26011",
+  "model": "deepseek-v4-flash",
+  "label": "wide-plan-exec",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-26011:latest",
+  "container": "pirsbench-matplotlib--matplotlib-26011-wide-plan-exec",
+  "exit_code": 0,
+  "elapsed_s": 763.7,
+  "solved": true,
+  "stderr_tail": "strategy: wide-plan-exec-pro-flash\nsession: turns=58 tools=65 [grep:31 read:30 run_tests:3 edit:1]\ntokens by model:\n  deepseek-v4-flash: in=8405 cache_r=98944 cache_w=0 out=2433 reasoning=1339 total=109782 \u2014 $0.0119\n  deepseek-v4-pro: in=18005 cache_r=334848 cache_w=0 out=16455 reasoning=10413 total=369308 \u2014 $0.0464\n  TOTAL: in=26410 cache_r=433792 cache_w=0 out=18888 reasoning=11752 total=479090 \u2014 $0.0583\ntiming (total 763.63s):\n  bootstrap: 404.68s (53%)\n  fix: 149.65s (20%)\n  baseline: 128.87s (17%)\n  verify: 66.03s (9% n=2)\n  discover: 14.36s (2%)\n  patch: 0.04s (0%)\n  fix\u2192tools: run_tests:17.06s grep:1.08s read:0.03s edit:0.03s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (541 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 541
+}

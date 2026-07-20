@@ -1,0 +1,13 @@
+{
+  "id": "scikit-learn__scikit-learn-25570",
+  "model": "deepseek-v4-flash",
+  "label": "plan-exec",
+  "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25570:latest",
+  "container": "pirsbench-scikit-learn--scikit-learn-25570-plan-exec",
+  "exit_code": 0,
+  "elapsed_s": 373.6,
+  "solved": true,
+  "stderr_tail": "strategy: plan-pro-exec-flash\nsession: turns=51 tools=54 [read:31 grep:15 edit:3 run_tests:3 bash:1 code_map:1]\ntokens by model:\n  deepseek-v4-flash: in=12563 cache_r=285824 cache_w=0 out=7907 reasoning=4742 total=306294 \u2014 $0.0321\n  deepseek-v4-pro: in=12713 cache_r=325120 cache_w=0 out=14055 reasoning=10778 total=351888 \u2014 $0.0417\n  TOTAL: in=25276 cache_r=610944 cache_w=0 out=21962 reasoning=15520 total=658182 \u2014 $0.0737\ntiming (total 373.51s):\n  fix: 317.66s (85%)\n  discover: 26.24s (7%)\n  bootstrap: 17.85s (5%)\n  baseline: 6.50s (2%)\n  verify: 5.23s (1% n=2)\n  patch: 0.03s (0%)\n  fix\u2192tools: run_tests:28.72s read:2.53s code_map:2.52s bash:1.71s edit:0.03s grep:0.01s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (2397 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 2397
+}

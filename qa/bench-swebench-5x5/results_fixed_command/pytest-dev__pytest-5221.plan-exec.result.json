@@ -1,0 +1,13 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "label": "plan-exec",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirsbench-pytest-dev--pytest-5221-plan-exec",
+  "exit_code": 0,
+  "elapsed_s": 165.1,
+  "solved": true,
+  "stderr_tail": "strategy: plan-pro-exec-flash\nsession: turns=28 tools=31 [read:14 grep:11 code_map:2 run_tests:2 bash:1 edit:1]\ntokens by model:\n  deepseek-v4-flash: in=2843 cache_r=36736 cache_w=0 out=1054 reasoning=231 total=40633 \u2014 $0.0045\n  deepseek-v4-pro: in=11999 cache_r=220032 cache_w=0 out=6548 reasoning=4389 total=238579 \u2014 $0.0258\n  TOTAL: in=14842 cache_r=256768 cache_w=0 out=7602 reasoning=4620 total=279212 \u2014 $0.0303\ntiming (total 165.01s):\n  fix: 125.49s (76%)\n  baseline: 17.68s (11%)\n  verify: 9.96s (6% n=2)\n  discover: 6.34s (4%)\n  bootstrap: 5.52s (3%)\n  patch: 0.02s (0%)\n  fix\u2192tools: run_tests:3.99s bash:0.75s grep:0.46s code_map:0.41s edit:0.02s read:0.01s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (875 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 875
+}

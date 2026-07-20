@@ -1,0 +1,13 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "label": "monolithic",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirsbench-pytest-dev--pytest-5221-monolithic",
+  "exit_code": 0,
+  "elapsed_s": 264.7,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=47 tools=46 [grep:17 bash:12 read:11 ls:3 edit:2 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=26900 cache_r=1077888 cache_w=0 out=18004 reasoning=12200 total=1122792 \u2014 $0.1025\n  TOTAL: in=26900 cache_r=1077888 cache_w=0 out=18004 reasoning=12200 total=1122792 \u2014 $0.1025\ntiming (total 264.64s):\n  fix: 224.36s (85% n=2)\n  baseline: 17.83s (7%)\n  verify: 10.38s (4% n=3)\n  discover: 6.50s (2%)\n  bootstrap: 5.55s (2%)\n  patch: 0.02s (0%)\n  fix\u2192tools: bash:11.16s run_tests:1.99s edit:0.04s grep:0.02s read:0.01s ls:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (1000 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 1000
+}

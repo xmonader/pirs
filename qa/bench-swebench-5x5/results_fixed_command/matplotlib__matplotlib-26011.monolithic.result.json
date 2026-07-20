@@ -1,0 +1,13 @@
+{
+  "id": "matplotlib__matplotlib-26011",
+  "model": "deepseek-v4-flash",
+  "label": "monolithic",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-26011:latest",
+  "container": "pirsbench-matplotlib--matplotlib-26011-monolithic",
+  "exit_code": 0,
+  "elapsed_s": 803.5,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=13 tools=13 [grep:5 read:4 run_tests:3 edit:1]\ntokens by model:\n  deepseek-v4-flash: in=6471 cache_r=92288 cache_w=0 out=4157 reasoning=2627 total=102916 \u2014 $0.0128\n  TOTAL: in=6471 cache_r=92288 cache_w=0 out=4157 reasoning=2627 total=102916 \u2014 $0.0128\ntiming (total 803.45s):\n  bootstrap: 407.11s (51%)\n  fix: 161.52s (20%)\n  baseline: 151.27s (19%)\n  verify: 69.06s (9% n=2)\n  discover: 14.45s (2%)\n  patch: 0.04s (0%)\n  fix\u2192tools: run_tests:118.11s edit:0.11s grep:0.01s read:0.01s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (567 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 567
+}

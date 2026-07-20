@@ -1,0 +1,13 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "label": "wide-plan-exec",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirsbench-pytest-dev--pytest-5221-wide-plan-exec",
+  "exit_code": 0,
+  "elapsed_s": 183.4,
+  "solved": true,
+  "stderr_tail": "strategy: wide-plan-exec-pro-flash\nsession: turns=77 tools=76 [read:40 grep:27 bash:2 code_map:2 ls:2 edit:1 find:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=6231 cache_r=81152 cache_w=0 out=1749 reasoning=483 total=89132 \u2014 $0.0093\n  deepseek-v4-pro: in=48272 cache_r=866560 cache_w=0 out=16618 reasoning=10155 total=931450 \u2014 $0.0920\n  TOTAL: in=54503 cache_r=947712 cache_w=0 out=18367 reasoning=10638 total=1020582 \u2014 $0.1013\ntiming (total 183.32s):\n  fix: 144.71s (79%)\n  baseline: 17.14s (9%)\n  verify: 9.79s (5% n=2)\n  discover: 6.14s (3%)\n  bootstrap: 5.52s (3%)\n  patch: 0.02s (0%)\n  fix\u2192tools: run_tests:2.01s bash:1.30s code_map:0.40s grep:0.11s edit:0.02s read:0.02s find:0.01s ls:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (533 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 533
+}

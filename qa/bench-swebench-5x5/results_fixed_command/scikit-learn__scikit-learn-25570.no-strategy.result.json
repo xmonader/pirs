@@ -1,0 +1,12 @@
+{
+  "id": "scikit-learn__scikit-learn-25570",
+  "model": "deepseek-v4-flash",
+  "label": "no-strategy",
+  "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25570:latest",
+  "container": "pirsbench-scikit-learn--scikit-learn-25570-no-strategy",
+  "exit_code": 1,
+  "elapsed_s": 98.6,
+  "solved": false,
+  "stderr_tail": "strategy: none\nsession: turns=10 tools=12 [read:8 grep:3 find:1]\ntokens by model:\n  deepseek-v4-flash: in=7035 cache_r=73728 cache_w=0 out=5868 reasoning=4965 total=86631 \u2014 $0.0135\n  TOTAL: in=7035 cache_r=73728 cache_w=0 out=5868 reasoning=4965 total=86631 \u2014 $0.0135\ntiming (total 98.51s):\n  fix: 49.98s (51%)\n  discover: 25.06s (25%)\n  bootstrap: 17.17s (17%)\n  baseline: 6.24s (6%)\n  rollback: 0.05s (0%)\n  fix\u2192tools: find:0.05s grep:0.04s read:0.00s\noutcome: Failed(FixNoFlip)",
+  "patch_copied": false
+}

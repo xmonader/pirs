@@ -1,0 +1,13 @@
+{
+  "id": "matplotlib__matplotlib-23562",
+  "model": "deepseek-v4-flash",
+  "label": "plan-critic-exec",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23562:latest",
+  "container": "pirsbench-matplotlib--matplotlib-23562-plan-critic-exec",
+  "exit_code": 0,
+  "elapsed_s": 562.0,
+  "solved": true,
+  "stderr_tail": "strategy: plan-critic-exec-pro-flash\nsession: turns=40 tools=50 [read:25 grep:20 run_tests:3 code_map:1 edit:1]\ntokens by model:\n  deepseek-v4-flash: in=2655 cache_r=29312 cache_w=0 out=873 reasoning=87 total=32840 \u2014 $0.0037\n  deepseek-v4-pro: in=20843 cache_r=387968 cache_w=0 out=15899 reasoning=10750 total=424710 \u2014 $0.0503\n  TOTAL: in=23498 cache_r=417280 cache_w=0 out=16772 reasoning=10837 total=457550 \u2014 $0.0540\ntiming (total 561.96s):\n  fix: 280.29s (50%)\n  bootstrap: 214.10s (38%)\n  baseline: 31.19s (6%)\n  verify: 22.17s (4% n=2)\n  discover: 14.17s (3%)\n  patch: 0.03s (0%)\n  fix\u2192tools: run_tests:31.47s code_map:1.96s read:0.01s grep:0.01s edit:0.01s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (745 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 745
+}
