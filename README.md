@@ -153,6 +153,26 @@ the environment (`$$` escapes to a literal `$`), and a leading `!` runs the
 rest of the string as a shell command, using its trimmed stdout (`!!` escapes
 to a literal leading `!`) — e.g. `provider = "!gh auth token"`.
 
+## GitHub Action
+
+`action.yml` at the repo root runs pirs as a one-shot GitHub Action —
+downloads the matching release binary for the runner's platform (from this
+repo's own tagged releases; see `.github/workflows/release.yml`) and invokes
+it non-interactively:
+
+```yaml
+- uses: xmonader/pirs@v0.1.0
+  with:
+    prompt: "fix the failing test in src/foo.rs"
+    provider: openai            # or anthropic; base-url below for non-OpenAI endpoints
+    model: gpt-5-mini
+    api-key: ${{ secrets.OPENAI_API_KEY }}
+```
+
+`--approval auto` is always forced (never prompts). `base-url` (for
+OpenAI-compatible non-OpenAI endpoints), `max-turns`, and `strategy` are
+optional passthroughs.
+
 ## Orchestrator
 
 Run fleets of headless agents (`pirs --mode rpc`, pi-compatible JSONL RPC):

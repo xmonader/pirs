@@ -1,0 +1,88 @@
+name: 'pirs'
+description: 'Run the pirs coding agent as a one-shot GitHub Action'
+branding:
+  icon: 'terminal'
+  color: 'gray-dark'
+
+inputs:
+  prompt:
+    description: 'The one-shot task for pirs to run (e.g. "fix the failing test in src/foo.rs")'
+    required: true
+  provider:
+    description: 'LLM provider: openai (OpenAI-compatible — set base-url for non-OpenAI endpoints like DeepSeek) or anthropic'
+    required: false
+    default: 'openai'
+  model:
+    description: 'Model id to use (defaults to pirs''s own built-in default if unset)'
+    required: false
+    default: ''
+  api-key:
+    description: 'API key for the selected provider'
+    required: true
+  base-url:
+    description: 'OpenAI-compatible base URL, for non-OpenAI endpoints (only used when provider=openai)'
+    required: false
+    default: ''
+  max-turns:
+    description: 'Max agent turns before giving up (unset = no limit)'
+    required: false
+    default: ''
+  strategy:
+    description: 'A built-in loop strategy (monolithic, plan-exec, plan-critic-exec, wide-plan-exec) or a name resolved from .pirs/strategies/'
+    required: false
+    default: ''
+  version:
+    description: 'pirs release tag to install (e.g. v0.3.0); installs the latest release by default'
+    required: false
+    default: 'latest'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install pirs
+      shell: bash
+      run: |
+        set -euo pipefail
+        os="$(uname -s)"; arch="$(uname -m)"
+        case "$os-$arch" in
+          Linux-x86_64)   target=x86_64-unknown-linux-gnu ;;
+          Linux-aarch64)  target=aarch64-unknown-linux-gnu ;;
+          Darwin-arm64)   target=aarch64-apple-darwin ;;
+          Darwin-x86_64)  target=x86_64-apple-darwin ;;
+          *) echo "::error::pirs action: unsupported platform $os-$arch" ; exit 1 ;;
+        esac
+
+        version="${{ inputs.version }}"
+        if [ "$version" = "latest" ]; then
+          url="https://github.com/xmonader/pirs/releases/latest/download/pirs-${target}.tar.gz"
+        else
+          url="https://github.com/xmonader/pirs/releases/download/${version}/pirs-${target}.tar.gz"
+        fi
+
+        bin_dir="$RUNNER_TEMP/pirs-bin"
+        mkdir -p "$bin_dir"
+        curl -fsSL "$url" -o "$RUNNER_TEMP/pirs.tar.gz"
+        tar -xzf "$RUNNER_TEMP/pirs.tar.gz" -C "$bin_dir"
+        chmod +x "$bin_dir/pirs"
+        echo "$bin_dir" >> "$GITHUB_PATH"
+
+    - name: Run pirs
+      shell: bash
+      env:
+        PIRS_ACTION_PROVIDER: ${{ inputs.provider }}
+        PIRS_ACTION_API_KEY: ${{ inputs.api-key }}
+      run: |
+        set -euo pipefail
+        case "$PIRS_ACTION_PROVIDER" in
+          openai)    export OPENAI_API_KEY="$PIRS_ACTION_API_KEY" ;;
+          anthropic) export ANTHROPIC_API_KEY="$PIRS_ACTION_API_KEY" ;;
+          *) echo "::error::pirs action: provider must be 'openai' or 'anthropic', got '$PIRS_ACTION_PROVIDER'" ; exit 1 ;;
+        esac
+
+        args=(--provider "${{ inputs.provider }}" --approval auto)
+        [ -n "${{ inputs.model }}" ]      && args+=(--model "${{ inputs.model }}")
+        [ -n "${{ inputs.base-url }}" ]   && args+=(--base-url "${{ inputs.base-url }}")
+        [ -n "${{ inputs.max-turns }}" ]  && args+=(--max-turns "${{ inputs.max-turns }}")
+        [ -n "${{ inputs.strategy }}" ]   && args+=(--strategy "${{ inputs.strategy }}")
+
+        pirs "${args[@]}" "${{ inputs.prompt }}"
