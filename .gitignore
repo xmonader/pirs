@@ -20,3 +20,5 @@ target/
 !qa/bench-swebench-5x5/results_rerun/*.log
 !qa/bench-swebench-5x5/results_matrix2/
 !qa/bench-swebench-5x5/results_matrix2/*.log
+!qa/bench-swebench-5x5/results_disk_suspects/
+!qa/bench-swebench-5x5/results_disk_suspects/*.log

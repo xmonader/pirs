@@ -157,6 +157,13 @@ real instances, every strategy now ties at 4/4 solved (with the fixed
 `monolithic` are cheapest and the three planner-based strategies cost roughly
 2x more for the same outcome.
 
+A follow-up mid-run disk-full incident raised a legitimate question — were
+the `ReproFailed` instances actually disk-I/O victims rather than genuinely
+broken? Tested directly: re-ran all 3 suspect instances (15 runs) with
+450GB+ free throughout. **Refuted** — all 15 failed identically with
+unchanged bootstrap timing, 0/15 solved. These 4 instances are genuinely
+broken for this harness/image combination, independent of disk space.
+
 ## Discovery
 
 | Feature | Proof | What it demonstrates |

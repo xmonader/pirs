@@ -1,0 +1,12 @@
+{
+  "id": "scikit-learn__scikit-learn-25570",
+  "model": "deepseek-v4-flash",
+  "label": "plan-exec",
+  "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25570:latest",
+  "container": "pirsbench-scikit-learn--scikit-learn-25570-plan-exec",
+  "exit_code": 1,
+  "elapsed_s": 44.1,
+  "solved": false,
+  "stderr_tail": "strategy: plan-pro-exec-flash\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 44.00s):\n  discover: 24.91s (57%)\n  bootstrap: 17.47s (40%)\n  baseline: 1.58s (4%)\n  rollback: 0.03s (0%)\noutcome: Failed(ReproFailed)",
+  "patch_copied": false
+}

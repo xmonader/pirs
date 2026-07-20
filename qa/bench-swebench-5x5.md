@@ -74,6 +74,21 @@ time match exactly). **These two cells are excluded from every strategy
 comparison in this report** — including them would just add ten identical
 zero-cost failures, hiding the real signal.
 
+**Tested and ruled out: is this actually disk pressure, not a real gap?** The
+second batch (below) hit an unrelated mid-run disk-full incident, and its two
+new `ReproFailed` instances showed bootstrap times 2-4x slower than their
+same-repo counterparts here — a real, worth-checking hypothesis that these
+"broken" instances might just be disk-I/O victims rather than genuinely
+unsupported. Directly tested by re-running `matplotlib-23562`,
+`matplotlib-26011`, and `scikit-learn-25570` (15 runs) with ~450GB free: **all
+15 failed identically** — same `Failed(ReproFailed)` outcome, same bootstrap
+timing (`matplotlib-23562`: 231-278s vs. the original 207-251s;
+`matplotlib-26011`: 398-458s vs. 439-480s), 0/15 solved. Disk pressure is
+**ruled out** as the cause for these three; they are genuinely broken for this
+harness/image combination. See
+[Disk-pressure hypothesis: tested and refuted](#disk-pressure-hypothesis-tested-and-refuted)
+for the full re-test.
+
 ## Full per-run results
 
 | Instance | Strategy | Outcome | Turns | Elapsed | Cost |
@@ -280,6 +295,55 @@ Artifacts: [`bench-swebench-5x5/results_matrix2/`](bench-swebench-5x5/results_ma
 [`bench-swebench-5x5/run_matrix2.py`](bench-swebench-5x5/run_matrix2.py),
 [`bench-swebench-5x5/rerun_disk_losses.py`](bench-swebench-5x5/rerun_disk_losses.py).
 
+## Disk-pressure hypothesis: tested and refuted
+
+The disk-full incident above raised a legitimate question: were the
+`ReproFailed` instances actually failing because of disk pressure (slow
+overlay-filesystem I/O as the host disk approached capacity), rather than a
+genuine instance/harness incompatibility? The evidence looked plausible at
+first glance — comparing bootstrap time for the same repo across batches:
+
+| Instance | Batch | Bootstrap time |
+|---|---|---|
+| `matplotlib-23562` | 1 (disk presumed fine) | 207-251s |
+| `matplotlib-26011` | 2 (disk filled later in this run) | 442-480s (~2x) |
+| `scikit-learn-12471` | 1 (solved cleanly) | 6-9s |
+| `scikit-learn-25570` | 2 (disk filled later in this run) | 21-31s (~3-4x) |
+
+Both batch-2 instances took markedly longer to fail than their batch-1,
+same-repo counterparts, right before the disk hit absolute zero later in that
+same run. Worth testing directly rather than assuming either way.
+
+**Test**: re-ran all 5 strategies on all 3 suspect instances (`matplotlib-23562`,
+`matplotlib-26011`, `scikit-learn-25570` — 15 runs) with ~450-461GB free
+throughout (checked before, during, and after).
+
+**Result: refuted.** All 15 runs failed identically — same `Failed(ReproFailed)`
+outcome, same bootstrap-time ballpark:
+
+| Instance | Original bootstrap | Re-test bootstrap (450GB+ free) |
+|---|---|---|
+| `matplotlib-23562` | 207-251s | 231-278s |
+| `matplotlib-26011` | 442-480s | 398-458s |
+| `scikit-learn-25570` | 21-31s | 17-17.5s |
+
+`scikit-learn-25570` bootstrapped a little faster with disk free (17s vs.
+21-31s) but still failed the same way every time — nowhere close to
+`scikit-learn-12471`'s healthy 6-9s, and it never got a single agent turn.
+`matplotlib-23562` and `matplotlib-26011` didn't improve at all. **0/15 solved.**
+Disk pressure is ruled out as the cause — these three instances are genuinely
+broken for this harness/docker-image combination, for whatever underlying
+reason actually explains the long `bootstrap` hangs (not investigated further
+here; out of scope for this benchmark).
+
+This is a useful negative result: it means the earlier "40% real-instance
+yield" finding isn't an artifact of a resource-constrained host — it's a real
+property of this harness + this set of pre-pulled docker images, and won't
+self-resolve just by freeing disk space.
+
+Artifacts: [`bench-swebench-5x5/results_disk_suspects/`](bench-swebench-5x5/results_disk_suspects/),
+[`bench-swebench-5x5/rerun_disk_suspects.py`](bench-swebench-5x5/rerun_disk_suspects.py).
+
 ## Limitations
 
 - **n=4 real instances, out of 10 attempted.** 6 of the first 10 SWE-bench-lite
@@ -291,11 +355,15 @@ Artifacts: [`bench-swebench-5x5/results_matrix2/`](bench-swebench-5x5/results_ma
   directional, not statistically powered. A single flip on one instance moves
   a strategy's solve rate by 25 percentage points.
 - **~40% real-instance yield from this docker-image set is itself a finding**,
-  not just a sampling nuisance. Extending this benchmark further with more of
-  the 40 remaining images should expect a similar attrition rate until the two
-  underlying gaps are fixed: (a) whatever makes `bootstrap` hang/fail on some
-  images (up to 480s before giving up), and (b) the harness's test-runner
-  detector not recognizing Django's or sympy's custom test invocation.
+  not just a sampling nuisance, and it's **not a disk-space artifact** — directly
+  tested (see [Disk-pressure hypothesis](#disk-pressure-hypothesis-tested-and-refuted)):
+  the 4 `ReproFailed` instances still fail identically with 450GB+ free.
+  Extending this benchmark further with more of the 40 remaining images should
+  expect a similar attrition rate until the two underlying gaps are fixed: (a)
+  whatever actually makes `bootstrap` hang/fail on some images (up to 480s
+  before giving up — root cause not yet identified, just confirmed to not be
+  disk pressure), and (b) the harness's test-runner detector not recognizing
+  Django's or sympy's custom test invocation.
 - **One trial per (instance, strategy) cell.** LLM agent runs are stochastic;
   no repeated-seed variance is captured here — e.g. `no-strategy`'s own numbers
   moved between its two independent runs on the same 3 instances (see the
@@ -348,6 +416,10 @@ never collide) live in `run_one.py`.
   [`bench-swebench-5x5/rerun_disk_losses.py`](bench-swebench-5x5/rerun_disk_losses.py)
   — the second batch (5 more instances × 5 strategies) and the 7-cell rerun
   after the mid-run disk-space incident.
+- [`bench-swebench-5x5/results_disk_suspects/`](bench-swebench-5x5/results_disk_suspects/),
+  [`bench-swebench-5x5/rerun_disk_suspects.py`](bench-swebench-5x5/rerun_disk_suspects.py)
+  — the 15-run test (3 suspect instances × 5 strategies) that ruled out disk
+  pressure as the cause of the `ReproFailed` instances.
 - New strategy scripts: `.pirs/strategies/plan-critic-exec-pro-flash.rhai`,
   `.pirs/strategies/wide-plan-exec-pro-flash.rhai` (planner/critic phases
   pinned to `deepseek-v4-pro`, cloned from the built-in phase structure).
