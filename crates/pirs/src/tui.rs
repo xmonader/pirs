@@ -441,6 +441,18 @@ fn find_closing(chars: &[char], start: usize, needle: &[char]) -> Option<usize> 
 
 // ── App state ───────────────────────────────────────────────────────────────
 
+/// One committed chat item's wrapped-row cache. `rows: None` means the exact
+/// rows aren't currently known at the active width — either the item was
+/// just pushed and has never been measured, or its previous measurement was
+/// invalidated by a resize, or it was evicted for being far off-screen — in
+/// all three cases `row_count` still holds a best-known estimate (possibly
+/// stale) so scroll-position math stays correct without needing the exact
+/// content.
+struct ItemCache {
+    rows: Option<Vec<Line<'static>>>,
+    row_count: usize,
+}
+
 pub struct TuiOptions {
     pub agent: Agent,
     pub host: Option<Arc<pirs_rhai::ExtensionHost>>,
@@ -479,12 +491,13 @@ struct App {
     show_help: bool,
     status_msg: String,
     should_quit: bool,
-    /// Wrapped physical rows for committed items; rebuilt only when items or
-    /// width change. The chat viewport windows over these (+ live rows) so the
-    /// row model used for scrolling is exactly what gets painted.
-    items_rows: Vec<Line<'static>>,
-    items_rev: u64,
-    cache_rev: u64,
+    /// One entry per `items[i]`: wrapped physical rows for that item, when
+    /// known — virtualized so a long conversation with large tool outputs
+    /// doesn't pay to re-wrap the *entire* history every time a single new
+    /// item is pushed. See `ItemCache` and `draw_chat`'s three-pass
+    /// measure/clamp/paint for how entries near the viewport stay exactly
+    /// measured while everything else keeps only a row-count estimate.
+    item_caches: Vec<ItemCache>,
     cache_width: usize,
     total_rows: usize,
     last_draw_width: usize,
@@ -505,7 +518,13 @@ impl App {
     fn push(&mut self, item: ChatItem) {
         self.items.push(item);
         self.dirty = true;
-        self.items_rev = self.items_rev.wrapping_add(1);
+        // Unmeasured placeholder: App::push has no `theme`/width to render
+        // with, so the real row count is filled in lazily by draw_chat, the
+        // first time this item is (or might be) actually painted.
+        self.item_caches.push(ItemCache {
+            rows: None,
+            row_count: 1,
+        });
     }
 
     fn notice(&mut self, text: impl Into<String>) {
@@ -740,9 +759,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         show_help: false,
         status_msg: String::new(),
         should_quit: false,
-        items_rows: Vec::new(),
-        items_rev: 0,
-        cache_rev: u64::MAX,
+        item_caches: Vec::new(),
         cache_width: 0,
         total_rows: 0,
         last_draw_width: 0,
@@ -1312,6 +1329,13 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme)
     }
 }
 
+/// Slack (in wrapped rows, not items) kept exactly measured on each side of
+/// the viewport. Generous enough to absorb the usual case — a handful of
+/// never-yet-measured items pushed since the last frame — without
+/// repeatedly re-measuring/evicting right at the viewport's edge on small
+/// scrolls.
+const VIRTUALIZE_MARGIN_ROWS: usize = 200;
+
 fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Theme) {
     let block = Block::default()
         .borders(Borders::TOP)
@@ -1327,18 +1351,20 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
     let prev_total = app.total_rows;
     let width_stable = app.last_draw_width == width;
 
-    // Rebuild the committed-items row cache only when items or width change —
-    // not every frame. Rows are pre-wrapped here so the row count matches the
-    // painted output exactly (rendered below with wrapping disabled).
-    if app.cache_rev != app.items_rev || app.cache_width != width {
-        let mut logical: Vec<Line<'static>> = Vec::new();
-        for item in &app.items {
-            logical.extend(item.render(theme, width));
+    // A resize invalidates exact measurements (wrapping depends on width),
+    // but keeps each item's previous row_count as a placeholder estimate —
+    // deferring the full re-wrap instead of doing it immediately, the same
+    // way pushing a new item no longer forces one either (see ItemCache).
+    if app.cache_width != width {
+        for c in &mut app.item_caches {
+            c.rows = None;
         }
-        app.items_rows = flatten_rows(&logical, width);
-        app.cache_rev = app.items_rev;
         app.cache_width = width;
     }
+    // App::push can't measure (no theme/width there), so new items arrive
+    // as bare placeholders; nothing to do here beyond the invariant that
+    // item_caches.len() == items.len(), which push already maintains.
+    debug_assert_eq!(app.item_caches.len(), app.items.len());
 
     // The live streaming preview changes every frame (blinking cursor / new
     // tokens), so it is wrapped fresh each time — only the tail, cheap.
@@ -1367,7 +1393,46 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
         live_rows = flatten_rows(&logical, width);
     }
 
-    let total = app.items_rows.len() + live_rows.len();
+    // Pass 1: using the current (possibly stale) row_count estimates, work
+    // out roughly where the viewport sits, exactly measure any item near
+    // it, and evict the exact rows of anything far from it so a long
+    // session with large tool outputs doesn't hold every item's wrapped
+    // text in memory at once. VIRTUALIZE_MARGIN_ROWS of slack on each side
+    // means a small scroll doesn't repeatedly re-measure/evict at the
+    // boundary, and comfortably covers the usual case of a handful of
+    // never-yet-measured items (new pushes since the last frame).
+    {
+        let total_est: usize = app.item_caches.iter().map(|c| c.row_count).sum();
+        let max_skip_est = total_est.saturating_sub(vh);
+        let scroll_est = (app.scroll as usize).min(max_skip_est);
+        let start_est = max_skip_est.saturating_sub(scroll_est);
+        let end_est = start_est + vh;
+
+        let mut offset = 0usize;
+        for i in 0..app.items.len() {
+            let item_start = offset;
+            let item_end = item_start + app.item_caches[i].row_count;
+            offset = item_end;
+            let near = item_end + VIRTUALIZE_MARGIN_ROWS > start_est
+                && item_start < end_est + VIRTUALIZE_MARGIN_ROWS;
+            if near {
+                if app.item_caches[i].rows.is_none() {
+                    let logical = app.items[i].render(theme, width);
+                    let rows = flatten_rows(&logical, width);
+                    app.item_caches[i].row_count = rows.len();
+                    app.item_caches[i].rows = Some(rows);
+                }
+            } else if app.item_caches[i].rows.is_some() {
+                app.item_caches[i].rows = None;
+            }
+        }
+    }
+
+    // Pass 2: now that pass 1 corrected any stale/placeholder row_count
+    // near the viewport, compute the real totals and clamp scroll against
+    // them — same semantics as before, just measured incrementally.
+    let total_items_rows: usize = app.item_caches.iter().map(|c| c.row_count).sum();
+    let total = total_items_rows + live_rows.len();
     app.total_rows = total;
     let max_skip = total.saturating_sub(vh);
 
@@ -1383,14 +1448,41 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
     app.scroll = app.scroll.min(max_skip.min(u16::MAX as usize) as u16);
 
     let start = max_skip.saturating_sub(app.scroll as usize);
-    let visible: Vec<Line<'static>> = app
-        .items_rows
-        .iter()
-        .chain(live_rows.iter())
-        .skip(start)
-        .take(vh)
-        .cloned()
-        .collect();
+    let end = start + vh;
+
+    // Pass 3: paint. Items overlapping [start, end) should already be
+    // exactly measured by pass 1's margin; the `rows.is_none()` fallback
+    // here is a correctness backstop (never skip painting an item just
+    // because an estimate was off), not the expected common path.
+    let mut visible: Vec<Line<'static>> = Vec::with_capacity(vh.min(total.max(1)));
+    let mut offset = 0usize;
+    for i in 0..app.items.len() {
+        let item_start = offset;
+        let row_count = app.item_caches[i].row_count;
+        let item_end = item_start + row_count;
+        offset = item_end;
+        if item_end <= start || item_start >= end {
+            continue;
+        }
+        if app.item_caches[i].rows.is_none() {
+            let logical = app.items[i].render(theme, width);
+            let rows = flatten_rows(&logical, width);
+            app.item_caches[i].row_count = rows.len();
+            app.item_caches[i].rows = Some(rows);
+        }
+        let rows = app.item_caches[i].rows.as_ref().unwrap();
+        let local_start = start.saturating_sub(item_start);
+        let local_end = (end.saturating_sub(item_start)).min(rows.len());
+        if local_start < local_end {
+            visible.extend(rows[local_start..local_end].iter().cloned());
+        }
+    }
+    let live_start = start.saturating_sub(total_items_rows);
+    let live_end = (end.saturating_sub(total_items_rows)).min(live_rows.len());
+    if live_start < live_end {
+        visible.extend(live_rows[live_start..live_end].iter().cloned());
+    }
+    visible.truncate(vh);
 
     // Rows are pre-wrapped to `width`; render without ratatui's wrap so the
     // painted layout matches the row model used for scrolling.
@@ -2205,5 +2297,151 @@ mod tests {
         writer.push(b"hello".to_vec());
         writer.push(b"world".to_vec());
         writer.shutdown();
+    }
+
+    /// A minimal but fully valid `App`, for tests that need to drive
+    /// `draw_chat` directly rather than just its pure helper functions.
+    fn test_app() -> App {
+        App {
+            items: Vec::new(),
+            live: None,
+            input: String::new(),
+            cursor: 0,
+            history: Vec::new(),
+            history_idx: None,
+            history_draft: String::new(),
+            running: false,
+            tick: 0,
+            dirty: true,
+            last_live_refresh: std::time::Instant::now(),
+            steer_queue: Arc::new(Mutex::new(Vec::new())),
+            scroll: 0,
+            viewport_height: 10,
+            model: "test-model".into(),
+            approval_mode: "auto".into(),
+            cwd_label: ".".into(),
+            usage_summary: String::new(),
+            pending_approval: Arc::new(Mutex::new(None)),
+            approval_answer: Arc::new(std::sync::mpsc::channel().0),
+            cancel: Arc::new(Mutex::new(tokio_util::sync::CancellationToken::new())),
+            show_help: false,
+            status_msg: String::new(),
+            should_quit: false,
+            item_caches: Vec::new(),
+            cache_width: 0,
+            total_rows: 0,
+            last_draw_width: 0,
+            desired_cursor: None,
+        }
+    }
+
+    fn draw_chat_once(app: &mut App, width: u16, height: u16) -> ratatui::backend::TestBackend {
+        let backend = ratatui::backend::TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let theme = Theme::default_dark();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                draw_chat(frame, area, app, &theme);
+            })
+            .unwrap();
+        terminal.backend().clone()
+    }
+
+    fn backend_text(backend: &ratatui::backend::TestBackend) -> String {
+        backend
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect::<String>()
+    }
+
+    #[test]
+    fn draw_chat_pinned_to_bottom_shows_newest_items_and_evicts_far_off_screen() {
+        let mut app = test_app();
+        for i in 0..2000 {
+            app.push(ChatItem::Notice(format!("item-{i:04}")));
+        }
+        // Pinned to the bottom (scroll == 0): the newest items should be
+        // visible, and the oldest ones — far from the viewport — should not
+        // still be holding exact rows in memory after this draw.
+        let backend = draw_chat_once(&mut app, 40, 5);
+        let text = backend_text(&backend);
+        assert!(text.contains("item-1999"), "{text}");
+        assert!(
+            !text.contains("item-0000"),
+            "the oldest item shouldn't be in a 5-row viewport pinned to the bottom: {text}"
+        );
+        assert!(
+            app.item_caches[0].rows.is_none(),
+            "item far from the viewport should have its exact rows evicted"
+        );
+        assert!(
+            app.item_caches[1999].rows.is_some(),
+            "item actually painted must have exact rows cached"
+        );
+    }
+
+    #[test]
+    fn draw_chat_scrolled_to_top_measures_top_items_and_evicts_the_bottom() {
+        let mut app = test_app();
+        for i in 0..2000 {
+            app.push(ChatItem::Notice(format!("item-{i:04}")));
+        }
+        // First draw pinned to the bottom, so the tail is measured/cached...
+        draw_chat_once(&mut app, 40, 5);
+        assert!(app.item_caches[1999].rows.is_some());
+
+        // ...then scroll all the way to the top and redraw.
+        app.scroll = u16::MAX;
+        let backend = draw_chat_once(&mut app, 40, 5);
+        let text = backend_text(&backend);
+        assert!(text.contains("item-0000"), "{text}");
+        assert!(
+            app.item_caches[0].rows.is_some(),
+            "now-visible top item must be measured"
+        );
+        assert!(
+            app.item_caches[1999].rows.is_none(),
+            "no-longer-visible bottom item should have been evicted: far from the new viewport"
+        );
+    }
+
+    #[test]
+    fn draw_chat_resize_remeasures_items_at_the_new_width() {
+        let mut app = test_app();
+        // Long enough to wrap differently at 60 cols vs 20.
+        app.push(ChatItem::Notice("word ".repeat(30)));
+        draw_chat_once(&mut app, 60, 20);
+        let rows_at_60 = app.item_caches[0].row_count;
+        assert!(app.item_caches[0].rows.is_some());
+
+        draw_chat_once(&mut app, 20, 20);
+        let rows_at_20 = app.item_caches[0].row_count;
+        assert!(
+            rows_at_20 > rows_at_60,
+            "the same text should wrap into more rows at a narrower width: \
+             {rows_at_20} rows at 20 cols vs {rows_at_60} at 60 cols"
+        );
+        assert!(
+            app.item_caches[0].rows.is_some(),
+            "the item is in view at both widths, so it should be re-measured, not left stale"
+        );
+    }
+
+    #[test]
+    fn draw_chat_new_items_are_placeholders_until_actually_drawn() {
+        let mut app = test_app();
+        app.push(ChatItem::Notice("only item".into()));
+        assert!(
+            app.item_caches[0].rows.is_none(),
+            "App::push has no width/theme to measure with"
+        );
+        draw_chat_once(&mut app, 40, 10);
+        assert!(
+            app.item_caches[0].rows.is_some(),
+            "the first draw after a push should measure it once it's in view"
+        );
     }
 }
