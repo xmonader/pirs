@@ -9,6 +9,7 @@ using the container's own already-installed conda env -> copy the patch (if
 any) back out -> tear down the container.
 """
 import json
+import os
 import subprocess
 import sys
 import time
@@ -16,7 +17,7 @@ from pathlib import Path
 
 BENCH_DIR = Path(__file__).parent
 BINARY = "/home/driver/hero/build/target/x86_64-unknown-linux-musl/release/pirs-bench"
-DEEPSEEK_KEY = "REDACTED-SEE-ENV-VAR"
+DEEPSEEK_KEY = os.environ["DEEPSEEK_API_KEY"]
 # docker exec does not source .bashrc, so the testbed conda env is never
 # activated by default (PATH falls back to base miniconda). Every exec that
 # needs the repo's installed deps (pytest, etc.) must set this explicitly.
