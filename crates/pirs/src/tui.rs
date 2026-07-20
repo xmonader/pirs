@@ -488,6 +488,17 @@ struct App {
     cache_width: usize,
     total_rows: usize,
     last_draw_width: usize,
+    /// Where the input-box cursor should sit, computed fresh by `draw_input`
+    /// on every render. Read by the custom draw wrapper (see `draw_dedup_cursor`)
+    /// so the actual terminal cursor escape is only re-emitted when this
+    /// value changes between frames — `ratatui::Terminal::draw`/`try_draw`
+    /// unconditionally re-sends Show+MoveTo on *every* call regardless of
+    /// whether the position changed, which resets the terminal's cursor
+    /// blink phase on every streamed token. Confirmed unfixed as of ratatui
+    /// 0.30/ratatui-core 0.1.2 (`apply_buffer_with_cursor` has no dedup),
+    /// so this is handled at the application level instead of waiting on
+    /// upstream.
+    desired_cursor: Option<(u16, u16)>,
 }
 
 impl App {
@@ -610,6 +621,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         cache_width: 0,
         total_rows: 0,
         last_draw_width: 0,
+        desired_cursor: None,
     };
 
     app.push(ChatItem::System(welcome_banner(
@@ -635,6 +647,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     }
 
     let mut events = crossterm::event::EventStream::new();
+    let mut last_cursor: Option<(u16, u16)> = None;
     loop {
         while let Ok(event) = event_rx.try_recv() {
             apply_agent_event(&mut app, event);
@@ -705,9 +718,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                 .and_then(|mut f| std::io::Write::write_all(&mut f, dump.as_bytes()));
         }
 
-        terminal.draw(|frame| {
-            draw_ui(frame, &mut app);
-        })?;
+        draw_dedup_cursor(&mut terminal, &mut app, &mut last_cursor)?;
     }
 
     // Explicit restore before Drop (Drop is best-effort).
@@ -1037,6 +1048,73 @@ fn submit_input(app: &mut App, prompt_tx: &tokio::sync::mpsc::UnboundedSender<St
 
 // ── Drawing ─────────────────────────────────────────────────────────────────
 
+/// Replicates `Terminal::try_draw`'s sequence (autoresize, render, flush,
+/// cursor, swap, backend flush) using ratatui's public lower-level pieces,
+/// but only re-emits the cursor escape (`Hide`, or `Show`+`MoveTo`) when
+/// `app.desired_cursor` actually differs from the previous frame's.
+///
+/// `Terminal::draw`/`try_draw` themselves have no such gate — every call
+/// unconditionally calls `hide_cursor()` or `show_cursor()`+
+/// `set_cursor_position()` regardless of whether the position/visibility
+/// changed (confirmed in both ratatui 0.29's `Terminal::try_draw` and
+/// ratatui-core 0.1.2's `apply_buffer_with_cursor`, the 0.30 successor —
+/// unfixed upstream, not something bumping the dependency would resolve).
+/// On most terminals a `Show`/`MoveTo` write resets the cursor's blink
+/// phase, so during active token streaming — which redraws the frame many
+/// times a second while the input-box cursor itself isn't moving — the
+/// stock behavior makes the cursor look like it never blinks at all.
+/// Reusable, `App`/`draw_ui`-independent version of `draw_dedup_cursor`'s
+/// mechanism: `render` draws the frame and returns the cursor position it
+/// wants (or `None` to hide it); the escape is only re-emitted when that
+/// differs from `last_cursor`. Kept generic and decoupled from `App` so the
+/// dedup behavior itself is unit-testable without constructing a full `App`.
+fn draw_with_cursor_dedup<B, F>(
+    terminal: &mut Terminal<B>,
+    last_cursor: &mut Option<(u16, u16)>,
+    render: F,
+) -> anyhow::Result<()>
+where
+    B: ratatui::backend::Backend,
+    F: FnOnce(&mut ratatui::Frame) -> Option<(u16, u16)>,
+{
+    terminal.autoresize()?;
+    let desired = {
+        let mut frame = terminal.get_frame();
+        render(&mut frame)
+    };
+    terminal.flush()?;
+
+    if desired != *last_cursor {
+        match desired {
+            None => terminal.hide_cursor()?,
+            Some(pos) => {
+                terminal.show_cursor()?;
+                terminal.set_cursor_position(pos)?;
+            }
+        }
+        *last_cursor = desired;
+    }
+
+    terminal.swap_buffers();
+    terminal.backend_mut().flush()?;
+    Ok(())
+}
+
+/// Renders one TUI frame with the cursor-blink-preserving dedup wrapper —
+/// see `draw_with_cursor_dedup` and `App::desired_cursor` for why this
+/// exists instead of a plain `terminal.draw(|frame| draw_ui(frame, app))`.
+fn draw_dedup_cursor<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    app: &mut App,
+    last_cursor: &mut Option<(u16, u16)>,
+) -> anyhow::Result<()> {
+    draw_with_cursor_dedup(terminal, last_cursor, |frame| {
+        app.desired_cursor = None;
+        draw_ui(frame, app);
+        app.desired_cursor
+    })
+}
+
 fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
     let theme = Theme::default_dark();
 
@@ -1244,7 +1322,7 @@ fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Th
     frame.render_widget(Paragraph::new(Line::from(clipped)), area);
 }
 
-fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme) {
+fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Theme) {
     let pending = app.pending_approval.lock().unwrap().is_some();
     let (title, border_style) = if pending {
         (" approval · y / n / a ", theme.approval)
@@ -1280,7 +1358,11 @@ fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme) 
     let (cx, cy) = cursor_pos(cursor_text, inner.width.max(1) as usize);
     let cursor_x = (inner.x + cx as u16).min(inner.x + inner.width.saturating_sub(1));
     let cursor_y = (inner.y + cy as u16).min(inner.y + inner.height.saturating_sub(1));
-    frame.set_cursor_position((cursor_x, cursor_y));
+    // Stashed on App rather than `frame.set_cursor_position` — the custom
+    // draw wrapper (`draw_dedup_cursor`) reads this to decide whether the
+    // cursor escape actually needs re-emitting this frame. See the
+    // `desired_cursor` field doc comment for why.
+    app.desired_cursor = Some((cursor_x, cursor_y));
 }
 
 fn cursor_pos(text_before_cursor: &str, width: usize) -> (usize, usize) {
@@ -1645,6 +1727,128 @@ fn approval_bridge(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Wraps `ratatui::backend::TestBackend`, counting cursor-escape calls so
+    /// `draw_with_cursor_dedup`'s dedup behavior can be asserted mechanically
+    /// (there's no terminal to visually watch blink in a test).
+    struct CountingBackend {
+        inner: ratatui::backend::TestBackend,
+        hide_calls: u32,
+        show_calls: u32,
+        move_calls: u32,
+    }
+
+    impl CountingBackend {
+        fn new(w: u16, h: u16) -> Self {
+            CountingBackend {
+                inner: ratatui::backend::TestBackend::new(w, h),
+                hide_calls: 0,
+                show_calls: 0,
+                move_calls: 0,
+            }
+        }
+    }
+
+    impl ratatui::backend::Backend for CountingBackend {
+        fn draw<'a, I>(&mut self, content: I) -> std::io::Result<()>
+        where
+            I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>,
+        {
+            self.inner.draw(content)
+        }
+        fn hide_cursor(&mut self) -> std::io::Result<()> {
+            self.hide_calls += 1;
+            self.inner.hide_cursor()
+        }
+        fn show_cursor(&mut self) -> std::io::Result<()> {
+            self.show_calls += 1;
+            self.inner.show_cursor()
+        }
+        fn get_cursor_position(&mut self) -> std::io::Result<ratatui::layout::Position> {
+            self.inner.get_cursor_position()
+        }
+        fn set_cursor_position<P: Into<ratatui::layout::Position>>(
+            &mut self,
+            position: P,
+        ) -> std::io::Result<()> {
+            self.move_calls += 1;
+            self.inner.set_cursor_position(position)
+        }
+        fn clear(&mut self) -> std::io::Result<()> {
+            self.inner.clear()
+        }
+        fn size(&self) -> std::io::Result<ratatui::layout::Size> {
+            self.inner.size()
+        }
+        fn window_size(&mut self) -> std::io::Result<ratatui::backend::WindowSize> {
+            self.inner.window_size()
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
+    #[test]
+    fn cursor_dedup_skips_reemission_when_position_is_unchanged() {
+        let mut terminal = Terminal::new(CountingBackend::new(20, 5)).unwrap();
+        let mut last_cursor = None;
+
+        // Frame 1: cursor appears at (2, 1) — first time, must emit.
+        draw_with_cursor_dedup(&mut terminal, &mut last_cursor, |frame| {
+            frame.render_widget(Paragraph::new("hi"), frame.area());
+            Some((2, 1))
+        })
+        .unwrap();
+        assert_eq!(terminal.backend().show_calls, 1);
+        assert_eq!(terminal.backend().move_calls, 1);
+
+        // Frame 2: content changes (simulating streamed tokens) but the
+        // cursor position is identical — must NOT re-emit.
+        draw_with_cursor_dedup(&mut terminal, &mut last_cursor, |frame| {
+            frame.render_widget(Paragraph::new("hi there, more text"), frame.area());
+            Some((2, 1))
+        })
+        .unwrap();
+        assert_eq!(
+            terminal.backend().show_calls,
+            1,
+            "unchanged cursor position must not re-trigger Show"
+        );
+        assert_eq!(
+            terminal.backend().move_calls,
+            1,
+            "unchanged cursor position must not re-trigger MoveTo"
+        );
+
+        // Frame 3: cursor actually moves — must emit again.
+        draw_with_cursor_dedup(&mut terminal, &mut last_cursor, |frame| {
+            frame.render_widget(Paragraph::new("hi there"), frame.area());
+            Some((5, 1))
+        })
+        .unwrap();
+        assert_eq!(terminal.backend().show_calls, 2);
+        assert_eq!(terminal.backend().move_calls, 2);
+
+        // Frame 4: cursor hidden entirely — must emit hide once, then...
+        draw_with_cursor_dedup(&mut terminal, &mut last_cursor, |frame| {
+            frame.render_widget(Paragraph::new("hi there"), frame.area());
+            None
+        })
+        .unwrap();
+        assert_eq!(terminal.backend().hide_calls, 1);
+
+        // Frame 5: still hidden — must not re-emit hide either.
+        draw_with_cursor_dedup(&mut terminal, &mut last_cursor, |frame| {
+            frame.render_widget(Paragraph::new("hi there"), frame.area());
+            None
+        })
+        .unwrap();
+        assert_eq!(
+            terminal.backend().hide_calls,
+            1,
+            "unchanged (hidden) cursor state must not re-trigger Hide"
+        );
+    }
 
     #[test]
     fn wrap_words_respects_width() {
