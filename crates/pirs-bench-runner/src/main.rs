@@ -87,6 +87,11 @@ struct Common {
     /// Path to a user-authored strategy (`.rhai`). Overrides `--strategy`.
     #[arg(long, global = true)]
     strategy_script: Option<PathBuf>,
+    /// Bypass the strategy engine entirely: one undivided agent loop with a
+    /// generic system prompt, matching the interactive CLI's default (no
+    /// `--strategy`/`--profile` given) behavior. Overrides everything below.
+    #[arg(long, global = true)]
+    no_strategy: bool,
     /// Path to a profile (`.rhai`): a role bundling a strategy with a persona,
     /// model, and tool policy. Overrides `--strategy`/`--strategy-script`.
     #[arg(long, global = true)]
@@ -109,6 +114,16 @@ impl Common {
     /// The loop strategy to run. A `--profile` wins (its resolved strategy bakes in
     /// persona + model), then `--strategy-script`, then the selected built-in.
     fn strategy(&self) -> anyhow::Result<Strategy> {
+        if self.no_strategy {
+            // No phases at all: AgentConfig.naive (set from this same flag) makes
+            // AgentExecutor bypass the strategy engine. This value only names the
+            // run in traces/logs.
+            return Ok(Strategy {
+                name: "none".to_string(),
+                steps: Vec::new(),
+                persist_across_attempts: true,
+            });
+        }
         if let Some(profile) = self.profile()? {
             return Ok(profile.resolved_strategy());
         }
@@ -330,6 +345,7 @@ fn solve_one(
             max_turns_per_attempt: ctx.common.max_turns,
             provider: build_provider(ctx.provider),
             strategy: ctx.strategy.clone(),
+            naive: ctx.common.no_strategy,
             tool_policy: ctx.tool_policy.clone(),
             recorder: ctx.recorder.clone(),
             steering: None,
@@ -534,4 +550,38 @@ fn run_selftest(a: SelftestArgs) -> anyhow::Result<u8> {
         }
     }
     Ok(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn common(no_strategy: bool) -> Common {
+        Common {
+            model: "m".into(),
+            provider: ProviderKind::Anthropic,
+            max_attempts: 3,
+            max_turns: 40,
+            strategy: StrategyKind::Monolithic,
+            strategy_script: None,
+            no_strategy,
+            profile: None,
+            trace: None,
+        }
+    }
+
+    #[test]
+    fn no_strategy_flag_resolves_to_empty_strategy() {
+        let s = common(true).strategy().unwrap();
+        assert_eq!(s.name, "none");
+        assert!(s.steps.is_empty(), "naive mode has no phases: {s:?}");
+        assert!(s.persist_across_attempts);
+    }
+
+    #[test]
+    fn without_no_strategy_falls_back_to_selected_builtin() {
+        let s = common(false).strategy().unwrap();
+        assert_eq!(s.name, "monolithic");
+        assert!(!s.steps.is_empty());
+    }
 }

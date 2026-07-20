@@ -404,6 +404,7 @@ pub fn run_selftest(
                         max_turns_per_attempt: *max_turns,
                         provider: Arc::clone(provider.as_ref().expect("provider in agent mode")),
                         strategy: strategy.clone(),
+                        naive: false,
                         tool_policy: tool_policy.clone(),
                         recorder: recorder.cloned(),
                         steering: None,

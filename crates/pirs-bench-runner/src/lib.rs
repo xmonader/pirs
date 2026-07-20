@@ -80,6 +80,12 @@ pub struct AgentConfig {
     pub provider: Arc<dyn LlmProvider>,
     /// The loop strategy to drive the fix with (a built-in or a user script).
     pub strategy: Strategy,
+    /// When true, bypass `strategy` and the `PhaseDriver`/`run_strategy` engine
+    /// entirely: one undivided, growing-context agent loop with a generic system
+    /// prompt, matching the interactive CLI's true default (no `--strategy`/
+    /// `--profile` at all) rather than the "monolithic" built-in, which still runs
+    /// through the phase machinery with a bench-engineered system prompt.
+    pub naive: bool,
     /// Tool allow/deny policy (from a profile). Filters both the full tool set and
     /// the read-only planner set. Defaults to allow-all.
     pub tool_policy: ToolPolicy,
@@ -104,6 +110,8 @@ pub struct AgentExecutor {
     planner_tools: Vec<Arc<dyn AgentTool>>,
     /// The loop strategy (phase list) this executor runs.
     strategy: Strategy,
+    /// When true, `attempt()` bypasses `strategy` entirely — see [`AgentConfig::naive`].
+    naive: bool,
     /// One conversation per strategy phase, keyed by phase id. Persistent
     /// strategies reuse a phase's context across attempts; split strategies get a
     /// fresh one each attempt (the driver honours the `fresh` flag).
@@ -192,6 +200,7 @@ impl AgentExecutor {
             tools,
             planner_tools,
             strategy: config.strategy,
+            naive: config.naive,
             phase_contexts: HashMap::new(),
             recorder: config.recorder,
             attempt_no: 0,
@@ -402,6 +411,59 @@ impl AgentExecutor {
             );
         }
     }
+
+    /// The naive baseline: no phases, no plan/execute split, no per-phase model
+    /// lever, no bench-engineered "smallest change / don't touch tests" system
+    /// prompt — a single growing-context loop with a generic assistant system
+    /// prompt, given the same issue+targets a strategy phase would see. This is
+    /// what `AgentConfig::naive` selects instead of `strategy::run_strategy`.
+    fn run_naive_attempt(&mut self, last: Option<&Verdict>) -> anyhow::Result<()> {
+        const NAIVE_SYSTEM: &str = "You are a helpful coding assistant with access to tools for reading, searching, and editing code, and running shell commands. Investigate the repository and make the changes needed to resolve the user's request.";
+        const PHASE_ID: &str = "naive";
+
+        let verdict_note = last
+            .map(|v| format!("Your previous attempt did not pass verification: {v:?}\n\n"))
+            .unwrap_or_default();
+        let prompt = format!(
+            "{verdict_note}Fix the following issue in this repository.\n\n## Issue\n{}\n\n## Tests that must pass after your fix\n{}\n",
+            self.issue,
+            self.targets.join("\n"),
+        );
+
+        if !self.phase_contexts.contains_key(PHASE_ID) {
+            self.phase_contexts.insert(
+                PHASE_ID.to_string(),
+                Context {
+                    system_prompt: Some(NAIVE_SYSTEM.to_string()),
+                    messages: Vec::new(),
+                    tools: Vec::new(),
+                },
+            );
+        }
+
+        let mut cfg = self.loop_config();
+        cfg.model = self.model.clone();
+        let tools = self.tools.clone();
+        let ctx = self
+            .phase_contexts
+            .get_mut(PHASE_ID)
+            .expect("context inserted above");
+        let msgs = Self::run_loop(
+            &self.rt,
+            &self.provider,
+            &cfg,
+            &self.stats,
+            &tools,
+            ctx,
+            prompt,
+            self.recorder.as_ref(),
+            PHASE_ID,
+        );
+        self.fold_usage(&msgs);
+        let output = last_assistant_text(&msgs);
+        self.record_phase_end(PHASE_ID, msgs.len(), &output);
+        Ok(())
+    }
 }
 
 impl PhaseDriver for AgentExecutor {
@@ -531,15 +593,19 @@ impl Executor for AgentExecutor {
         // anything — if the agent made no change, there is nothing new to verify.
         let before = self.ws.diff().unwrap_or_default();
 
-        // Drive the configured strategy. Cloned so the engine can borrow it while
-        // `self` is the mutable driver.
-        let strategy = self.strategy.clone();
-        let task = strategy::Task {
-            issue: self.issue.clone(),
-            targets: self.targets.clone(),
-            verdict: last.map(|v| format!("{v:?}")),
-        };
-        strategy::run_strategy(&strategy, self, &task)?;
+        if self.naive {
+            self.run_naive_attempt(last)?;
+        } else {
+            // Drive the configured strategy. Cloned so the engine can borrow it
+            // while `self` is the mutable driver.
+            let strategy = self.strategy.clone();
+            let task = strategy::Task {
+                issue: self.issue.clone(),
+                targets: self.targets.clone(),
+                verdict: last.map(|v| format!("{v:?}")),
+            };
+            strategy::run_strategy(&strategy, self, &task)?;
+        }
 
         // Integrity: revert any edits to protected test files, so verification
         // always runs against the original tests. A fix that only touched a test
@@ -577,6 +643,7 @@ mod tests {
                 max_turns_per_attempt: 1,
                 provider: build_provider(&Provider::Anthropic),
                 strategy,
+                naive: false,
                 tool_policy: ToolPolicy::allow_all(),
                 recorder: None,
                 steering: None,
@@ -597,12 +664,39 @@ mod tests {
                 max_turns_per_attempt: 1,
                 provider: build_provider(&Provider::Anthropic),
                 strategy: pirs_rhai::builtins::builtin("plan-exec").unwrap(),
+                naive: false,
                 tool_policy: policy,
                 recorder: None,
                 steering: None,
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn naive_config_flag_is_stored_on_the_executor() {
+        let ex = AgentExecutor::new(
+            ".".into(),
+            "issue".into(),
+            vec!["t.py::test_x".into()],
+            vec![],
+            AgentConfig {
+                model: "m".into(),
+                api_key: "k".into(),
+                max_turns_per_attempt: 1,
+                provider: build_provider(&Provider::Anthropic),
+                strategy: pirs_rhai::builtins::builtin("monolithic").unwrap(),
+                naive: true,
+                tool_policy: ToolPolicy::allow_all(),
+                recorder: None,
+                steering: None,
+            },
+        )
+        .unwrap();
+        assert!(
+            ex.naive,
+            "AgentConfig::naive must carry through to the executor"
+        );
     }
 
     #[test]
