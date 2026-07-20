@@ -89,7 +89,7 @@ Code graph (`--no-graph` to disable): tree-sitter index of the repo (rust/py/ts/
 
 Scripts can also spawn fresh-context sub-agents themselves: `run_subagent(task, model?)`.
 
-rhai gotchas (pinned by tests): interpolation only in backtick strings `` `${x}` ``; string methods like `trim()` mutate in place; no `let mut`; arrays have no `join` — use `str_join(arr, sep)` or a loop; array property access clones (write whole entries back); `const` doesn't resolve inside nested closures.
+rhai gotchas (pinned by tests): interpolation only in backtick strings `` `${x}` `` (and backtick strings don't process `\n`/other backslash escapes at all — only real embedded newlines and `${}` interpolation; use a normal `"..."` string for escapes); string methods like `trim()` mutate in place; no `let mut`; arrays have no `join` — use `str_join(arr, sep)` or a loop; array property access clones (write whole entries back); a top-level `const`/`let` is only visible inside the one function the host calls directly (via `call_fn`) — a function called *from* that function (nested closures included) can't see it, so pass it as a parameter or make it a local instead.
 
 ## MCP servers
 
