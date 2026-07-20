@@ -1,48 +1,33 @@
 // stash-checkpoint.rhai — per-turn worktree snapshots via a "dangling
-// stash" (cline's approach: `git stash create` anchored to a private ref),
-// as a lighter-weight ALTERNATIVE to rollback.rhai's commit-tree snapshots.
+// stash" (cline's approach: `git stash create` anchored to a private ref).
+// Rewinds files to a previous turn without touching conversation history,
+// for git repos (see checkpoints.rhai for the non-git, per-file option).
 //
-// Both packs solve the same problem (rewind files to a previous turn
-// without touching conversation history) and both register the same
-// `/undo`/`/snapshots` commands — pick ONE, don't load both (the
-// later-loaded pack's commands simply win, same as sandbox.rhai overriding
-// the native `bash` tool). Differences that might tip the choice:
+// `git stash create` captures the worktree+index diff against HEAD in one
+// command, without touching the index or working tree at all — no `git add
+// -A` side effect that would leave the user's entire worktree staged after
+// every turn. When a turn made no file changes, `git stash create` prints
+// nothing; this pack tracks a `dirty` flag (via `on_tool_result`) to skip
+// the git call entirely on read-only turns, falling back to snapshotting
+// the current `HEAD` if `stash create` itself comes back empty (e.g.
+// `dirty` was set by a tool call that ended up a no-op edit).
 //
-//   - rollback.rhai snapshots via `git add -A && git write-tree && git
-//     commit-tree`. `git add -A` STAGES EVERYTHING as a side effect of
-//     taking a snapshot — after every turn, `git status` shows the user's
-//     entire worktree staged, which can surprise someone running `git
-//     add -p`/`git commit` mid-session. `git stash create` captures the
-//     same worktree+index diff against HEAD in one command, without
-//     touching the index or working tree at all.
-//   - When a turn made no file changes, `git stash create` prints nothing
-//     rather than needing an explicit "was anything dirty" check first —
-//     this pack still tracks a `dirty` flag (via `on_tool_result`) to skip
-//     the git call entirely on read-only turns, same as rollback.rhai, but
-//     falls back to snapshotting the current `HEAD` if `stash create`
-//     itself comes back empty (e.g. `dirty` was set by a tool call that
-//     ended up a no-op edit).
-//   - Restore is `git stash apply`, which MERGES the snapshot's changes
-//     onto whatever is currently on disk (conflict markers on overlap)
-//     rather than rollback.rhai's `git restore --worktree --staged .`,
-//     which unconditionally overwrites with the snapshotted content. Pick
-//     rollback.rhai if you want a guaranteed-clean overwrite; this pack if
-//     you'd rather not lose unrelated uncommitted edits made since the
-//     snapshot was taken.
+// Restore is `git stash apply`, which MERGES the snapshot's changes onto
+// whatever is currently on disk (conflict markers on overlap) rather than
+// unconditionally overwriting — uncommitted edits made since the snapshot
+// are layered over, not discarded.
 //
-// Like rollback.rhai, this requires an existing git repo — there is no
-// fallback (no shadow repo, no init) for a non-git working directory; the
-// snapshot silently no-ops if `git rev-parse --is-inside-work-tree` fails,
-// matching rollback.rhai's own silent-skip behavior there.
+// Requires an existing git repo — there is no fallback (no shadow repo, no
+// init) for a non-git working directory; the snapshot silently no-ops if
+// `git rev-parse --is-inside-work-tree` fails.
 //
 // The resulting stash commit is genuinely "dangling" (unreachable, GC
 // candidate) the instant `git stash create` returns it; `git update-ref`
 // immediately anchors it under `refs/pirs/stash-turn-N` — a private
 // namespace, invisible to `git stash list`/`git log`/branches, mirroring
-// cline's own `refs/cline/checkpoints/...` pattern. Like rollback.rhai's
-// `refs/pirs/turn-N`, these refs are never pruned automatically; delete
-// them by hand (`git update-ref -d refs/pirs/stash-turn-N`) if they
-// accumulate across a very long session.
+// cline's own `refs/cline/checkpoints/...` pattern. These refs are never
+// pruned automatically; delete them by hand (`git update-ref -d
+// refs/pirs/stash-turn-N`) if they accumulate across a very long session.
 
 fn snapshot() {
     if exec("git rev-parse --is-inside-work-tree", 5).code != 0 {

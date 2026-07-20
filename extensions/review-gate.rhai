@@ -1,15 +1,18 @@
 // review-gate.rhai — an independent reviewer that can REFUSE completion.
 // Every edit/write turn is reviewed (against the original request, not just
-// tests). A Critical verdict blocks the run until the issues are fixed and
-// the review passes. Reviewer model defaults to the session model; set
+// tests, AND adversarially for bugs/edge-cases/race-conditions — this used
+// to be red-team.rhai's separate job; folded in here rather than paying for
+// two independent-reviewer sub-agent calls per edit for overlapping
+// coverage). A Critical verdict blocks the run until the issues are fixed
+// and the review passes. Reviewer model defaults to the session model; set
 // state_set("reviewer_model", "other-model") to force a different one.
 
-const REVIEW_PROMPT = `You are an independent code reviewer who did NOT write this change. Judge the diff against the USER'S REQUEST, not just the tests (a gamed change passes tests and is still wrong).
+const REVIEW_PROMPT = `You are an independent, adversarial code reviewer who did NOT write this change. Judge the diff against the USER'S REQUEST, not just the tests (a gamed change passes tests and is still wrong) — and attack it: look for bugs, edge cases, race conditions, and broken invariants a first read would miss.
 
 Flag as CRITICAL:
 - The change does not actually do what was asked (wrong behavior, wrong semantics)
 - Test-gaming: weakened assertions, narrowed selectors, deleted cases, tautological tests
-- A bug that will fail in real use (edge cases, invariants, error paths)
+- A bug that will fail in real use (edge cases, invariants, error paths, race conditions)
 
 Otherwise reply SOUND. Format: first line exactly "CRITICAL" or "SOUND", then bullets.`;
 

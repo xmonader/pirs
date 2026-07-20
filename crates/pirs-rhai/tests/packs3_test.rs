@@ -79,34 +79,6 @@ fn session_handoff_injects_previous_brief() {
 }
 
 #[test]
-fn red_team_attacks_edits_once() {
-    let host = load("red-team.rhai", true);
-    let hooks = host.hooks();
-    let after = hooks.after_tool_call.unwrap();
-    let follow = hooks.get_follow_up_messages.unwrap();
-
-    let edit = pirs_ai::ToolResultMessage {
-        tool_call_id: "1".into(),
-        tool_name: "edit".into(),
-        content: vec![pirs_ai::ContentBlock::text("ok")],
-        details: None,
-        is_error: false,
-        terminate: false,
-        timestamp: 0,
-    };
-    after("1", "edit", &edit);
-    let has_git = std::process::Command::new("git")
-        .args(["diff", "HEAD"])
-        .output()
-        .map(|o| !o.stdout.is_empty())
-        .unwrap_or(false);
-    let msgs = follow();
-    if has_git {
-        assert!(msgs.len() <= 1, "adversary runs at most once: {msgs:?}");
-    }
-}
-
-#[test]
 fn shadow_verify_flags_discrepancy() {
     let host = load("shadow-verify.rhai", false);
     let hooks = host.hooks();

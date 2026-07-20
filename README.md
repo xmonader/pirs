@@ -60,10 +60,9 @@ Shipped packs in `extensions/`:
 | `audit-log.rhai` | tool calls + results to `~/.pirs/audit.jsonl` |
 | `conductor.rhai` | strong-planner/weak-executor guidance + plan tool |
 | `context-janitor.rhai` | shrink stale giant tool outputs in outgoing context |
-| `review-gate.rhai` | independent fresh-context sub-agent reviews every diff, can refuse completion |
+| `review-gate.rhai` | independent fresh-context sub-agent reviews every diff (request-compliance + adversarial), can refuse completion |
 | `instincts.rhai` | learn failure→fix pairs, steer away from repeats |
 | `session-handoff.rhai` | next-session brief carried via `.pirs/handoff.md` |
-| `red-team.rhai` | fresh-context adversary attacks your diff before run ends |
 | `shadow-verify.rhai` | re-runs test commands, flags claimed-vs-actual discrepancies |
 | `spec-check.rhai` | pins ACCEPTANCE.md, forces item-by-item verification |
 | `semantic-bookmarks.rhai` | model-pinned notes at context tail (max 5) |
@@ -78,8 +77,7 @@ Shipped packs in `extensions/`:
 | `critic.rhai` | interleaved mid-run diff review via background sub-agent (steers corrections) |
 | `approval2.rhai` | semantic blast-radius: sub-agent judges risky commands against the environment |
 | `skill-crystallizer.rhai` | distills successful runs into reusable SKILL.md files (self-improving) |
-| `rollback.rhai` | commit-tree snapshots per turn (stages everything via `git add -A`), /undo N overwrites files |
-| `stash-checkpoint.rhai` | alternative to rollback.rhai: dangling `git stash create` snapshots (never stages), /undo merges via `git stash apply` |
+| `stash-checkpoint.rhai` | dangling `git stash create` snapshots per turn (never stages), /undo merges via `git stash apply` |
 | `swarm.rhai` | work-packet queue over the hive for multi-instance fleets |
 | `goal.rhai` | session goals: pinned, compaction-proof, verified, persisted |
 | `telemetry.rhai` | metadata-only usage stats (counts, tokens, stop reasons) — never prompt/tool content |
