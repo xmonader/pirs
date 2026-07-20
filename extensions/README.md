@@ -15,7 +15,7 @@ compiles and behaves.
 
 | Extension | What it does |
 |-----------|--------------|
-| `sandbox.rhai` | Overrides `bash` with an OS-level sandbox (bubblewrap/Seatbelt, falling back to Docker/Podman if bwrap can't start): read-only filesystem outside the working dir, no network. |
+| `sandbox.rhai` | Overrides `bash` with an OS-level sandbox (bubblewrap/Seatbelt, falling back to Docker/Podman if bwrap can't start): read-only filesystem outside the working dir, no network by default — or a domain allowlist (`.pirs/sandbox-allowlist.txt`) enforced by a local CONNECT proxy on Docker/Podman. |
 | `guardrails.rhai` | Block destructive commands; the model must ask the user first. |
 | `approval.rhai` | Sensitive tool calls require explicit user approval. |
 | `approval2.rhai` | Semantic blast-radius: a sub-agent judges how risky a command is. |

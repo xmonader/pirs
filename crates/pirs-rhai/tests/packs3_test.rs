@@ -500,6 +500,101 @@ fn sandbox_runs_a_command_or_fails_loud_with_a_named_reason() {
 
 #[test]
 #[cfg(target_os = "linux")]
+fn sandbox_egress_allowlist_permits_listed_domain_and_blocks_others() {
+    // Proves the actual egress-allowlisting mechanism end to end: a listed
+    // domain gets a real response through the proxy, an unlisted one is
+    // rejected, and the result says which sandbox mode actually ran. Skips
+    // (not fails) if docker or curl aren't available in this environment,
+    // since that's an environment fact the pack's own logic already
+    // surfaces as a loud, actionable message rather than a silent skip.
+    let has = |cmd: &str| {
+        std::process::Command::new("sh")
+            .args(["-c", &format!("command -v {cmd}")])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+    if !has("docker") {
+        eprintln!("skipping: docker not on PATH in this environment");
+        return;
+    }
+    if !has("curl") {
+        eprintln!("skipping: curl not on PATH in this environment (needed inside the chroot)");
+        return;
+    }
+
+    let _g = ENV_LOCK.lock().unwrap();
+    let host = load("sandbox.rhai", false);
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".pirs")).unwrap();
+    std::fs::write(
+        dir.path().join(".pirs").join("sandbox-allowlist.txt"),
+        "# comment lines are ignored\nexample.com\n",
+    )
+    .unwrap();
+    let prev = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let tools = host.tools();
+    let bash = tools.iter().find(|t| t.name() == "bash").unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    let allowed = rt.block_on(bash.execute(pirs_agent::ToolExecContext {
+        tool_call_id: "t1".into(),
+        args: serde_json::json!({
+            "command": "curl -sS -o /dev/null -w 'http_code=%{http_code}\\n' https://example.com --max-time 15",
+            "timeout": 30,
+        }),
+        cancel: tokio_util::sync::CancellationToken::new(),
+        on_update: None,
+    }));
+    let blocked = rt.block_on(bash.execute(pirs_agent::ToolExecContext {
+        tool_call_id: "t2".into(),
+        args: serde_json::json!({
+            "command": "curl -sS -o /dev/null -w 'http_code=%{http_code}\\n' https://example.org --max-time 15 || echo curl-was-blocked",
+            "timeout": 30,
+        }),
+        cancel: tokio_util::sync::CancellationToken::new(),
+        on_update: None,
+    }));
+
+    std::env::set_current_dir(prev).unwrap();
+
+    // Best-effort cleanup of the long-lived shared proxy/network this pack
+    // intentionally leaves running between calls in real usage — a test run
+    // shouldn't leave it behind.
+    if let Ok(home) = std::env::var("HOME") {
+        let pid_file = std::path::Path::new(&home)
+            .join(".pirs")
+            .join("sandbox-egress")
+            .join("proxy.pid");
+        if let Ok(pid) = std::fs::read_to_string(&pid_file) {
+            let _ = std::process::Command::new("kill").arg(pid.trim()).status();
+        }
+    }
+    let _ = std::process::Command::new("docker")
+        .args(["network", "rm", "pirs-sandbox-net"])
+        .status();
+
+    let allowed_text = allowed.unwrap().content[0].as_text().unwrap().to_string();
+    assert!(
+        allowed_text.contains("http_code=200"),
+        "listed domain should get a real 200 through the allowlist proxy, got: {allowed_text}"
+    );
+    assert!(
+        allowed_text.contains("sandboxed via docker with an egress allowlist"),
+        "output should be annotated as having used the egress allowlist, got: {allowed_text}"
+    );
+
+    let blocked_text = blocked.unwrap().content[0].as_text().unwrap().to_string();
+    assert!(
+        !blocked_text.contains("http_code=200"),
+        "unlisted domain must not get a real response through the proxy, got: {blocked_text}"
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn sandbox_falls_back_to_docker_when_bwrap_cannot_start() {
     // This environment's `kernel.apparmor_restrict_unprivileged_userns=1`
     // reliably breaks bwrap (confirmed above), so if docker is on PATH this
