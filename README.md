@@ -60,10 +60,9 @@ Shipped packs in `extensions/`:
 | `audit-log.rhai` | tool calls + results to `~/.pirs/audit.jsonl` |
 | `conductor.rhai` | strong-planner/weak-executor guidance + plan tool |
 | `context-janitor.rhai` | shrink stale giant tool outputs in outgoing context |
-| `reviewer.rhai` | force a review pass after file edits before run ends |
+| `review-gate.rhai` | independent fresh-context sub-agent reviews every diff, can refuse completion |
 | `instincts.rhai` | learn failure→fix pairs, steer away from repeats |
 | `session-handoff.rhai` | next-session brief carried via `.pirs/handoff.md` |
-| `failure-diary.rhai` | known-pitfalls pin built from tool failures |
 | `red-team.rhai` | fresh-context adversary attacks your diff before run ends |
 | `shadow-verify.rhai` | re-runs test commands, flags claimed-vs-actual discrepancies |
 | `spec-check.rhai` | pins ACCEPTANCE.md, forces item-by-item verification |

@@ -16,21 +16,21 @@ compiles and behaves.
 | Extension | What it does |
 |-----------|--------------|
 | `sandbox.rhai` | Overrides `bash` with an OS-level sandbox (bubblewrap/Seatbelt, falling back to Docker/Podman if bwrap can't start): read-only filesystem outside the working dir, no network by default — or a domain allowlist (`.pirs/sandbox-allowlist.txt`) enforced by a local CONNECT proxy on Docker/Podman. |
-| `guardrails.rhai` | Block destructive commands; the model must ask the user first. |
-| `path-guard.rhai` | Block sensitive commands (`rm`/`chmod`/`chown`/etc, `find -exec`/`-delete`) whose targets are outside the working directory. |
-| `approval.rhai` | Sensitive tool calls require explicit user approval. |
-| `approval2.rhai` | Semantic blast-radius: a sub-agent judges how risky a command is. |
+| `guardrails.rhai` | Hard-blocks a fixed list of known-catastrophic patterns (`rm -rf /`, `curl \| bash`, force-push, ...) regardless of location — no ask, just refuses. |
+| `path-guard.rhai` | Blocks otherwise-ordinary commands (`rm`/`chmod`/`chown`/etc, `find -exec`/`-delete`) whose *target resolves outside the working directory* — catches what a fixed pattern list can't (structural, not pattern-based). |
+| `approval2.rhai` | Semantic blast-radius: a sub-agent judges how risky a command is against the actual environment (git status/stash), not a fixed list. |
 | `diff-shield.rhai` | Merge consecutive same-tool results to compress context. |
 | `dirty-guard.rhai` | Commit pre-existing user WIP before the AI edits a file. |
 | `env-doctor.rhai` | Block tool calls for missing toolchains, with install hints. |
 | `safe_edit.rhai` | Editor-mode edits: a narrow prompt applies a single focused diff. |
 
+The four safety packs above are deliberately complementary layers (fixed denylist, structural path check, semantic judge, OS-level sandbox), not overlapping alternatives — combine as many as you want. For interactive approval prompting, use the native `--approval ask` flag rather than a pack; a rhai-based reimplementation of that (`approval.rhai`) used to live here and was retired for duplicating it with a clunkier chat-text ticket flow.
+
 ## Verification & review
 
 | Extension | What it does |
 |-----------|--------------|
-| `review-gate.rhai` | An independent reviewer that can REFUSE completion. |
-| `reviewer.rhai` | After file edits, force a review pass before the run ends. |
+| `review-gate.rhai` | An independent, fresh-context sub-agent reviews every diff against the original request and can REFUSE completion. |
 | `critic.rhai` | Interleaved mid-run critic: every N edits, a background pass. |
 | `critic-arena.rhai` | Two models answer the same task; you judge. |
 | `red-team.rhai` | After edits, a fresh-context adversary attacks the changes. |
@@ -40,6 +40,8 @@ compiles and behaves.
 | `mutation-guard.rhai` | Self-verifying codegen via mutation testing. |
 | `spec-check.rhai` | Pin `ACCEPTANCE.md`; force a checklist pass before ending. |
 | `relay-race.rhai` | Draft → critique → finalize pipeline as a single tool. |
+
+`reviewer.rhai`, an earlier same-model self-review reminder (weaker: the model that wrote the bug reviews its own work), was retired in favor of `review-gate.rhai`, which does the same triggering but with an independent sub-agent and an actual block.
 
 ## Cost & budget
 
@@ -67,22 +69,26 @@ compiles and behaves.
 | `context-janitor.rhai` | Shrink stale giant tool outputs in the outgoing context. |
 | `semantic-bookmarks.rhai` | Model-managed pinned notes at the context tail. |
 | `repo-pulse.rhai` | Keep a fresh repo-state pin (branch, dirty files) in context. |
-| `failure-diary.rhai` | Log tool failures and pin recent pitfalls in context. |
-| `instincts.rhai` | Learn (failure → fix) pairs and steer away from repeats. |
+| `instincts.rhai` | Log a (failure → then-succeeded-on-retry) pair and pin the ones that were actually fixed — steers away from repeats without pinning every dead-end failure. |
 | `btw.rhai` | Side questions that never enter the main history. |
+
+`failure-diary.rhai`, which pinned *every* recent failure unconditionally (noisier, no signal on whether it was ever fixed), was retired in favor of `instincts.rhai`'s narrower, higher-precision pairing.
 
 ## Persistence, memory & handoff
 
 | Extension | What it does |
 |-----------|--------------|
 | `goal.rhai` | First-class session goals: set, pin, verify, persist. |
-| `checkpoint.rhai` | Periodic session snapshots + `/checkpoints` + `/restore`. |
-| `checkpoints.rhai` | VCS-free per-file checkpoints: every edit is restorable. |
-| `rollback.rhai` | Snapshot the worktree every turn via `git add -A && commit-tree`; `/undo` overwrites via `git restore`. |
+| `checkpoints.rhai` | VCS-free per-file checkpoints (plain `cp` backups): every edit is restorable, no git required — the option for non-git working directories. |
+| `rollback.rhai` | Git-based: snapshot the whole worktree every turn via `git add -A && commit-tree`; `/undo` overwrites via `git restore`. |
 | `stash-checkpoint.rhai` | Alternative to rollback.rhai: snapshot via a "dangling" `git stash create` (never stages anything); `/undo` merges via `git stash apply`. |
 | `dmail.rhai` | Model-initiated time travel (D-Mail). |
 | `session-handoff.rhai` | Carry context between sessions via `.pirs/handoff.md`. |
 | `skill-crystallizer.rhai` | After a successful run, distill what worked into a skill. |
+
+`checkpoint.rhai` (singular) was retired: despite the name, it never restored file state at all (just pinned an old text summary of the message log back into context), and it collided with `checkpoints.rhai` — both registered the same `/checkpoints`/`/restore` commands into the same `.pirs/checkpoints/log.jsonl` with incompatible schemas, so loading both would have corrupted each other's log.
+
+`checkpoints.rhai` and `rollback.rhai`/`stash-checkpoint.rhai` aren't alternatives to each other: `checkpoints.rhai` works with no git repo at all, the other two require one. Pick `checkpoints.rhai` for a non-git project; otherwise pick exactly one of `rollback.rhai` or `stash-checkpoint.rhai` (see that section's own note).
 
 ## Provenance & audit
 

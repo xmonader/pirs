@@ -303,29 +303,6 @@ async fn janitor_shrinks_old_tool_results_keeps_recent() {
     assert!(!text.contains("line1\n"));
 }
 
-#[tokio::test]
-async fn reviewer_injects_review_followup_once() {
-    let host = load_pack("reviewer.rhai");
-    let (mut agent, seen) = build(
-        host,
-        vec![
-            tc("1", "edit", json!({"path": "f.rs"})),
-            text("final answer"),
-            text("review summary"),
-        ],
-        vec![Arc::new(NamedTool("edit".into()))],
-    );
-    let new = agent.prompt("go").await.unwrap();
-
-    let calls = seen.lock().unwrap();
-    assert_eq!(calls.len(), 3, "edit turn + answer + review turn");
-    assert!(calls[2].iter().any(|m| matches!(
-        m,
-        Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("review your changes"))
-    )));
-    assert!(matches!(new.last(), Some(Message::Assistant(_))));
-}
-
 #[test]
 fn register_command_exposed_and_runnable() {
     let mut host = ExtensionHost::new();

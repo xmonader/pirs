@@ -79,31 +79,6 @@ fn session_handoff_injects_previous_brief() {
 }
 
 #[test]
-fn failure_diary_logs_and_pins() {
-    let host = load("failure-diary.rhai", false);
-    home_isolated();
-    let hooks = host.hooks();
-    let after = hooks.after_tool_call.unwrap();
-    let transform = hooks.transform_context.unwrap();
-
-    let fail = pirs_ai::ToolResultMessage {
-        tool_call_id: "1".into(),
-        tool_name: "grep".into(),
-        content: vec![pirs_ai::ContentBlock::text("invalid regex")],
-        details: None,
-        is_error: true,
-        terminate: false,
-        timestamp: 0,
-    };
-    after("1", "grep", &fail);
-    let out = transform(vec![pirs_ai::Message::user("next")]);
-    assert!(out.iter().any(|m| matches!(
-        m,
-        pirs_ai::Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("known pitfalls") && t.contains("invalid regex"))
-    )));
-}
-
-#[test]
 fn red_team_attacks_edits_once() {
     let host = load("red-team.rhai", true);
     let hooks = host.hooks();
