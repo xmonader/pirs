@@ -48,8 +48,8 @@ pub type DetectedVerify = (String, String);
 /// Apply `--weak` composition rules.
 ///
 /// - Always: tool_diet, sequential, max_retries floor of 3, bundled pack list.
-/// - Strategy: default `plan-exec-weak` only for one-shot when neither strategy
-///   nor profile was set.
+/// - Strategy: default `plan-exec` only for one-shot when neither strategy
+///   nor profile was set (pair with `--plan-model` for strong planning).
 /// - Auto-verify: only when verify unset, one-shot, and strategy/profile will run;
 ///   uses `detected` when present, otherwise records a skip note (never invents a command).
 pub fn apply_weak_preset(
@@ -67,7 +67,7 @@ pub fn apply_weak_preset(
     let mut strategy = input.strategy;
     let profile = input.profile;
     if strategy.is_none() && profile.is_none() && input.has_prompt {
-        strategy = Some("plan-exec-weak".into());
+        strategy = Some("plan-exec".into());
     }
 
     let mut verify = input.verify;
@@ -123,7 +123,7 @@ mod tests {
         assert!(out.tool_diet);
         assert!(out.sequential);
         assert_eq!(out.max_retries, 3);
-        assert_eq!(out.strategy.as_deref(), Some("plan-exec-weak"));
+        assert_eq!(out.strategy.as_deref(), Some("plan-exec"));
     }
 
     #[test]

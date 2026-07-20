@@ -1,7 +1,13 @@
-// Built-in strategy: plan-critic-exec — planner → critic gate → fresh executor.
-// The critic vets (and if needed rewrites) the plan before any edit. Resolved by
-// name via `builtin("plan-critic-exec")`; overridable at
-// .pirs/strategies/plan-critic-exec.rhai.
+// Built-in strategy: plan-critic-exec (alias: plan-exec-critic) — planner →
+// critic gate → fresh executor. The critic vets (and if needed rewrites) the
+// plan before any edit.
+//
+// Multi-model (strong plan+critic / weak exec):
+//   pirs --model <weak> --plan-model <strong> --strategy plan-critic-exec "…"
+// Both read-only phases (plan + critic) use --plan-model; executor uses --model.
+//
+// Resolved by name via `builtin("plan-critic-exec")` or alias `plan-exec-critic`;
+// overridable at .pirs/strategies/plan-critic-exec.rhai.
 #{
     name: "plan-critic-exec",
     persist: false,

@@ -278,6 +278,33 @@ fn merge(join: Join, outs: &[String]) -> String {
     }
 }
 
+/// Pin a strong planner (and critic) model onto every **read-only** phase.
+///
+/// Full-scope executor phases are left alone so they keep the run default
+/// (`--model` / weak executor). This is the product multi-model pitch:
+/// `--model <cheap> --plan-model <strong> --strategy plan-exec|plan-critic-exec`.
+///
+/// Applied after profile resolution so it overrides a profile-wide default on
+/// plan/critic phases only.
+pub fn pin_plan_model(strategy: &mut Strategy, plan_model: &str) {
+    let model = plan_model.to_string();
+    for step in &mut strategy.steps {
+        match step {
+            Step::Solo(phase) if phase.scope == ToolScope::ReadOnly => {
+                phase.model = Some(model.clone());
+            }
+            Step::Fan { branches, .. } => {
+                for phase in branches {
+                    if phase.scope == ToolScope::ReadOnly {
+                        phase.model = Some(model.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -454,6 +481,37 @@ mod tests {
         assert_eq!(d.calls[0].4, None);
         assert_eq!(d.calls[1].4, Some("strong-model".to_string()));
         assert_eq!(d.calls[2].4, None);
+    }
+
+    #[test]
+    fn pin_plan_model_strong_plan_weak_exec() {
+        // Product pitch: plan (+ critic) on strong, executor keeps None → --model.
+        let mut s = plan_critic_exec();
+        pin_plan_model(&mut s, "strong-planner");
+        match (&s.steps[0], &s.steps[1], &s.steps[2]) {
+            (Step::Solo(plan), Step::Solo(critic), Step::Solo(exec)) => {
+                assert_eq!(plan.model.as_deref(), Some("strong-planner"));
+                assert_eq!(critic.model.as_deref(), Some("strong-planner"));
+                assert_eq!(exec.model, None, "executor stays on run default");
+                assert_eq!(exec.scope, ToolScope::Full);
+            }
+            _ => panic!("expected three solo phases"),
+        }
+        let mut d = RecordingDriver::default();
+        run_strategy(&s, &mut d, &task()).unwrap();
+        assert_eq!(d.calls[0].4.as_deref(), Some("strong-planner"));
+        assert_eq!(d.calls[1].4.as_deref(), Some("strong-planner"));
+        assert_eq!(d.calls[2].4, None);
+    }
+
+    #[test]
+    fn pin_plan_model_leaves_monolithic_untouched() {
+        let mut s = monolithic();
+        pin_plan_model(&mut s, "strong");
+        match &s.steps[0] {
+            Step::Solo(p) => assert_eq!(p.model, None, "full-scope phase is not a planner"),
+            _ => panic!("expected solo"),
+        }
     }
 
     /// A driver whose `run_parallel` marks each branch's output so we can prove the

@@ -1,7 +1,12 @@
 // Built-in strategy: plan-exec — a read-only planner produces a self-contained
-// fix plan, then a fresh executor (seeded only by that plan) applies it. Resolved
-// by name via `builtin("plan-exec")`; a user file at .pirs/strategies/plan-exec.rhai
-// overrides it.
+// fix plan, then a fresh executor (seeded only by that plan) applies it.
+//
+// Multi-model (strong plan / weak exec):
+//   pirs --model <weak> --plan-model <strong> --strategy plan-exec "…"
+// Read-only plan phase runs on --plan-model; full-scope exec uses --model.
+//
+// Resolved by name via `builtin("plan-exec")`; a user file at
+// .pirs/strategies/plan-exec.rhai overrides it.
 #{
     name: "plan-exec",
     persist: false,

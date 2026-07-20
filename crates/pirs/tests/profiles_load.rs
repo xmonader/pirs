@@ -30,16 +30,16 @@ fn every_shipped_profile_loads_and_resolves() {
 }
 
 #[test]
-fn weak_profile_loads_and_uses_plan_exec_weak() {
+fn weak_profile_loads_and_uses_plan_exec() {
     let profile = load_profile_file(&profiles_dir().join("weak.rhai")).expect("weak loads");
     assert_eq!(profile.name, "weak");
-    assert_eq!(profile.strategy.name, "plan-exec-weak");
+    assert_eq!(profile.strategy.name, "plan-exec");
     assert!(profile.persona.is_some());
     let resolved = profile.resolved_strategy();
     assert_eq!(resolved.steps.len(), 2);
     // Built-in name also resolves without a file.
     let builtin = pirs_rhai::discover::builtin_profile("weak").expect("builtin weak");
-    assert_eq!(builtin.strategy.name, "plan-exec-weak");
+    assert_eq!(builtin.strategy.name, "plan-exec");
 }
 
 #[test]

@@ -23,4 +23,5 @@ pub use control_pins::{
     PROTECTED_KINDS,
 };
 pub use events::{AgentEvent, Emit, Hooks, ToolResultPatch};
+pub use strategy::pin_plan_model;
 pub use tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext, ToolOutput};

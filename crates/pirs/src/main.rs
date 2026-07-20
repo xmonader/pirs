@@ -63,13 +63,20 @@ struct Cli {
     #[arg(long)]
     resume: bool,
 
-    /// Run a multi-phase loop strategy for a one-shot prompt. Accepts a built-in
-    /// name (monolithic, plan-exec, plan-critic-exec, wide-plan-exec,
-    /// plan-exec-weak), a name resolved from .pirs/strategies/<name>.rhai
-    /// (project then ~/.pirs), or a path to a .rhai script. No effect in the
-    /// interactive REPL.
+    /// Run a multi-phase loop strategy for a one-shot prompt. Primary built-ins:
+    /// `monolithic`, `plan-exec`, `plan-critic-exec` (alias `plan-exec-critic`).
+    /// Also accepts other built-in names, `.pirs/strategies/<name>.rhai`, or a
+    /// path to a .rhai script. No effect in the interactive REPL.
+    /// Pair with `--plan-model` for strong-plan / weak-exec multi-model runs.
     #[arg(long)]
     strategy: Option<String>,
+
+    /// Model for planning (and critique) phases only. Executor phases use
+    /// `--model`. Enables the strong-planner / weak-executor pitch without
+    /// editing strategy scripts, e.g.:
+    ///   pirs --model cheap-model --plan-model strong-model --strategy plan-exec "…"
+    #[arg(long)]
+    plan_model: Option<String>,
 
     /// Run under a profile (a role: persona + model + strategy + tool policy).
     /// Accepts a name resolved from .pirs/profiles/<name>.rhai (project then
@@ -171,11 +178,12 @@ struct Cli {
     sequential: bool,
 
     /// Weak-model hardening preset: enables --tool-diet, --sequential,
-    /// --max-retries at least 3, defaults --strategy to plan-exec-weak when
+    /// --max-retries at least 3, defaults --strategy to plan-exec when
     /// neither --strategy nor --profile is set, loads bundled packs
     /// (weak-model, context-janitor, env-doctor, goal), and auto-sets
     /// --verify from the project test ecosystem when possible. Multi-model:
-    /// use strategy phase `model:` overrides and/or `--cascade <draft_model>`.
+    /// pair with `--plan-model <strong>` so planning stays strong while this
+    /// run's `--model` is the weak executor; or use phase `model:` / `--cascade`.
     #[arg(long)]
     weak: bool,
 
@@ -1337,6 +1345,7 @@ async fn main() -> anyhow::Result<()> {
                 cli.strategy.as_deref(),
                 cli.profile.as_deref(),
                 &cli.model,
+                cli.plan_model.as_deref(),
                 strategy_tools,
                 &cwd,
                 cli.verify.as_deref(),
@@ -1470,6 +1479,7 @@ async fn run_strategy_turn(
     strategy_arg: Option<&str>,
     profile_arg: Option<&str>,
     default_model: &str,
+    plan_model: Option<&str>,
     full_tools: Vec<Arc<dyn AgentTool>>,
     cwd: &Path,
     verify: Option<&str>,
@@ -1478,7 +1488,7 @@ async fn run_strategy_turn(
     use pirs_agent::gate::{run_gated, GateOutcome};
     use pirs_agent::phase_agent::AgentPhaseDriver;
     use pirs_agent::profile::Profile;
-    use pirs_agent::strategy::{run_strategy_async, PhaseReq, Task, ToolScope};
+    use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, ToolScope};
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -1499,18 +1509,26 @@ async fn run_strategy_turn(
         profile.strategy = pirs_rhai::discover::resolve_strategy(s, cwd)
             .with_context(|| format!("resolving strategy {s:?}"))?;
     }
-    let strategy = profile.resolved_strategy();
+    let mut strategy = profile.resolved_strategy();
+    // Strong plan / weak exec: pin read-only phases to --plan-model; full-scope
+    // executor keeps profile/script model or falls back to --model (default_model).
+    if let Some(pm) = plan_model {
+        pin_plan_model(&mut strategy, pm);
+    }
     let policy = profile.tools.clone();
 
     // Retry only makes sense with a gate; default to 3 attempts when verifying.
     let attempts = max_attempts.unwrap_or(if verify.is_some() { 3 } else { 1 });
 
     eprintln!(
-        "[strategy '{}' · {} step(s){}{}]",
+        "[strategy '{}' · {} step(s){}{}{}]",
         strategy.name,
         strategy.steps.len(),
         profile_arg
             .map(|p| format!(" · profile '{p}'"))
+            .unwrap_or_default(),
+        plan_model
+            .map(|m| format!(" · plan-model '{m}' · exec-model '{default_model}'"))
             .unwrap_or_default(),
         verify
             .map(|_| format!(" · verify (≤{attempts} attempts)"))

@@ -1,8 +1,9 @@
 // Weak-model profile (also available as a built-in name).
-// Recommended: pirs --weak --profile weak "…"
+// Recommended: pirs --weak --profile weak --plan-model <strong> "…"
 // --weak enables tool-diet, sequential tools, retries≥3, and bundled packs.
+// --plan-model keeps planning on a strong model while --model is the executor.
 #{
     name: "weak",
     persona: "You are a careful junior engineer. Work in small steps. Prefer reading before editing. After every edit, run tests. Do not claim success without test evidence. If stuck after two failed attempts at the same approach, change strategy or ask.",
-    strategy: "plan-exec-weak",
+    strategy: "plan-exec",
 }

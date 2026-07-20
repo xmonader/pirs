@@ -28,7 +28,8 @@ this stack and can override further.
 | 4 | `goal.rhai` | Session goal pin (`[SESSION GOAL]` text — separate from system-reminder) |
 
 Also composed by the CLI (not packs): `--tool-diet`, `--sequential`,
-`max-retries ≥ 3`, one-shot default strategy `plan-exec-weak`, and
+`max-retries ≥ 3`, one-shot default strategy `plan-exec` (pair with
+`--plan-model <strong>` for strong-plan / weak-exec), and
 auto-`--verify` from the project test ecosystem when detectable.
 
 Source of truth for order: `pirs_rhai::weak_packs::BUNDLED_ORDER` /

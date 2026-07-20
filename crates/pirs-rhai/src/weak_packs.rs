@@ -127,7 +127,7 @@ mod tests {
     fn weak_profile_script_parses() {
         let p = crate::profile_script::load_profile_str(WEAK_PROFILE, "weak").unwrap();
         assert_eq!(p.name, "weak");
-        assert_eq!(p.strategy.name, "plan-exec-weak");
+        assert_eq!(p.strategy.name, "plan-exec");
         assert!(p.persona.is_some());
     }
 }

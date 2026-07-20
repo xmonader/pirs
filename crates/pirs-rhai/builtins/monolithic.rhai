@@ -1,6 +1,8 @@
 // Built-in strategy: monolithic — one self-correcting fix loop in a single
-// persistent context (the baseline). Resolved by name via `builtin("monolithic")`
-// and overridable by a user file at .pirs/strategies/monolithic.rhai.
+// persistent context (the baseline). Uses --model for the whole run
+// (--plan-model has no effect: there is no separate plan phase).
+// Resolved by name via `builtin("monolithic")` and overridable by a user file
+// at .pirs/strategies/monolithic.rhai.
 #{
     name: "monolithic",
     persist: true,

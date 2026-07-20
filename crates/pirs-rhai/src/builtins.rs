@@ -20,13 +20,13 @@ const PLAN_CRITIC_EXEC: &str = include_str!("../builtins/plan-critic-exec.rhai")
 const WIDE_PLAN_EXEC: &str = include_str!("../builtins/wide-plan-exec.rhai");
 const PLAN_EXEC_WEAK: &str = include_str!("../builtins/plan-exec-weak.rhai");
 
-/// `(name, embedded source)` for every built-in, in resolution/display order.
-/// (`plan-oracle-exec` is intentionally not here — it is a fixed-model script
-/// shipped in `.pirs/strategies/`, not a bare-name built-in.)
+/// Primary product strategies (strong-plan/weak-exec pitch). Others remain
+/// available by name but are not the front-door set.
 const SOURCES: &[(&str, &str)] = &[
     ("monolithic", MONOLITHIC),
     ("plan-exec", PLAN_EXEC),
     ("plan-critic-exec", PLAN_CRITIC_EXEC),
+    // Secondary / legacy — still loadable, not the product focus:
     ("wide-plan-exec", WIDE_PLAN_EXEC),
     ("plan-exec-weak", PLAN_EXEC_WEAK),
 ];
@@ -34,6 +34,11 @@ const SOURCES: &[(&str, &str)] = &[
 /// Names of the built-in strategies, in display order.
 pub fn builtin_names() -> Vec<&'static str> {
     SOURCES.iter().map(|(name, _)| *name).collect()
+}
+
+/// The three strategies the product is built around.
+pub fn primary_names() -> &'static [&'static str] {
+    &["monolithic", "plan-exec", "plan-critic-exec"]
 }
 
 /// The parsed built-ins, keyed by name. Parsed once; a parse failure is a bug in
@@ -53,9 +58,19 @@ fn registry() -> &'static HashMap<&'static str, Strategy> {
     })
 }
 
-/// Look up a built-in strategy by name.
+/// Canonicalize user-facing aliases to registry keys.
+/// `plan-exec-critic` is accepted as a synonym for `plan-critic-exec`.
+pub fn canonicalize_name(name: &str) -> &str {
+    match name {
+        "plan-exec-critic" | "plan_critic_exec" => "plan-critic-exec",
+        "plan_exec" => "plan-exec",
+        other => other,
+    }
+}
+
+/// Look up a built-in strategy by name (aliases accepted).
 pub fn builtin(name: &str) -> Option<Strategy> {
-    registry().get(name).cloned()
+    registry().get(canonicalize_name(name)).cloned()
 }
 
 #[cfg(test)]
@@ -107,6 +122,23 @@ mod tests {
     fn plan_critic_exec_has_three_phases() {
         let s = builtin("plan-critic-exec").unwrap();
         assert_eq!(s.steps.len(), 3);
+    }
+
+    #[test]
+    fn plan_exec_critic_alias_resolves() {
+        let a = builtin("plan-exec-critic").expect("alias");
+        let b = builtin("plan-critic-exec").expect("canonical");
+        assert_eq!(a.name, b.name);
+        assert_eq!(a.steps.len(), 3);
+        assert_eq!(canonicalize_name("plan-exec-critic"), "plan-critic-exec");
+    }
+
+    #[test]
+    fn primary_names_are_the_product_three() {
+        assert_eq!(
+            primary_names(),
+            &["monolithic", "plan-exec", "plan-critic-exec"]
+        );
     }
 
     #[test]
