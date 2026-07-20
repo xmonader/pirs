@@ -1,0 +1,12 @@
+{
+  "id": "django__django-11001",
+  "model": "deepseek-v4-flash",
+  "label": "no-strategy",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11001:latest",
+  "container": "pirsbench-django--django-11001-no-strategy",
+  "exit_code": 1,
+  "elapsed_s": 0.1,
+  "solved": false,
+  "stderr_tail": "strategy: none\n\u001b[2m2026-07-20T11:26:43.351753Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::harness\u001b[0m\u001b[2m:\u001b[0m no runner confirmed\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 0.02s):\n  discover: 0.02s (100%)\noutcome: Failed(RunnerUndetected)",
+  "patch_copied": false
+}

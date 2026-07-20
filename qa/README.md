@@ -130,18 +130,32 @@ embeddings send code off-machine: fine for a public repo, weigh for private.)
 ## Strategy comparison benchmark (SWE-bench-lite)
 
 A live, real-API comparison of all 5 execution modes (`no-strategy`,
-`monolithic`, `plan-exec`, `plan-critic-exec`, `wide-plan-exec`) against the
-same 5 SWE-bench-lite instances inside the official eval docker images — 25
-runs, $2.10 total spend. Full methodology, per-run results, and findings in
-[`bench-swebench-5x5.md`](bench-swebench-5x5.md); raw `.result.json`/`.log`
-artifacts in [`bench-swebench-5x5/results/`](bench-swebench-5x5/results/).
-Headline: `monolithic`'s original prompt ("make the SMALLEST change... do not
-refactor") was dominated on every axis by the plain `no-strategy` baseline —
-traced to that one instruction pressuring the model into minimal-but-wrong
-fixes. A follow-up experiment rewrote the prompt to focus on root cause
-instead and re-ran it: `monolithic` went from 1/3 to 3/3, closing the entire
-gap. The built-in prompt (`crates/pirs-rhai/builtins/monolithic.rhai`) has been
-fixed accordingly — this was a real bug, not just a benchmark footnote.
+`monolithic`, `plan-exec`, `plan-critic-exec`, `wide-plan-exec`) against 10
+SWE-bench-lite instances (two batches of 5) inside the official eval docker
+images — 50 runs attempted, ~$2.90 total spend. Full methodology, per-run
+results, and findings in [`bench-swebench-5x5.md`](bench-swebench-5x5.md); raw
+`.result.json`/`.log` artifacts in
+[`bench-swebench-5x5/results/`](bench-swebench-5x5/results/) and
+[`results_matrix2/`](bench-swebench-5x5/results_matrix2/).
+
+Headline #1: `monolithic`'s original prompt ("make the SMALLEST change... do
+not refactor") was dominated on every axis by the plain `no-strategy`
+baseline — traced to that one instruction pressuring the model into
+minimal-but-wrong fixes. A follow-up experiment rewrote the prompt to focus on
+root cause instead and re-ran it: `monolithic` went from 1/3 to 3/3, closing
+the entire gap. The built-in prompt
+(`crates/pirs-rhai/builtins/monolithic.rhai`) has been fixed accordingly —
+this was a real bug, not just a benchmark footnote.
+
+Headline #2: only **4 of the 10 attempted instances ever reached the agent**
+— the other 6 failed identically across all five strategies, either
+`Failed(ReproFailed)` (a harness/environment pre-flight gap, 4 instances) or
+`Failed(RunnerUndetected)` (the harness's test-runner detector doesn't
+recognize Django's or sympy's custom test invocation, 2 instances). On the 4
+real instances, every strategy now ties at 4/4 solved (with the fixed
+`monolithic`) — the remaining differentiator is cost, where `no-strategy` and
+`monolithic` are cheapest and the three planner-based strategies cost roughly
+2x more for the same outcome.
 
 ## Discovery
 

@@ -198,17 +198,109 @@ not just a benchmark footnote.
 Artifacts: [`bench-swebench-5x5/results_rerun/`](bench-swebench-5x5/results_rerun/),
 [`bench-swebench-5x5/rerun_monolithic_vs_naive.py`](bench-swebench-5x5/rerun_monolithic_vs_naive.py).
 
+## Second batch: 5 more instances (and a harness coverage gap)
+
+Extended the sample with 5 more instances from the 45 remaining pre-pulled
+docker images, chosen for repo diversity: `astropy__astropy-14182`,
+`django__django-11001`, `matplotlib__matplotlib-26011`,
+`scikit-learn__scikit-learn-25570`, `sympy__sympy-15346`. Same setup: all 5
+strategies (with the now-fixed `monolithic`), `deepseek-v4-flash` base,
+`deepseek-v4-pro` on planner/critic phases.
+
+**Only 1 of the 5 new instances ever reached the agent.** The other 4 failed
+identically across all five strategies, in two distinct ways:
+
+- **`matplotlib-26011` and `scikit-learn-25570`: `Failed(ReproFailed)`**, the
+  same pre-flight failure as `matplotlib-23562`/`pytest-5221` from the first
+  batch — `turns=0` for every strategy, 96-97% of wall-clock spent inside
+  `bootstrap` (up to 480s) before the harness ever hands control to the agent.
+- **`django-11001` and `sympy-15346`: `Failed(RunnerUndetected)`** — a
+  *different* failure, and a new finding: the harness's bundled test-runner
+  detectors don't recognize Django's or sympy's test invocation (both use a
+  custom runner rather than plain pytest). This fails in ~0.1-0.3s, before
+  `discover` even completes, and is a harness coverage gap, not instance
+  flakiness or a strategy effect — every strategy hits it identically because
+  none of them ever get a turn.
+
+Only `astropy-14182` produced real signal, solved by all 5 strategies:
+
+| Strategy | Turns | Elapsed | Cost |
+|---|---|---|---|
+| no-strategy | 31 | 305.0s | $0.0789 |
+| monolithic | 21 | 320.9s | $0.0523 |
+| plan-exec | 31 | 407.7s | $0.0603 |
+| plan-critic-exec | 43 | 597.5s | $0.0920 |
+| wide-plan-exec | 100 | 403.4s | $0.1681 |
+
+**Combined real-instance yield so far: 4 of 10 attempted instances (40%)** ever
+reached the agent — `astropy-6938`, `scikit-learn-12471`, `sphinx-7686`,
+`astropy-14182`. The other 6 split evenly between the two failure categories
+above. This 40% yield is itself a finding: this particular set of pre-pulled
+SWE-bench-lite docker images, combined with this harness's current detector
+coverage, only produces usable signal on a minority of instances — see
+[Limitations](#limitations).
+
+**Combined strategy comparison across all 4 real instances** (using the fixed
+`monolithic` throughout — `astropy-6938`/`scikit-learn-12471`/`sphinx-7686`
+from the [follow-up rerun](#follow-up-was-it-really-the-prompt),
+`astropy-14182` from this batch):
+
+| Strategy | Solved (of 4) | Total cost | Avg cost |
+|---|---|---|---|
+| no-strategy | 4/4 | $0.3045 | $0.0761 |
+| monolithic (fixed) | 4/4 | $0.2798 | $0.0700 |
+| plan-exec | 4/4 | $0.6096 | $0.1524 |
+| plan-critic-exec | 4/4 | $0.5238 | $0.1310 |
+| wide-plan-exec | 4/4 | $0.6179 | $0.1545 |
+
+**With the prompt fixed, every strategy now ties at 4/4** on this sample — the
+solve-rate question that motivated this whole benchmark is no longer
+differentiating. What still separates them is cost: `no-strategy` and the
+fixed `monolithic` are statistically indistinguishable and cheapest (both
+around $0.07-0.08 avg), while the three planner-based strategies cost
+**roughly 2x more** for the same outcome on this sample, `wide-plan-exec` and
+`plan-exec` being the most expensive. None of the extra spend bought a solve
+the cheap strategies didn't already get — though again, n=4 is still small,
+and a harder or more varied instance is where a planner phase would be
+expected to start earning its cost.
+
+**A mid-run infrastructure incident, unrelated to any of the above:** 7 of
+this batch's 25 runs failed with `[Errno 28] No space left on device`
+(`sympy-15346` all 5 strategies, `scikit-learn-25570`'s `plan-critic-exec`/
+`wide-plan-exec`) when the host disk filled during the run — traced to
+`/home/driver/hero/build/target`, a 389GB accumulated Rust build-artifact
+cache unrelated to this benchmark. After ~400GB was freed, those 7 cells were
+re-run cleanly; all 5 of the re-run `sympy-15346` cells landed on
+`RunnerUndetected` (see above) and the 2 re-run `scikit-learn-25570` cells
+landed on `ReproFailed`, both fully consistent with their sibling strategies'
+results on the same instances — so the disk incident cost time, not data
+integrity.
+
+Artifacts: [`bench-swebench-5x5/results_matrix2/`](bench-swebench-5x5/results_matrix2/),
+[`bench-swebench-5x5/run_matrix2.py`](bench-swebench-5x5/run_matrix2.py),
+[`bench-swebench-5x5/rerun_disk_losses.py`](bench-swebench-5x5/rerun_disk_losses.py).
+
 ## Limitations
 
-- **n=3 real instances.** `matplotlib-23562` and `pytest-5221` never exercised
-  the agent, leaving only `astropy-6938`, `scikit-learn-12471`, and
-  `sphinx-7686` as actual signal. Every claim above is a 3-instance sample —
+- **n=4 real instances, out of 10 attempted.** 6 of the first 10 SWE-bench-lite
+  instances tried across both batches never exercised the agent at all — 4
+  `Failed(ReproFailed)` (`matplotlib-23562`, `pytest-5221`, `matplotlib-26011`,
+  `scikit-learn-25570`) and 2 `Failed(RunnerUndetected)` (`django-11001`,
+  `sympy-15346`). Every solve-rate/cost claim above rests on the remaining 4
+  (`astropy-6938`, `scikit-learn-12471`, `sphinx-7686`, `astropy-14182`) —
   directional, not statistically powered. A single flip on one instance moves
-  a strategy's solve rate by 33 percentage points.
+  a strategy's solve rate by 25 percentage points.
+- **~40% real-instance yield from this docker-image set is itself a finding**,
+  not just a sampling nuisance. Extending this benchmark further with more of
+  the 40 remaining images should expect a similar attrition rate until the two
+  underlying gaps are fixed: (a) whatever makes `bootstrap` hang/fail on some
+  images (up to 480s before giving up), and (b) the harness's test-runner
+  detector not recognizing Django's or sympy's custom test invocation.
 - **One trial per (instance, strategy) cell.** LLM agent runs are stochastic;
-  no repeated-seed variance is captured here, so e.g. `monolithic`'s 1/3 could
-  plausibly be 2/3 or 0/3 on a re-run. Same caveat applies to every cost/turn
-  number — each is one sample, not a distribution.
+  no repeated-seed variance is captured here — e.g. `no-strategy`'s own numbers
+  moved between its two independent runs on the same 3 instances (see the
+  follow-up section). Every cost/turn number here is one sample, not a
+  distribution.
 - **`--max-turns 40` / 2400s timeout were reused from an earlier, separately
   validated baseline**, not tuned for this specific comparison. `plan-exec`'s
   171-turn `sphinx-7686` outlier suggests some strategies may be more sensitive
@@ -217,10 +309,9 @@ Artifacts: [`bench-swebench-5x5/results_rerun/`](bench-swebench-5x5/results_reru
   will drift, though the relative ordering between strategies (which is the
   actual finding) is pricing-model-independent as long as flash/pro's relative
   price ratio holds.
-- **The two `ReproFailed` instances are an unresolved harness/environment gap**,
-  not a strategy finding — worth root-causing separately (likely a slow or
-  failing `bootstrap` step specific to these two docker images) before reusing
-  this instance set for a larger run.
+- **The `ReproFailed` and `RunnerUndetected` instances are unresolved
+  harness/environment gaps**, not a strategy finding — worth root-causing
+  separately before reusing this instance set for a larger run.
 
 ## Reproduce
 
@@ -252,6 +343,11 @@ never collide) live in `run_one.py`.
   [`bench-swebench-5x5/rerun_monolithic_vs_naive.py`](bench-swebench-5x5/rerun_monolithic_vs_naive.py)
   — the 6-run follow-up (`monolithic-v2` vs `no-strategy`) that confirmed the
   prompt fix.
+- [`bench-swebench-5x5/results_matrix2/`](bench-swebench-5x5/results_matrix2/),
+  [`bench-swebench-5x5/run_matrix2.py`](bench-swebench-5x5/run_matrix2.py),
+  [`bench-swebench-5x5/rerun_disk_losses.py`](bench-swebench-5x5/rerun_disk_losses.py)
+  — the second batch (5 more instances × 5 strategies) and the 7-cell rerun
+  after the mid-run disk-space incident.
 - New strategy scripts: `.pirs/strategies/plan-critic-exec-pro-flash.rhai`,
   `.pirs/strategies/wide-plan-exec-pro-flash.rhai` (planner/critic phases
   pinned to `deepseek-v4-pro`, cloned from the built-in phase structure).

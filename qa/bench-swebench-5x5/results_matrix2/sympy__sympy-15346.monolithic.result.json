@@ -1,0 +1,12 @@
+{
+  "id": "sympy__sympy-15346",
+  "model": "deepseek-v4-flash",
+  "label": "monolithic",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15346:latest",
+  "container": "pirsbench-sympy--sympy-15346-monolithic",
+  "exit_code": 1,
+  "elapsed_s": 0.3,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\n\u001b[2m2026-07-20T11:56:16.234421Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::harness\u001b[0m\u001b[2m:\u001b[0m no runner confirmed\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 0.09s):\n  discover: 0.09s (100%)\noutcome: Failed(RunnerUndetected)",
+  "patch_copied": false
+}

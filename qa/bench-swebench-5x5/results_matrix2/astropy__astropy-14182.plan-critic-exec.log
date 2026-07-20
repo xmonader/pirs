@@ -1,0 +1,23 @@
+=== astropy__astropy-14182 (deepseek-v4-flash) start 1784546201.2940078 ===
+194838d7de937284c0b481d2ec5d0c830eb414d0708b3563c7406cd44c75ffc9
+head_sha=9fe576fd020557c44b5cc9eb2468e3cc6c9e5b03
+cmd: pirs-bench solve /testbed -t astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows -k astropy/io/ascii/tests/test_rst.py::test_read_normal -k astropy/io/ascii/tests/test_rst.py::test_read_normal_names -k astropy/io/ascii/tests/test_rst.py::test_read_normal_names_include -k astropy/io/ascii/tests/test_rst.py::test_read_normal_exclude -k astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column -k astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column_header -k astropy/io/ascii/tests/test_rst.py::test_read_right_indented_table -k astropy/io/ascii/tests/test_rst.py::test_trailing_spaces_in_row_definition -k astropy/io/ascii/tests/test_rst.py::test_write_normal --issue-file /tmp/issue.md --base-sha 9fe576fd020557c44b5cc9eb2468e3cc6c9e5b03 --provider deepseek --model deepseek-v4-flash --max-turns 40 --out /tmp/out.patch --strategy-script /tmp/strategy.rhai
+
+strategy: plan-critic-exec-pro-flash
+session: turns=43 tools=48 [read:24 grep:11 code_map:8 run_tests:2 bash:1 edit:1 find:1]
+tokens by model:
+  deepseek-v4-flash: in=6677 cache_r=57856 cache_w=0 out=1177 reasoning=303 total=65710 — $0.0071
+  deepseek-v4-pro: in=34799 cache_r=681344 cache_w=0 out=25266 reasoning=21018 total=741409 — $0.0849
+  TOTAL: in=41476 cache_r=739200 cache_w=0 out=26443 reasoning=21321 total=807119 — $0.0920
+timing (total 597.51s):
+  fix: 464.36s (78%)
+  bootstrap: 83.80s (14%)
+  discover: 43.39s (7%)
+  verify: 3.72s (1% n=2)
+  baseline: 2.21s (0%)
+  patch: 0.03s (0%)
+  fix→tools: run_tests:46.68s code_map:5.47s bash:1.37s grep:0.06s read:0.04s find:0.03s edit:0.02s
+outcome: Solved
+patch written to "/tmp/out.patch" (819 bytes)
+
+exit_code=0 elapsed_s=597.6

@@ -1,0 +1,15 @@
+=== sympy__sympy-15346 (deepseek-v4-flash) start 1784548579.7409587 ===
+adc2e6cdf1c23f83cc2f6594f15c4a2f02053fdccc6a88fefd79795514855851
+head_sha=a635dfe985de4e85efec892b46249ec975c2d2e3
+cmd: pirs-bench solve /testbed -t test_issue_15129_trigsimp_methods -k test_trigsimp1 -k test_trigsimp1a -k test_trigsimp2 -k test_issue_4373 -k test_trigsimp3 -k test_issue_4661 -k test_issue_4494 -k test_issue_5948 -k test_issue_4775 -k test_issue_4280 -k test_issue_3210 -k test_trigsimp_issues -k test_trigsimp_issue_2515 -k test_trigsimp_issue_3826 -k test_trigsimp_issue_4032 -k test_trigsimp_issue_7761 -k test_trigsimp_noncommutative -k test_hyperbolic_simp -k test_trigsimp_groebner -k test_issue_2827_trigsimp_methods -k test_exptrigsimp -k test_powsimp_on_numbers --issue-file /tmp/issue.md --base-sha a635dfe985de4e85efec892b46249ec975c2d2e3 --provider deepseek --model deepseek-v4-flash --max-turns 40 --out /tmp/out.patch --strategy-script /tmp/strategy.rhai
+
+strategy: wide-plan-exec-pro-flash
+[2m2026-07-20T11:56:22.201793Z[0m [33m WARN[0m [2mpirs_bench::harness[0m[2m:[0m no runner confirmed
+session: turns=0 tools=0 []
+tokens by model:
+  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 — $0.0000
+timing (total 0.15s):
+  discover: 0.15s (100%)
+outcome: Failed(RunnerUndetected)
+
+exit_code=1 elapsed_s=0.3
