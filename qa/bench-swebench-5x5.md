@@ -15,7 +15,11 @@ solvable, real instances** once it was — turning a 40%-yield, n=4 comparison
 into an 80%-yield, n=8 one. **If you want the current, complete picture, skip
 to the [combined 8-instance results](#combined-8-instance-results-current)
 after the fix section** — the sections before it are preserved for the
-investigative trail, not as the final numbers.
+investigative trail, not as the final numbers. The remaining 2 of 10
+instances (`django-11001`, `sympy-15346`) needed a separate, larger fix —
+see [Default fallback: agent-discovered test runners](#default-fallback-agent-discovered-test-runners)
+— which mechanically works but exposed a real limit of its own, honestly
+reported there rather than glossed over.
 
 ## Harness fix: unresolvable test ids no longer sink the baseline
 
@@ -104,6 +108,94 @@ a small sample (see [Limitations](#limitations)), so treat the *ranking* as
 suggestive rather than final, but the *direction* — a well-written single-loop
 prompt beating both a generic loop and three multi-phase planners on cost — is
 a clear, reproducible result from this benchmark.
+
+## Default fallback: agent-discovered test runners
+
+The remaining 2 of the original 10 instances, `django-11001` and
+`sympy-15346`, never made it into the 8-instance comparison above: both fail
+`Failed(RunnerUndetected)` because their test suites use custom, non-pytest
+invocations this harness's static rhai detectors don't recognize (confirmed
+concretely for Django: its own docs say to run `tests/runtests.py`, a script
+with no `pytest` involved at all, and `python -m pytest` isn't even
+installed in its environment).
+
+**A deeper wrinkle, not just "add a Django detector":** Django's own test
+runner has **no JUnit XML output whatsoever**, and this harness's entire
+architecture is built around JUnit as its one universal interchange format
+— deliberately, to avoid a fragile per-framework text scraper. Checking the
+pre-built environment confirmed no JUnit-bridging package
+(`unittest-xml-reporting`, `pytest-django`) is installed either. A real fix
+needs either installing such a bridge at bootstrap time, or a bespoke
+Django-native result parser — a second, harder detection layer beyond just
+"find the right shell command."
+
+**What was built instead: a default (not opt-in) last-resort fallback.**
+When no static detector confirms *any* runner, the harness now hands the
+specific test ids to a bounded, edit-free sub-agent — read/bash/grep/find/ls
+only, no `edit`/`write`/`ast_edit` — that investigates the repo (docs, CI
+config, trial commands) and self-reports pass/fail via a forced
+`report_test_results` tool call. If static detection succeeds normally (the
+common case), this fallback is never invoked and costs nothing.
+
+**This is a deliberate, explicit trust exception**, the only one in the
+harness: every other `TestRunner` gets its verdict from independently
+parsing a real subprocess's JUnit output; this one trusts the discovery
+agent's own report instead. `InstanceReport.used_undetected_fallback` and the
+JSONL trace's `self_reported_runner` field ensure this is never silently
+indistinguishable from a harness-confirmed outcome.
+
+### A real bug found and fixed by the first live test
+
+The first live run against `django-11001` fell back correctly but came back
+`Failed(BaselineUnusable)` after 162s with zero visible turns. Root cause:
+the harness's baseline-stability check calls `TestRunner::run()` **twice**,
+requiring the *same* answer both times, to guard against flaky tests — but
+the discovery runner was doing two fully independent, non-deterministic LLM
+investigations from scratch every call, so even a perfectly-investigated,
+unchanged tree could disagree with itself on wording or edge cases. Every
+agent-discovered instance would have failed this way, unconditionally.
+
+**Fix:** cache the self-report keyed on (a fingerprint of the working tree's
+current git state, the exact requested ids). An unchanged tree returns the
+identical cached answer — guaranteed stable across repeat calls; a real fix
+attempt changes the fingerprint, forcing a fresh investigation, so a post-fix
+verify pass correctly reflects the new state rather than a stale pre-fix
+answer. Covered by a dedicated test proving both halves (a second call on an
+unchanged tree never re-invokes the provider; an edited tree does).
+
+### Second live test: the mechanism works, and its real limit shows up honestly
+
+With the caching fix, baseline capture succeeded — `BaselineUnusable` is
+gone. The discovery agent then did something genuinely substantial: it
+figured out Django's actual test invocation on its own and ran **all 120**
+requested ids (2 targets + 118 keep-green) using the correct Django-native
+dotted id format (`test_name (module.TestClass)`), reporting a real outcome
+for every single one — no omissions, no guessing. That is exactly the kind
+of "read the docs, try it, verify by actually running it" investigation this
+fallback was built for, and it worked.
+
+But one of the two `FAIL_TO_PASS` targets came back wrong:
+
+| Target | SWE-bench ground truth | Agent self-report |
+|---|---|---|
+| `test_order_by_multiline_sql (...)` | should fail at base commit | `fail` ✓ |
+| `test_order_of_operations (...)` | should fail at base commit | `pass` ✗ |
+
+Since the reproduce gate requires *every* target to show red before trusting
+a baseline, this one incorrect entry among 120 was enough to abort with
+`Failed(ReproFailed)` — never reaching the actual fix loop. This is not a
+mechanism failure: detection, fallback, investigation, and id formatting all
+worked correctly. It is the trust trade-off the code's own doc comments
+already name, materializing live: a self-reported outcome can simply be
+wrong, on one test in 120, with nothing in the loop to independently catch
+it. No further attempt was made to force a lucky pass on a re-run — the
+honest result is that this mechanism unlocks Django/sympy-style instances
+mechanically but inherits whatever accuracy the underlying model has at
+actually running and reading test results, which is not perfect.
+
+Artifacts: [`bench-swebench-5x5/results_agent_discovery/`](bench-swebench-5x5/results_agent_discovery/)
+(both live-test logs/results, the issue text, and the test patch for
+`django-11001`).
 
 ## Setup
 
@@ -468,14 +560,24 @@ Artifacts: [`bench-swebench-5x5/results_disk_suspects/`](bench-swebench-5x5/resu
 ## Limitations
 
 - **n=8 real instances, out of 10 attempted** (current, post-fix — see
-  [combined results](#combined-8-instance-results-current)). Only
-  `django-11001` and `sympy-15346` remain unusable, both
-  `Failed(RunnerUndetected)`: the harness's test-runner detectors don't
-  recognize Django's or sympy's custom test invocation, a real, still-open
-  gap unrelated to the fixed test-id bug. Every solve-rate/cost claim rests on
-  the 8 real instances — directional, not statistically powered. A single
-  flip on one instance moves a strategy's solve rate by 12.5 percentage
-  points.
+  [combined results](#combined-8-instance-results-current)). `django-11001`
+  and `sympy-15346` remain unusable through the strategy comparison — not
+  because detection can't be worked around at all (the
+  [default fallback](#default-fallback-agent-discovered-test-runners) does
+  unlock `django-11001`'s detection and investigation end-to-end) but because
+  the fallback's self-reported baseline came back with one wrong entry among
+  120, tripping the reproduce gate before any strategy ever got a fix
+  attempt. Every solve-rate/cost claim rests on the 8 real instances —
+  directional, not statistically powered. A single flip on one instance moves
+  a strategy's solve rate by 12.5 percentage points.
+- **The agent-discovery fallback trades detection coverage for verification
+  strength.** It mechanically works (confirmed live: correct Django-native
+  investigation, correct dotted test ids, all 120 requested ids answered),
+  but unlike every other runner in this harness, nothing independently
+  double-checks its self-report — so a single mistaken pass/fail judgment
+  (observed live, 1 wrong out of 120) can silently sink an otherwise-solvable
+  instance before the fix loop even starts. This is not a bug to chase
+  further; it's the trust trade-off, made real.
 - **The earlier "~40% real-instance yield" and "root cause not yet
   identified" framing (both below, in the pre-fix sections) were wrong** —
   the yield was a specific, fixed harness bug (see
@@ -563,3 +665,15 @@ never collide) live in `run_one.py`.
   --agent` (`crates/pirs-bench-runner/src/{main,lib}.rs`), unit-tested in both
   crates (`no_strategy_flag_resolves_to_empty_strategy`,
   `naive_config_flag_is_stored_on_the_executor`, and siblings).
+- New default harness feature: the agent-discovered test-runner fallback
+  (`crates/pirs-bench-runner/src/agent_runner.rs`, `crates/pirs-bench/src/harness.rs`'s
+  new `undetected_fallback` parameter on `run_instance`) — see
+  [Default fallback: agent-discovered test runners](#default-fallback-agent-discovered-test-runners).
+  Unit-tested: `harness.rs`'s
+  `undetected_fallback_bypasses_bootstrap_and_is_flagged_in_the_report` (wiring,
+  no LLM call), `agent_runner.rs`'s
+  `self_reported_outcomes_land_in_the_snapshot_and_omitted_ids_are_not_collected`
+  and `same_tree_state_reuses_the_cached_self_report_without_a_second_investigation`
+  (the tool-dispatch path and the tree-fingerprint caching fix, both against a
+  scripted provider). Live-tested twice against `django-11001`; artifacts in
+  [`bench-swebench-5x5/results_agent_discovery/`](bench-swebench-5x5/results_agent_discovery/).

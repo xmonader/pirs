@@ -1,0 +1,12 @@
+{
+  "id": "django__django-11001",
+  "model": "deepseek-v4-flash",
+  "label": "agent-discover-test2",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11001:latest",
+  "container": "pirsbench-django--django-11001-agent-discover-test2",
+  "exit_code": 1,
+  "elapsed_s": 123.6,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\n\u001b[2m2026-07-20T14:56:31.200051Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::harness\u001b[0m\u001b[2m:\u001b[0m no runner confirmed; falling back to an agent-discovered runner (self-reported, not independently verified)\n[WARNING: no runner detected \u2014 outcome is the discovery agent's own self-report, NOT independently verified by the harness]\nsession: turns=0 tools=0 []\ntokens by model:\n  TOTAL: in=0 cache_r=0 cache_w=0 out=0 reasoning=0 total=0 \u2014 $0.0000\ntiming (total 123.51s):\n  baseline: 123.39s (100%)\n  rollback: 0.09s (0%)\n  discover: 0.02s (0%)\noutcome: Failed(ReproFailed)",
+  "patch_copied": false
+}

@@ -167,10 +167,23 @@ strategies on cost, for the same solve rate.
    unresolvable ids (identified from pytest's own stderr) and retry. Re-test:
    18/20 solved — both `matplotlib` instances now go 5/5.
 
-Only `django-11001`/`sympy-15346`'s `Failed(RunnerUndetected)` remains a real,
-open gap (the harness's test-runner detectors don't recognize Django's or
-sympy's custom test invocation) — worth fixing before extending this
-benchmark further.
+`django-11001`/`sympy-15346`'s `Failed(RunnerUndetected)` prompted a third,
+larger addition: a default (not opt-in) fallback — when no static detector
+confirms a runner at all, a bounded, edit-free sub-agent investigates the
+repo and self-reports pass/fail, rather than failing the instance outright.
+Live-tested against `django-11001`: it genuinely worked — correctly
+discovered Django's own `runtests.py` convention and ran all 120 requested
+tests with the right dotted ids — but its self-report had 1 wrong entry out
+of 120 (a target incorrectly marked passing), which was enough to trip the
+reproduce gate before any strategy got a fix attempt. This is the deliberate
+trust trade-off the feature makes, explicit rather than hidden: unlike every
+other runner in the harness, nothing independently re-checks this one's
+verdict. See `bench-swebench-5x5.md`'s
+"Default fallback: agent-discovered test runners" section for the full
+writeup, including a real caching bug this live test caught and fixed along
+the way (the harness's baseline-stability check needs the same answer twice;
+two independent fresh LLM investigations of an unchanged tree don't
+reliably agree with themselves).
 
 ## Discovery
 
