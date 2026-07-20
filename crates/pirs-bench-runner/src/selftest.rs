@@ -424,7 +424,7 @@ pub fn run_selftest(
                 serde_json::json!({ "id": proj.id, "targets": proj.targets }),
             );
         }
-        let report = run_instance(&inst, &host, &mut cache, exec, 3, Some(&ws))?;
+        let report = run_instance(&inst, &host, &mut cache, exec, 3, Some(&ws), None)?;
         attribution.record(&report.outcome);
         if let Some(r) = recorder {
             r.event(

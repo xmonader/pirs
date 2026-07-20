@@ -12,6 +12,7 @@
 //! `pirs_rhai::ExtensionHost`. There is therefore no path by which the task
 //! repo's own `.pirs/extensions`, hooks, or MCP config load into this run.
 
+pub mod agent_runner;
 pub mod metrics;
 pub mod selftest;
 

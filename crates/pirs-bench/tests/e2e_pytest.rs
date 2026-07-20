@@ -88,7 +88,7 @@ fn solves_a_real_pytest_bug_end_to_end() {
         base_sha: None,
     };
 
-    let report = run_instance(&inst, &host, &mut cache, &mut exec, 2, Some(&ws)).unwrap();
+    let report = run_instance(&inst, &host, &mut cache, &mut exec, 2, Some(&ws), None).unwrap();
     assert_eq!(
         report.outcome,
         Outcome::Solved,
@@ -170,7 +170,7 @@ fn unpatched_bug_is_not_a_false_pass() {
         base_sha: None,
     };
 
-    let report = run_instance(&inst, &host, &mut cache, &mut NoopExecutor, 2, None).unwrap();
+    let report = run_instance(&inst, &host, &mut cache, &mut NoopExecutor, 2, None, None).unwrap();
     // The target never flipped, so it must NOT be reported solved.
     assert_ne!(
         report.outcome,

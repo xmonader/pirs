@@ -1,0 +1,287 @@
+//! Last-resort test runner for when no static detector confirms a runner at
+//! all (e.g. Django's or sympy's custom test invocation, which this harness's
+//! rhai detectors don't yet recognize). Instead of failing the instance
+//! outright with `RunnerUndetected`, hand the specific test ids to a bounded,
+//! edit-free sub-agent: investigate the repo (docs, CI config, trial
+//! commands) and self-report pass/fail for each id.
+//!
+//! **Trust note — read before using.** Every other [`TestRunner`] in this
+//! harness gets its verdict from independently parsing a real test run's
+//! output (JUnit XML); the whole benchmark's value rests on that
+//! independence ("the harness judges, the agent's own 'I'm done' is only
+//! advisory"). This runner is the one deliberate exception: its
+//! [`Snapshot`] is the discovery sub-agent's own self-report, not something
+//! the harness re-verified. It exists only as an opt-in fallback
+//! (`--agent-discover-runner`) for instances no static detector covers at
+//! all, and every id it reports is tagged in the trace so a reader can tell
+//! a self-reported outcome apart from a harness-confirmed one.
+
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use async_trait::async_trait;
+use pirs_agent::agent_loop::{run_agent_loop, Budgets, LoopConfig};
+use pirs_agent::{AgentTool, Emit, ExecutionMode, ToolExecContext, ToolOutput};
+use pirs_ai::{CompletionOptions, Context, LlmProvider, Message};
+use pirs_bench::{Ring, Snapshot, TestId, TestOutcome, TestRunner};
+use serde::Deserialize;
+use serde_json::{json, Value};
+use tokio_util::sync::CancellationToken;
+
+/// Tools the discovery sub-agent may use. It investigates and *runs* things
+/// (so it needs a shell), but must never edit the tree it's judging — that
+/// stays the fix executor's job, never this runner's.
+const DISCOVERY_MUTATING: &[&str] = &["edit", "write", "ast_edit"];
+
+/// One id's self-reported outcome, as the discovery agent phrases it.
+#[derive(Debug, Clone, Deserialize)]
+struct ReportedResult {
+    id: String,
+    outcome: String, // "pass" | "fail" | "error" | "unknown"
+}
+
+/// Captures the discovery agent's one required tool call and ends its turn.
+/// This is the *only* way the sub-agent can conclude — there is no other
+/// termination path, so a run that never calls it exhausts its turn budget
+/// and every id defaults to [`TestOutcome::NotCollected`] (never a silent
+/// pass).
+struct ReportResultsTool {
+    slot: Arc<Mutex<Option<Vec<ReportedResult>>>>,
+}
+
+#[async_trait]
+impl AgentTool for ReportResultsTool {
+    fn name(&self) -> &str {
+        "report_test_results"
+    }
+
+    fn description(&self) -> &str {
+        "Report your final findings: the current pass/fail outcome for every \
+         requested test id, based on tests you actually ran — never a guess. \
+         Call this exactly once, when done investigating. Include every id \
+         you were given; any omitted id counts as not verified."
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "outcome": {
+                                "type": "string",
+                                "enum": ["pass", "fail", "error", "unknown"]
+                            }
+                        },
+                        "required": ["id", "outcome"]
+                    }
+                }
+            },
+            "required": ["results"]
+        })
+    }
+
+    async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+        let results: Vec<ReportedResult> = ctx
+            .args
+            .get("results")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()?
+            .unwrap_or_default();
+        let n = results.len();
+        *self.slot.lock().unwrap() = Some(results);
+        Ok(ToolOutput::text(format!("recorded {n} result(s)")).terminate())
+    }
+}
+
+/// Renders the discovery sub-agent's system prompt for one batch of ids.
+fn discovery_system_prompt(ids: &[TestId]) -> String {
+    format!(
+        "You are investigating how to run specific tests in a real repository. \
+         This project's test framework was NOT recognized by the harness's \
+         built-in detectors — it likely uses a custom test runner rather than \
+         a standard one. Your job is ONLY to determine whether each listed \
+         test id currently passes or fails right now. Do not edit any files.\n\n\
+         You may read documentation (README, CONTRIBUTING, docs/, CI config) \
+         and run shell commands to investigate and actually execute the \
+         tests. Only report an outcome you have verified by running it — \
+         never guess. When you have a real answer for every id, call \
+         report_test_results with one entry per id.\n\n\
+         Test ids:\n{}",
+        ids.join("\n")
+    )
+}
+
+/// A [`TestRunner`] backed by a bounded, edit-free sub-agent instead of a
+/// deterministic subprocess. See the module doc for the trust trade-off this
+/// makes — opt-in, last-resort, and always for instances no static detector
+/// covers at all.
+pub struct AgentDiscoveredRunner {
+    rt: Arc<tokio::runtime::Runtime>,
+    provider: Arc<dyn LlmProvider>,
+    model: String,
+    api_key: String,
+    tools: Vec<Arc<dyn AgentTool>>,
+    max_turns: usize,
+}
+
+impl AgentDiscoveredRunner {
+    pub fn new(
+        rt: Arc<tokio::runtime::Runtime>,
+        provider: Arc<dyn LlmProvider>,
+        model: String,
+        api_key: String,
+        work_dir: PathBuf,
+        max_turns: usize,
+    ) -> Self {
+        let mut tools = pirs_tools::default_tools(work_dir);
+        tools.retain(|t| !DISCOVERY_MUTATING.contains(&t.name()));
+        AgentDiscoveredRunner {
+            rt,
+            provider,
+            model,
+            api_key,
+            tools,
+            max_turns,
+        }
+    }
+}
+
+impl TestRunner for AgentDiscoveredRunner {
+    fn run(&self, ids: &[TestId], _ring: Ring) -> anyhow::Result<Snapshot> {
+        let slot: Arc<Mutex<Option<Vec<ReportedResult>>>> = Arc::new(Mutex::new(None));
+        let mut tools = self.tools.clone();
+        tools.push(Arc::new(ReportResultsTool { slot: slot.clone() }));
+
+        let mut ctx = Context {
+            system_prompt: Some(discovery_system_prompt(ids)),
+            messages: Vec::new(),
+            tools: Vec::new(),
+        };
+        let cfg = LoopConfig {
+            model: self.model.clone(),
+            completion: CompletionOptions {
+                api_key: Some(self.api_key.clone()),
+                max_tokens: Some(8_000),
+                ..Default::default()
+            },
+            tool_execution: ExecutionMode::Parallel,
+            hooks: Default::default(),
+            compaction: None,
+            visible_tools: None,
+            extra_usage: Arc::new(Mutex::new(pirs_ai::Usage::default())),
+            cascade: None,
+            budgets: Budgets {
+                max_turns: Some(self.max_turns),
+                max_tool_calls: None,
+                max_wall_time: None,
+            },
+        };
+        let emit: Emit = Arc::new(|_| {});
+        let prompt = "Investigate and report the current pass/fail state of every listed test id."
+            .to_string();
+
+        self.rt.block_on(run_agent_loop(
+            vec![Message::user(prompt)],
+            &mut ctx,
+            &tools,
+            &self.provider,
+            &cfg,
+            &emit,
+            CancellationToken::new(),
+        ));
+
+        let reported = slot.lock().unwrap().take().unwrap_or_default();
+        let pairs = ids.iter().map(|id| {
+            let outcome = reported
+                .iter()
+                .find(|r| &r.id == id)
+                .map(|r| match r.outcome.as_str() {
+                    "pass" => TestOutcome::Pass,
+                    "fail" | "error" => TestOutcome::Fail,
+                    _ => TestOutcome::NotCollected,
+                })
+                .unwrap_or(TestOutcome::NotCollected);
+            (id.clone(), outcome)
+        });
+        Ok(Snapshot::from_pairs(pairs))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pirs_ai::{AssistantMessage, ContentBlock, StopReason, StreamEvent};
+
+    /// A scripted provider standing in for a real LLM: its one scripted turn
+    /// emits the tool call the discovery agent needs; the loop then
+    /// terminates because that tool sets `terminate: true`. Exercises the
+    /// real tool-dispatch and Snapshot-construction path without a network
+    /// call.
+    struct ScriptedProvider;
+
+    #[async_trait]
+    impl LlmProvider for ScriptedProvider {
+        async fn stream(
+            &self,
+            model: &str,
+            _context: &Context,
+            _options: &CompletionOptions,
+            _cancel: CancellationToken,
+        ) -> futures::stream::BoxStream<'static, StreamEvent> {
+            let msg = AssistantMessage {
+                content: vec![ContentBlock::ToolCall {
+                    id: "1".into(),
+                    name: "report_test_results".into(),
+                    arguments: json!({
+                        "results": [
+                            {"id": "m::pass_id", "outcome": "pass"},
+                            {"id": "m::fail_id", "outcome": "fail"},
+                        ]
+                    }),
+                    thought_signature: None,
+                }],
+                stop_reason: StopReason::ToolUse,
+                model: model.to_string(),
+                ..Default::default()
+            };
+            Box::pin(futures::stream::iter(vec![
+                StreamEvent::Start,
+                StreamEvent::Done(Box::new(msg)),
+            ]))
+        }
+    }
+
+    #[test]
+    fn self_reported_outcomes_land_in_the_snapshot_and_omitted_ids_are_not_collected() {
+        let dir = tempfile::tempdir().unwrap();
+        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let provider: Arc<dyn LlmProvider> = Arc::new(ScriptedProvider);
+        let runner = AgentDiscoveredRunner::new(
+            rt,
+            provider,
+            "scripted".into(),
+            "k".into(),
+            dir.path().to_path_buf(),
+            5,
+        );
+        let ids = vec![
+            "m::pass_id".to_string(),
+            "m::fail_id".to_string(),
+            "m::never_mentioned".to_string(),
+        ];
+        let snap = runner.run(&ids, Ring::Inner).unwrap();
+        assert_eq!(snap.get("m::pass_id"), Some(TestOutcome::Pass));
+        assert_eq!(snap.get("m::fail_id"), Some(TestOutcome::Fail));
+        // An id the agent never reported must never silently count as a pass.
+        assert_eq!(
+            snap.get("m::never_mentioned"),
+            Some(TestOutcome::NotCollected)
+        );
+    }
+}

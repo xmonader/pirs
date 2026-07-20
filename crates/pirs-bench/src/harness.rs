@@ -19,6 +19,7 @@ use crate::detect::DetectorHost;
 use crate::driver::{run_task, run_task_cached, Executor, TaskSpec};
 use crate::git::GitWorkspace;
 use crate::probe::probe;
+use crate::run::TestRunner;
 use crate::timing::Timings;
 use crate::types::{FailBucket, Outcome, RunnerSpec, TestId};
 
@@ -41,6 +42,12 @@ pub struct InstanceReport {
     pub patch: Option<String>,
     /// Per-phase wall-clock: discover, bootstrap, baseline, fix, verify, patch.
     pub timings: Timings,
+    /// True when no static detector confirmed a runner and `undetected_fallback`
+    /// supplied one instead. That runner's verdicts are NOT independently
+    /// re-verified by the harness the way every other [`TestRunner`]'s are —
+    /// callers/traces MUST surface this so a reader never mistakes a
+    /// self-reported outcome for a harness-confirmed one.
+    pub used_undetected_fallback: bool,
 }
 
 /// Run one instance to an [`InstanceReport`]. `cache` is threaded through so a
@@ -48,6 +55,13 @@ pub struct InstanceReport {
 /// `Some`, an accepted outcome yields the fix as a patch and any other outcome
 /// rolls the tree back to pristine — so a failed attempt never leaves partial
 /// edits on disk.
+///
+/// `undetected_fallback`, when given, is invoked ONLY if no static detector
+/// confirms any runner at all — it must produce a substitute [`TestRunner`]
+/// (e.g. one backed by an agent's self-report) rather than failing the
+/// instance outright with `RunnerUndetected`. Bootstrap is skipped for a
+/// fallback runner (there is no static [`RunnerSpec`] to install/probe); the
+/// fallback owns making the environment usable itself, if needed at all.
 pub fn run_instance(
     inst: &Instance,
     host: &DetectorHost,
@@ -55,6 +69,7 @@ pub fn run_instance(
     executor: &mut dyn Executor,
     max_attempts: u32,
     workspace: Option<&GitWorkspace>,
+    undetected_fallback: Option<&dyn Fn() -> Box<dyn TestRunner>>,
 ) -> anyhow::Result<InstanceReport> {
     let mut timings = Timings::new();
     let bail = |outcome, timings| {
@@ -62,6 +77,7 @@ pub fn run_instance(
             outcome,
             patch: None,
             timings,
+            used_undetected_fallback: false,
         })
     };
 
@@ -77,43 +93,58 @@ pub fn run_instance(
         }
         Ok(out)
     })?;
-    if confirmed.is_empty() {
-        tracing::warn!("no runner confirmed");
-        return bail(Outcome::Failed(FailBucket::RunnerUndetected), timings);
-    }
 
-    // 2. Make the environment usable (install + re-probe), trying confirmed
-    //    candidates in trust order. A higher-trust candidate's own install can
-    //    break an environment that was already probing fine (e.g. a CI-mined
-    //    command that blindly upgrades pip/setuptools against a
-    //    pre-provisioned venv) — that must degrade to the next candidate, not
-    //    fail the whole instance outright.
-    let mut spec = None;
-    let mut last_hint = String::new();
-    timings.time("bootstrap", || -> anyhow::Result<()> {
-        for candidate in confirmed {
-            match bootstrap(&candidate, &inst.repo_root)? {
-                Bootstrap::Ready(_) => {
-                    spec = Some(candidate);
-                    break;
-                }
-                Bootstrap::Failed(hint) => last_hint = hint,
+    let (runner, used_undetected_fallback): (Box<dyn TestRunner>, bool) = if confirmed.is_empty() {
+        match undetected_fallback {
+            Some(make_fallback) => {
+                tracing::warn!(
+                    "no runner confirmed; falling back to an agent-discovered runner \
+                     (self-reported, not independently verified)"
+                );
+                (make_fallback(), true)
+            }
+            None => {
+                tracing::warn!("no runner confirmed");
+                return bail(Outcome::Failed(FailBucket::RunnerUndetected), timings);
             }
         }
-        Ok(())
-    })?;
-    let spec = match spec {
-        Some(s) => s,
-        None => {
-            tracing::warn!("environment setup failed for every candidate runner: {last_hint}");
-            return bail(Outcome::Failed(FailBucket::EnvSetup), timings);
-        }
+    } else {
+        // 2. Make the environment usable (install + re-probe), trying confirmed
+        //    candidates in trust order. A higher-trust candidate's own install can
+        //    break an environment that was already probing fine (e.g. a CI-mined
+        //    command that blindly upgrades pip/setuptools against a
+        //    pre-provisioned venv) — that must degrade to the next candidate, not
+        //    fail the whole instance outright.
+        let mut spec = None;
+        let mut last_hint = String::new();
+        timings.time("bootstrap", || -> anyhow::Result<()> {
+            for candidate in confirmed {
+                match bootstrap(&candidate, &inst.repo_root)? {
+                    Bootstrap::Ready(_) => {
+                        spec = Some(candidate);
+                        break;
+                    }
+                    Bootstrap::Failed(hint) => last_hint = hint,
+                }
+            }
+            Ok(())
+        })?;
+        let spec = match spec {
+            Some(s) => s,
+            None => {
+                tracing::warn!("environment setup failed for every candidate runner: {last_hint}");
+                return bail(Outcome::Failed(FailBucket::EnvSetup), timings);
+            }
+        };
+
+        // 3. Build the concrete runner. The executor edits the real tree; the
+        //    outcome decides whether we keep or discard those edits.
+        //    (baseline/fix/verify phases are timed inside the driver.)
+        let runner: Box<dyn TestRunner> =
+            Box::new(CommandRunner::new(spec, inst.repo_root.clone()));
+        (runner, false)
     };
 
-    // 3. Build the concrete runner and drive the task. The executor edits the
-    //    real tree; the outcome decides whether we keep or discard those edits.
-    //    (baseline/fix/verify phases are timed inside the driver.)
-    let runner = CommandRunner::new(spec, inst.repo_root.clone());
     let task = TaskSpec {
         targets: inst.targets.clone(),
         keep_green: inst.keep_green.clone(),
@@ -122,14 +153,14 @@ pub fn run_instance(
     let outcome = match &inst.base_sha {
         Some(sha) => run_task_cached(
             &task,
-            &runner,
+            &*runner,
             executor,
             max_attempts,
             cache,
             sha,
             &mut timings,
         )?,
-        None => run_task(&task, &runner, executor, max_attempts, &mut timings)?,
+        None => run_task(&task, &*runner, executor, max_attempts, &mut timings)?,
     };
 
     // 4. Keep the fix (as a patch) or roll back to pristine.
@@ -146,6 +177,7 @@ pub fn run_instance(
         outcome,
         patch,
         timings,
+        used_undetected_fallback,
     })
 }
 
@@ -174,11 +206,97 @@ mod tests {
             keep_green: vec![],
             base_sha: None,
         };
-        let report = run_instance(&inst, &host, &mut cache, &mut NeverExecutor, 3, None).unwrap();
+        let report =
+            run_instance(&inst, &host, &mut cache, &mut NeverExecutor, 3, None, None).unwrap();
         assert_eq!(
             report.outcome,
             Outcome::Failed(FailBucket::RunnerUndetected)
         );
         assert!(report.patch.is_none());
+        assert!(!report.used_undetected_fallback);
+    }
+
+    /// A fixed-outcome runner standing in for a real agent-discovery runner —
+    /// this test only proves harness.rs's wiring (fallback invoked, bootstrap
+    /// skipped, `used_undetected_fallback` set, outcome flows through the
+    /// normal driver), not the agent itself.
+    /// Red for its first `flips_after` calls (covering the baseline's own
+    /// stability check, which runs the fallback runner twice), green from
+    /// then on — simulating "the fix landed" without a real subprocess.
+    struct FlippingRunner {
+        calls: std::cell::Cell<u32>,
+        flips_after: u32,
+    }
+    impl TestRunner for FlippingRunner {
+        fn run(
+            &self,
+            ids: &[TestId],
+            _ring: crate::types::Ring,
+        ) -> anyhow::Result<crate::types::Snapshot> {
+            let n = self.calls.get();
+            self.calls.set(n + 1);
+            let outcome = if n < self.flips_after {
+                crate::types::TestOutcome::Fail
+            } else {
+                crate::types::TestOutcome::Pass
+            };
+            Ok(crate::types::Snapshot::from_pairs(
+                ids.iter().map(|id| (id.clone(), outcome)),
+            ))
+        }
+    }
+
+    struct OneShotExecutor {
+        ran: std::cell::Cell<bool>,
+    }
+    impl Executor for OneShotExecutor {
+        fn attempt(&mut self, _a: u32, _l: Option<&Verdict>) -> anyhow::Result<bool> {
+            self.ran.set(true);
+            Ok(true) // claim a change was made, so the driver verifies
+        }
+    }
+
+    #[test]
+    fn undetected_fallback_bypasses_bootstrap_and_is_flagged_in_the_report() {
+        // Baseline (pre-fix) reports every target red via the fallback runner;
+        // after one "fix" attempt the same fallback reports every target green
+        // — so the instance is accepted purely through the fallback runner,
+        // with bootstrap/CommandRunner never in the picture.
+        let dir = tempfile::tempdir().unwrap();
+        let host = DetectorHost::with_bundled().unwrap();
+        let mut cache = BaselineCache::in_memory();
+        let inst = Instance {
+            repo_root: dir.path().to_path_buf(),
+            targets: vec!["t1".into()],
+            keep_green: vec![],
+            base_sha: None,
+        };
+        let mut executor = OneShotExecutor {
+            ran: std::cell::Cell::new(false),
+        };
+        // Baseline capture calls .run() twice to confirm stability before the
+        // fix loop ever starts — flip on the 3rd call (the post-fix verify).
+        let fallback_fn = || -> Box<dyn TestRunner> {
+            Box::new(FlippingRunner {
+                calls: std::cell::Cell::new(0),
+                flips_after: 2,
+            })
+        };
+        let report = run_instance(
+            &inst,
+            &host,
+            &mut cache,
+            &mut executor,
+            3,
+            None,
+            Some(&fallback_fn),
+        )
+        .unwrap();
+        assert!(report.used_undetected_fallback);
+        assert!(
+            executor.ran.get(),
+            "executor must run under the fallback path too"
+        );
+        assert!(report.outcome.is_accepted(), "{:?}", report.outcome);
     }
 }

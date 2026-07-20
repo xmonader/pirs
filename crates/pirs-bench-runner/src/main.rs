@@ -22,8 +22,9 @@ use pirs_agent::profile::{Profile, ToolPolicy};
 use pirs_agent::trace::Recorder;
 use pirs_bench::{
     is_git_repo, run_instance, Attribution, BaselineCache, DetectorHost, GitWorkspace, Instance,
-    InstanceReport,
+    InstanceReport, TestRunner,
 };
+use pirs_bench_runner::agent_runner::AgentDiscoveredRunner;
 use pirs_bench_runner::{build_provider, selftest, AgentConfig, AgentExecutor, Provider, Strategy};
 use serde::Deserialize;
 
@@ -100,6 +101,16 @@ struct Common {
     /// outcome) to this file — the flight recorder for long sessions.
     #[arg(long, global = true)]
     trace: Option<PathBuf>,
+    /// Last-resort fallback when no static detector recognizes the project's
+    /// test framework at all (`Failed(RunnerUndetected)`): hand the test ids
+    /// to a bounded, edit-free sub-agent that investigates the repo and
+    /// self-reports pass/fail. UNLIKE every other runner in this harness,
+    /// this outcome is NOT independently re-verified — it is the discovery
+    /// agent's own report. Off by default; every instance where this path
+    /// fires is tagged in the output so results are never silently
+    /// indistinguishable from a harness-verified run.
+    #[arg(long, global = true)]
+    agent_discover_runner: bool,
 }
 
 impl Common {
@@ -354,11 +365,34 @@ fn solve_one(
     .context("build agent executor")?;
 
     let inst = Instance {
-        repo_root: repo,
+        repo_root: repo.clone(),
         targets: job.targets,
         keep_green: job.keep_green,
         base_sha,
     };
+
+    // Only built (and only ever invoked by run_instance) when no static
+    // detector confirms a runner at all — see AgentDiscoveredRunner's own
+    // doc comment for the trust trade-off this makes.
+    let make_fallback = move || -> Box<dyn TestRunner> {
+        let rt = Arc::new(
+            tokio::runtime::Runtime::new().expect("build tokio runtime for discovery agent"),
+        );
+        Box::new(AgentDiscoveredRunner::new(
+            rt,
+            build_provider(ctx.provider),
+            ctx.common.model.clone(),
+            ctx.api_key.to_string(),
+            repo.clone(),
+            ctx.common.max_turns,
+        ))
+    };
+    let fallback: Option<&dyn Fn() -> Box<dyn TestRunner>> = if ctx.common.agent_discover_runner {
+        Some(&make_fallback)
+    } else {
+        None
+    };
+
     let report = run_instance(
         &inst,
         ctx.host,
@@ -366,7 +400,14 @@ fn solve_one(
         &mut executor,
         ctx.common.max_attempts,
         workspace.as_ref(),
+        fallback,
     )?;
+    if report.used_undetected_fallback {
+        eprintln!(
+            "[WARNING: no runner detected — outcome is the discovery agent's own \
+             self-report, NOT independently verified by the harness]"
+        );
+    }
     // Surface this session's behavior + token cost.
     let stats = executor.session_stats();
     eprintln!("session: {}", stats.summary());
@@ -389,6 +430,7 @@ fn solve_one(
                 "id": job.id,
                 "outcome": format!("{:?}", report.outcome),
                 "accepted": report.outcome.is_accepted(),
+                "self_reported_runner": report.used_undetected_fallback,
                 "turns": stats.turns,
                 "tool_calls": stats.tool_calls,
                 "tokens": {
@@ -567,6 +609,7 @@ mod tests {
             no_strategy,
             profile: None,
             trace: None,
+            agent_discover_runner: false,
         }
     }
 
