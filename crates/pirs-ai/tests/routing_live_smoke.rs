@@ -247,6 +247,123 @@ fn dashscope_key() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+fn deepseek_key() -> Option<String> {
+    std::env::var("DEEPSEEK_API_KEY")
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+/// Product pitch live: strong plan on DeepSeek, weak exec on DashScope/qwen.
+#[tokio::test]
+async fn live_deepseek_plan_dashscope_exec() {
+    let Some(ds_key) = deepseek_key() else {
+        eprintln!("skip: DEEPSEEK_API_KEY unset");
+        return;
+    };
+    let Some(qw_key) = dashscope_key() else {
+        eprintln!("skip: DASHSCOPE_API_KEY unset");
+        return;
+    };
+
+    let deepseek = Arc::new(
+        OpenAiCompat::new(Some(
+            std::env::var("DEEPSEEK_BASE_URL")
+                .unwrap_or_else(|_| "https://api.deepseek.com/v1".into()),
+        ))
+        .with_provider_name("deepseek")
+        .with_max_retries(1),
+    );
+    let dashscope = Arc::new(
+        OpenAiCompat::new(Some(
+            std::env::var("DASHSCOPE_BASE_URL")
+                .unwrap_or_else(|_| "https://coding-intl.dashscope.aliyuncs.com/v1".into()),
+        ))
+        .with_provider_name("dashscope")
+        .with_max_retries(1),
+    );
+
+    let mut backends = HashMap::new();
+    backends.insert(
+        "deepseek".into(),
+        (
+            Arc::clone(&deepseek) as Arc<dyn LlmProvider>,
+            Some(ds_key),
+            vec![],
+        ),
+    );
+    backends.insert(
+        "dashscope".into(),
+        (
+            Arc::clone(&dashscope) as Arc<dyn LlmProvider>,
+            Some(qw_key),
+            vec![],
+        ),
+    );
+
+    let router = RoutingProvider::new(
+        Arc::clone(&dashscope) as Arc<dyn LlmProvider>,
+        None,
+        vec![],
+        backends,
+        vec![
+            ModelRoute {
+                alias: "deepseek-v4-flash".into(),
+                serve: vec![ServeTarget {
+                    backend: "deepseek".into(),
+                    // API accepts deepseek-chat; account may map to v4-flash.
+                    remote_model: std::env::var("DEEPSEEK_MODEL")
+                        .unwrap_or_else(|_| "deepseek-chat".into()),
+                }],
+                tier: Some("fast".into()),
+                ctx: None,
+            },
+            ModelRoute {
+                alias: "qwen-plus".into(),
+                serve: vec![ServeTarget {
+                    backend: "dashscope".into(),
+                    remote_model: "qwen3.5-plus".into(),
+                }],
+                tier: None,
+                ctx: None,
+            },
+        ],
+    );
+
+    assert_eq!(router.resolve("deepseek-v4-flash").backend_name, "deepseek");
+    assert_eq!(router.resolve("qwen-plus").backend_name, "dashscope");
+
+    let plan_text = complete_alias(
+        &router,
+        "deepseek-v4-flash",
+        "You are a planner. Reply with exactly: PLAN_OK",
+        "plan",
+    )
+    .await;
+    let exec_text = complete_alias(
+        &router,
+        "qwen-plus",
+        "You are an executor. Reply with exactly: EXEC_OK",
+        "exec",
+    )
+    .await;
+
+    eprintln!(
+        "deepseek+dashscope smoke: plan_len={} exec_len={} plan={plan_text:?} exec={exec_text:?}",
+        plan_text.len(),
+        exec_text.len()
+    );
+    assert!(!plan_text.is_empty(), "deepseek plan empty");
+    assert!(
+        !plan_text.starts_with("error:"),
+        "deepseek plan failed: {plan_text}"
+    );
+    assert!(!exec_text.is_empty(), "dashscope exec empty");
+    assert!(
+        !exec_text.starts_with("error:"),
+        "dashscope exec failed: {exec_text}"
+    );
+}
+
 async fn complete_alias(
     router: &RoutingProvider,
     alias: &str,
