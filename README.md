@@ -54,6 +54,7 @@ Shipped packs in `extensions/`:
 | Pack | Purpose |
 |---|---|
 | `weak-model.rhai` | loop detector, verify-after-edit, plan pinning |
+| `sandbox.rhai` | OS-level sandbox for `bash` (bubblewrap/Seatbelt): read-only fs outside cwd, no network |
 | `guardrails.rhai` | block destructive bash patterns, ask-first policy |
 | `audit-log.rhai` | tool calls + results to `~/.pirs/audit.jsonl` |
 | `conductor.rhai` | strong-planner/weak-executor guidance + plan tool |

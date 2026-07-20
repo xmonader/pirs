@@ -15,6 +15,7 @@ compiles and behaves.
 
 | Extension | What it does |
 |-----------|--------------|
+| `sandbox.rhai` | Overrides `bash` with an OS-level sandbox (bubblewrap/Seatbelt): read-only filesystem outside the working dir, no network. |
 | `guardrails.rhai` | Block destructive commands; the model must ask the user first. |
 | `approval.rhai` | Sensitive tool calls require explicit user approval. |
 | `approval2.rhai` | Semantic blast-radius: a sub-agent judges how risky a command is. |

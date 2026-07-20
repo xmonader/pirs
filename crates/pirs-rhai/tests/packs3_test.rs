@@ -424,3 +424,70 @@ fn hive_note_posts_and_reads() {
         .unwrap()
         .contains("instance A finished porting"));
 }
+
+#[test]
+fn sandbox_overrides_bash_and_advertises_one_schema() {
+    let host = load("sandbox.rhai", false);
+    let tools = host.tools();
+    let bash_tools: Vec<_> = tools.iter().filter(|t| t.name() == "bash").collect();
+    assert_eq!(
+        bash_tools.len(),
+        1,
+        "must present exactly one bash tool, not a shadowed original plus an override"
+    );
+    assert!(bash_tools[0].description().contains("sandboxed"));
+}
+
+#[test]
+fn sandbox_rejects_background_without_attempting_to_sandbox() {
+    let host = load("sandbox.rhai", false);
+    let tools = host.tools();
+    let bash = tools.iter().find(|t| t.name() == "bash").unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let out = rt
+        .block_on(bash.execute(pirs_agent::ToolExecContext {
+            tool_call_id: "t".into(),
+            args: serde_json::json!({"command": "sleep 999", "background": true}),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            on_update: None,
+        }))
+        .unwrap();
+    assert!(out.content[0]
+        .as_text()
+        .unwrap()
+        .contains("does not support background"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn sandbox_runs_a_command_or_fails_loud_with_a_named_reason() {
+    // This environment's Ubuntu base restricts unprivileged user namespaces
+    // (kernel.apparmor_restrict_unprivileged_userns=1, the 23.10+/24.04+
+    // default), so bwrap itself cannot succeed here regardless of this
+    // pack's logic — this test accepts either a real result (an environment
+    // where bwrap actually works) or the pack's own named diagnostic for
+    // that specific failure, but never a silent/garbage failure.
+    let host = load("sandbox.rhai", false);
+    let dir = tempfile::tempdir().unwrap();
+    let prev = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let tools = host.tools();
+    let bash = tools.iter().find(|t| t.name() == "bash").unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let out = rt.block_on(bash.execute(pirs_agent::ToolExecContext {
+        tool_call_id: "t".into(),
+        args: serde_json::json!({"command": "echo sandboxed-ok"}),
+        cancel: tokio_util::sync::CancellationToken::new(),
+        on_update: None,
+    }));
+
+    std::env::set_current_dir(prev).unwrap();
+    let text = out.unwrap().content[0].as_text().unwrap().to_string();
+    assert!(
+        text.contains("sandboxed-ok") || text.contains("sandbox setup failed before the command ran"),
+        "expected either a real sandboxed result or the named bwrap-setup-failure diagnostic, got: {text}"
+    );
+    // Whichever path was taken, the scratch dir it used must be cleaned up.
+    assert!(!dir.path().join(".pirs").join("sandbox-tmp").exists());
+}
