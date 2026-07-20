@@ -150,6 +150,84 @@ fn project_is_trusted(project_pirs_dir: &Path) -> bool {
         .any(|t| t.starts_with(&prefix) || t == path_s.as_ref() || t.starts_with(path_s.as_ref()))
 }
 
+/// Load `~/.pirs/secrets.env` into the process environment for any vars not
+/// already set. Lets `api_key_env` in config.toml work without re-sourcing the
+/// shell (bash/nushell already source it; this covers bare `pirs` launches).
+pub fn load_secrets_env() {
+    let Some(home) = std::env::var_os("HOME") else {
+        return;
+    };
+    let path = Path::new(&home).join(".pirs").join("secrets.env");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let body = line.strip_prefix("export ").unwrap_or(line).trim();
+        let Some((name, raw)) = body.split_once('=') else {
+            continue;
+        };
+        let name = name.trim();
+        if name.is_empty() || std::env::var_os(name).is_some() {
+            continue; // never override an already-set var
+        }
+        let mut val = raw.trim().to_string();
+        if (val.starts_with('\'') && val.ends_with('\''))
+            || (val.starts_with('"') && val.ends_with('"'))
+        {
+            val = val[1..val.len() - 1].to_string();
+        }
+        // Expand ${OTHER} once (e.g. DASHSCOPE_API_KEY=${BAILIAN_...}).
+        if val.starts_with("${") && val.ends_with('}') {
+            let ref_name = &val[2..val.len() - 1];
+            val = std::env::var(ref_name).unwrap_or_default();
+            if val.is_empty() {
+                continue;
+            }
+        }
+        // SAFETY: single-threaded at process startup before workers spawn.
+        std::env::set_var(name, val);
+    }
+}
+
+/// API key for a model alias from its primary serve backend's `api_key_env`.
+pub fn api_key_for_alias(registry: &RegistryFile, alias: &str) -> Option<String> {
+    let model = registry.models.iter().find(|m| m.alias == alias)?;
+    let serve = model.serve.first()?;
+    let backend = registry.backends.iter().find(|b| b.name == serve.backend)?;
+    let env = backend.api_key_env.as_ref()?;
+    std::env::var(env).ok().filter(|s| !s.is_empty())
+}
+
+/// First non-empty backend key in the registry (fallback default provider key).
+pub fn first_available_backend_key(registry: &RegistryFile) -> Option<String> {
+    for b in &registry.backends {
+        if let Some(env) = &b.api_key_env {
+            if let Ok(k) = std::env::var(env) {
+                if !k.is_empty() {
+                    return Some(k);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Human-readable list of expected env vars for the registry.
+pub fn expected_key_envs(registry: &RegistryFile) -> Vec<String> {
+    let mut v: Vec<String> = registry
+        .backends
+        .iter()
+        .filter_map(|b| b.api_key_env.clone())
+        .collect();
+    v.sort();
+    v.dedup();
+    v
+}
+
 pub fn load_registry_layers(cwd: &Path) -> RegistryFile {
     let mut reg = RegistryFile::default();
     if let Some(path) = crate::config_file::user_config_path() {
@@ -160,28 +238,41 @@ pub fn load_registry_layers(cwd: &Path) -> RegistryFile {
         }
     }
     if let Some(path) = crate::config_file::find_project_config(cwd) {
-        if let Ok(text) = std::fs::read_to_string(&path) {
-            if let Ok(v) = text.parse::<toml::Value>() {
-                let mut project = parse_from_config_value(&v);
-                if !project.backends.is_empty() {
-                    let project_dir = path.parent().unwrap_or(Path::new("."));
-                    if project_is_trusted(project_dir) {
-                        eprintln!(
-                            "[model registry: loading {} backend(s) from trusted project config {}]",
-                            project.backends.len(),
-                            path.display()
-                        );
-                    } else {
-                        eprintln!(
-                            "[note: project {} defines backends but is not trusted — \
-                             backends ignored (run `pirs trust` in the project, or move \
-                             backends to ~/.pirs/config.toml). Model aliases still load.]",
-                            path.display()
-                        );
-                        project.backends.clear();
+        // When cwd is $HOME, find_project_config hits ~/.pirs/config.toml — that
+        // is already the user layer; do not re-load it as an untrusted project.
+        let user_path = crate::config_file::user_config_path();
+        let same_as_user = user_path
+            .as_ref()
+            .and_then(|u| {
+                let a = path.canonicalize().ok()?;
+                let b = u.canonicalize().ok()?;
+                Some(a == b)
+            })
+            .unwrap_or(false);
+        if !same_as_user {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                if let Ok(v) = text.parse::<toml::Value>() {
+                    let mut project = parse_from_config_value(&v);
+                    if !project.backends.is_empty() {
+                        let project_dir = path.parent().unwrap_or(Path::new("."));
+                        if project_is_trusted(project_dir) {
+                            eprintln!(
+                                "[model registry: loading {} backend(s) from trusted project config {}]",
+                                project.backends.len(),
+                                path.display()
+                            );
+                        } else {
+                            eprintln!(
+                                "[note: project {} defines backends but is not trusted — \
+                                 backends ignored (run `pirs trust` in the project, or move \
+                                 backends to ~/.pirs/config.toml). Model aliases still load.]",
+                                path.display()
+                            );
+                            project.backends.clear();
+                        }
                     }
+                    reg = merge(reg, project);
                 }
-                reg = merge(reg, project);
             }
         }
     }

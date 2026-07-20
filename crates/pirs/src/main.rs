@@ -688,14 +688,37 @@ async fn main() -> anyhow::Result<()> {
         return auth::login(provider);
     }
 
+    // Load ~/.pirs/secrets.env into process env (does not override existing vars).
+    registry::load_secrets_env();
+    // Model registry first so backend api_key_env can satisfy auth without OPENAI_API_KEY.
+    let model_registry = registry::load_registry_layers(&cwd);
+
     let env_var = if cli.provider == "anthropic" {
         "ANTHROPIC_API_KEY"
     } else {
         "OPENAI_API_KEY"
     };
-    let api_key =
-        auth::resolve(cli.api_key.as_deref(), &cli.provider, env_var).with_context(|| {
-            format!("no API key: pass --api-key, run `pirs login`, or set {env_var}")
+    let api_key = auth::resolve(cli.api_key.as_deref(), &cli.provider, env_var)
+        .or_else(|| registry::api_key_for_alias(&model_registry, &cli.model))
+        .or_else(|| {
+            cli.plan_model
+                .as_ref()
+                .and_then(|m| registry::api_key_for_alias(&model_registry, m))
+        })
+        .or_else(|| registry::first_available_backend_key(&model_registry))
+        .with_context(|| {
+            let mut hint = format!(
+                "no API key: pass --api-key, run `pirs login`, set {env_var}"
+            );
+            let envs = registry::expected_key_envs(&model_registry);
+            if !envs.is_empty() {
+                hint.push_str(&format!(
+                    ", or set a backend key from ~/.pirs/config.toml ({})",
+                    envs.join(" / ")
+                ));
+            }
+            hint.push_str(" — also ensure ~/.pirs/secrets.env is loaded");
+            hint
         })?;
 
     if cli.mode == "rpc" {
@@ -738,9 +761,8 @@ async fn main() -> anyhow::Result<()> {
             cli.provider
         );
     };
-    // Optional multi-backend registry: aliases in --model / --plan-model route to
-    // per-subscription base_url + API key (see [[backends]] / [[models]] in config).
-    let model_registry = registry::load_registry_layers(&cwd);
+    // Multi-backend registry: aliases in --model / --plan-model route to
+    // per-subscription base_url + API key (see [[backends]] / [[models]]).
     let provider: Arc<dyn pirs_ai::LlmProvider> =
         if let Some(router) = registry::build_routing_provider(
             &model_registry,
