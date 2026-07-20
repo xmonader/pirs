@@ -23,6 +23,7 @@ mod session;
 mod subagent;
 mod system_prompt;
 mod tui;
+mod weak_compose;
 
 #[derive(Parser)]
 #[command(
@@ -432,46 +433,41 @@ async fn main() -> anyhow::Result<()> {
         ..cli
     };
     // --weak: compose the recommended weak-model preset without requiring the
-    // user to remember every flag. Explicit flags still win for strategy/profile.
+    // user to remember every flag. Pure rules live in weak_compose (unit-tested).
     if cli.weak {
-        cli.tool_diet = true;
-        cli.sequential = true;
-        if cli.max_retries < 3 {
-            cli.max_retries = 3;
-        }
-        if cli.strategy.is_none() && cli.profile.is_none() {
-            // One-shot gets plan-exec-weak; interactive still benefits from
-            // diet/sequential/packs even without a strategy.
-            if !cli.prompt.is_empty() {
-                cli.strategy = Some("plan-exec-weak".into());
-            }
-        }
-        // Auto-verify for one-shot/strategy mode only (not every REPL turn).
-        // Explicit --verify always wins. Marker-file detect only — no invented
-        // command when no ecosystem is present.
-        if cli.verify.is_none()
-            && !cli.prompt.is_empty()
-            && (cli.strategy.is_some() || cli.profile.is_some())
-        {
-            match pirs_tools::run_tests::detect_verify_command(&cwd) {
-                Some((eco, cmd)) => {
-                    eprintln!("[weak auto-verify: {eco} → `{cmd}`]");
-                    cli.verify = Some(cmd);
-                }
-                None => {
-                    eprintln!(
-                        "[weak auto-verify: skipped — no test ecosystem detected \
-                         (Cargo.toml / go.mod / package.json / pytest markers / Makefile)]"
-                    );
-                }
-            }
+        let detected = if cli.verify.is_none() && !cli.prompt.is_empty() {
+            pirs_tools::run_tests::detect_verify_command(&cwd)
+        } else {
+            None
+        };
+        let composed = weak_compose::apply_weak_preset(
+            weak_compose::WeakComposeInput {
+                has_prompt: !cli.prompt.is_empty(),
+                strategy: cli.strategy.clone(),
+                profile: cli.profile.clone(),
+                verify: cli.verify.clone(),
+                max_retries: cli.max_retries,
+                tool_diet: cli.tool_diet,
+                sequential: cli.sequential,
+            },
+            detected,
+        );
+        cli.tool_diet = composed.tool_diet;
+        cli.sequential = composed.sequential;
+        cli.max_retries = composed.max_retries;
+        cli.strategy = composed.strategy;
+        cli.profile = composed.profile;
+        cli.verify = composed.verify;
+        if let Some(note) = &composed.auto_verify_note {
+            eprintln!("{note}");
         }
         eprintln!(
             "[weak mode: tool-diet, sequential, max-retries={}, strategy={:?}, \
-             verify={:?}; multi-model: phase `model:` in strategies and/or --cascade <draft>]",
+             verify={:?}, packs={:?}; multi-model: phase `model:` in strategies and/or --cascade <draft>]",
             cli.max_retries,
             cli.strategy.as_deref().or(cli.profile.as_deref()),
-            cli.verify.as_deref()
+            cli.verify.as_deref(),
+            composed.bundled_packs,
         );
     }
 

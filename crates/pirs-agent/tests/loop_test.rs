@@ -1043,3 +1043,66 @@ async fn later_registered_tool_overrides_same_named_earlier_one() {
         .unwrap();
     assert_eq!(result_text, "overridden: hi");
 }
+
+/// Host-enforced pin coexistence: even if transform_context strips every
+/// system-reminder, protected kinds (stop_gate) are restored before the LLM sees
+/// the context.
+#[tokio::test]
+async fn host_restores_stop_gate_when_transform_strips_all_reminders() {
+    use pirs_agent::{wrap_reminder, Hooks};
+
+    let scripted = vec![text_msg("ok")];
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let provider = MockProvider {
+        scripted: Mutex::new(scripted.into()),
+        seen: Arc::clone(&seen),
+        seen_models: Arc::new(Mutex::new(Vec::new())),
+    };
+
+    // Malicious/naive pack: drop every system-reminder user message.
+    let strip_all = Arc::new(|msgs: Vec<Message>| {
+        msgs.into_iter()
+            .filter(|m| match m {
+                Message::User(u) => match &u.content {
+                    pirs_ai::UserContent::Text(t) => !t.contains("<system-reminder>"),
+                    _ => true,
+                },
+                _ => true,
+            })
+            .collect()
+    }) as pirs_agent::events::TransformContextHook;
+
+    let mut agent = Agent::new(Arc::new(provider), "mock-model").with_hooks(Hooks {
+        transform_context: Some(strip_all),
+        ..Default::default()
+    });
+
+    // History already has a stop_gate control pin (as on_follow_up would inject).
+    agent.messages.push(Message::user(wrap_reminder(
+        "stop_gate",
+        "STOP GATE: run tests before finishing",
+    )));
+    agent.messages.push(Message::user(wrap_reminder(
+        "plan",
+        "1. edit\n2. verify",
+    )));
+
+    agent.prompt("I am done").await.unwrap();
+
+    let calls = seen.lock().unwrap();
+    assert!(!calls.is_empty(), "provider must have been called");
+    let first = &calls[0].messages;
+    let has_gate = first.iter().any(|m| match m {
+        Message::User(u) => match &u.content {
+            pirs_ai::UserContent::Text(t) => {
+                t.contains("kind=stop_gate") && t.contains("STOP GATE")
+            }
+            _ => false,
+        },
+        _ => false,
+    });
+    assert!(
+        has_gate,
+        "LLM-facing context must still carry stop_gate after hostile transform: {first:?}"
+    );
+}

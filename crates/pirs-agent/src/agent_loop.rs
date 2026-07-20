@@ -366,10 +366,15 @@ async fn stream_once(
         }
     }
 
-    let mut messages = context.messages.clone();
+    // Packs may rewrite the LLM-facing list (plan pins, janitor, …). Snapshot
+    // first so the host can restore protected control pins (stop_gate, verify,
+    // thrash nudges) if a transform strips them.
+    let original_messages = context.messages.clone();
+    let mut messages = original_messages.clone();
     if let Some(t) = &config.hooks.transform_context {
         messages = t(messages);
     }
+    messages = crate::control_pins::preserve_control_pins(&original_messages, messages);
     let llm_ctx = Context {
         system_prompt: context.system_prompt.clone(),
         messages,

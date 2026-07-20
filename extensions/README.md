@@ -9,7 +9,49 @@ load it.
 These are **not** auto-loaded from this directory; it is a catalog. To run one,
 place it under a `.pirs/extensions/` directory. The integration tests in
 `crates/pirs-rhai/tests/` load them straight from here to prove each still
-compiles and behaves.
+compiles and behaves. Exception: **`pirs --weak`** embeds and loads a fixed
+stack (see [Recommended stacks](#recommended-stacks) below).
+
+## Recommended stacks
+
+### `--weak` (built-in)
+
+Deterministic load order (first → last). Later packs win on **tool name**
+collisions; project/user extensions under `.pirs/extensions/` load **after**
+this stack and can override further.
+
+| Order | Pack | Role |
+|------:|------|------|
+| 1 | `weak-model.rhai` | Loop thrash detection, verify-after-edit, stop gate, `update_plan` + plan pin (`<system-reminder> kind=plan`) |
+| 2 | `context-janitor.rhai` | Shrink stale giant tool outputs in outgoing context |
+| 3 | `env-doctor.rhai` | Block tools when toolchains are missing |
+| 4 | `goal.rhai` | Session goal pin (`[SESSION GOAL]` text — separate from system-reminder) |
+
+Also composed by the CLI (not packs): `--tool-diet`, `--sequential`,
+`max-retries ≥ 3`, one-shot default strategy `plan-exec-weak`, and
+auto-`--verify` from the project test ecosystem when detectable.
+
+Source of truth for order: `pirs_rhai::weak_packs::BUNDLED_ORDER` /
+`crates/pirs-rhai/src/weak_packs.rs`.
+
+### Optional companions (not auto-loaded)
+
+| Pack | When to add |
+|------|-------------|
+| `conductor.rhai` | Strong-planner / weak-executor **instructions** only (no `update_plan` tool — use with weak-model for the real pin) |
+| `verify-guard.rhai` | Treat “0 tests ran” as failed verify |
+| `sandbox.rhai` / `guardrails.rhai` | OS sandbox / catastrophic command denylist |
+
+## Composition hazards (last-wins / pin channels)
+
+| Hazard | Detail |
+|--------|--------|
+| **Tool name last-wins** | Two packs that `register_tool` the same name: the **last loaded** implementation runs. Never load a second `update_plan` alongside `weak-model` unless you intend to replace it. |
+| **`on_context` rewrites** | Each pack with `on_context` rewrites the full LLM-facing message list in load order. Filters must be **kind-scoped** (strip only your pin), never “drop every `<system-reminder>`”. |
+| **Plan pin vs control pins** | `weak-model` de-dupes only `kind=plan`. Host (`pirs_agent::control_pins::preserve_control_pins`) restores protected kinds (`stop_gate`, `verify`, `edit_fail`, `repeat`, `no_progress`) if a transform drops them. |
+| **Goal vs plan formats** | `goal.rhai` pins `[SESSION GOAL]…`; `weak-model` pins `<system-reminder> kind=plan`. Both may be active under `--weak`; they do not share a string prefix. |
+| **conductor + weak-model** | `conductor.rhai` deliberately does **not** register `update_plan` (earlier versions did, and last-wins left a broken pin that read empty state). Load weak-model for the tool; conductor for planner/delegate guidance. |
+| **Checkpoint packs** | Do not load `file-checkpoints` and a retired dual that shared `/checkpoints` paths — see Persistence section. |
 
 ## Safety & guardrails
 
