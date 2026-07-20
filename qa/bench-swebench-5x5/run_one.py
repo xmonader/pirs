@@ -17,7 +17,6 @@ from pathlib import Path
 
 BENCH_DIR = Path(__file__).parent
 BINARY = "/home/driver/hero/build/target/x86_64-unknown-linux-musl/release/pirs-bench"
-DEEPSEEK_KEY = os.environ["DEEPSEEK_API_KEY"]
 # docker exec does not source .bashrc, so the testbed conda env is never
 # activated by default (PATH falls back to base miniconda). Every exec that
 # needs the repo's installed deps (pytest, etc.) must set this explicitly.
@@ -39,7 +38,8 @@ def sh(cmd, **kw):
 
 def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, out_dir: Path,
                   strategy_script: str | None = None, label: str | None = None,
-                  no_strategy: bool = False):
+                  no_strategy: bool = False, provider: str = "deepseek",
+                  base_url: str | None = None):
     inst = json.loads((BENCH_DIR / "instances" / f"{instance_id}.json").read_text())
     image = image_for(instance_id)
     tag = label or model
@@ -96,21 +96,32 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
         cmd += [
             "--issue-file", "/tmp/issue.md",
             "--base-sha", head_sha,
-            "--provider", "deepseek",
+            "--provider", provider,
             "--model", model,
             "--max-turns", str(max_turns),
             "--out", "/tmp/out.patch",
         ]
+        if provider == "openai-compat":
+            if not base_url:
+                raise ValueError("base_url is required when provider='openai-compat'")
+            cmd += ["--base-url", base_url]
         if no_strategy:
             cmd += ["--no-strategy"]
         elif strategy_script:
             cmd += ["--strategy-script", "/tmp/strategy.rhai"]
         logline("cmd: " + " ".join(cmd))
 
+        env_key_name = {
+            "deepseek": "DEEPSEEK_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai-compat": "CUSTOM_API_KEY",
+        }[provider]
+        api_key = os.environ[env_key_name]
+
         start = time.time()
         proc = subprocess.run(
             ["docker", "exec",
-             "-e", f"DEEPSEEK_API_KEY={DEEPSEEK_KEY}",
+             "-e", f"{env_key_name}={api_key}",
              "-e", f"PATH={TESTBED_PATH}",
              "-e", "RUST_LOG=warn",
              cname] + cmd,
