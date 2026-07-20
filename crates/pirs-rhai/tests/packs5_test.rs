@@ -94,7 +94,7 @@ fn critic_spawns_background_review_after_n_edits() {
 }
 
 #[test]
-fn approval2_denies_dangerous_approves_safe() {
+fn blast_radius_judge_denies_dangerous_approves_safe() {
     let runner: Runner = Arc::new(|task: String, _| {
         if task.contains("rm -rf /important") {
             Ok("DENY - deletes data".to_string())
@@ -102,7 +102,7 @@ fn approval2_denies_dangerous_approves_safe() {
             Ok("APPROVE - fine".to_string())
         }
     });
-    let host = load("approval2.rhai", Some(runner));
+    let host = load("blast-radius-judge.rhai", Some(runner));
     let hooks = host.hooks();
     let before = hooks.before_tool_call.unwrap();
 

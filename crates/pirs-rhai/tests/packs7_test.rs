@@ -175,7 +175,7 @@ fn safe_edit_rewrites_via_editor_prompt() {
         assert!(task.contains("editor model") || task.contains("EDITOR"));
         Ok("fn add(a: i32, b: i32) -> i32 {\n    a + b\n}".to_string())
     });
-    let host = load("safe_edit.rhai", Some(runner));
+    let host = load("safe-edit.rhai", Some(runner));
     let tools = host.tools();
     let safe_edit = tools.iter().find(|t| t.name() == "safe_edit").unwrap();
 
@@ -225,7 +225,7 @@ fn checkpoints_snapshot_and_restore() {
     let cwd = std::env::current_dir().unwrap();
     std::env::set_current_dir(&tmp).unwrap();
 
-    let host = load("checkpoints.rhai", None);
+    let host = load("file-checkpoints.rhai", None);
     let hooks = host.hooks();
     let before = hooks.before_tool_call.unwrap();
     before("1", "edit", &json!({"path": f.to_string_lossy()}));

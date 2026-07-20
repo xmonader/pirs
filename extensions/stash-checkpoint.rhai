@@ -1,7 +1,7 @@
 // stash-checkpoint.rhai — per-turn worktree snapshots via a "dangling
 // stash" (cline's approach: `git stash create` anchored to a private ref).
 // Rewinds files to a previous turn without touching conversation history,
-// for git repos (see checkpoints.rhai for the non-git, per-file option).
+// for git repos (see file-checkpoints.rhai for the non-git, per-file option).
 //
 // `git stash create` captures the worktree+index diff against HEAD in one
 // command, without touching the index or working tree at all — no `git add

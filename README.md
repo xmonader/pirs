@@ -75,7 +75,7 @@ Shipped packs in `extensions/`:
 | `relay-race.rhai` | draft→critique→finalize pipeline as one tool |
 | `hive-note.rhai` | shared blackboard for multi-instance coordination |
 | `critic.rhai` | interleaved mid-run diff review via background sub-agent (steers corrections) |
-| `approval2.rhai` | semantic blast-radius: sub-agent judges risky commands against the environment |
+| `blast-radius-judge.rhai` | semantic blast-radius: sub-agent judges risky commands against the environment |
 | `skill-crystallizer.rhai` | distills successful runs into reusable SKILL.md files (self-improving) |
 | `stash-checkpoint.rhai` | dangling `git stash create` snapshots per turn (never stages), /undo merges via `git stash apply` |
 | `swarm.rhai` | work-packet queue over the hive for multi-instance fleets |

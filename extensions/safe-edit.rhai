@@ -1,4 +1,4 @@
-// safe_edit.rhai — editor-mode edits (aider's editor-diff): a narrow prompt
+// safe-edit.rhai — editor-mode edits (aider's editor-diff): a narrow prompt
 // that only produces the new file content. Better for weak models than the
 // instruction-following edit tool, because there's nothing to misunderstand.
 

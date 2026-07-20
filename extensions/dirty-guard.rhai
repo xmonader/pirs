@@ -3,7 +3,7 @@
 // and undo never eats user changes.
 //
 // Unlike every checkpoint/rollback pack in this catalog (rollback.rhai,
-// stash-checkpoint.rhai, checkpoints.rhai), which deliberately avoid moving
+// stash-checkpoint.rhai, file-checkpoints.rhai), which deliberately avoid moving
 // HEAD or touching the user's real branch, this one DOES: it's a genuine
 // `git commit` onto whatever branch is checked out, with the message
 // "wip: pre-ai-edit snapshot of <path>". That's the point (a real, durable

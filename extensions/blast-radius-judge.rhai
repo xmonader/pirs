@@ -1,5 +1,7 @@
-// approval2.rhai — semantic blast-radius: a sub-agent judges risky commands
-// against the actual environment instead of matching fixed patterns.
+// blast-radius-judge.rhai — semantic blast-radius: a sub-agent judges risky
+// commands against the actual environment instead of matching fixed
+// patterns. (Formerly approval2.rhai — renamed once the plain approval.rhai
+// it was numbered after was retired; nothing else changed.)
 
 const JUDGE_PROMPT = `You are a safety judge for shell commands. Given a command and environment info, answer APPROVE or DENY (one word) then a dash and a one-line reason.
 Consider: does it delete data? overwrite uncommitted work? kill services? touch outside the project? install/run untrusted code?`;

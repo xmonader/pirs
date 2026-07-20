@@ -1,5 +1,9 @@
-// checkpoints.rhai — VCS-free per-file checkpoints (qwen /restore): every
-// mutating tool call snapshots the target file first. /restore <path> rewinds.
+// file-checkpoints.rhai — VCS-free per-file checkpoints (qwen /restore):
+// every mutating tool call snapshots the target file first. /restore <path>
+// rewinds. (Formerly checkpoints.rhai — renamed to read apart more clearly
+// from stash-checkpoint.rhai, its git-based counterpart for git repos;
+// nothing else changed. This one is the option for non-git working
+// directories.)
 
 fn ckpt_root() {
     let cwd = exec("pwd").output;
