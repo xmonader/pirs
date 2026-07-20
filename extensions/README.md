@@ -17,6 +17,7 @@ compiles and behaves.
 |-----------|--------------|
 | `sandbox.rhai` | Overrides `bash` with an OS-level sandbox (bubblewrap/Seatbelt, falling back to Docker/Podman if bwrap can't start): read-only filesystem outside the working dir, no network by default — or a domain allowlist (`.pirs/sandbox-allowlist.txt`) enforced by a local CONNECT proxy on Docker/Podman. |
 | `guardrails.rhai` | Block destructive commands; the model must ask the user first. |
+| `path-guard.rhai` | Block sensitive commands (`rm`/`chmod`/`chown`/etc, `find -exec`/`-delete`) whose targets are outside the working directory. |
 | `approval.rhai` | Sensitive tool calls require explicit user approval. |
 | `approval2.rhai` | Semantic blast-radius: a sub-agent judges how risky a command is. |
 | `diff-shield.rhai` | Merge consecutive same-tool results to compress context. |

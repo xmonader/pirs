@@ -131,6 +131,96 @@ fn guardrails_blocks_destructive_allows_safe() {
     assert!(before("3", "edit", &json!({"path": "/x"})).is_none());
 }
 
+static PATH_GUARD_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[test]
+fn path_guard_blocks_sensitive_verbs_outside_cwd_but_allows_inside() {
+    let host = load_pack("path-guard.rhai");
+    let hooks = host.hooks();
+    let before = hooks.before_tool_call.unwrap();
+
+    for cmd in [
+        "rm -rf /etc/shadow",
+        "chmod -R 777 /usr/local",
+        "chown -R root /var/lib",
+        "cp secrets.txt ~/exposed.txt",
+        "mv build.log ../../outside.log",
+    ] {
+        assert!(
+            before("1", "bash", &json!({"command": cmd})).is_some(),
+            "should block: {cmd}"
+        );
+    }
+    for cmd in [
+        "rm -rf target/debug",
+        "cp README.md build/readme_copy.md", // both targets relative to cwd
+        "ls -la /etc",                       // ls isn't a sensitive verb
+        "chmod +x ./scripts/run.sh",
+    ] {
+        assert!(
+            before("2", "bash", &json!({"command": cmd})).is_none(),
+            "should allow: {cmd}"
+        );
+    }
+}
+
+#[test]
+fn path_guard_blocks_find_exec_and_delete_regardless_of_path() {
+    let host = load_pack("path-guard.rhai");
+    let hooks = host.hooks();
+    let before = hooks.before_tool_call.unwrap();
+
+    assert!(before(
+        "1",
+        "bash",
+        &json!({"command": "find . -name '*.tmp' -delete"})
+    )
+    .is_some());
+    assert!(before(
+        "2",
+        "bash",
+        &json!({"command": "find . -name '*.log' -exec rm {} \\;"})
+    )
+    .is_some());
+    assert!(before("3", "bash", &json!({"command": "find . -name '*.rs'"})).is_none());
+}
+
+#[test]
+fn path_guard_allowlist_permits_a_matching_command() {
+    let _g = PATH_GUARD_ENV_LOCK.lock().unwrap();
+    let host = load_pack("path-guard.rhai");
+    let hooks = host.hooks();
+    let before = hooks.before_tool_call.unwrap();
+
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".pirs")).unwrap();
+    std::fs::write(
+        dir.path().join(".pirs").join("path-guard-allow.txt"),
+        "# shared scratch dir\nrm -rf /tmp/pirs-shared-scratch\n",
+    )
+    .unwrap();
+    let prev = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let allowed = before(
+        "1",
+        "bash",
+        &json!({"command": "rm -rf /tmp/pirs-shared-scratch"}),
+    );
+    let still_blocked = before("2", "bash", &json!({"command": "rm -rf /etc/shadow"}));
+
+    std::env::set_current_dir(prev).unwrap();
+
+    assert!(
+        allowed.is_none(),
+        "allowlisted command should pass: {allowed:?}"
+    );
+    assert!(
+        still_blocked.is_some(),
+        "non-allowlisted command outside cwd should still block"
+    );
+}
+
 #[tokio::test]
 async fn audit_log_writes_jsonl_entries() {
     let host = load_pack("audit-log.rhai");

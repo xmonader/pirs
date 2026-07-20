@@ -56,6 +56,7 @@ Shipped packs in `extensions/`:
 | `weak-model.rhai` | loop detector, verify-after-edit, plan pinning |
 | `sandbox.rhai` | OS-level sandbox for `bash` (bubblewrap/Seatbelt, falls back to Docker/Podman): read-only fs outside cwd, no network (or a domain allowlist via `.pirs/sandbox-allowlist.txt`) |
 | `guardrails.rhai` | block destructive bash patterns, ask-first policy |
+| `path-guard.rhai` | block sensitive bash commands targeting paths outside cwd, plus `find -exec`/`-delete` |
 | `audit-log.rhai` | tool calls + results to `~/.pirs/audit.jsonl` |
 | `conductor.rhai` | strong-planner/weak-executor guidance + plan tool |
 | `context-janitor.rhai` | shrink stale giant tool outputs in outgoing context |
