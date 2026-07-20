@@ -22,7 +22,7 @@ export OPENAI_API_KEY=...            # or --api-key; OPENAI_BASE_URL for compati
 
 REPL commands: `/model`, `/export`, `/compact`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`).
 
-Hardening flags: `--tool-diet` (start with core tools only; the model loads more via `use_tool`), `--sequential` (one tool call at a time), `--no-compaction` / `--context-window N`, `--max-retries N` (also retries empty/garbage completions). A `delegate` tool runs subtasks in fresh-context sub-agents — with an optional `model` override, this gives strong-planner/weak-executor routing in one process (sub-agents see no parent history, return only their answer). The orchestrator's `spawn --env KEY=VAL` (repeatable) configures per-instance providers/models for mixed fleets. and auto-compaction summarizes old history when the context window fills. `extensions/weak-model.rhai` adds loop-detection, verify-after-edit, and plan pinning as a script pack.
+Hardening flags: `--tool-diet` (start with core tools only; the model loads more via `use_tool`), `--sequential` (one tool call at a time), `--no-compaction` / `--context-window N`, `--max-retries N` (also retries empty/garbage completions). **`--weak`** is the one-flag preset for smaller models: tool-diet + sequential + retries≥3 + default strategy `plan-exec-weak` (one-shot) + bundled packs (`weak-model`, `context-janitor`, `env-doctor`, `goal`) + larger PageRank **repo_map** sketch in the system prompt. **`edit_block`** accepts aider-style SEARCH/REPLACE (better for weak models than nested JSON edits). A `delegate` tool runs subtasks in fresh-context sub-agents — with an optional `model` override, this gives strong-planner/weak-executor routing in one process (sub-agents see no parent history, return only their answer). The orchestrator's `spawn --env KEY=VAL` (repeatable) configures per-instance providers/models for mixed fleets. Auto-compaction summarizes old history when the context window fills. `extensions/weak-model.rhai` adds loop-detection, edit-thrash / no-progress steering, verify-after-edit, a fire-capped stop gate, and plan pinning.
 
 ## Extensions (rhai)
 
@@ -53,7 +53,7 @@ Shipped packs in `extensions/`:
 
 | Pack | Purpose |
 |---|---|
-| `weak-model.rhai` | loop detector, verify-after-edit, plan pinning |
+| `weak-model.rhai` | loop detector, edit-thrash / no-progress steer, verify-after-edit, stop gate, plan pinning (also loaded by `--weak`) |
 | `sandbox.rhai` | OS-level sandbox for `bash` (bubblewrap/Seatbelt, falls back to Docker/Podman): read-only fs outside cwd, no network (or a domain allowlist via `.pirs/sandbox-allowlist.txt`) |
 | `guardrails.rhai` | block destructive bash patterns, ask-first policy |
 | `path-guard.rhai` | block sensitive bash commands targeting paths outside cwd, plus `find -exec`/`-delete` |

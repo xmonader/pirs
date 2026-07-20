@@ -240,9 +240,13 @@ async fn unknown_tool_reported() {
     let provider = MockProvider::new(vec![tool_call_msg("c1", "nope", json!({})), text_msg("ok")]);
     let mut agent = make_agent(provider, vec![]);
     let new = agent.prompt("go").await.unwrap();
-    assert!(new.iter().any(
-        |m| matches!(m, Message::ToolResult(r) if r.is_error && r.content[0].as_text() == Some("Tool nope not found"))
-    ));
+    assert!(new.iter().any(|m| {
+        matches!(
+            m,
+            Message::ToolResult(r) if r.is_error
+                && r.content[0].as_text().is_some_and(|t| t.contains("Tool `nope` not found"))
+        )
+    }));
 }
 
 #[tokio::test]

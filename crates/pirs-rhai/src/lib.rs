@@ -36,6 +36,7 @@ pub mod caps;
 pub mod discover;
 pub mod profile_script;
 pub mod strategy_script;
+pub mod weak_packs;
 
 /// Immutable per-extension hook presence, hoisted OUT of `Mutex<Extension>` so
 /// dispatchers can tell whether an extension even has a hook without taking its

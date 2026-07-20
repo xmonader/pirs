@@ -159,26 +159,40 @@ pub fn finish_output(
 ) -> anyhow::Result<ToolOutput> {
     let combined = format!("{}{}", out.stdout, out.stderr);
     if out.timed_out {
+        let ui = tail_with_footer(&combined, call_id);
+        let (model, _) = truncate::cap_for_model(&ui);
         bail!(
             "Command timed out after {} seconds\n{}",
             timeout_secs.unwrap_or(0),
-            tail_with_footer(&combined, call_id)
+            model
         );
     }
-    let text = tail_with_footer(&combined, call_id);
+    let ui_text = tail_with_footer(&combined, call_id);
     let note = if sandbox_name == "local" {
         String::new()
     } else {
         format!(" [sandbox: {sandbox_name}]")
     };
+    let ui_full = if ui_text.is_empty() {
+        "(no output)".to_string()
+    } else {
+        format!("{ui_text}{note}")
+    };
+    let (model_text, truncated) = truncate::cap_for_model(&ui_full);
     match out.code {
-        Some(0) => Ok(ToolOutput::text(if text.is_empty() {
-            "(no output)".to_string()
-        } else {
-            format!("{text}{note}")
-        })),
-        Some(n) => bail!("{text}\nCommand exited with code {n}{note}"),
-        None => bail!("{text}\nCommand terminated by signal{note}"),
+        Some(0) => {
+            let mut out = if truncated {
+                ToolOutput::text_with_ui(model_text, Some(ui_full))
+            } else {
+                ToolOutput::text(model_text)
+            };
+            if !note.is_empty() {
+                out = out.with_details(serde_json::json!({ "sandbox": sandbox_name }));
+            }
+            Ok(out)
+        }
+        Some(n) => bail!("{model_text}\nCommand exited with code {n}{note}"),
+        None => bail!("{model_text}\nCommand terminated by signal{note}"),
     }
 }
 

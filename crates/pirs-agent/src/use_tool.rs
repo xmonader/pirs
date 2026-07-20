@@ -32,7 +32,9 @@ impl UseTool {
     }
 
     pub fn default_visible() -> std::collections::HashSet<String> {
-        ["bash", "read", "edit", "write", "use_tool"]
+        // edit_block is visible by default: weak models match SEARCH/REPLACE
+        // more reliably than nested oldText/newText JSON (aider lesson).
+        ["bash", "read", "edit", "edit_block", "write", "use_tool"]
             .iter()
             .map(|s| s.to_string())
             .collect()

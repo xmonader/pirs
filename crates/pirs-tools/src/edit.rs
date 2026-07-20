@@ -211,20 +211,119 @@ fn locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
     // same way, mirroring the exact tier above). Every tier still requires
     // uniqueness — a more lenient match is never allowed to silently pick
     // among several candidates.
-    fuzzy_locate(content, old_text).or_else(|| reflow_locate(content, old_text))
+    fuzzy_locate(content, old_text)
+        .or_else(|| reflow_locate(content, old_text))
+        // Multi-line SequenceMatcher-style window (aider's last resort).
+        .or_else(|| similarity_locate(content, old_text))
+}
+
+/// Apply a single old→new replacement to file contents (LF-normalized body).
+/// Shared by `edit` and `edit_block`. Returns the new full file text.
+pub fn apply_one_replacement(original: &str, old_text: &str, new_text: &str) -> anyhow::Result<String> {
+    if old_text.is_empty() {
+        bail!("search/oldText must not be empty");
+    }
+    let Norm {
+        body,
+        without_bom,
+        bom,
+        crlf,
+        map,
+    } = normalize_file(original);
+    let span = locate(&body, old_text).ok_or_else(|| not_found_error(&body, old_text))?;
+    if &body[span.0..span.1] == new_text {
+        bail!("replacement is identical to the matched text; no change");
+    }
+    let ostart = map[span.0];
+    let oend = map[span.1];
+    let region = &without_bom[ostart..oend];
+    let use_crlf =
+        region.contains("\r\n") || (crlf && !region.contains('\n') && !region.contains('\r'));
+    let mut replacement = new_text.to_string();
+    if oend > ostart && without_bom[..oend].ends_with('\n') && !replacement.ends_with('\n') {
+        replacement.push('\n');
+    }
+    if use_crlf {
+        replacement = replacement.replace('\n', "\r\n");
+    }
+    let mut edited_orig = without_bom;
+    edited_orig.replace_range(ostart..oend, &replacement);
+    let mut out = String::new();
+    if bom {
+        out.push('\u{feff}');
+    }
+    out.push_str(&edited_orig);
+    Ok(out)
 }
 
 fn not_found_error(content: &str, old_text: &str) -> anyhow::Error {
     let exact = content.match_indices(old_text).count();
     if exact > 1 {
-        anyhow::anyhow!(
-            "oldText occurs {exact} times in the file; it must be unique. Add more surrounding context."
-        )
-    } else {
-        anyhow::anyhow!(
-            "oldText not found in the file. Check whitespace, indentation, and that the file has not changed."
-        )
+        return anyhow::anyhow!(
+            "oldText occurs {exact} times in the file; it must be unique. Add more surrounding context (include surrounding lines so the match is unique)."
+        );
     }
+    let mut msg = String::from(
+        "oldText not found in the file (exact and fuzzy match both failed). \
+         Re-read the file, copy the exact current text, and retry with a larger unique block.",
+    );
+    // Show a short preview of what the model tried to match.
+    let preview: String = old_text.chars().take(120).collect();
+    let ellipsis = if old_text.chars().count() > 120 {
+        "…"
+    } else {
+        ""
+    };
+    msg.push_str(&format!("\n\nYour oldText began with:\n  | {preview}{ellipsis}"));
+
+    // Suggest nearest lines by fuzzy-normalized token overlap (cheap, no deps).
+    let candidates = similar_line_candidates(content, old_text, 3);
+    if !candidates.is_empty() {
+        msg.push_str("\n\nClosest lines in the file (did you mean one of these?):");
+        for (line_no, line) in candidates {
+            let shown: String = line.chars().take(100).collect();
+            let e = if line.chars().count() > 100 { "…" } else { "" };
+            msg.push_str(&format!("\n  L{line_no}: {shown}{e}"));
+        }
+        msg.push_str(
+            "\n\nTip: include 2–3 surrounding lines in oldText so the match is unique, \
+             or replace the entire function body.",
+        );
+    }
+    anyhow::anyhow!(msg)
+}
+
+/// Rank file lines by shared whitespace-normalized tokens with `old_text`.
+fn similar_line_candidates(content: &str, old_text: &str, limit: usize) -> Vec<(usize, String)> {
+    let needle_tokens = token_set(&reflow_normalize(old_text));
+    if needle_tokens.is_empty() {
+        return Vec::new();
+    }
+    let mut scored: Vec<(usize, usize, String)> = Vec::new();
+    for (i, line) in content.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let tokens = token_set(&reflow_normalize(line));
+        let overlap = needle_tokens.intersection(&tokens).count();
+        if overlap == 0 {
+            continue;
+        }
+        scored.push((overlap, i + 1, line.to_string()));
+    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, n, l)| (n, l))
+        .collect()
+}
+
+fn token_set(s: &str) -> std::collections::BTreeSet<String> {
+    s.split_whitespace()
+        .filter(|t| t.len() >= 2)
+        .map(|t| t.to_string())
+        .collect()
 }
 
 pub fn fuzzy_normalize(line: &str) -> String {
@@ -300,6 +399,67 @@ fn reflow_locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
     locate_lines(content, old_text, reflow_normalize)
 }
 
+/// Aider-style multi-line fuzzy match: slide a window of the same line count
+/// and accept the unique best window with SequenceMatcher ratio ≥ 0.8.
+fn similarity_locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
+    const THRESH: f64 = 0.8;
+    let old_lines: Vec<&str> = old_text.lines().collect();
+    if old_lines.is_empty() || old_lines.len() > 80 {
+        return None;
+    }
+    let content_lines: Vec<&str> = content.lines().collect();
+    if content_lines.len() < old_lines.len() {
+        return None;
+    }
+    let old_joined = old_lines.join("\n");
+    let mut best: Option<(f64, usize)> = None;
+    let mut second = 0.0f64;
+    let window = old_lines.len();
+    for i in 0..=content_lines.len() - window {
+        let chunk = content_lines[i..i + window].join("\n");
+        // Char-level ratio (aider SequenceMatcher style). Line-level is too
+        // harsh when only one token in a multi-line block differs.
+        let ratio = f64::from(similar::TextDiff::from_chars(&old_joined, &chunk).ratio());
+        if ratio < THRESH {
+            continue;
+        }
+        match best {
+            Some((r, _)) if ratio > r + 1e-9 => {
+                second = r;
+                best = Some((ratio, i));
+            }
+            Some((r, _)) if (ratio - r).abs() < 1e-9 => {
+                // Ambiguous: two windows with same score.
+                second = ratio;
+            }
+            Some((r, _)) => {
+                if ratio > second {
+                    second = ratio;
+                }
+                let _ = r;
+            }
+            None => best = Some((ratio, i)),
+        }
+    }
+    let (best_ratio, start_line) = best?;
+    // Require uniqueness: second-best must be clearly worse.
+    if second + 0.02 >= best_ratio && second > 0.0 {
+        return None;
+    }
+    // Map line window to byte offsets.
+    let starts = line_starts(content);
+    let start = *starts.get(start_line)?;
+    let end_line = start_line + window;
+    let end = if end_line < starts.len() {
+        starts[end_line]
+    } else {
+        content.len()
+    };
+    // Prefer excluding a trailing final newline mismatch by trimming end to
+    // the last line of the window when the file continues.
+    Some((start, end.min(content.len())))
+}
+
 fn line_starts(content: &str) -> Vec<usize> {
     let mut starts = vec![0];
     for (i, b) in content.bytes().enumerate() {
@@ -356,6 +516,31 @@ mod tests {
     fn fuzzy_multiple_rejected() {
         let content = "foo  \nfoo\n";
         assert!(fuzzy_locate(content, "foo").is_none());
+    }
+
+    #[test]
+    fn similarity_locate_matches_near_miss_block() {
+        let content = "fn compute_total(x: i32) -> i32 {\n    x + 1\n}\n";
+        // Model almost-right block (wrong constant) — high SequenceMatcher ratio.
+        let old = "fn compute_total(x: i32) -> i32 {\n    x + 2\n}";
+        let span = similarity_locate(content, old).expect("expected similarity match");
+        let matched = &content[span.0..span.1];
+        assert!(
+            matched.contains("compute_total") && matched.contains("x + 1"),
+            "matched={matched:?}"
+        );
+    }
+
+    #[test]
+    fn not_found_error_lists_similar_lines() {
+        let content = "fn compute_total(a: i32) -> i32 {\n    a + 1\n}\n";
+        let err = not_found_error(content, "fn compute_ttl(a: i32) -> i32 {");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("Closest lines") || msg.contains("compute_total"),
+            "expected candidate hint, got: {msg}"
+        );
+        assert!(msg.contains("oldText not found"));
     }
 
     #[test]

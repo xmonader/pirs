@@ -512,6 +512,34 @@ fn normalize_lock_path(raw: &str) -> String {
     raw.to_string()
 }
 
+/// Cheap "did you mean" for unknown tool names: longest common prefix / substring.
+fn did_you_mean<'a>(name: &str, available: &[&'a str]) -> Option<&'a str> {
+    let name_l = name.to_ascii_lowercase();
+    let mut best: Option<(&str, usize)> = None;
+    for &cand in available {
+        let c = cand.to_ascii_lowercase();
+        let score = if c == name_l {
+            1000
+        } else if c.contains(&name_l) || name_l.contains(&c) {
+            50 + c.len().min(name_l.len())
+        } else {
+            // shared prefix length
+            name_l
+                .bytes()
+                .zip(c.bytes())
+                .take_while(|(a, b)| a == b)
+                .count()
+        };
+        if score >= 3 {
+            match best {
+                Some((_, s)) if s >= score => {}
+                _ => best = Some((cand, score)),
+            }
+        }
+    }
+    best.map(|(c, _)| c)
+}
+
 fn schema_summary(schema: &Value) -> String {
     let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
         return "(any object)".to_string();
@@ -562,12 +590,21 @@ fn prepare_call(
     // sandbox — by registering another tool under the same name later in the
     // list (native tools are constructed first, rhai packs appended after).
     let Some(tool) = tools.iter().rev().find(|t| t.name() == call.name) else {
+        let available: Vec<&str> = tools.iter().map(|t| t.name()).collect();
+        let hint = did_you_mean(&call.name, &available);
+        let hint_s = hint
+            .map(|h| format!(" Did you mean `{h}`?"))
+            .unwrap_or_default();
         return Prepared::Failed {
             index,
             result: error_result(
                 &call.id,
                 &call.name,
-                &format!("Tool {} not found", call.name),
+                &format!(
+                    "Tool `{}` not found.{hint_s} Available tools: {}.",
+                    call.name,
+                    available.join(", ")
+                ),
             ),
         };
     };
@@ -585,6 +622,7 @@ fn prepare_call(
         };
     }
     let schema = tool.parameters();
+    // coerce_args runs repair_args first (string/concat/trailing-junk).
     let args = coerce_args(&schema, &call.arguments);
     if let Err(e) = validate_args(&schema, &args) {
         return Prepared::Failed {
@@ -593,7 +631,9 @@ fn prepare_call(
                 &call.id,
                 &call.name,
                 &format!(
-                    "Invalid arguments for tool {}: {e}. Expected: {}. Re-issue the call with corrected arguments.",
+                    "Invalid arguments for tool {}: {e}. Expected: {}. \
+                     Re-issue the call with a single JSON object matching that schema \
+                     (no markdown fences, no trailing commentary).",
                     call.name,
                     schema_summary(&schema)
                 ),

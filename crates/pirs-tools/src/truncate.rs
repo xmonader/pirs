@@ -1,5 +1,10 @@
 pub const MAX_LINES: usize = 2000;
 pub const MAX_BYTES: usize = 50 * 1024;
+/// Harder caps for the *model-facing* tool result path. UI/audit can keep the
+/// larger window via `details.uiText`; weak models drown if every bash dump is
+/// 50 KB.
+pub const MODEL_MAX_LINES: usize = 400;
+pub const MODEL_MAX_CHARS: usize = 20_000;
 pub const GREP_LINE_MAX: usize = 500;
 /// Files larger than this are skipped by grep rather than read fully into
 /// memory — a guard against OOM on multi-gigabyte files that are not useful
@@ -87,6 +92,58 @@ pub fn truncate_line(line: &str, max: usize) -> String {
             end -= 1;
         }
         format!("{}...", &line[..end])
+    }
+}
+
+/// Cap a full tool result for the model: keep the tail (most recent lines),
+/// enforce `MODEL_MAX_CHARS`, and return `(model_text, was_truncated)`.
+pub fn cap_for_model(full: &str) -> (String, bool) {
+    let window = tail(full, MODEL_MAX_LINES);
+    let mut text = window.text;
+    let mut truncated = window.truncated;
+    if text.len() > MODEL_MAX_CHARS {
+        // Keep the tail of the already-tailed window.
+        let start = text
+            .char_indices()
+            .rev()
+            .nth(MODEL_MAX_CHARS.saturating_sub(1))
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        // Snap to char boundary (already from char_indices).
+        text = format!(
+            "[earlier output truncated for model context — full log in tool details if available]\n{}",
+            &text[start..]
+        );
+        truncated = true;
+    } else if truncated {
+        text = format!(
+            "[earlier output truncated for model context]\n{text}"
+        );
+    }
+    (text, truncated)
+}
+
+#[cfg(test)]
+mod model_cap_tests {
+    use super::*;
+
+    #[test]
+    fn cap_for_model_short_unchanged() {
+        let (t, trunc) = cap_for_model("hello\n");
+        assert_eq!(t, "hello\n");
+        assert!(!trunc);
+    }
+
+    #[test]
+    fn cap_for_model_long_keeps_tail() {
+        let mut s = String::new();
+        for i in 0..1000 {
+            s.push_str(&format!("line {i}\n"));
+        }
+        let (t, trunc) = cap_for_model(&s);
+        assert!(trunc);
+        assert!(t.contains("line 999"));
+        assert!(t.len() <= MODEL_MAX_CHARS + 80); // prefix note overhead
     }
 }
 

@@ -63,16 +63,17 @@ struct Cli {
     resume: bool,
 
     /// Run a multi-phase loop strategy for a one-shot prompt. Accepts a built-in
-    /// name (monolithic, plan-exec, plan-critic-exec, wide-plan-exec), a name
-    /// resolved from .pirs/strategies/<name>.rhai (project then ~/.pirs), or a
-    /// path to a .rhai script. No effect in the interactive REPL.
+    /// name (monolithic, plan-exec, plan-critic-exec, wide-plan-exec,
+    /// plan-exec-weak), a name resolved from .pirs/strategies/<name>.rhai
+    /// (project then ~/.pirs), or a path to a .rhai script. No effect in the
+    /// interactive REPL.
     #[arg(long)]
     strategy: Option<String>,
 
     /// Run under a profile (a role: persona + model + strategy + tool policy).
     /// Accepts a name resolved from .pirs/profiles/<name>.rhai (project then
-    /// ~/.pirs) or a path to a .rhai script. Implies its strategy; --strategy
-    /// overrides which strategy the profile runs.
+    /// ~/.pirs), a built-in name (`weak`), or a path to a .rhai script. Implies
+    /// its strategy; --strategy overrides which strategy the profile runs.
     #[arg(long)]
     profile: Option<String>,
 
@@ -87,6 +88,11 @@ struct Cli {
     /// Defaults to 3 with --verify, 1 otherwise.
     #[arg(long)]
     max_attempts: Option<u32>,
+
+    /// Skip injecting the PageRank repo-map sketch into the system prompt
+    /// (on by default when the code graph is enabled).
+    #[arg(long)]
+    no_repo_map: bool,
 
     /// Disable rhai extension loading
     #[arg(long)]
@@ -162,6 +168,13 @@ struct Cli {
     /// Execute tool calls one at a time (helps weaker models)
     #[arg(long)]
     sequential: bool,
+
+    /// Weak-model hardening preset: enables --tool-diet, --sequential,
+    /// --max-retries at least 3, defaults --strategy to plan-exec-weak when
+    /// neither --strategy nor --profile is set, and loads bundled packs
+    /// (weak-model, context-janitor, env-doctor, goal). Skip security packs.
+    #[arg(long)]
+    weak: bool,
 
     /// Draft each turn with a cheaper model; escalate to the main model only when the draft is rejected
     #[arg(long)]
@@ -413,13 +426,34 @@ async fn main() -> anyhow::Result<()> {
         println!("approval:   {approval:<24} ({})", approval_src.label());
         return Ok(());
     }
-    let cli = Cli {
+    let mut cli = Cli {
         model,
         provider,
         base_url,
         approval,
         ..cli
     };
+    // --weak: compose the recommended weak-model preset without requiring the
+    // user to remember every flag. Explicit flags still win for strategy/profile.
+    if cli.weak {
+        cli.tool_diet = true;
+        cli.sequential = true;
+        if cli.max_retries < 3 {
+            cli.max_retries = 3;
+        }
+        if cli.strategy.is_none() && cli.profile.is_none() {
+            // One-shot gets plan-exec-weak; interactive still benefits from
+            // diet/sequential/packs even without a strategy.
+            if !cli.prompt.is_empty() {
+                cli.strategy = Some("plan-exec-weak".into());
+            }
+        }
+        eprintln!(
+            "[weak mode: tool-diet, sequential, max-retries={}, strategy={:?}, bundled packs]",
+            cli.max_retries,
+            cli.strategy.as_deref().or(cli.profile.as_deref())
+        );
+    }
 
     if let Some(dir) = cli
         .prompt
@@ -848,6 +882,11 @@ async fn main() -> anyhow::Result<()> {
             std::sync::Arc::clone(&policy_slot),
             std::sync::Arc::clone(&usage_slot),
         ));
+        // Bundled weak packs load first; project/user extensions load after so
+        // a local weak-model.rhai (or other pack) overrides by last-wins.
+        if cli.weak {
+            pirs_rhai::weak_packs::load_into(&mut h);
+        }
         h.load_default_dirs(&cwd);
         for err in &h.load_errors {
             eprintln!("[extension error] {err}");
@@ -860,23 +899,32 @@ async fn main() -> anyhow::Result<()> {
         let ext_hooks = h.hooks();
         let yolo =
             approval::ApprovalMode::parse(&cli.approval) == Some(approval::ApprovalMode::Yolo);
-        policy_hooks = if yolo {
-            None
-        } else {
-            match (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
-                (Some(b), Some(a)) => Some((b.clone(), a.clone())),
-                _ => None,
-            }
+        // Always pass extension hooks to subagents (weak-model packs etc.).
+        // Approval gate is only chained onto the main session when not yolo.
+        policy_hooks = match (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
+            (Some(b), Some(a)) => Some((b.clone(), a.clone())),
+            _ => None,
         };
         if let Some((b, a)) = &policy_hooks {
-            let b_chained = pirs_agent::Hooks::chain_before(gate_hook.clone(), Some(b.clone()));
-            if let Some(b_chained) = b_chained {
+            let b_for_sub = if yolo {
+                Some(b.clone())
+            } else {
+                pirs_agent::Hooks::chain_before(gate_hook.clone(), Some(b.clone()))
+            };
+            if let Some(b_chained) = b_for_sub {
                 *policy_slot.lock().unwrap() = Some((b_chained, a.clone()));
             }
         }
-        if !yolo {
-            hooks.before_tool_call =
-                pirs_agent::Hooks::chain_before(gate_hook.clone(), ext_hooks.before_tool_call);
+        // Extension before/after hooks always install (weak-model loop detection,
+        // verify-after-edit tracking). YOLO only skips the interactive approval
+        // *gate* — not rhai policy/hardening packs. Harness control (loop
+        // detection, verify-after-edit) must run even when the user opts out of prompts.
+        hooks.before_tool_call = if yolo {
+            ext_hooks.before_tool_call
+        } else {
+            pirs_agent::Hooks::chain_before(gate_hook.clone(), ext_hooks.before_tool_call)
+        };
+        {
             let rhai_after = ext_hooks.after_tool_call;
             let graph_after = graph.clone().map(|g| {
                 let g = std::sync::Arc::clone(&g);
@@ -884,7 +932,10 @@ async fn main() -> anyhow::Result<()> {
                 let cwd2 = cwd.clone();
                 let f: pirs_agent::events::AfterToolCallHook =
                     std::sync::Arc::new(move |_id, name, result| {
-                        if (name != "edit" && name != "write" && name != "ast_edit")
+                        if (name != "edit"
+                            && name != "edit_block"
+                            && name != "write"
+                            && name != "ast_edit")
                             || result.is_error
                         {
                             return None;
@@ -990,7 +1041,26 @@ async fn main() -> anyhow::Result<()> {
     let skills = discovery::discover_skills(&cwd);
     let file_commands = discovery::discover_commands(&cwd);
 
-    let mut system = system_prompt::build_system_prompt(&cwd, &tools);
+    // Inject a PageRank-ranked symbol sketch so the model sees structure
+    // without a first tool call (classic repomap idea). Weak mode gets a
+    // larger budget (weaker models thrash without a map).
+    let repo_map = if cli.no_repo_map {
+        None
+    } else {
+        graph.as_ref().and_then(|g| {
+            let budget = if cli.weak {
+                6_000
+            } else {
+                pirs_graph::repo_map::DEFAULT_MAP_CHARS
+            };
+            pirs_graph::repo_map::render_sketch(&g.get(), &cwd, budget)
+        })
+    };
+    if let Some(ref m) = repo_map {
+        eprintln!("[repo_map: {} chars]", m.len());
+    }
+    let mut system =
+        system_prompt::build_system_prompt_with_map(&cwd, &tools, repo_map.as_deref(), cli.weak);
     if let Some(block) = discovery::skills_prompt_block(&skills) {
         system.push_str(&block);
     }

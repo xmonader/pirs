@@ -6,6 +6,7 @@ pub mod code_search;
 pub mod embed_util;
 pub mod graph;
 pub mod lexical;
+pub mod repo_map;
 pub mod store;
 
 pub use bg_index::BackgroundIndexer;

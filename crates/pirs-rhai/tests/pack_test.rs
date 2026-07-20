@@ -151,6 +151,84 @@ async fn verify_after_edit_steers_model_to_test() {
 }
 
 #[tokio::test]
+async fn stop_gate_forces_verify_after_edit_before_finish() {
+    // edit succeeds → model says "done" with no bash → follow-up should fire.
+    let (mut agent, seen) = build(
+        vec![
+            tc("1", "edit", json!({"path": "f.rs"})),
+            text("all done"),
+            text("really done after tests"),
+        ],
+        vec![Arc::new(NamedTool {
+            name: "edit".into(),
+        })],
+    );
+    agent.prompt("go").await.unwrap();
+
+    let calls = seen.lock().unwrap();
+    // After first content-only turn, follow-up injects stop-gate message and
+    // we sample again — so at least 2 model calls after the initial tool turn.
+    assert!(
+        calls.len() >= 3,
+        "stop gate should force another turn after unverified edit: {} calls",
+        calls.len()
+    );
+    let has_gate = calls.iter().any(|round| {
+        round.iter().any(|m| {
+            matches!(
+                m,
+                Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("STOP GATE"))
+            )
+        })
+    });
+    assert!(has_gate, "expected STOP GATE follow-up in context: {calls:?}");
+}
+
+#[tokio::test]
+async fn edit_thrash_blocks_after_repeated_failures() {
+    struct FailEdit;
+    #[async_trait]
+    impl AgentTool for FailEdit {
+        fn name(&self) -> &str {
+            "edit"
+        }
+        fn description(&self) -> &str {
+            "fail"
+        }
+        fn parameters(&self) -> Value {
+            json!({"type":"object","properties":{"path":{"type":"string"}}})
+        }
+        async fn execute(&self, _ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+            anyhow::bail!("oldText not found")
+        }
+    }
+
+    let (mut agent, _seen) = build(
+        vec![
+            tc("1", "edit", json!({"path": "f.rs"})),
+            tc("2", "edit", json!({"path": "f.rs"})),
+            tc("3", "edit", json!({"path": "f.rs"})),
+            text("gave up"),
+        ],
+        vec![Arc::new(FailEdit)],
+    );
+    let new = agent.prompt("go").await.unwrap();
+    let blocked = new.iter().any(|m| {
+        matches!(
+            m,
+            Message::ToolResult(r) if r.is_error
+                && r.content.iter().any(|b| b.as_text().is_some_and(|t|
+                    t.contains("already failed") || t.contains("already made 3 times")
+                ))
+        )
+    });
+    assert!(
+        blocked,
+        "third failing edit on same path should be blocked: {new:?}"
+    );
+}
+
+#[tokio::test]
 async fn plan_pinned_at_tail_of_context() {
     let (mut agent, seen) = build(
         vec![

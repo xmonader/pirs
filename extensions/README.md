@@ -54,7 +54,7 @@ Two packs were retired in favor of `review-gate.rhai`, which now covers both: `r
 | Extension | What it does |
 |-----------|--------------|
 | `conductor.rhai` | Strong-planner / weak-executor guidance pack. |
-| `weak-model.rhai` | Loop hardening for weaker models. |
+| `weak-model.rhai` | Loop hardening for weaker models (repeat block, edit thrash, no-progress, verify-after-edit, stop gate, plan pin). Also auto-loaded by `pirs --weak`. |
 | `subagents.rhai` | Named sub-agents from `.pirs/agents/*.md` (and `~/.pirs/agents`). |
 | `fork.rhai` | Cache-warm delegates: the sub-agent inherits the current context. |
 | `workflow.rhai` | A rerunnable multi-agent workflow: fan out reviews over a set. |

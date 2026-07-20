@@ -38,6 +38,7 @@ pub fn scratch_dir() -> &'static Path {
 
 pub mod bash;
 pub mod edit;
+pub mod edit_block;
 pub mod filelock;
 pub mod find;
 pub mod grep;
@@ -53,6 +54,7 @@ pub mod write;
 
 pub use bash::BashTool;
 pub use edit::EditTool;
+pub use edit_block::EditBlockTool;
 pub use find::FindTool;
 pub use grep::GrepTool;
 pub use ls::LsTool;
@@ -66,6 +68,7 @@ pub fn default_tools(cwd: PathBuf) -> Vec<Arc<dyn AgentTool>> {
         Arc::new(BashTool::new(cwd.clone())),
         Arc::new(ReadTool::new(cwd.clone())),
         Arc::new(EditTool::new(cwd.clone())),
+        Arc::new(EditBlockTool::new(cwd.clone())),
         Arc::new(WriteTool::new(cwd.clone())),
         Arc::new(GrepTool::new(cwd.clone())),
         Arc::new(FindTool::new(cwd.clone())),

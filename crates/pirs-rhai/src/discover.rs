@@ -75,8 +75,8 @@ pub fn resolve_strategy_in(arg: &str, roots: &[PathBuf]) -> Result<Strategy> {
 }
 
 /// Resolve a profile from a path or a name, searching the given roots.
-/// Name resolution order: `<root>/profiles/<name>.rhai` (each root). Profiles
-/// have no built-ins, so an unresolved name is an error.
+/// Name resolution order: `<root>/profiles/<name>.rhai` (each root) →
+/// built-in profile of that name (currently: `weak`).
 pub fn resolve_profile_in(arg: &str, roots: &[PathBuf]) -> Result<Profile> {
     if looks_like_path(arg) {
         let path = Path::new(arg);
@@ -88,10 +88,28 @@ pub fn resolve_profile_in(arg: &str, roots: &[PathBuf]) -> Result<Profile> {
     if let Some(path) = find_named(roots, "profiles", arg) {
         return load_profile_file(&path);
     }
+    if let Some(profile) = builtin_profile(arg) {
+        return Ok(profile);
+    }
     bail!(
-        "unknown profile {arg:?}: no {arg}.rhai found under {}",
+        "unknown profile {arg:?}: not a built-in ({}) and no {arg}.rhai found under {}",
+        builtin_profile_names().join(", "),
         roots_display(roots, "profiles"),
     )
+}
+
+/// Built-in profile names (also documented on `--profile`).
+pub fn builtin_profile_names() -> Vec<&'static str> {
+    vec!["weak"]
+}
+
+/// Look up a built-in profile by name.
+pub fn builtin_profile(name: &str) -> Option<Profile> {
+    match name {
+        "weak" => crate::profile_script::load_profile_str(crate::weak_packs::WEAK_PROFILE, "weak")
+            .ok(),
+        _ => None,
+    }
 }
 
 /// Resolve a strategy against the default roots derived from `cwd` + `$HOME`.

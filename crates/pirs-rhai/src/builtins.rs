@@ -18,6 +18,7 @@ const MONOLITHIC: &str = include_str!("../builtins/monolithic.rhai");
 const PLAN_EXEC: &str = include_str!("../builtins/plan-exec.rhai");
 const PLAN_CRITIC_EXEC: &str = include_str!("../builtins/plan-critic-exec.rhai");
 const WIDE_PLAN_EXEC: &str = include_str!("../builtins/wide-plan-exec.rhai");
+const PLAN_EXEC_WEAK: &str = include_str!("../builtins/plan-exec-weak.rhai");
 
 /// `(name, embedded source)` for every built-in, in resolution/display order.
 /// (`plan-oracle-exec` is intentionally not here — it is a fixed-model script
@@ -27,6 +28,7 @@ const SOURCES: &[(&str, &str)] = &[
     ("plan-exec", PLAN_EXEC),
     ("plan-critic-exec", PLAN_CRITIC_EXEC),
     ("wide-plan-exec", WIDE_PLAN_EXEC),
+    ("plan-exec-weak", PLAN_EXEC_WEAK),
 ];
 
 /// Names of the built-in strategies, in display order.
@@ -124,6 +126,27 @@ mod tests {
         match &s.steps[1] {
             Step::Solo(p) => assert_eq!(p.scope, ToolScope::Full),
             Step::Fan { .. } => panic!("second step is the solo executor"),
+        }
+    }
+
+    #[test]
+    fn plan_exec_weak_is_readonly_then_full_with_simple_prompts() {
+        let s = builtin("plan-exec-weak").unwrap();
+        assert!(!s.persist_across_attempts);
+        assert_eq!(s.steps.len(), 2);
+        match (&s.steps[0], &s.steps[1]) {
+            (Step::Solo(plan), Step::Solo(exec)) => {
+                assert_eq!(plan.scope, ToolScope::ReadOnly);
+                assert_eq!(exec.scope, ToolScope::Full);
+                assert!(
+                    plan.system.contains("short fix plan") || plan.system.contains("SELF-CONTAINED"),
+                    "weak plan system should be simple: {}",
+                    plan.system
+                );
+                assert!(exec.system.contains("One edit") || exec.system.contains("one edit") || exec.system.contains("After each"),
+                    "weak exec should stress step-by-step: {}", exec.system);
+            }
+            _ => panic!("plan-exec-weak is two solo phases"),
         }
     }
 }

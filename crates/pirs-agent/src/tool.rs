@@ -11,6 +11,7 @@ pub enum ExecutionMode {
 
 #[derive(Debug, Clone)]
 pub struct ToolOutput {
+    /// Model-facing content (may be truncated / capped for context).
     pub content: Vec<ContentBlock>,
     pub details: Option<Value>,
     pub terminate: bool,
@@ -25,8 +26,29 @@ impl ToolOutput {
         }
     }
 
+    /// Model-facing `model_text` with optional longer `ui_text` stashed under
+    /// `details.uiText` for UIs / audit logs that want the full output.
+    pub fn text_with_ui(model_text: impl Into<String>, ui_text: Option<String>) -> Self {
+        let model_text = model_text.into();
+        let mut out = Self::text(model_text.clone());
+        if let Some(ui) = ui_text {
+            if ui != model_text {
+                out.details = Some(serde_json::json!({ "uiText": ui }));
+            }
+        }
+        out
+    }
+
     pub fn with_details(mut self, details: Value) -> Self {
-        self.details = Some(details);
+        // Merge into existing details when present (preserve uiText).
+        match (&mut self.details, details) {
+            (Some(Value::Object(existing)), Value::Object(extra)) => {
+                for (k, v) in extra {
+                    existing.insert(k, v);
+                }
+            }
+            (slot, d) => *slot = Some(d),
+        }
         self
     }
 
