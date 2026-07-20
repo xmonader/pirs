@@ -4,10 +4,12 @@ pub mod anthropic;
 pub mod embed;
 pub mod openai;
 pub mod pricing;
+pub mod routing;
 pub mod sse;
 pub use anthropic::AnthropicClient;
 pub use embed::{cosine, EmbeddingClient};
 pub use openai::OpenAiCompat;
+pub use routing::{BackendKind, BackendSpec, ModelRoute, RoutingProvider};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

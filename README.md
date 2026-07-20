@@ -24,6 +24,47 @@ REPL commands: `/model`, `/export`, `/compact`, `/help`, `/quit`; `!cmd` runs a 
 
 **Strategies (product set):** `monolithic` (one growing loop on `--model`), `plan-exec` (read-only plan → fresh exec), `plan-critic-exec` / alias `plan-exec-critic` (plan → critic → exec). **Strong plan / weak exec:** `--model <cheap> --plan-model <strong> --strategy plan-exec` (or `plan-critic-exec`) — planning (and critique) run on `--plan-model`, the executor keeps `--model`.
 
+### Multi-backend model registry
+
+Use several subscriptions (OpenRouter, DashScope, Groq, …) via aliases in
+`~/.pirs/config.toml` (backends with keys/URLs are **user-config only**; project
+configs may only add aliases that point at those backends):
+
+```toml
+[[backends]]
+name = "openrouter"
+kind = "openai_compatible"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+headers = { HTTP-Referer = "https://example.com", X-Title = "pirs" }
+
+[[backends]]
+name = "dashscope"
+kind = "openai_compatible"
+base_url = "https://coding-intl.dashscope.aliyuncs.com/v1"
+api_key_env = "DASHSCOPE_API_KEY"
+
+[[models]]
+alias = "deepseek-v4-flash"
+tier = "fast"
+ctx = 1000000
+serve = [{ backend = "openrouter", model = "deepseek/deepseek-v4-flash" }]
+
+[[models]]
+alias = "qwen-plus"
+serve = [{ backend = "dashscope", model = "qwen3.5-plus" }]
+```
+
+```bash
+# Weak executor on DashScope, strong planner on OpenRouter — each uses its own key
+export DASHSCOPE_API_KEY=... OPENROUTER_API_KEY=...
+pirs --model qwen-plus --plan-model deepseek-v4-flash \
+  --strategy plan-exec "fix the failing test"
+```
+
+Unregistered `--model` names still hit the CLI default provider (`--provider` /
+`--base-url` / `OPENAI_API_KEY`).
+
 Hardening flags: `--tool-diet`, `--sequential`, `--no-compaction` / `--context-window N`, `--max-retries N`. **`--weak`**: tool-diet + sequential + retries≥3 + default strategy `plan-exec` (one-shot) + bundled packs (`weak-model` → `context-janitor` → `env-doctor` → `goal`) + larger **repo_map** + **auto-verify** when a test ecosystem is detected. Pair with `--plan-model` for multi-model. **`edit_block`** accepts SEARCH/REPLACE. `delegate` supports a per-subagent `model` override. Auto-compaction summarizes old history. `extensions/weak-model.rhai` adds loop/thrash/stop-gate/plan pins; the host restores protected control pins if a context rewrite drops them.
 
 ## Extensions (rhai)

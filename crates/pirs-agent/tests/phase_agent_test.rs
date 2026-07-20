@@ -196,6 +196,68 @@ async fn oracle_strategy_routes_system_prompts_models_and_prev() {
     );
 }
 
+/// Product pitch: `--model weak --plan-model strong --strategy plan-exec|plan-critic-exec`.
+/// `pin_plan_model` + `AgentPhaseDriver` (same bridge as CLI) must call the provider
+/// with the strong model on every read-only phase and the default on the executor.
+#[tokio::test]
+async fn pin_plan_model_strong_plan_weak_exec_reaches_provider() {
+    use pirs_agent::strategy::pin_plan_model;
+
+    let provider = Arc::new(RecordingProvider::new(vec![
+        "THE_PLAN",
+        "VETTED_PLAN",
+        "PATCH_DONE",
+    ]));
+    let seen = Arc::clone(&provider.seen);
+    let mut driver = driver_over(provider);
+
+    let mut strategy = Strategy {
+        name: "plan-critic-exec".into(),
+        persist_across_attempts: false,
+        steps: vec![
+            Step::Solo(ph(
+                "plan-sys",
+                "plan {issue}",
+                ToolScope::ReadOnly,
+                None,
+            )),
+            Step::Solo(ph(
+                "critic-sys",
+                "critic {prev}",
+                ToolScope::ReadOnly,
+                None,
+            )),
+            Step::Solo(ph("exec-sys", "exec {prev}", ToolScope::Full, None)),
+        ],
+    };
+    // Same call the CLI makes after profile resolution.
+    pin_plan_model(&mut strategy, "strong-planner");
+
+    run_strategy_async(&strategy, &mut driver, &task())
+        .await
+        .unwrap();
+
+    let calls = seen.lock().unwrap();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(
+        calls[0].model, "strong-planner",
+        "plan phase must use --plan-model"
+    );
+    assert_eq!(
+        calls[1].model, "strong-planner",
+        "critic phase must use --plan-model"
+    );
+    assert_eq!(
+        calls[2].model, "default-model",
+        "executor must keep --model (run default)"
+    );
+    assert!(
+        calls[2].user.contains("VETTED_PLAN"),
+        "exec must still receive critic output: {}",
+        calls[2].user
+    );
+}
+
 #[tokio::test]
 async fn fan_out_runs_every_branch_then_merges_for_the_executor() {
     // 3 planners + 1 executor; leave the script empty so every call returns "done".

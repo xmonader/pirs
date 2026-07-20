@@ -23,6 +23,7 @@ mod session;
 mod subagent;
 mod system_prompt;
 mod tui;
+mod registry;
 mod weak_compose;
 
 #[derive(Parser)]
@@ -707,7 +708,7 @@ async fn main() -> anyhow::Result<()> {
         bail!("unknown mode: {} (expected repl|rpc|tui|acp)", cli.mode);
     }
 
-    let provider: Arc<dyn pirs_ai::LlmProvider> = if cli.provider == "anthropic" {
+    let default_provider: Arc<dyn pirs_ai::LlmProvider> = if cli.provider == "anthropic" {
         Arc::new(
             pirs_ai::AnthropicClient::new(cli.base_url.clone()).with_max_retries(cli.max_retries),
         )
@@ -723,6 +724,33 @@ async fn main() -> anyhow::Result<()> {
             cli.provider
         );
     };
+    // Optional multi-backend registry: aliases in --model / --plan-model route to
+    // per-subscription base_url + API key (see [[backends]] / [[models]] in config).
+    let model_registry = registry::load_registry_layers(&cwd);
+    let provider: Arc<dyn pirs_ai::LlmProvider> =
+        if let Some(router) = registry::build_routing_provider(
+            &model_registry,
+            Arc::clone(&default_provider),
+            Some(api_key.clone()),
+            cli.max_retries,
+        )? {
+            if !model_registry.models.is_empty() {
+                let aliases: Vec<_> = model_registry
+                    .models
+                    .iter()
+                    .map(|m| m.alias.as_str())
+                    .collect();
+                eprintln!(
+                    "[model registry: {} alias(es), {} backend(s) — {}]",
+                    model_registry.models.len(),
+                    model_registry.backends.len(),
+                    aliases.join(", ")
+                );
+            }
+            router
+        } else {
+            default_provider
+        };
     let usage_slot: std::sync::Arc<std::sync::Mutex<pirs_ai::Usage>> =
         std::sync::Arc::new(std::sync::Mutex::new(pirs_ai::Usage::default()));
 
