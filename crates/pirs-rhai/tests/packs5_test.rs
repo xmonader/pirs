@@ -235,6 +235,104 @@ fn rollback_snapshots_and_restores() {
 }
 
 #[test]
+fn stash_checkpoint_snapshots_without_staging_and_restores_via_stash_apply() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let host = load("stash-checkpoint.rhai", None);
+    let tmp = std::env::temp_dir().join(format!("pirs-stashckpt-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::process::Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::fs::write(tmp.join("f.txt"), "v1\n").unwrap();
+    std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "init",
+        ])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+
+    let cwd = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&tmp).unwrap();
+    let listener = host.listener().unwrap();
+    let hooks = host.hooks();
+    let after = hooks.after_tool_call.unwrap();
+    let edit = pirs_ai::ToolResultMessage {
+        tool_call_id: "1".into(),
+        tool_name: "edit".into(),
+        content: vec![pirs_ai::ContentBlock::text("ok")],
+        details: None,
+        is_error: false,
+        terminate: false,
+        timestamp: 0,
+    };
+
+    std::fs::write(tmp.join("f.txt"), "v2\n").unwrap();
+    after("1", "edit", &edit);
+    listener(pirs_agent::AgentEvent::TurnEnd {
+        message: Box::new(pirs_ai::AssistantMessage::default()),
+        tool_results: vec![],
+    });
+
+    // The whole point of `git stash create` over rollback.rhai's `git add
+    // -A`: taking a snapshot must never stage anything. If this pack ever
+    // regressed to staging, this assertion catches it.
+    let staged = std::process::Command::new("git")
+        .args(["diff", "--cached", "--name-only"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    assert!(
+        staged.stdout.is_empty(),
+        "snapshotting must not stage files: {:?}",
+        String::from_utf8_lossy(&staged.stdout)
+    );
+    // `stash create` also doesn't touch the working tree — the edit should
+    // still be sitting there, uncommitted, exactly as the tool left it.
+    assert_eq!(
+        std::fs::read_to_string(tmp.join("f.txt")).unwrap(),
+        "v2\n",
+        "git stash create must not alter the working tree"
+    );
+
+    let list = host.run_command("snapshots", "").unwrap();
+    assert!(list.contains("refs/pirs/stash-turn-0"), "{list}");
+
+    // Simulate discarding the uncommitted edit (e.g. reverted by hand, or a
+    // later turn stomped it back to match HEAD) and then using /undo to
+    // bring the snapshotted change back — the realistic use case for a
+    // merge-based restore, as opposed to rollback.rhai's overwrite-based one.
+    std::process::Command::new("git")
+        .args(["checkout", "--", "f.txt"])
+        .current_dir(&tmp)
+        .output()
+        .unwrap();
+    assert_eq!(std::fs::read_to_string(tmp.join("f.txt")).unwrap(), "v1\n");
+
+    let out = host.run_command("undo", "0").unwrap();
+    assert!(out.contains("restored"), "{out}");
+    assert_eq!(
+        std::fs::read_to_string(tmp.join("f.txt")).unwrap(),
+        "v2\n",
+        "undo must reapply the snapshotted edit via `git stash apply`"
+    );
+    std::env::set_current_dir(cwd).unwrap();
+}
+
+#[test]
 fn swarm_post_claim_done_cycle() {
     let _guard = ENV_LOCK.lock().unwrap();
     let tmp = std::env::temp_dir().join(format!("pirs-swarm-{}", std::process::id()));

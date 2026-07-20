@@ -79,7 +79,8 @@ Shipped packs in `extensions/`:
 | `critic.rhai` | interleaved mid-run diff review via background sub-agent (steers corrections) |
 | `approval2.rhai` | semantic blast-radius: sub-agent judges risky commands against the environment |
 | `skill-crystallizer.rhai` | distills successful runs into reusable SKILL.md files (self-improving) |
-| `rollback.rhai` | commit-tree snapshots per turn, /undo N rewinds files |
+| `rollback.rhai` | commit-tree snapshots per turn (stages everything via `git add -A`), /undo N overwrites files |
+| `stash-checkpoint.rhai` | alternative to rollback.rhai: dangling `git stash create` snapshots (never stages), /undo merges via `git stash apply` |
 | `swarm.rhai` | work-packet queue over the hive for multi-instance fleets |
 | `goal.rhai` | session goals: pinned, compaction-proof, verified, persisted |
 | `telemetry.rhai` | metadata-only usage stats (counts, tokens, stop reasons) — never prompt/tool content |

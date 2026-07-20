@@ -78,7 +78,8 @@ compiles and behaves.
 | `goal.rhai` | First-class session goals: set, pin, verify, persist. |
 | `checkpoint.rhai` | Periodic session snapshots + `/checkpoints` + `/restore`. |
 | `checkpoints.rhai` | VCS-free per-file checkpoints: every edit is restorable. |
-| `rollback.rhai` | Snapshot the worktree every turn via `commit-tree` (no touch to index). |
+| `rollback.rhai` | Snapshot the worktree every turn via `git add -A && commit-tree`; `/undo` overwrites via `git restore`. |
+| `stash-checkpoint.rhai` | Alternative to rollback.rhai: snapshot via a "dangling" `git stash create` (never stages anything); `/undo` merges via `git stash apply`. |
 | `dmail.rhai` | Model-initiated time travel (D-Mail). |
 | `session-handoff.rhai` | Carry context between sessions via `.pirs/handoff.md`. |
 | `skill-crystallizer.rhai` | After a successful run, distill what worked into a skill. |
