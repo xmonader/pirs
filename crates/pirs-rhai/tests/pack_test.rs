@@ -146,7 +146,7 @@ async fn verify_after_edit_steers_model_to_test() {
     let second = &calls[1];
     assert!(second.iter().any(|m| matches!(
         m,
-        Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("build and tests") || t.contains("kind=verify") || t.contains("<system-reminder>"))
+        Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("kind=verify") && t.contains("build and tests"))
     )));
 }
 
@@ -177,7 +177,7 @@ async fn stop_gate_forces_verify_after_edit_before_finish() {
         round.iter().any(|m| {
             matches!(
                 m,
-                Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("STOP GATE") || t.contains("stop_gate") || t.contains("<system-reminder>"))
+                Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("STOP GATE") && t.contains("kind=stop_gate"))
             )
         })
     });
@@ -262,6 +262,74 @@ async fn plan_pinned_at_tail_of_context() {
         Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("<system-reminder>") && t.contains("kind=plan"))
     )).count();
     assert_eq!(duplicates, 1, "old pins must be replaced, not accumulated");
+}
+
+#[tokio::test]
+async fn stop_gate_survives_plan_pin_after_unverified_edit() {
+    // Regression: on_context must not strip stop_gate / verify reminders when
+    // a plan is set — only kind=plan pins are replaced.
+    let (mut agent, seen) = build(
+        vec![
+            tc("1", "update_plan", json!({"plan": "1. edit\n2. verify"})),
+            tc("2", "edit", json!({"path": "f.rs"})),
+            text("all done without tests"),
+            text("really done after tests"),
+        ],
+        vec![Arc::new(NamedTool {
+            name: "edit".into(),
+        })],
+    );
+    agent.prompt("go").await.unwrap();
+
+    let calls = seen.lock().unwrap();
+    assert!(
+        calls.len() >= 3,
+        "stop gate should force another turn after plan+edit: {} calls",
+        calls.len()
+    );
+
+    // After the unverified finish, some model-visible round must carry STOP GATE
+    // *alongside* the plan pin (not replaced by it).
+    let has_gate_with_plan = calls.iter().any(|round| {
+        let texts: Vec<String> = round
+            .iter()
+            .filter_map(|m| match m {
+                Message::User(u) => match &u.content {
+                    pirs_ai::UserContent::Text(t) => Some(t.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        let has_gate = texts
+            .iter()
+            .any(|t| t.contains("STOP GATE") && t.contains("kind=stop_gate"));
+        let has_plan = texts
+            .iter()
+            .any(|t| t.contains("kind=plan") && t.contains("1. edit"));
+        has_gate && has_plan
+    });
+    assert!(
+        has_gate_with_plan,
+        "STOP GATE must remain model-visible after update_plan: {calls:?}"
+    );
+
+    // Plan pin still de-duped to one per round that has it.
+    for round in calls.iter() {
+        let plan_pins = round
+            .iter()
+            .filter(|m| {
+                matches!(
+                    m,
+                    Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("kind=plan"))
+                )
+            })
+            .count();
+        assert!(
+            plan_pins <= 1,
+            "plan pins must not accumulate: {plan_pins} in {round:?}"
+        );
+    }
 }
 
 #[tokio::test]

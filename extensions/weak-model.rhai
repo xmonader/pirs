@@ -45,16 +45,15 @@ fn wrap_reminder(kind, body) {
     "<system-reminder> kind=" + kind + "\n" + body + "\n</system-reminder>"
 }
 
-fn is_reminder_message(m) {
+// Plan pins only — control reminders (stop_gate, verify, edit_fail, …) must
+// stay in context after update_plan. Matching any <system-reminder> would
+// strip those and leave only the re-appended plan pin.
+fn is_plan_pin(m) {
     if m.role != "user" {
         return false;
     }
     let t = m.content.to_string();
-    t.contains("<system-reminder>")
-}
-
-fn strip_reminders(messages) {
-    messages.filter(|m| !is_reminder_message(m))
+    t.contains("<system-reminder>") && t.contains("kind=plan")
 }
 
 fn on_tool_call(id, name, args) {
@@ -202,18 +201,14 @@ fn tool_update_plan(args) {
 }
 
 fn on_context(messages) {
-    // Single pin channel: drop prior <system-reminder> user pins, re-append plan once.
+    // Drop prior plan pins only, re-append the active plan once near the tail.
+    // Do not strip other <system-reminder> kinds — stop_gate / verify / thrash
+    // nudges are injected as user messages and must remain model-visible.
     if !state_has("plan") {
         return messages;
     }
     let plan = state_get("plan");
-    let filtered = messages.filter(|m| {
-        if m.role != "user" {
-            return true;
-        }
-        let t = m.content.to_string();
-        !t.contains("<system-reminder>")
-    });
+    let filtered = messages.filter(|m| !is_plan_pin(m));
     let pin = #{
         role: "user",
         content: `<system-reminder> kind=plan
