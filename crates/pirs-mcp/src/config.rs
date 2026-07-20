@@ -46,25 +46,72 @@ struct ServerEntry {
     transport: Option<String>,
 }
 
+/// Expand one config string value: `!command` (a leading, unescaped `!`)
+/// runs `command` in a shell and substitutes its trimmed stdout — for a
+/// value that has to come from somewhere other than a literal or an env var
+/// (a password-manager CLI, `gh auth token`, etc.); a doubled `!!` escapes to
+/// a literal leading `!` instead of running anything. Otherwise, `${VAR}`
+/// substitutes from the environment (`""` if unset) and `$$` escapes to a
+/// literal `$` — e.g. `$${literal}` stays exactly that, not an expansion
+/// attempt on an env var named `{literal}`.
 pub fn interpolate(input: &str) -> String {
+    if let Some(rest) = input.strip_prefix('!') {
+        return match rest.strip_prefix('!') {
+            Some(escaped) => expand_env(&format!("!{escaped}")),
+            None => run_for_stdout(rest),
+        };
+    }
+    expand_env(input)
+}
+
+fn run_for_stdout(command: &str) -> String {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .unwrap_or_default()
+}
+
+fn expand_env(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut rest = input;
-    while let Some(start) = rest.find("${") {
+    loop {
+        let Some(start) = rest.find('$') else {
+            out.push_str(rest);
+            break;
+        };
         out.push_str(&rest[..start]);
-        let after = &rest[start + 2..];
-        match after.find('}') {
-            Some(end) => {
-                let var = &after[..end];
-                out.push_str(&std::env::var(var).unwrap_or_default());
-                rest = &after[end + 1..];
+        let after = &rest[start + 1..];
+        if let Some(escaped) = after.strip_prefix('$') {
+            // `$$` -> literal `$`; continue scanning the rest normally.
+            out.push('$');
+            rest = escaped;
+        } else if let Some(after_brace) = after.strip_prefix('{') {
+            match after_brace.find('}') {
+                Some(end) => {
+                    let var = &after_brace[..end];
+                    out.push_str(&std::env::var(var).unwrap_or_default());
+                    rest = &after_brace[end + 1..];
+                }
+                // Unclosed `${` — same "pass through as-is" behavior as
+                // before this function grew `$$`/whole-value `!` handling.
+                None => {
+                    out.push_str(after);
+                    rest = "";
+                }
             }
-            None => {
-                out.push_str(after);
-                rest = "";
-            }
+        } else {
+            // A `$` not followed by `{` or another `$` is not a recognized
+            // form (bare `$VAR` is intentionally not supported, matching
+            // pirs's existing documented `${VAR}`-only convention) — pass it
+            // through literally.
+            out.push('$');
+            rest = after;
         }
     }
-    out.push_str(rest);
     out
 }
 
@@ -303,6 +350,46 @@ mod tests {
             }
             _ => panic!("expected stdio transport"),
         }
+    }
+
+    #[test]
+    fn interpolate_expands_braced_env_var() {
+        std::env::set_var("PIRS_INTERP_TEST_A", "value-a");
+        assert_eq!(
+            interpolate("prefix-${PIRS_INTERP_TEST_A}-suffix"),
+            "prefix-value-a-suffix"
+        );
+    }
+
+    #[test]
+    fn interpolate_dollar_dollar_escapes_to_literal_dollar() {
+        std::env::set_var("literal", "should not appear");
+        assert_eq!(interpolate("$${literal}"), "${literal}");
+    }
+
+    #[test]
+    fn interpolate_missing_var_expands_to_empty() {
+        std::env::remove_var("PIRS_INTERP_TEST_UNSET");
+        assert_eq!(interpolate("x${PIRS_INTERP_TEST_UNSET}y"), "xy");
+    }
+
+    #[test]
+    fn interpolate_bang_prefix_runs_a_command_and_trims_stdout() {
+        assert_eq!(interpolate("!echo sekrit-token"), "sekrit-token");
+    }
+
+    #[test]
+    fn interpolate_double_bang_escapes_to_a_literal_bang_then_expands_env() {
+        std::env::set_var("PIRS_INTERP_TEST_B", "value-b");
+        assert_eq!(
+            interpolate("!!not-a-command-${PIRS_INTERP_TEST_B}"),
+            "!not-a-command-value-b"
+        );
+    }
+
+    #[test]
+    fn interpolate_failing_command_yields_empty_string_not_the_literal() {
+        assert_eq!(interpolate("!false"), "");
     }
 
     #[test]

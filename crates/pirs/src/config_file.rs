@@ -57,6 +57,15 @@ pub struct FileConfig {
     pub approval: Option<String>,
 }
 
+/// Expand `!command` (run it, use trimmed stdout — e.g. a password-manager
+/// CLI or `gh auth token`) and `${VAR}`/`$$` in one optional config value.
+/// Reuses pirs-mcp's config-value interpolator (already used for `.mcp.json`
+/// headers/url/args/env) rather than a second implementation of the same
+/// mini-DSL.
+fn interpolate_opt(v: Option<String>) -> Option<String> {
+    v.map(|s| pirs_mcp::config::interpolate(&s))
+}
+
 /// Load one TOML layer. A missing file is silent (that layer just isn't
 /// present); a malformed file is a loud warning, not a crash — a typo in
 /// `~/.pirs/config.toml` must never stop the CLI from starting at all.
@@ -64,8 +73,13 @@ pub fn load_layer(path: &Path) -> FileConfig {
     let Ok(text) = std::fs::read_to_string(path) else {
         return FileConfig::default();
     };
-    match toml::from_str(&text) {
-        Ok(cfg) => cfg,
+    match toml::from_str::<FileConfig>(&text) {
+        Ok(cfg) => FileConfig {
+            model: interpolate_opt(cfg.model),
+            provider: interpolate_opt(cfg.provider),
+            base_url: interpolate_opt(cfg.base_url),
+            approval: interpolate_opt(cfg.approval),
+        },
         Err(e) => {
             eprintln!(
                 "[warning: {} is malformed, ignoring it: {e}]",
@@ -175,6 +189,21 @@ pub fn resolve_opt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn load_layer_interpolates_env_vars_and_shell_commands() {
+        std::env::set_var("PIRS_CONFIG_TEST_PROVIDER", "openai-from-env");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "model = \"!echo model-from-shell\"\nprovider = \"${PIRS_CONFIG_TEST_PROVIDER}\"\n",
+        )
+        .unwrap();
+        let cfg = load_layer(&path);
+        assert_eq!(cfg.model.as_deref(), Some("model-from-shell"));
+        assert_eq!(cfg.provider.as_deref(), Some("openai-from-env"));
+    }
 
     #[test]
     fn restrict_project_layer_strips_security_fields_but_keeps_preferences() {

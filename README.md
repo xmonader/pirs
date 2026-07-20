@@ -148,6 +148,11 @@ the approval gate), so they are only ever read from the **user** layer
 cannot set them, just by being checked out and run. `model`/`provider` carry
 no such risk and stay project-configurable.
 
+Values support the same mini-DSL as MCP server config: `${VAR}` expands from
+the environment (`$$` escapes to a literal `$`), and a leading `!` runs the
+rest of the string as a shell command, using its trimmed stdout (`!!` escapes
+to a literal leading `!`) — e.g. `provider = "!gh auth token"`.
+
 ## Orchestrator
 
 Run fleets of headless agents (`pirs --mode rpc`, pi-compatible JSONL RPC):
