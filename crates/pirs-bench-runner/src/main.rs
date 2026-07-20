@@ -53,18 +53,9 @@ enum Command {
 enum ProviderKind {
     Anthropic,
     Deepseek,
-}
-
-impl ProviderKind {
-    /// Resolve to a [`Provider`] plus the API key read from the matching env var.
-    fn resolve(self) -> anyhow::Result<(Provider, String)> {
-        let (provider, env) = match self {
-            ProviderKind::Anthropic => (Provider::Anthropic, "ANTHROPIC_API_KEY"),
-            ProviderKind::Deepseek => (Provider::deepseek(), "DEEPSEEK_API_KEY"),
-        };
-        let key = std::env::var(env).map_err(|_| anyhow::anyhow!("{env} is not set"))?;
-        Ok((provider, key))
-    }
+    /// Any OpenAI-compatible endpoint at `--base-url` (e.g. DashScope,
+    /// OpenRouter, a local server). Key: `CUSTOM_API_KEY`.
+    OpenaiCompat,
 }
 
 /// Knobs shared by all modes.
@@ -76,6 +67,10 @@ struct Common {
     /// LLM backend.
     #[arg(long, value_enum, default_value_t = ProviderKind::Anthropic, global = true)]
     provider: ProviderKind,
+    /// Base URL for `--provider openai-compat`. Required, and ignored
+    /// otherwise.
+    #[arg(long, global = true)]
+    base_url: Option<String>,
     /// Max verify-gated fix attempts before giving up.
     #[arg(long, default_value_t = 3, global = true)]
     max_attempts: u32,
@@ -104,6 +99,38 @@ struct Common {
 }
 
 impl Common {
+    /// Resolve to a [`Provider`] plus the API key read from the matching env
+    /// var (`ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, or `CUSTOM_API_KEY` for
+    /// `--provider openai-compat`, which also requires `--base-url`).
+    fn resolve_provider(&self) -> anyhow::Result<(Provider, String)> {
+        match self.provider {
+            ProviderKind::Anthropic => {
+                let key = std::env::var("ANTHROPIC_API_KEY")
+                    .map_err(|_| anyhow::anyhow!("ANTHROPIC_API_KEY is not set"))?;
+                Ok((Provider::Anthropic, key))
+            }
+            ProviderKind::Deepseek => {
+                let key = std::env::var("DEEPSEEK_API_KEY")
+                    .map_err(|_| anyhow::anyhow!("DEEPSEEK_API_KEY is not set"))?;
+                Ok((Provider::deepseek(), key))
+            }
+            ProviderKind::OpenaiCompat => {
+                let base_url = self.base_url.clone().ok_or_else(|| {
+                    anyhow::anyhow!("--base-url is required for --provider openai-compat")
+                })?;
+                let key = std::env::var("CUSTOM_API_KEY")
+                    .map_err(|_| anyhow::anyhow!("CUSTOM_API_KEY is not set"))?;
+                Ok((
+                    Provider::OpenAiCompat {
+                        base_url,
+                        name: "custom".to_string(),
+                    },
+                    key,
+                ))
+            }
+        }
+    }
+
     /// Load the profile if `--profile` was given.
     fn profile(&self) -> anyhow::Result<Option<Profile>> {
         match &self.profile {
@@ -434,7 +461,7 @@ fn solve_one(
 fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
     let strategy = a.common.strategy()?;
     eprintln!("strategy: {}", strategy.name);
-    let (provider, key) = a.common.provider.resolve()?;
+    let (provider, key) = a.common.resolve_provider()?;
     let issue = match (a.issue, a.issue_file) {
         (Some(s), _) => s,
         (None, Some(f)) => std::fs::read_to_string(&f).with_context(|| format!("read {f:?}"))?,
@@ -480,7 +507,7 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
 fn run_batch(a: BatchArgs) -> anyhow::Result<()> {
     let strategy = a.common.strategy()?;
     eprintln!("strategy: {}", strategy.name);
-    let (provider, key) = a.common.provider.resolve()?;
+    let (provider, key) = a.common.resolve_provider()?;
     let text = std::fs::read_to_string(&a.dataset)
         .with_context(|| format!("read dataset {:?}", a.dataset))?;
     if let Some(dir) = &a.out_dir {
@@ -545,7 +572,7 @@ fn run_selftest(a: SelftestArgs) -> anyhow::Result<u8> {
     let mode = if a.agent {
         let strategy = a.common.strategy()?;
         eprintln!("strategy: {}", strategy.name);
-        let (provider, api_key) = a.common.provider.resolve()?;
+        let (provider, api_key) = a.common.resolve_provider()?;
         selftest::Mode::Agent(Box::new(selftest::AgentMode {
             provider,
             model: a.common.model.clone(),
@@ -588,6 +615,7 @@ mod tests {
         Common {
             model: "m".into(),
             provider: ProviderKind::Anthropic,
+            base_url: None,
             max_attempts: 3,
             max_turns: 40,
             strategy: StrategyKind::Monolithic,
@@ -611,5 +639,32 @@ mod tests {
         let s = common(false).strategy().unwrap();
         assert_eq!(s.name, "monolithic");
         assert!(!s.steps.is_empty());
+    }
+
+    #[test]
+    fn openai_compat_without_base_url_is_a_clear_error() {
+        let mut c = common(false);
+        c.provider = ProviderKind::OpenaiCompat;
+        c.base_url = None;
+        let err = c.resolve_provider().unwrap_err();
+        assert!(err.to_string().contains("--base-url"), "{err}");
+    }
+
+    #[test]
+    fn openai_compat_with_base_url_resolves_to_that_endpoint() {
+        // SAFETY: single-threaded test process; no other test reads this var.
+        std::env::set_var("CUSTOM_API_KEY", "test-key");
+        let mut c = common(false);
+        c.provider = ProviderKind::OpenaiCompat;
+        c.base_url = Some("https://example.test/v1".to_string());
+        let (provider, key) = c.resolve_provider().unwrap();
+        assert_eq!(key, "test-key");
+        match provider {
+            Provider::OpenAiCompat { base_url, .. } => {
+                assert_eq!(base_url, "https://example.test/v1")
+            }
+            other => panic!("expected OpenAiCompat, got {other:?}"),
+        }
+        std::env::remove_var("CUSTOM_API_KEY");
     }
 }
