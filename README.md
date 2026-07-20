@@ -208,4 +208,4 @@ make lint    # clippy -D warnings
 
 ## Notable divergences from pi
 
-- OpenAI-compatible providers only (for now); grep/find are native Rust instead of rg/fd binaries; fuzzy `edit` is line-based; compaction is trigger-based (no model-aware tokenizer); no radius cloud presence; MIT licensed.
+- OpenAI-compatible providers only (for now); grep/find are native Rust instead of rg/fd binaries; fuzzy `edit` is line-based, escalating from exact match through quote/dash/trailing-whitespace normalization to full reflow (indentation- and internal-spacing-insensitive) before failing; compaction is trigger-based (no model-aware tokenizer); no radius cloud presence; MIT licensed.

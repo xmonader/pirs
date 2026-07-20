@@ -45,7 +45,7 @@ impl AgentTool for EditTool {
     }
 
     fn description(&self) -> &str {
-        "Make exact string replacements in a file. Each oldText must match exactly one location; edits are validated against the original file and must not overlap."
+        "Make exact string replacements in a file. Each oldText must match exactly one location; if an exact match isn't found, whitespace/formatting differences are tolerated (quote/dash style, indentation, reflowed spacing) before failing. Edits are validated against the original file and must not overlap."
     }
 
     fn parameters(&self) -> Value {
@@ -205,7 +205,13 @@ fn locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
         n if n > 1 => return None,
         _ => {}
     }
-    fuzzy_locate(content, old_text)
+    // Escalating fuzzy tiers, aider-style: each is strictly more lenient than
+    // the last, tried only after the previous one fails to resolve to a
+    // single unique hit (0 hits or >1 ambiguous hits both fall through the
+    // same way, mirroring the exact tier above). Every tier still requires
+    // uniqueness — a more lenient match is never allowed to silently pick
+    // among several candidates.
+    fuzzy_locate(content, old_text).or_else(|| reflow_locate(content, old_text))
 }
 
 fn not_found_error(content: &str, old_text: &str) -> anyhow::Error {
@@ -238,13 +244,31 @@ pub fn fuzzy_normalize(line: &str) -> String {
     out.trim_end().to_string()
 }
 
-fn fuzzy_locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
+/// More lenient still than `fuzzy_normalize`: collapses each line down to its
+/// whitespace-separated tokens joined by a single space, which also strips
+/// leading indentation (not just trailing whitespace) and folds internal
+/// runs of spaces/tabs to one. Lets an edit land when only formatting or
+/// indentation differs from what the model wrote — e.g. tabs vs spaces, or
+/// a reflowed/re-indented block — at the cost of no longer distinguishing
+/// lines that differ only in whitespace.
+fn reflow_normalize(line: &str) -> String {
+    fuzzy_normalize(line)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn locate_lines(
+    content: &str,
+    old_text: &str,
+    normalize: impl Fn(&str) -> String,
+) -> Option<(usize, usize)> {
     let content_lines: Vec<&str> = content.lines().collect();
-    let old_lines: Vec<String> = old_text.lines().map(fuzzy_normalize).collect();
+    let old_lines: Vec<String> = old_text.lines().map(&normalize).collect();
     if old_lines.is_empty() || old_lines.len() > content_lines.len() {
         return None;
     }
-    let norm_content: Vec<String> = content_lines.iter().map(|l| fuzzy_normalize(l)).collect();
+    let norm_content: Vec<String> = content_lines.iter().map(|l| normalize(l)).collect();
 
     let mut hits: Vec<usize> = Vec::new();
     for i in 0..=norm_content.len() - old_lines.len() {
@@ -266,6 +290,14 @@ fn fuzzy_locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
         content.len()
     };
     Some((start, end))
+}
+
+fn fuzzy_locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
+    locate_lines(content, old_text, fuzzy_normalize)
+}
+
+fn reflow_locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
+    locate_lines(content, old_text, reflow_normalize)
 }
 
 fn line_starts(content: &str) -> Vec<usize> {
@@ -324,6 +356,48 @@ mod tests {
     fn fuzzy_multiple_rejected() {
         let content = "foo  \nfoo\n";
         assert!(fuzzy_locate(content, "foo").is_none());
+    }
+
+    #[test]
+    fn reflow_locate_matches_despite_reindentation() {
+        // fuzzy_locate only trims trailing whitespace, so a leading-indent
+        // mismatch still fails there; reflow_locate is the escalation that
+        // catches it.
+        let content = "fn f() {\n\tif x {\n\t\tdo_thing();\n\t}\n}\n";
+        let old = "if x {\n    do_thing();\n}\n";
+        assert!(
+            fuzzy_locate(content, old).is_none(),
+            "fuzzy tier shouldn't match differing indentation"
+        );
+        let span = reflow_locate(content, old).unwrap();
+        assert_eq!(&content[span.0..span.1], "\tif x {\n\t\tdo_thing();\n\t}\n");
+    }
+
+    #[test]
+    fn reflow_locate_collapses_internal_whitespace_runs() {
+        let content = "let   x   =   1;\nnext();\n";
+        let old = "let x = 1;\nnext();\n";
+        assert!(fuzzy_locate(content, old).is_none());
+        let span = reflow_locate(content, old).unwrap();
+        assert_eq!(&content[span.0..span.1], content);
+    }
+
+    #[test]
+    fn reflow_multiple_rejected() {
+        let content = "  foo\nfoo  \n";
+        // Both lines reflow-normalize to "foo" — still ambiguous, must not
+        // silently pick one.
+        assert!(reflow_locate(content, "foo").is_none());
+    }
+
+    #[test]
+    fn locate_escalates_through_all_three_tiers() {
+        let content = "fn f() {\n\tif x {\n\t\tdo_thing();\n\t}\n}\n";
+        let old = "if x {\n    do_thing();\n}\n";
+        // Not found verbatim, not found by fuzzy (trailing-ws-only) — only
+        // the reflow tier resolves it, and `locate` must reach that far.
+        let span = locate(content, old).unwrap();
+        assert_eq!(&content[span.0..span.1], "\tif x {\n\t\tdo_thing();\n\t}\n");
     }
 
     #[test]
@@ -432,6 +506,25 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
             "FIRST\nsecond\nTHIRD\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_succeeds_via_reflow_tier_when_indentation_differs() {
+        // End-to-end: the model's oldText uses spaces, the file uses tabs —
+        // this must still succeed by escalating to reflow_locate rather
+        // than erroring out on the first exact-match miss.
+        let dir = tempfile::tempdir().unwrap();
+        let out = edit_file(
+            dir.path(),
+            b"fn f() {\n\tif x {\n\t\tdo_thing();\n\t}\n}\n",
+            "if x {\n    do_thing();\n}\n",
+            "if x {\n    do_other_thing();\n}\n",
+        )
+        .await;
+        assert_eq!(
+            out,
+            b"fn f() {\nif x {\n    do_other_thing();\n}\n}\n".to_vec()
         );
     }
 }
