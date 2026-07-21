@@ -846,15 +846,18 @@ fn chat_safe_tools(
     allow_code: bool,
     allow_skill_manage: bool,
 ) -> Vec<Arc<dyn pirs_agent::AgentTool>> {
-    chat_safe_tools_with_state(cwd, skills, allow_code, allow_skill_manage, None)
+    chat_safe_tools_with_state(cwd, skills, allow_code, allow_skill_manage, None, None)
 }
 
+/// Gateway/chat tools. When `state_dir` is set, `peer_scope` must be the caller's
+/// `SessionId::key()` so `session_search` cannot read other peers' transcripts.
 fn chat_safe_tools_with_state(
     cwd: &Path,
     skills: &[Skill],
     allow_code: bool,
     allow_skill_manage: bool,
     state_dir: Option<&Path>,
+    peer_scope: Option<&str>,
 ) -> Vec<Arc<dyn pirs_agent::AgentTool>> {
     let skills_arc = Arc::new(skills.to_vec());
     let mut tools: Vec<Arc<dyn pirs_agent::AgentTool>> =
@@ -874,7 +877,18 @@ fn chat_safe_tools_with_state(
         tools.extend(pirs_tools::computer_tools(cwd.to_path_buf()));
     }
     if let Some(state) = state_dir {
-        tools.push(pirs_claw::session_search::session_search_tool(state.to_path_buf()));
+        // Gateway: require explicit peer key on the tool instance (not env).
+        if let Some(peer) = peer_scope {
+            tools.push(pirs_claw::session_search::gateway_session_search_tool(
+                state.to_path_buf(),
+                peer,
+            ));
+        } else {
+            // Owner/CLI path with state_dir but no peer: global search is OK.
+            tools.push(pirs_claw::session_search::session_search_tool(
+                state.to_path_buf(),
+            ));
+        }
     }
     if allow_code {
         tools.extend(coding_tools(cwd));
@@ -1171,7 +1185,15 @@ async fn handle_gateway_message(
     }
     let attach_log = pirs_claw::attach::AttachmentLog::new();
     let out_dir = state.join("outbound").join(sid.key().replace('/', "_"));
-    let mut tools = chat_safe_tools_with_state(cwd, skills, allow_code_tools, false, Some(state));
+    // Scope session_search to this peer only (never global on multi-tenant gateway).
+    let mut tools = chat_safe_tools_with_state(
+        cwd,
+        skills,
+        allow_code_tools,
+        false,
+        Some(state),
+        Some(sid.key().as_str()),
+    );
     tools.push(Arc::new(pirs_claw::attach::AttachFileTool::new(
         out_dir.clone(),
         attach_log.clone_handle(),

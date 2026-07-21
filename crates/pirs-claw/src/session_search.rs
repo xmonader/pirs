@@ -128,13 +128,29 @@ fn walk_jsonl(dir: &Path, f: &mut dyn FnMut(&Path)) {
     }
 }
 
-/// Agent tool: search past gateway/CLI sessions.
+/// Agent tool: search past gateway/CLI sessions (global — CLI / owner only).
 ///
-/// `peer_scope` defaults from `PIRS_CLAW_SESSION_PEER` when set (gateway sets this
-/// per inbound peer). Without a scope, search is global (CLI / owner tools).
+/// Gateway message handling must use [`gateway_session_search_tool`] with the
+/// inbound peer's `SessionId::key()` so other peers' transcripts never leak.
 pub fn session_search_tool(state_dir: PathBuf) -> std::sync::Arc<dyn pirs_agent::AgentTool> {
-    let peer_scope = std::env::var("PIRS_CLAW_SESSION_PEER").ok().filter(|s| !s.is_empty());
-    session_search_tool_scoped(state_dir, peer_scope)
+    session_search_tool_scoped(state_dir, None)
+}
+
+/// Session search tool for a **specific** peer/channel key (`telegram/123`).
+///
+/// This is the only constructor the multi-tenant gateway may use. Scope is
+/// stored on the tool instance (not a process-wide env var) so concurrent
+/// handlers cannot clobber each other.
+pub fn gateway_session_search_tool(
+    state_dir: PathBuf,
+    peer_session_key: &str,
+) -> std::sync::Arc<dyn pirs_agent::AgentTool> {
+    let key = peer_session_key.trim();
+    debug_assert!(
+        !key.is_empty(),
+        "gateway session_search requires a non-empty peer session key"
+    );
+    session_search_tool_scoped(state_dir, Some(key.to_string()))
 }
 
 pub fn session_search_tool_scoped(
@@ -253,6 +269,82 @@ mod tests {
         assert!(
             !scoped.iter().any(|h| h.snippet.contains("beta")),
             "must not return other peer: {scoped:?}"
+        );
+    }
+
+    /// Gateway assembly path: tool built with inbound peer key must not leak
+    /// another peer's transcripts. Unscoped tool *would* leak — proves scope
+    /// is what prevents it.
+    #[tokio::test]
+    async fn gateway_tool_for_peer_cannot_return_other_peer_hits() {
+        use pirs_agent::ToolExecContext;
+        use tokio_util::sync::CancellationToken;
+
+        let dir = tempfile::tempdir().unwrap();
+        let peer_a = SessionId::new("telegram", "111");
+        let peer_b = SessionId::new("telegram", "222");
+        SessionStore::open_for(dir.path(), peer_a.clone())
+            .unwrap()
+            .append("user", "unique-alpha-marker confidential")
+            .unwrap();
+        SessionStore::open_for(dir.path(), peer_b.clone())
+            .unwrap()
+            .append("user", "unique-beta-marker confidential")
+            .unwrap();
+
+        // Same constructor the gateway uses for an inbound peer.
+        let tool = gateway_session_search_tool(dir.path().to_path_buf(), &peer_a.key());
+        assert_eq!(tool.name(), "session_search");
+        let out = tool
+            .execute(ToolExecContext {
+                tool_call_id: "t1".into(),
+                args: serde_json::json!({"query": "confidential unique", "limit": 10}),
+                cancel: CancellationToken::new(),
+                on_update: None,
+            })
+            .await
+            .unwrap();
+        let text = out.model_text().unwrap_or("");
+        assert!(
+            text.contains("unique-alpha-marker"),
+            "caller peer hits expected: {text}"
+        );
+        assert!(
+            !text.contains("unique-beta-marker"),
+            "gateway tool for peer A must not leak peer B: {text}"
+        );
+
+        // Control: unscoped (CLI) tool sees both — proves data is present and
+        // scoping is what filtered beta out.
+        let global = session_search_tool(dir.path().to_path_buf());
+        let global_out = global
+            .execute(ToolExecContext {
+                tool_call_id: "t2".into(),
+                args: serde_json::json!({"query": "confidential unique", "limit": 10}),
+                cancel: CancellationToken::new(),
+                on_update: None,
+            })
+            .await
+            .unwrap();
+        let gtext = global_out.model_text().unwrap_or("");
+        assert!(
+            gtext.contains("unique-beta-marker"),
+            "unscoped tool must see other peer (control): {gtext}"
+        );
+    }
+
+    #[test]
+    fn gateway_message_handler_wires_peer_scoped_search() {
+        // Structural: handle_gateway_message must pass sid.key() into tool build,
+        // not bare session_search_tool(state) / env-only scope.
+        let main_src = include_str!("main.rs");
+        assert!(
+            main_src.contains("gateway_session_search_tool"),
+            "gateway tool assembly must use gateway_session_search_tool"
+        );
+        assert!(
+            main_src.contains("sid.key().as_str()") || main_src.contains("sid.key()"),
+            "gateway must pass inbound SessionId key as peer_scope"
         );
     }
 }
