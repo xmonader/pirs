@@ -47,6 +47,8 @@ Deferred (non-goals / different product class):
 - Mistral browser sign-in / Mistral-only model lock-in
 - New messaging channels
 
+**Rust vs Rhai:** hard profile denials, tools (`ask_user`, `todo`, `browser_cdp`), and gates stay Rust. Team taste lives in optional packs: `strict-plan.rhai` (extra plan denials), `session-discipline.rhai` (todo/ask_user steering), `browser-cdp-workflow.rhai` (CDP recipes). Packs may only **add** denials, never loosen Rust plan.
+
 ## Channel policy
 
 **Focus now:** polish + deep internals on **CLI + Telegram**. No new channel product work.
