@@ -11,7 +11,7 @@ use pirs_ai::{
     merge_registry, parse_from_config_value as shared_parse, LlmProvider, RoutingProvider,
 };
 
-pub use pirs_ai::{BackendEntry, ModelEntry, RegistryFile, ServeEntry};
+pub use pirs_ai::RegistryFile;
 
 pub fn merge(base: RegistryFile, over: RegistryFile) -> RegistryFile {
     merge_registry(base, over)

@@ -1,10 +1,24 @@
 # pirs product roadmap
 
-**As of:** 2026-07-21 (depth-over-breadth pivot)  
-**Remote:** local `main` still **ahead of `origin/main`**; large Hermes-gap + CDP + speech arc may be **uncommitted** — treat publish as ops, not product expansion.
+**As of:** 2026-07-21 (deep eval + fix pass)  
+**Remote:** local `main` **ahead of `origin/main`** (unpushed depth/Vibe/policy commits) — publish is ops.
 
 **North star (current):** make what we already have **deep and polished**.  
 **Not now:** more messaging channels, Skills Hub, desktop, Modal/Daytona, OpenClaw zoo.
+
+### Evaluation snapshot (2026-07-21)
+
+| Signal | Result |
+|--------|--------|
+| `cargo check --workspace` | green (warnings cleaned) |
+| unit libs tools/agent/ai/skills/claw | **109** ok |
+| `pirs` binary tests | **111** ok |
+| `pirs-rhai` tests + policy packs | green |
+| `pirs-claw` cli_delivery | **21** ok |
+
+**Fixed this pass:** subagent policy when packs only register `before_tool`; subagents inherit profile/approval under `--no-extensions`; unused import warnings; claw normalizes `PIRS_AGENT_PROFILE` for packs.
+
+**Still later (not broken, polish backlog):** speech live health already probed; CDP multi-tab product; learn quality; publish origin; optional doctor CLI; Textual-class TUI non-goal.
 
 ---
 

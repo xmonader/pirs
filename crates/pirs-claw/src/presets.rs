@@ -79,6 +79,8 @@ pub fn build_code_agent(provider: Arc<dyn LlmProvider>, opts: &CodeOptions) -> A
         .with_system_prompt(coding_system_prompt(&opts.cwd))
         .with_tools(tools);
     let profile = env_safety_profile();
+    // Normalize env so Rhai packs (strict-plan) see the same profile as the gate.
+    std::env::set_var("PIRS_AGENT_PROFILE", profile.name());
     if profile != pirs_tools::SafetyProfile::Default {
         let mut hooks = pirs_agent::Hooks::default();
         hooks.before_tool_call = Some(pirs_tools::profile_hook(profile));

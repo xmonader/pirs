@@ -1093,18 +1093,24 @@ async fn main() -> anyhow::Result<()> {
         let ext_hooks = h.hooks();
         let yolo =
             approval::ApprovalMode::parse(&cli.approval) == Some(approval::ApprovalMode::Yolo);
-        // Always pass extension hooks to subagents (weak-model packs etc.).
-        // Approval gate is only chained onto the main session when not yolo.
-        policy_hooks = match (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
-            (Some(b), Some(a)) => Some((b.clone(), a.clone())),
-            _ => None,
-        };
-        if let Some((b, a)) = &policy_hooks {
-            if let Some(b_chained) =
-                chain_gate_with_extensions(gate_hook.clone(), Some(b.clone()), yolo, safety)
-            {
-                *policy_slot.lock().unwrap() = Some((b_chained, a.clone()));
-            }
+        // Subagents inherit gate+extension policy. Previously required BOTH
+        // before and after hooks, so packs with only on_tool_call (strict-plan,
+        // session-discipline, weak-model) never reached subagents.
+        let chained_before = chain_gate_with_extensions(
+            gate_hook.clone(),
+            ext_hooks.before_tool_call.clone(),
+            yolo,
+            safety,
+        );
+        let after_for_sub = ext_hooks.after_tool_call.clone().unwrap_or_else(|| {
+            std::sync::Arc::new(|_id, _name, _result| None)
+        });
+        if chained_before.is_some() || ext_hooks.after_tool_call.is_some() {
+            let b = chained_before.unwrap_or_else(|| {
+                std::sync::Arc::new(|_id, _name, _args| None)
+            });
+            *policy_slot.lock().unwrap() = Some((b, after_for_sub));
+            policy_hooks = policy_slot.lock().unwrap().clone();
         }
         // Extension before/after hooks always install (weak-model loop detection,
         // verify-after-edit tracking). YOLO skips interactive approval prompts
@@ -1218,6 +1224,23 @@ async fn main() -> anyhow::Result<()> {
     install_gate_if_absent(&mut hooks, &gate_hook, &cli.approval);
     // yolo + --agent-profile plan (etc.) with no extensions: still enforce denials.
     install_profile_under_yolo_if_needed(&mut hooks, &gate_hook, &cli.approval, safety);
+
+    // Subagents must inherit profile/approval even when --no-extensions left
+    // policy_slot empty (previously only filled inside the extensions branch).
+    {
+        let yolo =
+            approval::ApprovalMode::parse(&cli.approval) == Some(approval::ApprovalMode::Yolo);
+        if policy_slot.lock().unwrap().is_none() {
+            if let Some(b) =
+                chain_gate_with_extensions(gate_hook.clone(), None, yolo, safety)
+            {
+                *policy_slot.lock().unwrap() = Some((
+                    b,
+                    std::sync::Arc::new(|_id, _name, _result| None),
+                ));
+            }
+        }
+    }
 
     if !cli.no_mcp {
         let mcp = pirs_mcp::load_servers(&cwd).await;
@@ -2292,6 +2315,34 @@ mod tests {
         assert_eq!(
             chained("1", "danger", &serde_json::json!({})).as_deref(),
             Some("ext-only")
+        );
+    }
+
+    #[test]
+    fn chain_with_before_only_ext_still_returns_gate_under_plan() {
+        // Packs like strict-plan only register on_tool_call (before), no after.
+        let ext: pirs_agent::events::BeforeToolCallHook =
+            Arc::new(|_, name, _| {
+                if name == "web_search" {
+                    Some("strict".into())
+                } else {
+                    None
+                }
+            });
+        let chained = chain_gate_with_extensions(
+            gate(),
+            Some(ext),
+            false,
+            pirs_tools::SafetyProfile::Plan,
+        )
+        .expect("before-only chain");
+        assert_eq!(
+            chained("1", "danger", &serde_json::json!({})).as_deref(),
+            Some("blocked by gate")
+        );
+        assert_eq!(
+            chained("1", "web_search", &serde_json::json!({})).as_deref(),
+            Some("strict")
         );
     }
 }

@@ -240,7 +240,7 @@ pub fn print_session_stats(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pirs_ai::{AssistantMessage, ContentBlock, Usage};
+    use pirs_ai::{ContentBlock, Usage};
 
     #[test]
     fn format_duration_ranges() {
