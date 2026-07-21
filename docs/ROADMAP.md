@@ -1,7 +1,7 @@
 # pirs product roadmap
 
-**As of:** local `main` @ `8abdfc6` (2026-07-21 session arc)  
-**Remote:** **not published** — `main` is **25 commits ahead of `origin/main`**. Treat everything below as **local product state**, not a release.
+**As of:** local `main` @ `0d5e669` (2026-07-21 session arc)  
+**Remote:** **not published** — `main` is **26 commits ahead of `origin/main`** (local only; not a release).
 
 This roadmap is for implementers and product direction after dual-product hardening, Hermes-class spines, core/claw rebalance, and Soulforge-style project tooling.
 
@@ -65,8 +65,8 @@ Do **not** re-implement these; polish or document only.
 ### Ops reality
 | Item | Status |
 |------|--------|
-| Local main tip | `14841c3` |
-| vs `origin/main` | **ahead 25** — **unpushed** |
+| Local main tip | `0d5e669` |
+| vs `origin/main` | **ahead 26** — **unpushed** |
 | Branch `feat/weak-model-hardening` | Stale pointer; work is on `main` |
 
 ---
