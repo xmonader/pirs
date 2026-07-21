@@ -36,7 +36,7 @@ impl Drop for RunningGuard {
 }
 
 pub struct Agent {
-    provider: Arc<dyn LlmProvider>,
+    pub provider: Arc<dyn LlmProvider>,
     pub system_prompt: String,
     pub model: String,
     pub tools: Vec<Arc<dyn AgentTool>>,

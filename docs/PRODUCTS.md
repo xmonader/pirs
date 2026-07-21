@@ -19,10 +19,11 @@ Two products over one Rust agent core. Everything else is a power tool or pack.
 ## Positioning
 
 **pirs**  
-Multi-model agent harness. Plan on a strong model, execute on a cheap one. Strategies, registry, weak-model hardening.
+Multi-model agent harness. Plan on a strong model, execute on a cheap one. Strategies, registry, weak-model hardening.  
+**Shared core** (also used by claw): agentskills progressive skills + `skill_view`, life tools (`web_fetch`/`web_search`), optional learn/crystallize.
 
 **pirs-claw**  
-Terminal + gateway agent: coding, durable multi-key sessions, schedules with human durations, Hermes-set messaging channels, FTS memory, skills manager, local/docker/ssh exec. Shares `~/.pirs/config.toml` model registry + `~/.pirs/secrets.env` with the harness. Not Modal/Daytona/Singularity. Not a desktop Work app.
+Always-on personal agent **ops** on that same core: multi-key sessions, schedules, gateway (telegram/…), pairing. Coding/chat use the same tools/skills/learn libraries as `pirs` — claw is not a second stack for those.
 
 Hermes coverage detail: [HERMES-GAPS.md](HERMES-GAPS.md).
 

@@ -1,11 +1,9 @@
+//! Project discovery: skills (via shared `pirs-skills`) and slash commands.
+
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone)]
-pub struct Skill {
-    pub name: String,
-    pub description: String,
-    pub path: PathBuf,
-}
+// Skills live in the shared crate so pirs and pirs-claw stay in sync.
+pub use pirs_skills::{discover_skills, Skill};
 
 #[derive(Debug, Clone)]
 pub struct FileCommand {
@@ -29,20 +27,6 @@ fn dedupe_roots(mut roots: Vec<PathBuf>) -> Vec<PathBuf> {
         seen.insert(key)
     });
     roots
-}
-
-fn skill_roots(cwd: &Path) -> Vec<PathBuf> {
-    let mut roots = vec![
-        cwd.join(".claude").join("skills"),
-        cwd.join(".agents").join("skills"),
-        cwd.join(".pirs").join("skills"),
-    ];
-    for home in home_dirs() {
-        roots.push(home.join(".claude").join("skills"));
-        roots.push(home.join(".agents").join("skills"));
-        roots.push(home.join(".pirs").join("skills"));
-    }
-    dedupe_roots(roots)
 }
 
 fn command_roots(cwd: &Path) -> Vec<PathBuf> {
@@ -89,49 +73,6 @@ fn field<'a>(fields: &'a [(String, String)], name: &str) -> Option<&'a str> {
         .map(|(_, v)| v.as_str())
 }
 
-pub fn discover_skills(cwd: &Path) -> Vec<Skill> {
-    let mut skills = Vec::new();
-    for root in skill_roots(cwd) {
-        let Ok(read) = std::fs::read_dir(&root) else {
-            continue;
-        };
-        let mut entries: Vec<PathBuf> = read.flatten().map(|e| e.path()).collect();
-        entries.sort();
-        for entry in entries {
-            let skill_file = if entry.is_dir() {
-                entry.join("SKILL.md")
-            } else if entry.extension().and_then(|e| e.to_str()) == Some("md") {
-                entry.clone()
-            } else {
-                continue;
-            };
-            let Ok(content) = std::fs::read_to_string(&skill_file) else {
-                continue;
-            };
-            let (fields, _) = parse_frontmatter(&content);
-            let name = field(&fields, "name")
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| {
-                    entry
-                        .file_stem()
-                        .or_else(|| entry.file_name())
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default()
-                });
-            if name.is_empty() {
-                continue;
-            }
-            let description = field(&fields, "description").unwrap_or("").to_string();
-            skills.push(Skill {
-                name,
-                description,
-                path: skill_file,
-            });
-        }
-    }
-    skills
-}
-
 pub fn discover_commands(cwd: &Path) -> Vec<FileCommand> {
     let mut commands = Vec::new();
     for root in command_roots(cwd) {
@@ -172,22 +113,14 @@ pub fn discover_commands(cwd: &Path) -> Vec<FileCommand> {
     commands
 }
 
+/// Backward-compatible progressive skill block (markdown, shared with claw).
 pub fn skills_prompt_block(skills: &[Skill]) -> Option<String> {
-    if skills.is_empty() {
-        return None;
+    let s = pirs_skills::skills_prompt_section(skills);
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
     }
-    let mut out = String::from("\n<available_skills>\n");
-    for s in skills {
-        out.push_str(&format!(
-            "  <skill>\n    <name>{}</name>\n    <description>{}</description>\n    <location>{}</location>\n  </skill>\n",
-            s.name,
-            s.description,
-            s.path.display()
-        ));
-    }
-    out.push_str("</available_skills>\n");
-    out.push_str("When a task matches a skill's description, read its SKILL.md with the read tool and follow it.\n");
-    Some(out)
 }
 
 pub fn expand_command(cmd: &FileCommand, args: &str) -> String {
@@ -257,16 +190,20 @@ mod tests {
     }
 
     #[test]
-    fn skills_block_xml() {
-        let skills = vec![Skill {
-            name: "pdf".into(),
-            description: "PDF tools".into(),
-            path: PathBuf::from("/x/SKILL.md"),
-        }];
+    fn skills_block_progressive() {
+        let dir = tempfile::tempdir().unwrap();
+        let skill_dir = dir.path().join(".pirs/skills/pdf");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: pdf\ndescription: PDF tools\n---\nSECRET_BODY\n",
+        )
+        .unwrap();
+        let skills = discover_skills(dir.path());
         let block = skills_prompt_block(&skills).unwrap();
-        assert!(block.contains("<available_skills>"));
-        assert!(block.contains("<name>pdf</name>"));
-        assert!(block.contains("/x/SKILL.md"));
+        assert!(block.contains("pdf"));
+        assert!(block.contains("PDF tools"));
+        assert!(!block.contains("SECRET_BODY"));
         assert!(skills_prompt_block(&[]).is_none());
     }
 

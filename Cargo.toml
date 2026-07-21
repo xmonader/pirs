@@ -13,6 +13,7 @@ members = [
     "crates/pirs-bench",
     "crates/pirs-bench-runner",
     "crates/pirs-claw",
+    "crates/pirs-skills",
 ]
 
 [workspace.package]
@@ -47,6 +48,7 @@ libc = "0.2"
 pirs-ai = { path = "crates/pirs-ai" }
 pirs-agent = { path = "crates/pirs-agent" }
 pirs-tools = { path = "crates/pirs-tools" }
+pirs-skills = { path = "crates/pirs-skills" }
 pirs-rhai = { path = "crates/pirs-rhai" }
 pirs-mcp = { path = "crates/pirs-mcp" }
 pirs-graph = { path = "crates/pirs-graph" }

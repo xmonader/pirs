@@ -1,4 +1,6 @@
-// web-tools.rhai — web_fetch and web_search via curl.
+// web-tools.rhai — legacy pack.
+// Prefer built-in tools from pirs-tools (web_fetch / web_search in default_tools).
+// This pack remains for environments that only load rhai extensions.
 
 register_tool("web_fetch", "Fetch a URL and return its text content (truncated).", #{
     type: "object",

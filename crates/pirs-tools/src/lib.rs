@@ -50,6 +50,7 @@ pub mod recall;
 pub mod run_tests;
 pub mod sandbox;
 pub mod truncate;
+pub mod web;
 pub mod write;
 
 pub use bash::BashTool;
@@ -61,6 +62,7 @@ pub use ls::LsTool;
 pub use read::ReadTool;
 pub use recall::RecallTool;
 pub use run_tests::RunTestsTool;
+pub use web::life_tools;
 pub use write::WriteTool;
 
 pub fn default_tools(cwd: PathBuf) -> Vec<Arc<dyn AgentTool>> {
@@ -76,6 +78,8 @@ pub fn default_tools(cwd: PathBuf) -> Vec<Arc<dyn AgentTool>> {
         Arc::new(RunTestsTool::new(cwd)),
         Arc::new(RecallTool::default()),
     ];
+    // Shared life tools (harness + claw): web_fetch / web_search.
+    tools.extend(web::life_tools(false));
     for t in job_tools::tools() {
         tools.push(std::sync::Arc::from(t));
     }

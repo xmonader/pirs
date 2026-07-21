@@ -16,12 +16,11 @@ use pirs_claw::presets::{
 };
 use pirs_claw::registry;
 use pirs_claw::learn;
-use pirs_claw::life_tools;
-use pirs_claw::skill_tools;
-use pirs_claw::skills::{
+use pirs_skills::{
     default_skills_dir, find_skill, install_skill, install_skill_url, load_skills, remove_skill,
-    skills_full_section, skills_prompt_section, usage_counts, validate_skill, Skill,
+    skill_tools, skills_full_section, skills_prompt_section, usage_counts, validate_skill, Skill,
 };
+use pirs_tools::life_tools;
 use pirs_claw::parse_duration_secs;
 use pirs_claw::{
     apply_exec_backend, claw_system_prompt, default_state_dir, describe_exec_backend,
@@ -225,7 +224,7 @@ async fn main() -> anyhow::Result<()> {
 
     let sequential = cli.sequential || cli.weak;
     let max_turns = cli.max_turns.or(Some(if cli.weak { 60 } else { 40 }));
-    let skills = load_all_skills(cli.skills_dir.as_deref());
+    let skills = load_all_skills(&cwd, cli.skills_dir.as_deref());
 
     match cli.cmd {
         Some(Commands::Pair { cmd }) => {
@@ -579,10 +578,20 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn load_all_skills(extra: Option<&Path>) -> Vec<Skill> {
-    let mut skills = load_skills(&default_skills_dir());
+fn load_all_skills(cwd: &Path, extra: Option<&Path>) -> Vec<Skill> {
+    let mut skills = pirs_skills::discover_skills(cwd);
     if let Some(d) = extra {
-        skills.extend(load_skills(d));
+        for sk in load_skills(d) {
+            if !skills.iter().any(|s| s.name == sk.name) {
+                skills.push(sk);
+            }
+        }
+    }
+    // Always include default home skills dir even if discover missed (empty home).
+    for sk in load_skills(&default_skills_dir()) {
+        if !skills.iter().any(|s| s.name == sk.name) {
+            skills.push(sk);
+        }
     }
     skills
 }
@@ -597,8 +606,8 @@ fn chat_safe_tools(
     let skills_arc = Arc::new(skills.to_vec());
     let mut tools: Vec<Arc<dyn pirs_agent::AgentTool>> =
         vec![Arc::new(pirs_tools::RecallTool::default())];
-    tools.extend(skill_tools::skill_tools(skills_arc, allow_skill_manage));
-    tools.extend(life_tools::life_tools(false));
+    tools.extend(skill_tools(skills_arc, allow_skill_manage));
+    tools.extend(life_tools(false));
     if allow_code {
         tools.extend(coding_tools(cwd));
     }
@@ -724,9 +733,10 @@ async fn handle_gateway_message(
     skills: &[Skill],
     allow_code_tools: bool,
 ) -> anyhow::Result<String> {
-    // Gateway: skill writes off unless PIRS_CLAW_SKILL_WRITE=1 explicitly.
-    if std::env::var("PIRS_CLAW_SKILL_WRITE").is_err() {
-        std::env::set_var("PIRS_CLAW_SKILL_WRITE", "0");
+    // Gateway: skill writes off unless PIRS_SKILL_WRITE=1 explicitly.
+    if std::env::var("PIRS_SKILL_WRITE").is_err() && std::env::var("PIRS_CLAW_SKILL_WRITE").is_err()
+    {
+        std::env::set_var("PIRS_SKILL_WRITE", "0");
     }
     let sid = SessionId::from_inbound(inbound);
     let store = SessionStore::open_for(state, sid.clone())?;

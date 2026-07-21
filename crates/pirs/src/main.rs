@@ -1126,8 +1126,13 @@ async fn main() -> anyhow::Result<()> {
         tools.extend(mcp.tools);
     }
 
-    let skills = discovery::discover_skills(&cwd);
+    let skills = pirs_skills::discover_skills(&cwd);
     let file_commands = discovery::discover_commands(&cwd);
+    // Shared skill tools (same crate as pirs-claw).
+    tools.extend(pirs_skills::skill_tools(
+        std::sync::Arc::new(skills.clone()),
+        true,
+    ));
 
     // Inject a PageRank-ranked symbol sketch so the model sees structure
     // without a first tool call (classic repomap idea). Weak mode gets a
@@ -1149,9 +1154,8 @@ async fn main() -> anyhow::Result<()> {
     }
     let mut system =
         system_prompt::build_system_prompt_with_map(&cwd, &tools, repo_map.as_deref(), cli.weak);
-    if let Some(block) = discovery::skills_prompt_block(&skills) {
-        system.push_str(&block);
-    }
+    // Progressive agentskills index (shared with pirs-claw).
+    system.push_str(&pirs_skills::skills_prompt_section(&skills));
     if let Some(h) = &host {
         let cmds = h.commands();
         if !cmds.is_empty() {
@@ -1479,6 +1483,35 @@ async fn main() -> anyhow::Result<()> {
             host.as_ref(),
         )
         .await?;
+        // Shared learning loop (same as pirs-claw): crystallize after substantial one-shots.
+        if pirs_skills::learn_enabled_cli() {
+            let reply = agent
+                .messages
+                .iter()
+                .rev()
+                .find_map(|m| match m {
+                    pirs_ai::Message::Assistant(a) => {
+                        let t = a.text();
+                        if t.trim().is_empty() {
+                            None
+                        } else {
+                            Some(t)
+                        }
+                    }
+                    _ => None,
+                })
+                .unwrap_or_default();
+            let transcript =
+                pirs_skills::session_transcript(&prompt, &reply, "pirs one-shot");
+            let _ = pirs_skills::maybe_crystallize_skill(
+                agent.provider.clone(),
+                &agent.model,
+                Some(api_key.clone()),
+                &transcript,
+                400,
+            )
+            .await;
+        }
         eprintln!();
         print_usage(&agent.usage_report());
         if let Some(hit) = agent.budget_hit {

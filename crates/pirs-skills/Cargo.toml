@@ -1,8 +1,9 @@
 [package]
-name = "pirs-tools"
+name = "pirs-skills"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "agentskills.io skill discovery, tools, and learning loop (shared by pirs + pirs-claw)"
 
 [dependencies]
 pirs-ai = { workspace = true }
@@ -11,20 +12,11 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-schemars = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
-thiserror = { workspace = true }
-regex = { workspace = true }
-ignore = { workspace = true }
-unicode-normalization = { workspace = true }
-libc = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json", "rustls-tls"] }
 tracing = { workspace = true }
-base64 = "0.22"
-similar = "2"
-globset = "0.4"
-tempfile = "3"
-reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
 tempfile = "3"

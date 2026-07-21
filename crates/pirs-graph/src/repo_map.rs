@@ -89,8 +89,7 @@ pub fn render_sketch(graph: &Graph, root: &Path, max_chars: usize) -> Option<Str
         out.push_str(&file_header);
         used += file_header.len();
 
-        let mut n_in_file = 0usize;
-        for (kind, name, _rank) in &syms {
+        for (n_in_file, (kind, name, _rank)) in syms.iter().enumerate() {
             // Cap symbols per file so one giant module doesn't monopolize the map.
             if n_in_file >= 12 {
                 break;
@@ -106,7 +105,6 @@ pub fn render_sketch(graph: &Graph, root: &Path, max_chars: usize) -> Option<Str
             }
             out.push_str(&line);
             used += line.len();
-            n_in_file += 1;
         }
     }
 

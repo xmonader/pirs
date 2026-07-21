@@ -22,10 +22,10 @@ Legend: **Spine** = production-usable core · **Stub** = thin · **Skip** = inte
 | Modal / Daytona / Singularity | **Skip** | rejected |
 | FTS memory | **Spine** | memory_bridge + recall tool |
 | Memory dialectic (Honcho) / SOUL | **Skip** | moat |
-| Skills agentskills.io | **Spine** | progressive index + skill_view + validate + install URL/path |
+| Skills agentskills.io | **Spine (core)** | `pirs-skills` crate — harness + claw; progressive + skill_view |
 | Skills Hub / scanners / /learn marketplace | **Skip** | moat |
-| Learning loop (crystallize + memory nudge) | **Spine** | claw `learn` module; gateway opt-in |
-| Life tools (web) | **Spine** | web_fetch / web_search (+ optional http_json) |
+| Learning loop (crystallize + memory nudge) | **Spine (core)** | `pirs-skills::learn`; claw gateway opt-in; pirs one-shot |
+| Life tools (web) | **Spine (core)** | `pirs-tools::web` in default_tools (harness + claw) |
 | Browser / vision / TTS suite | **Skip** / partial | no CDP suite |
 | Multi-provider models | **Spine** | user registry + secrets.env |
 | Subagents | **Spine** | delegate on code path |

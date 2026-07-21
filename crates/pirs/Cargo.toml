@@ -13,6 +13,7 @@ tempfile = "3"
 pirs-ai = { workspace = true }
 pirs-agent = { workspace = true }
 pirs-tools = { workspace = true }
+pirs-skills = { workspace = true }
 pirs-rhai = { workspace = true }
 pirs-mcp = { workspace = true }
 pirs-graph = { workspace = true }

@@ -1707,6 +1707,7 @@ dependencies = [
  "pirs-lsp",
  "pirs-mcp",
  "pirs-rhai",
+ "pirs-skills",
  "pirs-tools",
  "ratatui",
  "rustyline",
@@ -1809,6 +1810,7 @@ dependencies = [
  "pirs-agent",
  "pirs-ai",
  "pirs-rhai",
+ "pirs-skills",
  "pirs-tools",
  "reqwest",
  "serde",
@@ -1921,6 +1923,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "pirs-skills"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures",
+ "pirs-agent",
+ "pirs-ai",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "pirs-tools"
 version = "0.1.0"
 dependencies = [
@@ -1933,6 +1953,7 @@ dependencies = [
  "pirs-agent",
  "pirs-ai",
  "regex",
+ "reqwest",
  "schemars",
  "serde",
  "serde_json",

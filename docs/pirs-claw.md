@@ -17,7 +17,9 @@ Hermes gap map: [HERMES-GAPS.md](HERMES-GAPS.md).
 | **Pair** | `pair list\|add\|remove` | gateway allowlist |
 | **Voice** | `transcribe <file>` | external whisper / custom cmd |
 
-## Skills (agentskills.io)
+## Skills (agentskills.io) — shared core
+
+Implemented in **`pirs-skills`** (same library as the `pirs` harness). Claw only adds CLI management commands.
 
 Layout:
 
@@ -57,9 +59,11 @@ export PIRS_CLAW_SKILL_WRITE=0    # deny skill_manage writes (gateway default)
 
 Harness users can still load `extensions/skill-crystallizer.rhai` on **pirs**.
 
-## Life tools
+## Life tools — shared core
 
-Built-in (no Rhai pack required):
+Implemented in **`pirs-tools::web`** and included in `default_tools` for both products:
+
+Also update extensions README note for web-tools.rhai briefly.
 
 | Tool | Role |
 |------|------|

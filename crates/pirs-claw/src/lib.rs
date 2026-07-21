@@ -45,10 +45,10 @@ pub use presets::{
 pub use duration_parse::parse_duration_secs;
 pub use secrets::{load_secrets_env, resolve_provider_and_key};
 pub use session::{migrate_legacy_cli_session, SessionId, SessionLine, SessionMeta, SessionStore};
-pub use skills::{
-    default_skills_dir, find_skill, install_skill, install_skill_url, load_skills, remove_skill,
-    skills_full_section, skills_prompt_section, usage_counts, validate_skill, validate_skill_name,
-    write_skill, Skill,
+pub use pirs_skills::{
+    default_skills_dir, discover_skills, find_skill, install_skill, install_skill_url, load_skills,
+    remove_skill, skills_full_section, skills_prompt_section, usage_counts, validate_skill,
+    validate_skill_name, write_skill, Skill,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

@@ -13,6 +13,7 @@ path = "src/main.rs"
 pirs-ai = { workspace = true }
 pirs-agent = { workspace = true }
 pirs-tools = { workspace = true }
+pirs-skills = { workspace = true }
 pirs-rhai = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
