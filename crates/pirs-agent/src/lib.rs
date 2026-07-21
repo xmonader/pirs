@@ -12,6 +12,7 @@ pub mod phase_agent;
 pub mod profile;
 pub mod steering;
 pub mod strategy;
+pub mod thrash;
 pub mod tool;
 pub mod trace;
 pub mod usage;
@@ -27,5 +28,9 @@ pub use control_pins::{
     PROTECTED_KINDS,
 };
 pub use events::{AgentEvent, Emit, Hooks, ToolResultPatch};
+pub use gate::GreenEvidence;
 pub use strategy::pin_plan_model;
+pub use thrash::{
+    LoopDetectionTracker, MistakeTracker, ThrashGuard, ToolSignature,
+};
 pub use tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext, ToolOutput};

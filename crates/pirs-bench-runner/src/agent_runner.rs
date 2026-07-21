@@ -236,6 +236,8 @@ impl TestRunner for AgentDiscoveredRunner {
                 max_tool_calls: None,
                 max_wall_time: None,
             },
+            thrash: None,
+            skip_remaining_if: None,
         };
         let emit: Emit = Arc::new(|_| {});
         let prompt = "Investigate and report the current pass/fail state of every listed test id."

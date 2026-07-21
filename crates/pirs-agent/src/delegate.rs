@@ -15,6 +15,87 @@ use crate::tool::{AgentTool, ToolExecContext, ToolOutput};
 pub const DEFAULT_SUBAGENT_MAX_TURNS: usize = 12;
 pub const DEFAULT_SUBAGENT_MAX_TOOL_CALLS: usize = 40;
 
+/// Compose a TaskPacket-style prompt from delegate args (task + optional fields).
+pub fn compose_task_packet(args: &Value) -> anyhow::Result<String> {
+    let mut task = args
+        .get("task")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if task.is_empty() {
+        if let Some(obj) = args.get("objective").and_then(|v| v.as_str()) {
+            task = obj.trim().to_string();
+        }
+    }
+    if task.is_empty() {
+        anyhow::bail!("delegate requires a non-empty task (or objective)");
+    }
+    let mut parts = vec![task];
+    if let Some(s) = args.get("scope").and_then(|v| v.as_str()).map(str::trim) {
+        if !s.is_empty() {
+            parts.push(format!("Scope: {s}"));
+        }
+    }
+    if let Some(s) = args
+        .get("acceptance")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+    {
+        if !s.is_empty() {
+            parts.push(format!("Acceptance: {s}"));
+        }
+    }
+    if let Some(s) = args
+        .get("permission_profile")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+    {
+        if !s.is_empty() {
+            parts.push(format!("Permission profile: {s}"));
+        }
+    }
+    if let Some(s) = args.get("verify").and_then(|v| v.as_str()).map(str::trim) {
+        if !s.is_empty() {
+            parts.push(format!("Verify with: `{s}`"));
+        }
+    }
+    Ok(parts.join("\n"))
+}
+
+#[cfg(test)]
+mod task_packet_tests {
+    use super::*;
+
+    #[test]
+    fn packet_merges_fields() {
+        let t = compose_task_packet(&json!({
+            "task": "fix the bug",
+            "scope": "src/",
+            "acceptance": "tests pass",
+            "permission_profile": "workspace-write",
+            "verify": "cargo test"
+        }))
+        .unwrap();
+        assert!(t.contains("fix the bug"));
+        assert!(t.contains("Scope: src/"));
+        assert!(t.contains("Acceptance:"));
+        assert!(t.contains("workspace-write"));
+        assert!(t.contains("cargo test"));
+    }
+
+    #[test]
+    fn objective_alone_works() {
+        let t = compose_task_packet(&json!({"objective": "list files"})).unwrap();
+        assert_eq!(t, "list files");
+    }
+
+    #[test]
+    fn empty_errors() {
+        assert!(compose_task_packet(&json!({})).is_err());
+    }
+}
+
 pub struct DelegateTool {
     provider: Arc<dyn LlmProvider>,
     model: String,
@@ -224,6 +305,26 @@ impl AgentTool for DelegateTool {
                 "max_tool_calls": {
                     "type": "integer",
                     "description": "Max tool calls for the sub-agent (default 40)."
+                },
+                "objective": {
+                    "type": "string",
+                    "description": "TaskPacket: short objective (optional; merged into task if task empty)."
+                },
+                "scope": {
+                    "type": "string",
+                    "description": "TaskPacket: files/dirs or concern the sub-agent may touch."
+                },
+                "acceptance": {
+                    "type": "string",
+                    "description": "TaskPacket: how to know the subtask is done."
+                },
+                "permission_profile": {
+                    "type": "string",
+                    "description": "TaskPacket: read-only | workspace-write | danger-full-access (hint in prompt)."
+                },
+                "verify": {
+                    "type": "string",
+                    "description": "TaskPacket: shell command the sub-agent should run to verify."
                 }
             },
             "required": ["task"]
@@ -237,16 +338,7 @@ impl AgentTool for DelegateTool {
     }
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
-        let task = ctx
-            .args
-            .get("task")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        if task.is_empty() {
-            anyhow::bail!("delegate requires a non-empty task");
-        }
+        let task = compose_task_packet(&ctx.args)?;
 
         let model = ctx
             .args

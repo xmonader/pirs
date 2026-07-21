@@ -42,6 +42,7 @@ pub mod bash;
 pub mod browser;
 #[cfg(feature = "cdp")]
 pub mod browser_cdp;
+pub mod checkpoint;
 pub mod computer;
 pub mod doctor;
 pub mod edit;
@@ -49,8 +50,10 @@ pub mod edit_block;
 pub mod filelock;
 pub mod find;
 pub mod fleet;
+pub mod git_tools;
 pub mod grep;
 pub mod job_tools;
+pub mod permission_mode;
 pub mod ls;
 pub mod paths;
 pub mod pr_tools;
@@ -95,8 +98,15 @@ pub use browser::browser_tools;
 pub use browser_cdp::cdp_tools;
 pub use computer::computer_tools;
 pub use vision::vision_tools;
+pub use checkpoint::{
+    create_checkpoint, list_checkpoints, maybe_auto_checkpoint, restore_checkpoint, CheckpointTool,
+};
 pub use doctor::{doctor_report, DoctorTool};
 pub use fleet::fleet_tools;
+pub use git_tools::git_tools;
+pub use permission_mode::{
+    permission_deny_reason, permission_hook, required_mode_for_tool, PermissionMode,
+};
 pub use pr_tools::pr_tools;
 pub use research::research_tools;
 pub use session_rewind::{host_undo, snapshot as rewind_snapshot, RewindTool};
@@ -139,7 +149,9 @@ pub fn default_tools_with_session(
     tools.push(Arc::new(audit_tool::AuditTailTool));
     tools.push(Arc::new(DoctorTool::new(cwd.clone())));
     tools.push(Arc::new(RewindTool));
+    tools.push(Arc::new(CheckpointTool::new(cwd.clone())));
     tools.extend(pr_tools(cwd.clone()));
+    tools.extend(git_tools(cwd.clone()));
     tools.extend(research_tools(cwd.clone()));
     tools.extend(fleet_tools());
     // Shared life tools (harness + claw): web_fetch / web_search.

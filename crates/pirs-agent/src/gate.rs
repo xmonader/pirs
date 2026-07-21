@@ -9,6 +9,72 @@
 //! without an agent or a real command.
 
 use std::future::Future;
+use std::path::Path;
+use std::process::Command;
+
+/// Structured evidence from a verify command (not just pass/fail).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct GreenEvidence {
+    pub command: String,
+    pub exit_code: i32,
+    pub passed: bool,
+    /// Optional git HEAD at verify time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_sha: Option<String>,
+    /// Tail of combined stdout/stderr.
+    #[serde(default)]
+    pub output_tail: String,
+}
+
+impl GreenEvidence {
+    pub fn from_command(command: &str, cwd: &Path) -> Self {
+        let out = Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .current_dir(cwd)
+            .output();
+        let base_sha = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(cwd)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty());
+        match out {
+            Ok(o) => {
+                let mut combined = String::from_utf8_lossy(&o.stdout).into_owned();
+                combined.push_str(&String::from_utf8_lossy(&o.stderr));
+                let n = combined.chars().count();
+                let tail: String = combined.chars().skip(n.saturating_sub(4000)).collect();
+                Self {
+                    command: command.into(),
+                    exit_code: o.status.code().unwrap_or(-1),
+                    passed: o.status.success(),
+                    base_sha,
+                    output_tail: tail,
+                }
+            }
+            Err(e) => Self {
+                command: command.into(),
+                exit_code: -1,
+                passed: false,
+                base_sha,
+                output_tail: format!("failed to run verify: {e}"),
+            },
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "green: passed={} exit={} cmd={:?} base={}",
+            self.passed,
+            self.exit_code,
+            self.command,
+            self.base_sha.as_deref().unwrap_or("(none)")
+        )
+    }
+}
 
 /// The outcome of a gated run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +130,23 @@ where
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn green_evidence_from_true_command() {
+        let dir = std::env::temp_dir();
+        let ev = GreenEvidence::from_command("true", &dir);
+        assert!(ev.passed, "{ev:?}");
+        assert_eq!(ev.exit_code, 0);
+        assert!(ev.summary_line().contains("passed=true"));
+    }
+
+    #[test]
+    fn green_evidence_from_false_command() {
+        let dir = std::env::temp_dir();
+        let ev = GreenEvidence::from_command("false", &dir);
+        assert!(!ev.passed);
+        assert_ne!(ev.exit_code, 0);
+    }
 
     #[tokio::test]
     async fn passes_on_first_attempt_runs_once() {

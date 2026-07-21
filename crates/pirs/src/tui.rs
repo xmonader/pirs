@@ -1647,6 +1647,65 @@ fn handle_slash_command(
                  paste transcript or use Telegram voice notes via claw.",
             );
         }
+        "/plan" => {
+            std::env::set_var("PIRS_PERMISSION_MODE", "read-only");
+            std::env::set_var("PIRS_AGENT_PROFILE", "plan");
+            app.notice("mode → plan (read-only tools; switch with /act)");
+        }
+        "/act" => {
+            std::env::set_var("PIRS_PERMISSION_MODE", "danger-full-access");
+            app.notice("mode → act (full tools; plan with /plan)");
+        }
+        "/permission" => {
+            if arg.is_empty() {
+                app.notice(format!(
+                    "permission: {}",
+                    std::env::var("PIRS_PERMISSION_MODE")
+                        .unwrap_or_else(|_| "workspace-write".into())
+                ));
+            } else if pirs_tools::PermissionMode::parse(arg).is_some() {
+                std::env::set_var("PIRS_PERMISSION_MODE", arg);
+                app.notice(format!("permission → {arg}"));
+            } else {
+                app.notice("usage: /permission read-only|workspace-write|danger-full-access");
+            }
+        }
+        "/checkpoint" => {
+            let action = if arg.is_empty() { "list" } else { arg };
+            match action {
+                "list" => {
+                    let list = pirs_tools::list_checkpoints(&app.cwd);
+                    if list.is_empty() {
+                        app.notice("no checkpoints");
+                    } else {
+                        let mut s = String::from("checkpoints:\n");
+                        for m in list {
+                            s.push_str(&format!("{} {}\n", m.id, m.label));
+                        }
+                        app.push(ChatItem::System(s));
+                    }
+                }
+                "create" => match agent.try_lock() {
+                    Ok(a) => match pirs_tools::create_checkpoint(
+                        &app.cwd,
+                        "tui",
+                        a.messages.len(),
+                    ) {
+                        Ok(m) => app.notice(format!("checkpoint {}", m.id)),
+                        Err(e) => app.notice(format!("checkpoint: {e}")),
+                    },
+                    Err(_) => app.notice("busy — try later"),
+                },
+                s if s.starts_with("restore") => {
+                    let id = s.split_whitespace().nth(1);
+                    match pirs_tools::restore_checkpoint(&app.cwd, id) {
+                        Ok(msg) => app.notice(msg),
+                        Err(e) => app.notice(format!("restore: {e}")),
+                    }
+                }
+                _ => app.notice("usage: /checkpoint list|create|restore [id]"),
+            }
+        }
         other => {
             app.notice(format!(
                 "unknown command {other} — /help for slash list"

@@ -82,6 +82,8 @@ pub fn is_readonly_tool(tool: &str) -> bool {
             | "research"
             | "session_rewind"
             | "fleet"
+            | "checkpoint"
+            | "git"
     )
 }
 

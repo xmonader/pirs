@@ -82,6 +82,8 @@ struct SessionState {
     /// `session/prompt` doesn't respond until the whole turn (including any
     /// steering/tool calls) finishes.
     pending_prompt_id: Option<Value>,
+    /// Multi-session: message history keyed by sessionId (in-memory).
+    session_histories: HashMap<String, Vec<Message>>,
 }
 
 pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
@@ -228,6 +230,7 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
         session_id: String::new(),
         run: None,
         pending_prompt_id: None,
+        session_histories: HashMap::new(),
     };
 
     let mut stdin = BufReader::new(tokio::io::stdin()).lines();
@@ -266,6 +269,12 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
                 state.run = None;
                 state.agent.budget_hit = hit;
                 state.agent.complete_run(full);
+                // Keep multi-session map in sync after each turn.
+                if !state.session_id.is_empty() {
+                    state
+                        .session_histories
+                        .insert(state.session_id.clone(), state.agent.messages.clone());
+                }
                 if let Some(id) = state.pending_prompt_id.take() {
                     respond(&out_tx, Some(id), json!({"stopReason": "end_turn"}));
                 }
@@ -311,7 +320,7 @@ async fn handle_method(
                 json!({
                     "protocolVersion": PROTOCOL_VERSION,
                     "agentCapabilities": {
-                        "loadSession": false,
+                        "loadSession": true,
                         "promptCapabilities": {
                             "image": true,
                             "audio": false,
@@ -327,10 +336,54 @@ async fn handle_method(
             );
         }
         "session/new" => {
+            // Persist current session history before switching.
+            if !state.session_id.is_empty() {
+                state
+                    .session_histories
+                    .insert(state.session_id.clone(), state.agent.messages.clone());
+            }
             let session_id = format!("acp-{}-{}", std::process::id(), pirs_ai::now_millis());
             *session_id_slot.lock().unwrap() = session_id.clone();
             state.session_id = session_id.clone();
+            state.agent.messages.clear();
             respond(out, id, json!({"sessionId": session_id}));
+        }
+        "session/load" => {
+            if state.run.is_some() {
+                respond_error(out, id, -32000, "cannot load while a turn is in progress");
+                return;
+            }
+            let sid = params
+                .get("sessionId")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
+            if sid.is_empty() {
+                respond_error(out, id, -32602, "sessionId required");
+                return;
+            }
+            // Save current.
+            if !state.session_id.is_empty() {
+                state
+                    .session_histories
+                    .insert(state.session_id.clone(), state.agent.messages.clone());
+            }
+            let msgs = state
+                .session_histories
+                .get(&sid)
+                .cloned()
+                .unwrap_or_default();
+            state.agent.messages = msgs;
+            state.session_id = sid.clone();
+            *session_id_slot.lock().unwrap() = sid.clone();
+            respond(
+                out,
+                id,
+                json!({
+                    "sessionId": sid,
+                    "messageCount": state.agent.messages.len(),
+                }),
+            );
         }
         "session/prompt" => {
             if state.run.is_some() {
@@ -341,6 +394,23 @@ async fn handle_method(
                     "a turn is already in progress for this session",
                 );
                 return;
+            }
+            // Optional sessionId routes to the right history.
+            if let Some(sid) = params.get("sessionId").and_then(|s| s.as_str()) {
+                if sid != state.session_id {
+                    if !state.session_id.is_empty() {
+                        state
+                            .session_histories
+                            .insert(state.session_id.clone(), state.agent.messages.clone());
+                    }
+                    if let Some(msgs) = state.session_histories.get(sid) {
+                        state.agent.messages = msgs.clone();
+                    } else {
+                        state.agent.messages.clear();
+                    }
+                    state.session_id = sid.to_string();
+                    *session_id_slot.lock().unwrap() = sid.to_string();
+                }
             }
             let user_msg = extract_prompt_message(&params);
             state.pending_prompt_id = id;
@@ -730,6 +800,7 @@ mod tests {
             session_id: String::new(),
             run: None,
             pending_prompt_id: None,
+            session_histories: HashMap::new(),
         };
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let session_id_slot = Arc::new(Mutex::new(String::new()));
@@ -756,6 +827,7 @@ mod tests {
             session_id: String::new(),
             run: None,
             pending_prompt_id: None,
+            session_histories: HashMap::new(),
         };
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let session_id_slot = Arc::new(Mutex::new(String::new()));
@@ -783,6 +855,7 @@ mod tests {
             session_id: String::new(),
             run: None,
             pending_prompt_id: None,
+            session_histories: HashMap::new(),
         };
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let session_id_slot = Arc::new(Mutex::new(String::new()));

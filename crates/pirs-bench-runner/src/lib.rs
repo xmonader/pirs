@@ -254,6 +254,8 @@ impl AgentExecutor {
             visible_tools: None,
             extra_usage: Arc::new(Mutex::new(Usage::default())),
             cascade: None,
+            thrash: None,
+            skip_remaining_if: None,
             budgets: Budgets {
                 max_turns: Some(self.max_turns_per_attempt),
                 max_tool_calls: None,

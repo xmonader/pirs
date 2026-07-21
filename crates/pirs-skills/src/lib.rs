@@ -5,15 +5,20 @@
 //! - multi-root discovery (project + home, `.pirs` / `.agents` / `.claude`)
 //! - optional post-turn memory nudge + skill crystallize
 
+pub mod heartbeat;
 pub mod learn;
 pub mod skill;
 pub mod soul;
 pub mod tools;
 
+pub use heartbeat::{
+    due as heartbeat_due, ensure_template as ensure_heartbeat_template,
+    maybe_prompt as heartbeat_prompt, DEFAULT_MIN_INTERVAL_SECS,
+};
 pub use learn::{
     learn_enabled_cli, learn_enabled_gateway, learn_enabled_interactive, looks_durable,
     maybe_crystallize_skill, maybe_improve_skill, maybe_memory_nudge, maybe_update_soul,
-    session_transcript, LEARN_DISABLE_ENV, LEARN_GATEWAY_ENV,
+    record_evolution_case, session_transcript, EvolutionMode, LEARN_DISABLE_ENV, LEARN_GATEWAY_ENV,
 };
 pub use soul::{
     curator_report, default_soul_path, default_soul_template, merge_soul_updates, read_soul,

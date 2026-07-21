@@ -259,6 +259,30 @@ async fn cron_ticker_loop(state_dir: PathBuf) {
             Err(e) => eprintln!("[cron] recover_missed: {e}"),
             _ => {}
         }
+        // Heartbeat (checklist file) — no hardware; optional soft prompt.
+        if let Some(prompt) = pirs_skills::heartbeat_prompt(std::time::Duration::from_secs(
+            pirs_skills::DEFAULT_MIN_INTERVAL_SECS,
+        )) {
+            eprintln!("[heartbeat] firing checklist turn");
+            let mut cmd = std::process::Command::new(
+                std::env::current_exe().unwrap_or_else(|_| "pirs-claw".into()),
+            );
+            cmd.arg("--state-dir").arg(&state_dir).arg("chat").arg(&prompt);
+            match cmd.output() {
+                Ok(out) if out.status.success() => {
+                    let reply = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if !reply.is_empty() {
+                        let _ = deliver_outbound(&crate::DeliverTarget::Cli, &reply).await;
+                    }
+                }
+                Ok(out) => eprintln!(
+                    "[heartbeat] chat exit {:?}: {}",
+                    out.status.code(),
+                    String::from_utf8_lossy(&out.stderr)
+                ),
+                Err(e) => eprintln!("[heartbeat] spawn: {e}"),
+            }
+        }
         let due = match store.due(now) {
             Ok(d) => d,
             Err(e) => {

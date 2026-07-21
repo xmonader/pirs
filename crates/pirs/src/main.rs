@@ -252,6 +252,16 @@ struct Cli {
     /// git, browser/CDP, computer-use, gh, soul/audit) and exit.
     #[arg(long)]
     doctor: bool,
+
+    /// Permission ladder: read-only | workspace-write | danger-full-access
+    /// (composes with --agent-profile). Env: PIRS_PERMISSION_MODE.
+    #[arg(long = "permission-mode", env = "PIRS_PERMISSION_MODE")]
+    permission_mode: Option<String>,
+
+    /// Product dial: plan (read-only tools) or act (full tools). Sets
+    /// permission mode + agent-profile when those flags are left default.
+    #[arg(long = "mode-dial", env = "PIRS_MODE_DIAL")]
+    mode_dial: Option<String>,
 }
 
 struct Printer {
@@ -892,6 +902,29 @@ async fn main() -> anyhow::Result<()> {
     let mut hooks = Hooks::default();
     let approval_mode =
         approval::ApprovalMode::parse(&cli.approval).unwrap_or(approval::ApprovalMode::Auto);
+    // Plan/Act product dial maps onto profile + permission ladder.
+    let mut dial_plan = false;
+    if let Some(d) = cli.mode_dial.as_deref() {
+        match d.trim().to_ascii_lowercase().as_str() {
+            "plan" => {
+                dial_plan = true;
+                if cli.agent_profile == "default" {
+                    cli.agent_profile = "plan".into();
+                }
+                if cli.permission_mode.is_none() {
+                    cli.permission_mode = Some("read-only".into());
+                }
+                eprintln!("[mode-dial: plan — read-only tools]");
+            }
+            "act" => {
+                if cli.permission_mode.is_none() {
+                    cli.permission_mode = Some("danger-full-access".into());
+                }
+                eprintln!("[mode-dial: act — full tools]");
+            }
+            other => bail!("unknown --mode-dial {other:?}; expected plan|act"),
+        }
+    }
     let safety = pirs_tools::SafetyProfile::parse(&cli.agent_profile).ok_or_else(|| {
         anyhow::anyhow!(
             "unknown --agent-profile {:?}; expected default|plan|accept-edits|auto-approve",
@@ -903,6 +936,15 @@ async fn main() -> anyhow::Result<()> {
     }
     // So Rhai packs (strict-plan, etc.) can read the active profile via agent_profile("").
     std::env::set_var("PIRS_AGENT_PROFILE", safety.name());
+    let perm_mode = cli
+        .permission_mode
+        .as_deref()
+        .and_then(pirs_tools::PermissionMode::parse)
+        .unwrap_or_else(pirs_tools::PermissionMode::from_env);
+    std::env::set_var("PIRS_PERMISSION_MODE", perm_mode.name());
+    if perm_mode != pirs_tools::PermissionMode::WorkspaceWrite || dial_plan {
+        eprintln!("[permission-mode: {}]", perm_mode.name());
+    }
     // Always install gate when a non-default safety profile is set (hard denials),
     // or when approval is Ask. Auto+default stays open; yolo still skips rhai policy.
     let gate = std::sync::Arc::new(approval::ApprovalGate::with_profile(
@@ -910,13 +952,19 @@ async fn main() -> anyhow::Result<()> {
         cwd.clone(),
         safety,
     ));
-    let gate_hook = if approval_mode == approval::ApprovalMode::Ask
+    let mut gate_hook = if approval_mode == approval::ApprovalMode::Ask
         || safety != pirs_tools::SafetyProfile::Default
     {
         Some(gate.hook())
     } else {
         None
     };
+    // Chain permission ladder (always on when not danger-full-access).
+    if perm_mode != pirs_tools::PermissionMode::DangerFullAccess {
+        let ph = pirs_tools::permission_hook(perm_mode);
+        gate_hook = pirs_agent::Hooks::chain_before(gate_hook, Some(ph));
+    }
+    let _ = dial_plan;
 
     // Semantic search needs the vector store, so it implies the persistent graph.
     let graph_db = cwd.join(".pirs").join("graph.db");
@@ -1262,6 +1310,10 @@ async fn main() -> anyhow::Result<()> {
         if !mcp.handles.is_empty() {
             let names: Vec<String> = mcp.handles.iter().map(|h| h.name.clone()).collect();
             eprintln!("[mcp: {} ({} tools)]", names.join(", "), mcp.tools.len());
+        }
+        let rep = pirs_mcp::McpDegradedReport::from_load(&mcp);
+        if !rep.working.is_empty() || !rep.failed.is_empty() {
+            std::env::set_var("PIRS_MCP_DOCTOR_LINES", rep.lines().join("\n"));
         }
         tools.extend(mcp.tools);
     }
@@ -1748,24 +1800,12 @@ const READONLY_PHASE_TOOLS: &[&str] = &[
 /// what feeds the next attempt's verdict.
 async fn run_verify_command(cmd: String, cwd: PathBuf) -> (bool, String) {
     let result = tokio::task::spawn_blocking(move || {
-        std::process::Command::new("sh")
-            .arg("-c")
-            .arg(&cmd)
-            .current_dir(&cwd)
-            .output()
+        let ev = pirs_agent::GreenEvidence::from_command(&cmd, &cwd);
+        (ev.passed, format!("{}\n{}", ev.summary_line(), ev.output_tail))
     })
     .await;
     match result {
-        Ok(Ok(out)) => {
-            let mut combined = String::from_utf8_lossy(&out.stdout).into_owned();
-            combined.push_str(&String::from_utf8_lossy(&out.stderr));
-            let tail: String = {
-                let n = combined.chars().count();
-                combined.chars().skip(n.saturating_sub(4000)).collect()
-            };
-            (out.status.success(), tail)
-        }
-        Ok(Err(e)) => (false, format!("failed to run verify command: {e}")),
+        Ok(pair) => pair,
         Err(e) => (false, format!("verify task panicked: {e}")),
     }
 }
@@ -2164,6 +2204,9 @@ async fn handle_command(
                  /audit [n]      tail last N audit log lines\n\
                  /profile [p]    show or set agent safety profile\n\
                  /image <path>   attach image to next prompt (vision)\n\
+                 /plan | /act    product dial (read-only vs full tools)\n\
+                 /permission [m] read-only|workspace-write|danger-full-access\n\
+                 /checkpoint     list|create|restore [id]\n\
                  /approval       auto|ask|yolo\n\
                  /fork [n]       fork session at entry\n\
                  /tree           session lineage\n\
@@ -2221,6 +2264,60 @@ async fn handle_command(
                     Ok(msg) => println!("{msg}"),
                     Err(e) => eprintln!("[image] {e}"),
                 }
+            }
+        }
+        "/plan" | "/act" => {
+            let mode = if cmd == "/plan" {
+                "read-only"
+            } else {
+                "danger-full-access"
+            };
+            std::env::set_var("PIRS_PERMISSION_MODE", mode);
+            if cmd == "/plan" {
+                std::env::set_var("PIRS_AGENT_PROFILE", "plan");
+            }
+            println!(
+                "mode → {} (permission={}; new denials apply on next tool call)",
+                cmd.trim_start_matches('/'),
+                mode
+            );
+        }
+        "/checkpoint" => {
+            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let action = if arg.is_empty() { "list" } else { arg };
+            match action {
+                "list" => {
+                    for m in pirs_tools::list_checkpoints(&cwd) {
+                        println!("{} {} {:?}", m.id, m.kind, m.label);
+                    }
+                }
+                "create" => match pirs_tools::create_checkpoint(&cwd, "manual", agent.messages.len())
+                {
+                    Ok(m) => println!("created {}", m.id),
+                    Err(e) => eprintln!("[checkpoint] {e}"),
+                },
+                s if s.starts_with("restore") => {
+                    let id = s.split_whitespace().nth(1);
+                    match pirs_tools::restore_checkpoint(&cwd, id) {
+                        Ok(msg) => println!("{msg}"),
+                        Err(e) => eprintln!("[checkpoint] {e}"),
+                    }
+                }
+                _ => println!("usage: /checkpoint [list|create|restore [id]]"),
+            }
+        }
+        "/permission" => {
+            if arg.is_empty() {
+                println!(
+                    "permission-mode: {}",
+                    std::env::var("PIRS_PERMISSION_MODE")
+                        .unwrap_or_else(|_| "workspace-write".into())
+                );
+            } else if pirs_tools::PermissionMode::parse(arg).is_some() {
+                std::env::set_var("PIRS_PERMISSION_MODE", arg);
+                println!("permission-mode → {arg}");
+            } else {
+                println!("usage: /permission read-only|workspace-write|danger-full-access");
             }
         }
         "/model" => {

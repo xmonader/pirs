@@ -72,7 +72,7 @@ pub fn doctor_report(cwd: &Path) -> Vec<String> {
         format!("lsp_servers: {}", lsp.join(", "))
     });
 
-    // MCP config
+    // MCP config + optional degrade snapshot from last load (env-injected by host)
     let mcp = cwd.join(".mcp.json");
     lines.push(format!(
         "mcp_config: {}",
@@ -82,6 +82,11 @@ pub fn doctor_report(cwd: &Path) -> Vec<String> {
             "absent".into()
         }
     ));
+    if let Ok(report) = std::env::var("PIRS_MCP_DOCTOR_LINES") {
+        for line in report.lines().filter(|l| !l.is_empty()) {
+            lines.push(format!("  {line}"));
+        }
+    }
 
     // Git
     let git = Command::new("git")

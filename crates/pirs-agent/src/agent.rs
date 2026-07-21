@@ -57,6 +57,7 @@ pub struct Agent {
     follow_up_mode: QueueMode,
     running: Arc<AtomicBool>,
     cancel: CancelSlot,
+    thrash: crate::thrash::ThrashGuard,
 }
 
 /// Stable handle for cancelling the agent's current run. The token inside is
@@ -88,6 +89,7 @@ impl Agent {
             follow_up_mode: QueueMode::default(),
             running: Arc::new(AtomicBool::new(false)),
             cancel: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
+            thrash: crate::thrash::ThrashGuard::new(),
         }
     }
 
@@ -134,6 +136,7 @@ impl Agent {
             follow_up_mode: self.follow_up_mode,
             running: Arc::new(AtomicBool::new(false)),
             cancel: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
+            thrash: self.thrash.clone(),
         }
     }
 
@@ -346,6 +349,8 @@ impl Agent {
             tools: vec![],
         };
 
+        let thrash = self.thrash.clone();
+        let steer_peek = Arc::clone(&self.steering);
         let config = LoopConfig {
             model: self.model.clone(),
             completion: self.completion.clone(),
@@ -356,6 +361,8 @@ impl Agent {
             extra_usage: Arc::clone(&self.extra_usage),
             cascade: self.cascade.clone(),
             budgets: self.budgets.clone(),
+            thrash: Some(thrash),
+            skip_remaining_if: Some(Arc::new(move || !steer_peek.lock().unwrap().is_empty())),
         };
 
         let tools = self.tools.clone();

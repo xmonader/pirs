@@ -35,10 +35,17 @@ pub enum QueueMode {
 }
 
 /// A cloneable handle to a shared steering buffer. Clones share one queue.
+///
+/// Optional **scope keys** (e.g. `telegram:chat:123`) isolate multi-chat steers
+/// so one channel cannot inject into another session's queue.
 #[derive(Clone, Default)]
 pub struct SteeringQueue {
     inner: Arc<Mutex<VecDeque<String>>>,
     mode: QueueMode,
+    /// When set, only steers with matching scope are drained (session hygiene).
+    scope: Option<String>,
+    /// Scoped buckets: key → messages (shared across clones of the same base).
+    scoped: Arc<Mutex<std::collections::HashMap<String, VecDeque<String>>>>,
 }
 
 impl SteeringQueue {
@@ -52,31 +59,86 @@ impl SteeringQueue {
         SteeringQueue {
             inner: Arc::new(Mutex::new(VecDeque::new())),
             mode,
+            scope: None,
+            scoped: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// Bind this handle to a session scope key (channel/chat identity).
+    pub fn with_scope(mut self, scope: impl Into<String>) -> Self {
+        self.scope = Some(scope.into());
+        self
     }
 
     /// Queue a message for injection at the running agent's next boundary. FIFO.
     pub fn push(&self, text: impl Into<String>) {
-        self.inner.lock().unwrap().push_back(text.into());
+        let text = text.into();
+        if let Some(scope) = &self.scope {
+            self.scoped
+                .lock()
+                .unwrap()
+                .entry(scope.clone())
+                .or_default()
+                .push_back(text);
+        } else {
+            self.inner.lock().unwrap().push_back(text);
+        }
     }
 
-    /// Nothing pending?
+    /// Push into an explicit scope without rebinding this handle.
+    pub fn push_scoped(&self, scope: &str, text: impl Into<String>) {
+        self.scoped
+            .lock()
+            .unwrap()
+            .entry(scope.to_string())
+            .or_default()
+            .push_back(text.into());
+    }
+
+    /// Nothing pending for this handle's scope (or global queue)?
     pub fn is_empty(&self) -> bool {
-        self.inner.lock().unwrap().is_empty()
+        if let Some(scope) = &self.scope {
+            self.scoped
+                .lock()
+                .unwrap()
+                .get(scope)
+                .map(|q| q.is_empty())
+                .unwrap_or(true)
+        } else {
+            self.inner.lock().unwrap().is_empty()
+        }
     }
 
-    /// Number of messages still queued.
+    /// Number of messages still queued for this handle.
     pub fn len(&self) -> usize {
-        self.inner.lock().unwrap().len()
+        if let Some(scope) = &self.scope {
+            self.scoped
+                .lock()
+                .unwrap()
+                .get(scope)
+                .map(|q| q.len())
+                .unwrap_or(0)
+        } else {
+            self.inner.lock().unwrap().len()
+        }
     }
 
     /// Take pending messages per the queue's [`QueueMode`], as user [`Message`]s.
     /// This is what the loop's steering hook calls each time it polls.
     pub fn drain(&self) -> Vec<Message> {
-        let mut q = self.inner.lock().unwrap();
-        match self.mode {
-            QueueMode::All => q.drain(..).map(Message::user).collect(),
-            QueueMode::OneAtATime => q.pop_front().map(Message::user).into_iter().collect(),
+        if let Some(scope) = &self.scope {
+            let mut map = self.scoped.lock().unwrap();
+            let q = map.entry(scope.clone()).or_default();
+            match self.mode {
+                QueueMode::All => q.drain(..).map(Message::user).collect(),
+                QueueMode::OneAtATime => q.pop_front().map(Message::user).into_iter().collect(),
+            }
+        } else {
+            let mut q = self.inner.lock().unwrap();
+            match self.mode {
+                QueueMode::All => q.drain(..).map(Message::user).collect(),
+                QueueMode::OneAtATime => q.pop_front().map(Message::user).into_iter().collect(),
+            }
         }
     }
 
@@ -151,5 +213,19 @@ mod tests {
         assert_eq!(texts(&first), vec!["steer me"]);
         // A second poll with nothing queued yields nothing.
         assert!(hook().is_empty());
+    }
+
+    #[test]
+    fn scoped_steers_do_not_cross_sessions() {
+        let base = SteeringQueue::new();
+        let a = base.clone().with_scope("chat:a");
+        let b = base.clone().with_scope("chat:b");
+        a.push("only-a");
+        b.push("only-b");
+        assert_eq!(texts(&a.drain()), vec!["only-a"]);
+        assert_eq!(texts(&b.drain()), vec!["only-b"]);
+        assert!(a.is_empty());
+        // Global queue stays empty when using scopes.
+        assert!(base.is_empty());
     }
 }

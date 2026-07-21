@@ -312,6 +312,8 @@ async fn steering_queue_primitive_injects_mid_run() {
         extra_usage: Arc::new(Mutex::new(pirs_ai::Usage::default())),
         cascade: None,
         budgets: Budgets::default(),
+        thrash: None,
+        skip_remaining_if: None,
     };
     let emit: Emit = Arc::new(|_| {});
     let mut ctx = Context {

@@ -282,7 +282,83 @@ pub async fn maybe_improve_skill(
     }
 }
 
+/// Skill evolution modes (PicoClaw-style safety framing).
+///
+/// - `observe` — record turn cases only (no skill write)
+/// - `draft` — write under `~/.pirs/skills-drafts/` for human review (default)
+/// - `apply` — write into the real skills dir
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvolutionMode {
+    Observe,
+    Draft,
+    Apply,
+}
+
+impl EvolutionMode {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "observe" | "off" | "0" => Some(Self::Observe),
+            "draft" | "review" => Some(Self::Draft),
+            "apply" | "on" | "1" | "true" => Some(Self::Apply),
+            _ => None,
+        }
+    }
+
+    pub fn from_env() -> Self {
+        std::env::var("PIRS_EVOLUTION_MODE")
+            .ok()
+            .and_then(|s| Self::parse(&s))
+            .unwrap_or(Self::Draft)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Observe => "observe",
+            Self::Draft => "draft",
+            Self::Apply => "apply",
+        }
+    }
+}
+
+fn drafts_dir() -> std::path::PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    std::path::PathBuf::from(home)
+        .join(".pirs")
+        .join("skills-drafts")
+}
+
+/// Append a turn case for observe/draft pipelines (always safe).
+pub fn record_evolution_case(transcript: &str) {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    let path = std::path::PathBuf::from(home)
+        .join(".pirs")
+        .join("evolution")
+        .join("cases.jsonl");
+    if let Some(p) = path.parent() {
+        let _ = std::fs::create_dir_all(p);
+    }
+    let line = serde_json::json!({
+        "ts": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        "chars": transcript.chars().count(),
+        "preview": truncate(transcript, 400),
+    });
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "{line}");
+    }
+}
+
 /// Crystallize a skill from a transcript when substantial work happened.
+///
+/// Honors [`EvolutionMode::from_env`]: observe records only; draft writes to
+/// skills-drafts; apply writes real skills.
 pub async fn maybe_crystallize_skill(
     provider: Arc<dyn LlmProvider>,
     model: &str,
@@ -291,6 +367,12 @@ pub async fn maybe_crystallize_skill(
     min_chars: usize,
 ) -> Option<std::path::PathBuf> {
     if transcript.chars().count() < min_chars {
+        return None;
+    }
+    let mode = EvolutionMode::from_env();
+    record_evolution_case(transcript);
+    if mode == EvolutionMode::Observe {
+        eprintln!("[learn] evolution mode=observe (case recorded, no skill write)");
         return None;
     }
     let prompt = CRYSTALLIZE_PROMPT.replace("{transcript}", &truncate(transcript, 6000));
@@ -317,15 +399,48 @@ pub async fn maybe_crystallize_skill(
         eprintln!("[learn] crystallize: invalid skill name {name:?}");
         return None;
     }
-    match write_skill(&default_skills_dir(), &name, &description, &body) {
+    let dest = if mode == EvolutionMode::Draft {
+        drafts_dir()
+    } else {
+        default_skills_dir()
+    };
+    match write_skill(&dest, &name, &description, &body) {
         Ok(p) => {
-            eprintln!("[learn] crystallized skill → {}", p.display());
+            eprintln!(
+                "[learn] crystallized skill (mode={}) → {}",
+                mode.name(),
+                p.display()
+            );
             Some(p)
         }
         Err(e) => {
             eprintln!("[learn] crystallize write failed: {e}");
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod evolution_mode_tests {
+    use super::*;
+
+    #[test]
+    fn parse_and_default() {
+        assert_eq!(EvolutionMode::parse("observe"), Some(EvolutionMode::Observe));
+        assert_eq!(EvolutionMode::parse("draft"), Some(EvolutionMode::Draft));
+        assert_eq!(EvolutionMode::parse("apply"), Some(EvolutionMode::Apply));
+        assert_eq!(EvolutionMode::Draft.name(), "draft");
+    }
+
+    #[test]
+    fn record_case_writes_jsonl() {
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        record_evolution_case("hello durable session");
+        let p = dir.path().join(".pirs/evolution/cases.jsonl");
+        let body = std::fs::read_to_string(p).unwrap();
+        assert!(body.contains("preview"));
+        assert!(body.contains("hello"));
     }
 }
 

@@ -25,6 +25,11 @@ pub struct LoopConfig {
     pub extra_usage: std::sync::Arc<std::sync::Mutex<pirs_ai::Usage>>,
     pub cascade: Option<CascadeConfig>,
     pub budgets: Budgets,
+    /// Loop/mistake thrash guard (default-on when set by Agent).
+    pub thrash: Option<crate::thrash::ThrashGuard>,
+    /// When sequential tools run, if this returns true after a tool finishes,
+    /// remaining tools in the batch are skipped (steering pending, etc.).
+    pub skip_remaining_if: Option<std::sync::Arc<dyn Fn() -> bool + Send + Sync>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -181,8 +186,28 @@ pub async fn run_agent_loop(
                         emit,
                         forced_sequential,
                         config.visible_tools.clone(),
+                        config.thrash.as_ref(),
+                        config.skip_remaining_if.as_ref().map(|f| f.as_ref()),
                     )
                     .await;
+                }
+                // Thrash stop: inject a synthetic error and end if detectors fired.
+                if let Some(guard) = &config.thrash {
+                    if let Some(msg) = guard.take_stop() {
+                        let stop = Message::user(format!("[system thrash stop] {msg}"));
+                        emit(AgentEvent::MessageStart {
+                            message: Box::new(stop.clone()),
+                        });
+                        context.messages.push(stop.clone());
+                        emit(AgentEvent::MessageEnd {
+                            message: Box::new(stop.clone()),
+                        });
+                        new_messages.push(stop);
+                        emit(AgentEvent::AgentEnd {
+                            messages: new_messages.clone(),
+                        });
+                        return (new_messages, None);
+                    }
                 }
                 for r in &results {
                     // Spill every tool result to searchable session memory —
@@ -824,6 +849,31 @@ fn finalize_result(
     result
 }
 
+/// Sequential tool batch with optional mid-batch skip (unit-test entry point).
+pub async fn execute_tool_calls_for_test(
+    calls: Vec<ToolCallData>,
+    tools: &[Arc<dyn AgentTool>],
+    hooks: &Hooks,
+    cancel: CancellationToken,
+    emit: &Emit,
+    sequential: bool,
+    thrash: Option<&crate::thrash::ThrashGuard>,
+    skip_remaining_if: Option<&(dyn Fn() -> bool + Send + Sync)>,
+) -> Vec<ToolResultMessage> {
+    execute_tool_calls(
+        calls,
+        tools,
+        hooks,
+        cancel,
+        emit,
+        sequential,
+        None,
+        thrash,
+        skip_remaining_if,
+    )
+    .await
+}
+
 async fn execute_tool_calls(
     calls: Vec<ToolCallData>,
     tools: &[Arc<dyn AgentTool>],
@@ -832,6 +882,8 @@ async fn execute_tool_calls(
     emit: &Emit,
     sequential: bool,
     visible: Option<VisibleTools>,
+    thrash: Option<&crate::thrash::ThrashGuard>,
+    skip_remaining_if: Option<&(dyn Fn() -> bool + Send + Sync)>,
 ) -> Vec<ToolResultMessage> {
     let n = calls.len();
     let meta: Vec<(String, String)> = calls
@@ -842,7 +894,46 @@ async fn execute_tool_calls(
     results.resize_with(n, || None);
 
     if sequential {
+        let mut skip_rest = false;
         for (index, call) in calls.into_iter().enumerate() {
+            if skip_rest {
+                let skipped = error_result_kind(
+                    &call.id,
+                    &call.name,
+                    "Skipped due to queued user message.",
+                    "skipped_steer",
+                );
+                emit(AgentEvent::ToolExecutionStart {
+                    tool_call_id: call.id.clone(),
+                    tool_name: call.name.clone(),
+                    args: call.arguments.clone(),
+                });
+                emit(AgentEvent::ToolExecutionEnd {
+                    tool_call_id: skipped.tool_call_id.clone(),
+                    tool_name: skipped.tool_name.clone(),
+                    result: Box::new(skipped.clone()),
+                });
+                results[index] = Some(skipped);
+                continue;
+            }
+            if let Some(g) = thrash {
+                if let Some(msg) = g.observe_tool_start(&call.name, &call.arguments) {
+                    let failed = error_result_kind(&call.id, &call.name, &msg, "loop_detect");
+                    emit(AgentEvent::ToolExecutionStart {
+                        tool_call_id: call.id.clone(),
+                        tool_name: call.name.clone(),
+                        args: call.arguments.clone(),
+                    });
+                    emit(AgentEvent::ToolExecutionEnd {
+                        tool_call_id: failed.tool_call_id.clone(),
+                        tool_name: failed.tool_name.clone(),
+                        result: Box::new(failed.clone()),
+                    });
+                    results[index] = Some(failed);
+                    skip_rest = true;
+                    continue;
+                }
+            }
             emit(AgentEvent::ToolExecutionStart {
                 tool_call_id: call.id.clone(),
                 tool_name: call.name.clone(),
@@ -862,6 +953,9 @@ async fn execute_tool_calls(
                     finalize_result(&id, &name, outcome, hooks)
                 }
             };
+            if let Some(g) = thrash {
+                let _ = g.observe_tool_end(result.is_error);
+            }
             emit(AgentEvent::ToolExecutionEnd {
                 tool_call_id: result.tool_call_id.clone(),
                 tool_name: result.tool_name.clone(),
@@ -870,6 +964,12 @@ async fn execute_tool_calls(
             results[index] = Some(result);
             if cancel.is_cancelled() {
                 break;
+            }
+            // After each tool: if steering is pending, skip the rest of the batch.
+            if let Some(pred) = skip_remaining_if {
+                if pred() {
+                    skip_rest = true;
+                }
             }
         }
     } else {
@@ -1091,5 +1191,104 @@ mod result_cap_tests {
         assert!(is_transient_tool_error(&anyhow::anyhow!("request timed out")));
         assert!(!is_transient_tool_error(&anyhow::anyhow!("file not found")));
         assert!(!is_transient_tool_error(&anyhow::anyhow!("Invalid arguments")));
+    }
+}
+
+
+#[cfg(test)]
+mod skip_remaining_tests {
+    use super::*;
+    use async_trait::async_trait;
+    use crate::tool::{AgentTool, ToolExecContext, ToolOutput};
+    use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct CountTool {
+        name: String,
+        hits: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl AgentTool for CountTool {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn description(&self) -> &str {
+            "count"
+        }
+        fn parameters(&self) -> Value {
+            json!({"type": "object", "properties": {}})
+        }
+        async fn execute(&self, _ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+            self.hits.fetch_add(1, Ordering::SeqCst);
+            Ok(ToolOutput::text("ok"))
+        }
+    }
+
+    #[tokio::test]
+    async fn sequential_skips_remaining_when_predicate_true() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let tools: Vec<Arc<dyn AgentTool>> = vec![
+            Arc::new(CountTool { name: "a".into(), hits: Arc::clone(&hits) }),
+            Arc::new(CountTool { name: "b".into(), hits: Arc::clone(&hits) }),
+            Arc::new(CountTool { name: "c".into(), hits: Arc::clone(&hits) }),
+        ];
+        let hits_for_pred = Arc::clone(&hits);
+        let pred = Arc::new(move || hits_for_pred.load(Ordering::SeqCst) >= 1);
+        let calls = vec![
+            ToolCallData { id: "1".into(), name: "a".into(), arguments: json!({}) },
+            ToolCallData { id: "2".into(), name: "b".into(), arguments: json!({}) },
+            ToolCallData { id: "3".into(), name: "c".into(), arguments: json!({}) },
+        ];
+        let emit: Emit = Arc::new(|_| {});
+        let results = execute_tool_calls_for_test(
+            calls,
+            &tools,
+            &Hooks::default(),
+            CancellationToken::new(),
+            &emit,
+            true,
+            None,
+            Some(pred.as_ref()),
+        )
+        .await;
+        assert_eq!(hits.load(Ordering::SeqCst), 1, "only first tool should run");
+        assert_eq!(results.len(), 3);
+        assert!(!results[0].is_error);
+        assert!(results[1].is_error);
+        assert!(results[1].model_text().contains("Skipped"));
+        assert!(results[2].model_text().contains("Skipped"));
+    }
+
+    #[tokio::test]
+    async fn thrash_blocks_identical_sequential_tools() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let tools: Vec<Arc<dyn AgentTool>> = vec![Arc::new(CountTool {
+            name: "bash".into(),
+            hits: Arc::clone(&hits),
+        })];
+        let thrash = crate::thrash::ThrashGuard::with_limits(3, 10);
+        let calls: Vec<_> = (0..4)
+            .map(|i| ToolCallData {
+                id: format!("{i}"),
+                name: "bash".into(),
+                arguments: json!({"command": "ls"}),
+            })
+            .collect();
+        let emit: Emit = Arc::new(|_| {});
+        let results = execute_tool_calls_for_test(
+            calls,
+            &tools,
+            &Hooks::default(),
+            CancellationToken::new(),
+            &emit,
+            true,
+            Some(&thrash),
+            None,
+        )
+        .await;
+        // First two run, third trips loop (max_repeats=3 means trip on 3rd observe)
+        assert!(results.iter().any(|r| r.model_text().contains("loop detection") || r.model_text().contains("Skipped")));
+        assert!(hits.load(Ordering::SeqCst) <= 3);
     }
 }
