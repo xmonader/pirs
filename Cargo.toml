@@ -14,6 +14,7 @@ members = [
     "crates/pirs-bench-runner",
     "crates/pirs-claw",
     "crates/pirs-skills",
+    "crates/pirs-audio",
 ]
 
 [workspace.package]
@@ -24,7 +25,7 @@ license = "MIT"
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "multipart"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 schemars = "0.8"
@@ -45,6 +46,9 @@ directories = "6"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 libc = "0.2"
+axum = { version = "0.8", features = ["multipart"] }
+tower-http = { version = "0.6", features = ["trace"] }
+cron = "0.15"
 pirs-ai = { path = "crates/pirs-ai" }
 pirs-agent = { path = "crates/pirs-agent" }
 pirs-tools = { path = "crates/pirs-tools" }

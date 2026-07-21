@@ -15,7 +15,7 @@ Hermes gap map: [HERMES-GAPS.md](HERMES-GAPS.md).
 | **Sessions** | `sessions` | `(channel, peer)` + meta |
 | **Skills** | `skills list\|show\|add\|install\|validate\|remove\|usage` | [agentskills.io](https://agentskills.io) |
 | **Pair** | `pair list\|add\|remove` | gateway allowlist |
-| **Voice** | `transcribe <file>` | external whisper / custom cmd |
+| **Voice** | `transcribe <file>` + Telegram VN | multi-backend OpenAI-compatible STT/TTS ([speech.md](speech.md)); CLI whisper fallback |
 
 ## Skills (agentskills.io) — shared core
 
@@ -160,6 +160,6 @@ Webhooks bind **127.0.0.1** by default (`PIRS_CLAW_PUBLIC_BIND=1` / `PIRS_CLAW_B
 | Full Hermes Skills Hub / scanners | Local + URL install only |
 | Honcho dialectic / SOUL.md product | Out of scope |
 | 20+ messaging platforms | Hermes set only |
-| Full browser CDP suite | web_fetch/search first |
+| Node Playwright runtime | pure-Rust CDP via chromiumoxide (`browser_cdp`) |
 
 Keys: `~/.pirs/secrets.env`.

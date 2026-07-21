@@ -8,7 +8,9 @@ use pirs_ai::{
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use crate::compaction::{compact_messages, last_input_tokens, should_compact, CompactionConfig};
+use crate::compaction::{
+    compact_messages, estimate_tokens, last_input_tokens, should_compact, CompactionConfig,
+};
 use crate::events::{AgentEvent, Emit, Hooks, ToolResultPatch};
 use crate::tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext};
 use crate::validate::{coerce_args, validate_args};
@@ -128,10 +130,11 @@ pub async fn run_agent_loop(
                 let dangling = extract_tool_calls(&assistant);
                 let mut tool_results = Vec::new();
                 for call in &dangling {
-                    let r = error_result(
+                    let r = error_result_kind(
                         &call.id,
                         &call.name,
                         "Tool call was not executed: the turn ended with an error or was aborted.",
+                        "aborted",
                     );
                     let msg = Message::ToolResult(r.clone());
                     context.messages.push(msg.clone());
@@ -154,10 +157,11 @@ pub async fn run_agent_loop(
             if had_calls {
                 if assistant.stop_reason == StopReason::Length {
                     for call in &calls {
-                        results.push(error_result(
+                        results.push(error_result_kind(
                             &call.id,
                             &call.name,
                             "Tool call arguments were truncated due to token limit. Re-issue the tool call.",
+                            "truncated",
                         ));
                     }
                 } else {
@@ -243,10 +247,19 @@ pub async fn run_agent_loop(
             }
 
             if let Some(cfg) = &config.compaction {
-                if last_input_tokens(&context.messages)
+                // Prefer provider-reported input tokens; fall back to local estimate
+                // so huge tool dumps still trigger compaction when usage is missing.
+                let over = last_input_tokens(&context.messages)
                     .map(|t| should_compact(t, cfg))
                     .unwrap_or(false)
-                {
+                    || should_compact(estimate_tokens(&context.messages), cfg);
+                if over {
+                    // Defense: shrink oversized tool results in history first
+                    // (cheap) so cut-point retention stays meaningful.
+                    let _shrunk = crate::compaction::shrink_oversized_tool_results(
+                        &mut context.messages,
+                        MODEL_MAX_TOOL_RESULT_CHARS,
+                    );
                     compact_messages(
                         provider,
                         &config.model,
@@ -476,12 +489,75 @@ fn append_delta_to_last(context: &mut Context, delta: &str, thinking: bool) {
     }
 }
 
-fn error_result(id: &str, name: &str, message: &str) -> ToolResultMessage {
+/// Defense-in-depth cap for model-facing tool results (MCP/Rhai/hooks included).
+/// Per-tool caps (e.g. bash `cap_for_model`) still apply first; this is the backstop.
+pub const MODEL_MAX_TOOL_RESULT_CHARS: usize = 20_000;
+/// Cap for error result bodies so a failed bash dump cannot blow the next turn.
+pub const MODEL_MAX_ERROR_CHARS: usize = 8_000;
+
+fn cap_chars_tail(s: &str, max_chars: usize) -> String {
+    let n = s.chars().count();
+    if n <= max_chars {
+        return s.to_string();
+    }
+    let skip = n - max_chars;
+    s.chars().skip(skip).collect()
+}
+
+fn merge_result_details(details: &mut Option<serde_json::Value>, extra: serde_json::Value) {
+    match details {
+        Some(serde_json::Value::Object(existing)) => {
+            if let serde_json::Value::Object(add) = extra {
+                for (k, v) in add {
+                    existing.insert(k, v);
+                }
+            } else {
+                *details = Some(extra);
+            }
+        }
+        _ => *details = Some(extra),
+    }
+}
+
+/// Truncate model-facing text blocks; spill full text into `details.uiText` when missing.
+fn apply_model_result_cap(result: &mut ToolResultMessage) {
+    let text = result.model_text();
+    if text.chars().count() <= MODEL_MAX_TOOL_RESULT_CHARS {
+        return;
+    }
+    let has_ui = result
+        .details
+        .as_ref()
+        .and_then(|d| d.get("uiText"))
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    if !has_ui {
+        merge_result_details(
+            &mut result.details,
+            serde_json::json!({ "uiText": text }),
+        );
+    }
+    let capped = cap_chars_tail(&text, MODEL_MAX_TOOL_RESULT_CHARS);
+    result.content = vec![ContentBlock::text(format!(
+        "[tool result truncated for model context — full output in details.uiText if available]\n{capped}"
+    ))];
+}
+
+fn error_result_kind(id: &str, name: &str, message: &str, kind: &str) -> ToolResultMessage {
+    let message = if message.chars().count() > MODEL_MAX_ERROR_CHARS {
+        format!(
+            "[error truncated]\n{}",
+            cap_chars_tail(message, MODEL_MAX_ERROR_CHARS)
+        )
+    } else {
+        message.to_string()
+    };
     ToolResultMessage {
         tool_call_id: id.to_string(),
         tool_name: name.to_string(),
         content: vec![ContentBlock::text(message)],
-        details: None,
+        details: Some(serde_json::json!({ "errorKind": kind })),
         is_error: true,
         terminate: false,
         timestamp: pirs_ai::now_millis(),
@@ -602,7 +678,7 @@ fn prepare_call(
             .unwrap_or_default();
         return Prepared::Failed {
             index,
-            result: error_result(
+            result: error_result_kind(
                 &call.id,
                 &call.name,
                 &format!(
@@ -610,19 +686,21 @@ fn prepare_call(
                     call.name,
                     available.join(", ")
                 ),
+                "not_found",
             ),
         };
     };
     if !is_visible(visible, &call.name) {
         return Prepared::Failed {
             index,
-            result: error_result(
+            result: error_result_kind(
                 &call.id,
                 &call.name,
                 &format!(
                     "Tool {} is not loaded in this session. Call use_tool(\"{}\") first to load it, then re-issue your call.",
                     call.name, call.name
                 ),
+                "not_loaded",
             ),
         };
     }
@@ -632,7 +710,7 @@ fn prepare_call(
     if let Err(e) = validate_args(&schema, &args) {
         return Prepared::Failed {
             index,
-            result: error_result(
+            result: error_result_kind(
                 &call.id,
                 &call.name,
                 &format!(
@@ -642,6 +720,7 @@ fn prepare_call(
                     call.name,
                     schema_summary(&schema)
                 ),
+                "validation",
             ),
         };
     }
@@ -649,10 +728,11 @@ fn prepare_call(
         if let Some(reason) = before(&call.id, &call.name, &args) {
             return Prepared::Failed {
                 index,
-                result: error_result(
+                result: error_result_kind(
                     &call.id,
                     &call.name,
                     &format!("Tool call blocked: {reason}"),
+                    "blocked",
                 ),
             };
         }
@@ -676,7 +756,8 @@ fn finalize_result(
         Ok(out) => {
             // History for the next LLM turn always uses model-facing content
             // (already capped by tools that call text_with_ui). Longer UI text
-            // lives only in details.uiText for TUI/REPL rendering.
+            // lives only in details.uiText for TUI/REPL rendering. Loop-level
+            // cap below is defense-in-depth for MCP/Rhai/hooks that skip caps.
             ToolResultMessage {
                 tool_call_id: id.to_string(),
                 tool_name: name.to_string(),
@@ -691,7 +772,19 @@ fn finalize_result(
                 timestamp: pirs_ai::now_millis(),
             }
         }
-        Err(e) => error_result(id, name, &e.to_string()),
+        Err(e) => {
+            let msg = e.to_string();
+            let kind = if msg.to_ascii_lowercase().contains("cancel") {
+                "cancelled"
+            } else if msg.to_ascii_lowercase().contains("timeout")
+                || msg.to_ascii_lowercase().contains("timed out")
+            {
+                "timeout"
+            } else {
+                "exec"
+            };
+            error_result_kind(id, name, &msg, kind)
+        }
     };
     if let Some(after) = &hooks.after_tool_call {
         if let Some(ToolResultPatch {
@@ -713,6 +806,19 @@ fn finalize_result(
             if let Some(t) = terminate {
                 result.terminate = t;
             }
+        }
+    }
+    // After hooks: re-cap so after_tool_call cannot inject unbounded history.
+    if !result.is_error {
+        apply_model_result_cap(&mut result);
+    } else {
+        // Error bodies already capped in error_result_kind; still clamp if hook expanded them.
+        let t = result.model_text();
+        if t.chars().count() > MODEL_MAX_ERROR_CHARS {
+            result.content = vec![ContentBlock::text(format!(
+                "[error truncated]\n{}",
+                cap_chars_tail(&t, MODEL_MAX_ERROR_CHARS)
+            ))];
         }
     }
     result
@@ -836,13 +942,18 @@ async fn execute_tool_calls(
         }
     }
 
+    let cancelled = cancel.is_cancelled();
     results
         .into_iter()
         .enumerate()
         .map(|(i, r)| {
             r.unwrap_or_else(|| {
                 let (id, name) = &meta[i];
-                error_result(id, name, "Tool execution did not complete")
+                if cancelled {
+                    error_result_kind(id, name, "Tool execution cancelled", "cancelled")
+                } else {
+                    error_result_kind(id, name, "Tool execution did not complete", "incomplete")
+                }
             })
         })
         .collect()
@@ -869,10 +980,116 @@ async fn run_tool(
         })
     };
     let ctx = ToolExecContext {
-        tool_call_id: id,
-        args,
-        cancel,
-        on_update: Some(on_update),
+        tool_call_id: id.clone(),
+        args: args.clone(),
+        cancel: cancel.clone(),
+        on_update: Some(on_update.clone()),
     };
-    tool.execute(ctx).await
+    match tool.execute(ctx).await {
+        Ok(out) => Ok(out),
+        Err(e) if is_transient_tool_error(&e) && !cancel.is_cancelled() => {
+            // One automatic retry for timeout/network-class failures.
+            let ctx2 = ToolExecContext {
+                tool_call_id: id,
+                args,
+                cancel,
+                on_update: Some(on_update),
+            };
+            tool.execute(ctx2).await
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Network/timeout-class failures worth one automatic retry.
+fn is_transient_tool_error(e: &anyhow::Error) -> bool {
+    let s = e.to_string().to_ascii_lowercase();
+    s.contains("timeout")
+        || s.contains("timed out")
+        || s.contains("connection reset")
+        || s.contains("connection refused")
+        || s.contains("broken pipe")
+        || s.contains("temporarily unavailable")
+        || s.contains("try again")
+        || s.contains("503")
+        || s.contains("502")
+        || s.contains("504")
+        || s.contains("econnreset")
+        || s.contains("dns error")
+}
+
+#[cfg(test)]
+mod result_cap_tests {
+    use super::*;
+    use pirs_ai::ContentBlock;
+
+    #[test]
+    fn cap_chars_tail_keeps_end() {
+        let s: String = (0..100).map(|i| format!("{i}")).collect();
+        let t = cap_chars_tail(&s, 10);
+        assert_eq!(t.chars().count(), 10);
+        assert!(s.ends_with(&t) || t.chars().all(|c| s.contains(c)));
+    }
+
+    #[test]
+    fn apply_model_result_cap_spills_ui_text() {
+        let big = "x".repeat(MODEL_MAX_TOOL_RESULT_CHARS + 500);
+        let mut result = ToolResultMessage {
+            tool_call_id: "1".into(),
+            tool_name: "t".into(),
+            content: vec![ContentBlock::text(big.clone())],
+            details: None,
+            is_error: false,
+            terminate: false,
+            timestamp: 0,
+        };
+        apply_model_result_cap(&mut result);
+        assert!(result.model_text().chars().count() <= MODEL_MAX_TOOL_RESULT_CHARS + 120);
+        assert!(result.model_text().contains("truncated"));
+        let ui = result
+            .details
+            .as_ref()
+            .and_then(|d| d.get("uiText"))
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert_eq!(ui.len(), big.len());
+    }
+
+    #[test]
+    fn error_result_kind_tags_and_truncates() {
+        let big = "e".repeat(MODEL_MAX_ERROR_CHARS + 200);
+        let r = error_result_kind("id", "bash", &big, "exec");
+        assert!(r.is_error);
+        assert!(r.model_text().chars().count() <= MODEL_MAX_ERROR_CHARS + 40);
+        assert_eq!(
+            r.details
+                .as_ref()
+                .and_then(|d| d.get("errorKind"))
+                .and_then(|v| v.as_str()),
+            Some("exec")
+        );
+    }
+
+    #[test]
+    fn finalize_result_caps_ok_output() {
+        let big = "z".repeat(MODEL_MAX_TOOL_RESULT_CHARS + 1000);
+        let out = crate::tool::ToolOutput::text(big);
+        let r = finalize_result("c1", "mcp_tool", Ok(out), &Hooks::default());
+        assert!(!r.is_error);
+        assert!(r.model_text().chars().count() <= MODEL_MAX_TOOL_RESULT_CHARS + 120);
+        assert!(r
+            .details
+            .as_ref()
+            .and_then(|d| d.get("uiText"))
+            .is_some());
+    }
+
+    #[test]
+    fn transient_tool_error_classifier() {
+        assert!(is_transient_tool_error(&anyhow::anyhow!("connection reset by peer")));
+        assert!(is_transient_tool_error(&anyhow::anyhow!("HTTP 503")));
+        assert!(is_transient_tool_error(&anyhow::anyhow!("request timed out")));
+        assert!(!is_transient_tool_error(&anyhow::anyhow!("file not found")));
+        assert!(!is_transient_tool_error(&anyhow::anyhow!("Invalid arguments")));
+    }
 }

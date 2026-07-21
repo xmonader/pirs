@@ -24,8 +24,9 @@ use pirs_tools::life_tools;
 use pirs_claw::parse_duration_secs;
 use pirs_claw::{
     apply_exec_backend, claw_system_prompt, default_state_dir, describe_exec_backend,
-    extract_assistant_reply, load_secrets_env, require_llm_key, should_mark_schedule_fired,
-    DeliverTarget, ScheduleStore, SessionId, SessionStore,
+    empty_assistant_diag, extract_assistant_reply, load_secrets_env, require_llm_key,
+    should_mark_schedule_fired, DeliverTarget, GatewayReply, ScheduleStore, SessionId,
+    SessionStore,
 };
 
 #[derive(Parser, Debug)]
@@ -123,11 +124,19 @@ enum Commands {
         #[command(subcommand)]
         cmd: Option<SkillsCmd>,
     },
-    /// List multi-key sessions under state dir.
-    Sessions,
-    /// Transcribe audio file via external whisper CLI if available.
+    /// List or search multi-key sessions under state dir.
+    Sessions {
+        #[command(subcommand)]
+        cmd: Option<SessionsCmd>,
+    },
+    /// Transcribe audio file (multi-backend STT: registry → Groq/OpenAI → CLI).
     Transcribe {
         path: PathBuf,
+    },
+    /// Speech STT/TTS status and setup (cloud failover + local daemon helper).
+    Speech {
+        #[command(subcommand)]
+        cmd: SpeechCmd,
     },
     Schedule {
         #[command(subcommand)]
@@ -138,10 +147,29 @@ enum Commands {
         #[arg(long, default_value = "telegram")]
         channel: String,
     },
+    /// Gateway / runtime status (pairing, schedule, speech, locks).
+    Status,
+    /// User soul/profile + skills curator (learning loop).
+    Soul {
+        #[command(subcommand)]
+        cmd: SoulCmd,
+    },
     /// Manage gateway pairing allowlist (add/list/remove peers).
     Pair {
         #[command(subcommand)]
         cmd: PairCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SessionsCmd {
+    /// List session files (default).
+    List,
+    /// Full-text search across all session transcripts.
+    Search {
+        query: Vec<String>,
+        #[arg(long, default_value_t = 12)]
+        limit: usize,
     },
 }
 
@@ -153,6 +181,27 @@ enum PairCmd {
     Add { peer: String },
     /// Remove a peer id.
     Remove { peer: String },
+}
+
+#[derive(Subcommand, Debug)]
+enum SpeechCmd {
+    /// Show resolved STT/TTS backend chain (no secrets).
+    Status,
+    /// Write speech backends into ~/.pirs/config.toml from available keys / local daemon.
+    Setup {
+        /// Enable cloud STT failover (Groq Whisper and/or OpenAI) from secrets.env keys.
+        #[arg(long)]
+        cloud: bool,
+        /// Install/configure a local OpenAI-compatible speech daemon (Parakeet/Kokoro via helper script).
+        #[arg(long)]
+        local: bool,
+        /// Local daemon base URL (default http://127.0.0.1:8090/v1).
+        #[arg(long, default_value = "http://127.0.0.1:8090/v1")]
+        local_url: String,
+        /// Overwrite existing speech stanzas in config.toml.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -186,6 +235,19 @@ enum ScheduleCmd {
         /// Repeat interval: seconds or 30s/5m/2h/1d (0 = one-shot)
         #[arg(long = "every", default_value = "0")]
         every_dur: String,
+        /// Cron expression (5- or 6-field). When set, overrides --every.
+        /// Examples: "0 9 * * 1-5" (weekdays 09:00), "*/15 * * * *" (every 15m)
+        #[arg(long)]
+        cron: Option<String>,
+        /// Natural language schedule, e.g. "weekdays at 9:00", "every 15 minutes"
+        #[arg(long = "nl")]
+        nl: Option<String>,
+        /// Named blueprint (morning-brief, standup, weekly-review, heartbeat, eod)
+        #[arg(long)]
+        blueprint: Option<String>,
+        /// Blueprint slot: time=08:30 (repeatable)
+        #[arg(long = "slot", value_name = "KEY=VALUE")]
+        slots: Vec<String>,
         #[arg(long, default_value = "cli")]
         deliver: String,
         /// Optional job name (for pause/resume/remove by name).
@@ -199,6 +261,11 @@ enum ScheduleCmd {
         model: Option<String>,
     },
     List,
+    /// List named automation blueprints.
+    Blueprint {
+        #[command(subcommand)]
+        cmd: Option<BlueprintCmd>,
+    },
     Pause { id: String },
     Resume { id: String },
     Remove { id: String },
@@ -208,6 +275,25 @@ enum ScheduleCmd {
         #[arg(long)]
         run: bool,
     },
+}
+
+#[derive(Subcommand, Debug)]
+enum BlueprintCmd {
+    /// List blueprints (default).
+    List,
+}
+
+#[derive(Subcommand, Debug)]
+enum SoulCmd {
+    /// Print ~/.pirs/soul.md (user profile).
+    Show,
+    /// Write stdin or --text into soul.md
+    Set {
+        #[arg(long)]
+        text: Option<String>,
+    },
+    /// Print skills curator report (usage + soul path).
+    Curator,
 }
 
 #[tokio::main]
@@ -420,21 +506,92 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Some(Commands::Sessions) => {
-            let root = state.join("sessions");
-            if !root.is_dir() {
-                println!("(no sessions under {})", root.display());
-            } else {
-                for ent in walkdir_sessions(&root) {
-                    println!("{ent}");
+        Some(Commands::Sessions { cmd }) => match cmd.unwrap_or(SessionsCmd::List) {
+            SessionsCmd::List => {
+                let root = state.join("sessions");
+                if !root.is_dir() {
+                    println!("(no sessions under {})", root.display());
+                } else {
+                    for ent in walkdir_sessions(&root) {
+                        println!("{ent}");
+                    }
                 }
             }
+            SessionsCmd::Search { query, limit } => {
+                let q = query.join(" ");
+                if q.trim().is_empty() {
+                    anyhow::bail!("usage: pirs-claw sessions search <query>");
+                }
+                let hits = pirs_claw::session_search::search_sessions(&state, &q, limit)?;
+                if hits.is_empty() {
+                    println!("(no matches for {q:?})");
+                } else {
+                    for h in hits {
+                        println!(
+                            "[{}] score={} session={} role={}\n  {}\n",
+                            h.path, h.score, h.session_key, h.role, h.snippet
+                        );
+                    }
+                }
+            }
+        },
+        Some(Commands::Status) => {
+            print_runtime_status(&state, &schedule_path).await?;
         }
-        Some(Commands::Transcribe { path }) => match pirs_claw::voice::transcribe_audio(&path)? {
-            Some(t) => println!("{t}"),
-            None => anyhow::bail!(
-                "no transcription (install whisper or set PIRS_CLAW_TRANSCRIBE_CMD with {{path}})"
-            ),
+        Some(Commands::Soul { cmd }) => match cmd {
+            SoulCmd::Show => {
+                print!("{}", pirs_skills::read_soul());
+            }
+            SoulCmd::Set { text } => {
+                let body = if let Some(t) = text {
+                    t
+                } else {
+                    use std::io::Read;
+                    let mut buf = String::new();
+                    std::io::stdin().read_to_string(&mut buf)?;
+                    buf
+                };
+                let p = pirs_skills::write_soul(&body)?;
+                println!("wrote soul → {}", p.display());
+            }
+            SoulCmd::Curator => {
+                print!(
+                    "{}",
+                    pirs_skills::curator_report(&default_skills_dir())
+                );
+            }
+        },
+        Some(Commands::Transcribe { path }) => {
+            match pirs_claw::voice::transcribe_audio(&path).await? {
+                Some(t) => println!("{t}"),
+                None => anyhow::bail!(
+                    "no transcription (configure STT: `pirs-claw speech setup --cloud`, \
+                     PIRS_SPEECH_BASE_URL, whisper CLI, or PIRS_CLAW_TRANSCRIBE_CMD)"
+                ),
+            }
+        }
+        Some(Commands::Speech { cmd }) => match cmd {
+            SpeechCmd::Status => {
+                for line in pirs_ai::speech_status_lines_probed().await {
+                    println!("{line}");
+                }
+            }
+            SpeechCmd::Setup {
+                cloud,
+                local,
+                local_url,
+                force,
+            } => {
+                if !cloud && !local {
+                    anyhow::bail!("pass --cloud and/or --local (see pirs-claw speech setup --help)");
+                }
+                pirs_claw::speech_setup::run_setup(pirs_claw::speech_setup::SetupOpts {
+                    cloud,
+                    local,
+                    local_url,
+                    force,
+                })?;
+            }
         },
         Some(Commands::Schedule { cmd }) => {
             let store = ScheduleStore::open(&schedule_path)?;
@@ -443,44 +600,86 @@ async fn main() -> anyhow::Result<()> {
                     prompt,
                     in_dur,
                     every_dur,
+                    cron,
+                    nl,
+                    blueprint,
+                    slots,
                     deliver,
                     name,
                     skills: job_skills,
                     model,
                 } => {
-                    let p = prompt.join(" ");
+                    let mut p = prompt.join(" ");
                     let in_secs = parse_duration_secs(&in_dur)?;
-                    let every = parse_duration_secs(&every_dur)?;
+                    let mut every = parse_duration_secs(&every_dur)?;
+                    let mut cron = cron;
+                    if let Some(bp) = blueprint {
+                        let mut map = std::collections::HashMap::new();
+                        for s in &slots {
+                            if let Some((k, v)) = s.split_once('=') {
+                                map.insert(k.trim().to_string(), v.trim().to_string());
+                            }
+                        }
+                        let (c, prompt_bp) = pirs_claw::cron_blueprints::expand_blueprint(
+                            &bp,
+                            &map,
+                            if p.trim().is_empty() { None } else { Some(p.as_str()) },
+                        )?;
+                        cron = Some(c);
+                        if p.trim().is_empty() {
+                            p = prompt_bp;
+                        }
+                    } else if let Some(nl_s) = nl {
+                        match pirs_claw::cron_blueprints::parse_nl_schedule(&nl_s)? {
+                            pirs_claw::cron_blueprints::NlSchedule::Cron(c) => cron = Some(c),
+                            pirs_claw::cron_blueprints::NlSchedule::EverySecs(secs) => {
+                                every = secs;
+                            }
+                        }
+                    }
+                    if p.trim().is_empty() {
+                        anyhow::bail!("schedule add needs a prompt (or --blueprint with defaults)");
+                    }
                     let deliver = DeliverTarget::parse(&deliver);
-                    let e = store.add_full(
+                    let e = store.add_full_cron(
                         &p,
                         every,
                         in_secs,
+                        cron,
                         deliver,
                         name,
                         job_skills,
                         model,
                     )?;
                     println!(
-                        "scheduled {} name={:?} next_fire={} every_secs={} deliver={} skills={:?}",
+                        "scheduled {} name={:?} next_fire={} every_secs={} cron={:?} deliver={} skills={:?}",
                         e.id,
                         e.name,
                         e.next_fire,
                         e.every_secs,
+                        e.cron,
                         e.deliver.as_config_str(),
                         e.skills
                     );
                 }
+                ScheduleCmd::Blueprint { cmd } => {
+                    let _ = cmd;
+                    print!("{}", pirs_claw::cron_blueprints::list_blueprints());
+                }
                 ScheduleCmd::List => {
                     for j in store.list()? {
                         println!(
-                            "{} name={:?} enabled={} next={} every={} last_run={:?} deliver={} skills={:?} | {}",
+                            "{} name={:?} enabled={} next={} every={} cron={:?} last_run={:?} last_status={:?} fail_count={} last_error={:?} deliver={} skills={:?} | {}",
                             j.id,
                             j.name,
                             j.enabled,
                             j.next_fire,
                             j.every_secs,
+                            j.cron,
                             j.last_run,
+                            j.last_status,
+                            j.fail_count,
+                            j.last_error,
                             j.deliver.as_config_str(),
                             j.skills,
                             j.prompt
@@ -512,16 +711,23 @@ async fn main() -> anyhow::Result<()> {
                     let job = store
                         .find(&id)?
                         .ok_or_else(|| anyhow::anyhow!("job not found: {id}"))?;
-                    let fire_ok = fire_schedule_job(&job, &state, &cli.model, &skills).await?;
-                    if fire_ok {
-                        let now = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .map(|d| d.as_secs())
-                            .unwrap_or(0);
-                        store.mark_fired(&job.id, now)?;
-                        println!("ran {} ok", job.id);
-                    } else {
-                        anyhow::bail!("job {} failed", job.id);
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    match fire_schedule_job(&job, &state, &cli.model, &skills).await {
+                        Ok(true) => {
+                            store.mark_fired(&job.id, now)?;
+                            println!("ran {} ok", job.id);
+                        }
+                        Ok(false) => {
+                            store.mark_failed(&job.id, now, "fire returned false")?;
+                            anyhow::bail!("job {} failed", job.id);
+                        }
+                        Err(e) => {
+                            store.mark_failed(&job.id, now, &e.to_string())?;
+                            return Err(e);
+                        }
                     }
                 }
                 ScheduleCmd::Tick { run } => {
@@ -529,6 +735,21 @@ async fn main() -> anyhow::Result<()> {
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_secs())
                         .unwrap_or(0);
+                    // Share cron lock with serve ticker so RMW cannot clobber concurrent fires.
+                    let _cron_lock = if run {
+                        match pirs_claw::instance_lock::try_acquire(&state, "cron") {
+                            Ok(l) => Some(l),
+                            Err(e) => {
+                                eprintln!("[tick] cron lock busy ({e}); try again shortly");
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+                    if run && _cron_lock.is_none() {
+                        anyhow::bail!("could not acquire cron lock (another tick/serve running?)");
+                    }
                     let due = store.due(now)?;
                     if due.is_empty() {
                         println!("no due jobs");
@@ -542,16 +763,24 @@ async fn main() -> anyhow::Result<()> {
                             j.deliver.as_config_str(),
                             j.prompt
                         );
-                        let fire_ok = if run {
-                            fire_schedule_job(&j, &state, &cli.model, &skills).await?
-                        } else {
-                            false
-                        };
-                        if should_mark_schedule_fired(run, fire_ok) {
-                            store.mark_fired(&j.id, now)?;
-                            ok_n += 1;
-                        } else if run {
-                            fail_n += 1;
+                        if !run {
+                            continue;
+                        }
+                        match fire_schedule_job(&j, &state, &cli.model, &skills).await {
+                            Ok(true) if should_mark_schedule_fired(true, true) => {
+                                store.mark_fired(&j.id, now)?;
+                                ok_n += 1;
+                            }
+                            Ok(true) => {}
+                            Ok(false) => {
+                                store.mark_failed(&j.id, now, "fire returned false")?;
+                                fail_n += 1;
+                            }
+                            Err(e) => {
+                                store.mark_failed(&j.id, now, &e.to_string())?;
+                                eprintln!("[tick] job {} error: {e}", j.id);
+                                fail_n += 1;
+                            }
                         }
                     }
                     if run {
@@ -617,15 +846,132 @@ fn chat_safe_tools(
     allow_code: bool,
     allow_skill_manage: bool,
 ) -> Vec<Arc<dyn pirs_agent::AgentTool>> {
+    chat_safe_tools_with_state(cwd, skills, allow_code, allow_skill_manage, None)
+}
+
+fn chat_safe_tools_with_state(
+    cwd: &Path,
+    skills: &[Skill],
+    allow_code: bool,
+    allow_skill_manage: bool,
+    state_dir: Option<&Path>,
+) -> Vec<Arc<dyn pirs_agent::AgentTool>> {
     let skills_arc = Arc::new(skills.to_vec());
     let mut tools: Vec<Arc<dyn pirs_agent::AgentTool>> =
         vec![Arc::new(pirs_tools::RecallTool::default())];
     tools.extend(skill_tools(skills_arc, allow_skill_manage));
     tools.extend(life_tools(false));
+    // Browser + vision on chat/gateway (SSRF-safe / path-contained).
+    tools.extend(pirs_tools::browser_tools(cwd.to_path_buf()));
+    #[cfg(feature = "cdp")]
+    tools.extend(pirs_tools::cdp_tools(cwd.to_path_buf()));
+    tools.extend(pirs_tools::vision_tools(cwd.to_path_buf()));
+    // Desktop computer-use only when explicitly enabled (dangerous).
+    if matches!(
+        std::env::var("PIRS_COMPUTER_USE").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes") | Ok("on")
+    ) {
+        tools.extend(pirs_tools::computer_tools(cwd.to_path_buf()));
+    }
+    if let Some(state) = state_dir {
+        tools.push(pirs_claw::session_search::session_search_tool(state.to_path_buf()));
+    }
     if allow_code {
         tools.extend(coding_tools(cwd));
     }
+    // Dedupe (coding_tools already includes browser/vision via default_tools).
+    {
+        let mut seen = std::collections::HashSet::new();
+        tools.retain(|t| seen.insert(t.name().to_string()));
+    }
     tools
+}
+
+async fn print_runtime_status(state: &Path, schedule_path: &Path) -> anyhow::Result<()> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    println!("state_dir: {}", state.display());
+    let pair = PairingAllowlist::default_path(state);
+    let al = PairingAllowlist::open(&pair)?;
+    println!("pairing: {} ({} peer(s))", pair.display(), al.list().len());
+    for p in al.list() {
+        println!("  - {p}");
+    }
+    let tg_token = std::env::var("TELEGRAM_BOT_TOKEN")
+        .or_else(|_| std::env::var("PIRS_TELEGRAM_BOT_TOKEN"))
+        .map(|t| !t.trim().is_empty())
+        .unwrap_or(false);
+    println!("telegram_token: {}", if tg_token { "set" } else { "missing" });
+    println!(
+        "telegram_lock: {}",
+        pirs_claw::instance_lock::lock_status(state, "telegram")
+    );
+    println!(
+        "cron_lock: {}",
+        pirs_claw::instance_lock::lock_status(state, "cron")
+    );
+    let store = ScheduleStore::open(schedule_path)?;
+    let jobs = store.list()?;
+    println!("schedule: {} job(s) at {}", jobs.len(), schedule_path.display());
+    if let Some(next) = store.next_due()? {
+        let in_secs = next.next_fire.saturating_sub(now);
+        println!(
+            "  next_due: {} in {}s (next_fire={})",
+            next.name.as_deref().unwrap_or(&next.id),
+            in_secs,
+            next.next_fire
+        );
+    }
+    for j in jobs.iter().take(8) {
+        println!(
+            "  {} enabled={} cron={:?} every={} next={} last_run={:?} status={:?} fails={} err={:?}",
+            j.name.as_deref().unwrap_or(&j.id),
+            j.enabled,
+            j.cron,
+            j.every_secs,
+            j.next_fire,
+            j.last_run,
+            j.last_status,
+            j.fail_count,
+            j.last_error.as_ref().map(|e| {
+                if e.chars().count() > 80 {
+                    format!("{}…", e.chars().take(80).collect::<String>())
+                } else {
+                    e.clone()
+                }
+            })
+        );
+    }
+    if jobs.len() > 8 {
+        println!("  … +{} more", jobs.len() - 8);
+    }
+    let sessions = state.join("sessions");
+    let n_sess = if sessions.is_dir() {
+        walkdir_sessions(&sessions).len()
+    } else {
+        0
+    };
+    println!("sessions: {n_sess} file(s) under {}", sessions.display());
+    let cdp = std::env::var("PIRS_BROWSER_CDP_URL")
+        .or_else(|_| std::env::var("BROWSER_CDP_URL"))
+        .or_else(|_| std::env::var("CDP_URL"))
+        .ok();
+    println!(
+        "browser_cdp: {}",
+        cdp.as_deref().unwrap_or("(auto-launch or default :9222)")
+    );
+    println!("speech (probed):");
+    for line in pirs_ai::speech_status_lines_probed().await {
+        println!("  {line}");
+    }
+    println!(
+        "tts_on_voice_default: {} (backends={})",
+        pirs_claw::voice::tts_on_voice(),
+        pirs_claw::voice::tts_backends_configured()
+    );
+    Ok(())
 }
 
 /// Load optional Rhai packs for claw chat/code (not gateway unless flagged).
@@ -708,7 +1054,12 @@ async fn fire_schedule_job(
         return Ok(false);
     }
     let reply = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if let Err(e) = pirs_claw::gateway::deliver_outbound(&job.deliver, &reply).await {
+    let text = if reply.is_empty() {
+        "(scheduled job finished with empty reply)".to_string()
+    } else {
+        reply
+    };
+    if let Err(e) = pirs_claw::gateway::deliver_outbound(&job.deliver, &text).await {
         eprintln!(
             "[tick] job {} deliver {} failed: {e}",
             job.id,
@@ -788,7 +1139,7 @@ async fn handle_gateway_message(
     inbound: &InboundMessage,
     skills: &[Skill],
     allow_code_tools: bool,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<GatewayReply> {
     // Gateway: skill writes off unless PIRS_SKILL_WRITE=1 explicitly.
     if std::env::var("PIRS_SKILL_WRITE").is_err() && std::env::var("PIRS_CLAW_SKILL_WRITE").is_err()
     {
@@ -817,7 +1168,13 @@ async fn handle_gateway_message(
     if let Some(ref m) = mem {
         sys.push_str(&memory_bridge::recall_context(m, &inbound.text, 5));
     }
-    let tools = chat_safe_tools(cwd, skills, allow_code_tools, false);
+    let attach_log = pirs_claw::attach::AttachmentLog::new();
+    let out_dir = state.join("outbound").join(sid.key().replace('/', "_"));
+    let mut tools = chat_safe_tools_with_state(cwd, skills, allow_code_tools, false, Some(state));
+    tools.push(Arc::new(pirs_claw::attach::AttachFileTool::new(
+        out_dir.clone(),
+        attach_log.clone_handle(),
+    )));
     let mut agent = Agent::new(provider.clone(), model)
         .with_system_prompt(sys)
         .with_tools(tools)
@@ -829,25 +1186,78 @@ async fn handle_gateway_message(
         agent.messages = msgs;
     }
     let new_msgs = agent.prompt(&inbound.text).await?;
-    let reply = extract_assistant_reply(&new_msgs)
-        .ok_or_else(|| anyhow::anyhow!("empty assistant reply"))?;
+    let reply = extract_assistant_reply(&new_msgs).ok_or_else(|| {
+        anyhow::anyhow!(
+            "empty assistant reply ({})",
+            empty_assistant_diag(&new_msgs)
+        )
+    })?;
     store.append("assistant", &reply)?;
     if let Some(ref m) = mem {
         memory_bridge::remember_turn(m, "assistant", &reply);
     }
     if learn::learn_enabled_gateway() {
         learn::maybe_memory_nudge(
-            provider,
+            provider.clone(),
             model,
-            key_for_learn,
+            key_for_learn.clone(),
             state,
             &sid.key(),
             &inbound.text,
             &reply,
         )
         .await;
+        // Improve skills that were viewed this turn (Hermes-style self-improve).
+        let transcript = learn::session_transcript(&inbound.text, &reply, "gateway");
+        // Long Telegram threads can crystallize skills (same gate as chat).
+        if transcript.chars().count() >= 800 {
+            let _ = learn::maybe_crystallize_skill(
+                provider.clone(),
+                model,
+                key_for_learn.clone(),
+                &transcript,
+                800,
+            )
+            .await;
+        }
+        for sk in skills {
+            if reply.contains(&sk.name) || inbound.text.to_ascii_lowercase().contains(&sk.name) {
+                let md = format!(
+                    "---\nname: {}\ndescription: {}\n---\n\n{}",
+                    sk.name, sk.description, sk.body
+                );
+                let _ = learn::maybe_improve_skill(
+                    provider.clone(),
+                    model,
+                    key_for_learn.clone(),
+                    &sk.name,
+                    &md,
+                    &transcript,
+                    400,
+                )
+                .await;
+            }
+        }
     }
-    Ok(reply)
+
+    // Collect attachments: explicit attach_file tool, write tool (code mode), fenced files.
+    let mut attachments = attach_log.take();
+    for p in pirs_claw::attach::paths_from_write_results(&new_msgs) {
+        if !attachments.iter().any(|x| x == &p) {
+            attachments.push(p);
+        }
+    }
+    if attachments.is_empty() {
+        // Fallback: materialize named fenced code blocks as files to send.
+        for p in pirs_claw::attach::materialize_fenced_files(&reply, &out_dir) {
+            attachments.push(p);
+        }
+    }
+
+    Ok(GatewayReply {
+        text: reply,
+        attachments,
+    })
 }
 
 async fn run_chat(
@@ -910,8 +1320,12 @@ async fn run_chat(
         .prompt(text)
         .await
         .map_err(|e| anyhow::anyhow!("agent error (no assistant reply recorded): {e}"))?;
-    let reply = extract_assistant_reply(&new_msgs)
-        .ok_or_else(|| anyhow::anyhow!("empty assistant reply (nothing recorded as assistant)"))?;
+    let reply = extract_assistant_reply(&new_msgs).ok_or_else(|| {
+        anyhow::anyhow!(
+            "empty assistant reply (nothing recorded as assistant; {})",
+            empty_assistant_diag(&new_msgs)
+        )
+    })?;
     store.append("assistant", &reply)?;
     if let Some(ref m) = mem {
         memory_bridge::remember_turn(m, "assistant", &reply);
@@ -928,14 +1342,37 @@ async fn run_chat(
         )
         .await;
         let transcript = learn::session_transcript(text, &reply, "");
-        let _ = learn::maybe_crystallize_skill(
-            provider,
+        let crystallized = learn::maybe_crystallize_skill(
+            provider.clone(),
             model,
-            key_for_learn,
+            key_for_learn.clone(),
             &transcript,
             800,
         )
         .await;
+        if crystallized.is_none() {
+            // Try improve any installed skill mentioned in the turn.
+            for sk in skills {
+                if text.to_ascii_lowercase().contains(&sk.name)
+                    || reply.to_ascii_lowercase().contains(&sk.name)
+                {
+                    let md = format!(
+                        "---\nname: {}\ndescription: {}\n---\n\n{}",
+                        sk.name, sk.description, sk.body
+                    );
+                    let _ = learn::maybe_improve_skill(
+                        provider.clone(),
+                        model,
+                        key_for_learn.clone(),
+                        &sk.name,
+                        &md,
+                        &transcript,
+                        400,
+                    )
+                    .await;
+                }
+            }
+        }
     }
     CliChannel.deliver(&OutboundReply::to(&inbound, reply))?;
     eprintln!(
@@ -1122,7 +1559,10 @@ async fn run_code(
         }
         println!("{reply}");
     } else {
-        anyhow::bail!("empty assistant reply");
+        anyhow::bail!(
+            "empty assistant reply ({})",
+            empty_assistant_diag(&msgs)
+        );
     }
     Ok(())
 }

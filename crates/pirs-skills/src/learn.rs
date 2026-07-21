@@ -65,19 +65,46 @@ SESSION:
 /// Heuristic: user text looks like something worth remembering.
 pub fn looks_durable(user: &str) -> bool {
     let l = user.to_ascii_lowercase();
-    l.contains("my name")
+    // Soft rejects — chit-chat that contains always/never/remember.
+    if l.contains("never mind")
+        || l.contains("nevermind")
+        || l.contains("don't remember")
+        || l.contains("do not remember")
+        || l.contains("forget it")
+    {
+        return false;
+    }
+    l.contains("my name is")
+        || l.contains("my name's")
         || l.contains("i prefer")
-        || l.contains("always ")
-        || l.contains("never ")
-        || l.contains("remember")
+        || l.contains("please always")
+        || l.contains("always use")
+        || l.contains("never do")
+        || l.contains("never use")
+        || l.contains("remember that")
+        || l.contains("remember this")
+        || l.contains("please remember")
         || l.contains("call me")
         || l.contains("i work")
+        || l.contains("i live in")
         || l.contains("timezone")
         || l.contains("my dog")
         || l.contains("my email")
+        || l.contains("my stack")
 }
 
-/// Soft-fail memory extract → store as kind `fact`.
+const SOUL_EXTRACT_PROMPT: &str = r#"From this exchange, extract up to 5 durable identity/preference facts for a long-lived user profile.
+Output plain bullets, one fact per line, starting with "- ".
+If nothing durable, output exactly: NOTHING
+
+USER:
+{user}
+
+ASSISTANT:
+{assistant}
+"#;
+
+/// Soft-fail memory extract → store as kind `fact` (+ optional soul.md update).
 pub async fn maybe_memory_nudge(
     provider: Arc<dyn LlmProvider>,
     model: &str,
@@ -93,7 +120,7 @@ pub async fn maybe_memory_nudge(
     let prompt = MEMORY_EXTRACT_PROMPT
         .replace("{user}", &truncate(user, 2000))
         .replace("{assistant}", &truncate(assistant, 2000));
-    let text = match complete_once(provider, model, api_key, &prompt).await {
+    let text = match complete_once(provider.clone(), model, api_key.clone(), &prompt).await {
         Ok(t) => t,
         Err(e) => {
             eprintln!("[learn] memory nudge skipped: {e}");
@@ -108,6 +135,7 @@ pub async fn maybe_memory_nudge(
         return;
     };
     mem.set_session(session_key);
+    let mut bullets = String::new();
     for line in text.lines() {
         let line = line.trim().trim_start_matches('-').trim();
         if line.is_empty() || line.eq_ignore_ascii_case("NOTHING") {
@@ -115,6 +143,129 @@ pub async fn maybe_memory_nudge(
         }
         mem.add("fact", "learn", line);
         eprintln!("[learn] remembered: {line}");
+        bullets.push_str("- ");
+        bullets.push_str(line);
+        bullets.push('\n');
+    }
+    // Fold the same extract into soul.md — no second LLM call.
+    if !bullets.is_empty() {
+        let current = crate::soul::read_soul();
+        let merged = crate::soul::merge_soul_updates(&current, &bullets);
+        if merged != current {
+            match crate::soul::write_soul(&merged) {
+                Ok(p) => eprintln!("[learn] soul updated → {}", p.display()),
+                Err(e) => eprintln!("[learn] soul write failed: {e}"),
+            }
+        }
+    }
+    let _ = (provider, model, api_key, assistant);
+}
+
+/// Update ~/.pirs/soul.md with durable identity facts.
+pub async fn maybe_update_soul(
+    provider: Arc<dyn LlmProvider>,
+    model: &str,
+    api_key: Option<String>,
+    user: &str,
+    assistant: &str,
+) {
+    if !looks_durable(user) {
+        return;
+    }
+    let prompt = SOUL_EXTRACT_PROMPT
+        .replace("{user}", &truncate(user, 1500))
+        .replace("{assistant}", &truncate(assistant, 1500));
+    let text = match complete_once(provider, model, api_key, &prompt).await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[learn] soul update skipped: {e}");
+            return;
+        }
+    };
+    let text = text.trim().to_string();
+    if text.is_empty() || text.eq_ignore_ascii_case("NOTHING") {
+        return;
+    }
+    let current = crate::soul::read_soul();
+    let merged = crate::soul::merge_soul_updates(&current, &text);
+    if merged != current {
+        match crate::soul::write_soul(&merged) {
+            Ok(p) => eprintln!("[learn] soul updated → {}", p.display()),
+            Err(e) => eprintln!("[learn] soul write failed: {e}"),
+        }
+    }
+}
+
+const IMPROVE_PROMPT: &str = r#"You are improving an existing skill based on a new successful session.
+Given CURRENT_SKILL and NEW_SESSION, output an updated skill with the SAME frontmatter name.
+Keep description accurate; merge new gotchas/steps; stay under 40 lines of body.
+Output ONLY:
+---
+name: <same-name>
+description: <updated one sentence>
+---
+<body>
+If the session adds nothing useful, output exactly: NOTHING
+
+CURRENT_SKILL:
+{current}
+
+NEW_SESSION:
+{transcript}
+"#;
+
+/// Improve an existing skill when the session looks related (Hermes-style self-improve).
+pub async fn maybe_improve_skill(
+    provider: Arc<dyn LlmProvider>,
+    model: &str,
+    api_key: Option<String>,
+    skill_name: &str,
+    current_md: &str,
+    transcript: &str,
+    min_chars: usize,
+) -> Option<std::path::PathBuf> {
+    if transcript.chars().count() < min_chars {
+        return None;
+    }
+    if validate_skill_name(skill_name).is_err() {
+        return None;
+    }
+    let prompt = IMPROVE_PROMPT
+        .replace("{current}", &truncate(current_md, 4000))
+        .replace("{transcript}", &truncate(transcript, 4000));
+    let text = match complete_once(provider, model, api_key, &prompt).await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[learn] skill improve skipped: {e}");
+            return None;
+        }
+    };
+    let text = text.trim().to_string();
+    if text.is_empty() || text.starts_with("NOTHING") || !text.starts_with("---") {
+        return None;
+    }
+    let (name, description, body) = match parse_crystallized(&text) {
+        Some(x) => x,
+        None => {
+            eprintln!("[learn] skill improve: bad frontmatter");
+            return None;
+        }
+    };
+    // Keep original name if model drifted.
+    let name = if validate_skill_name(&name).is_ok() {
+        name
+    } else {
+        skill_name.to_string()
+    };
+    match write_skill(&default_skills_dir(), &name, &description, &body) {
+        Ok(p) => {
+            eprintln!("[learn] improved skill → {}", p.display());
+            Some(p)
+        }
+        Err(e) => {
+            eprintln!("[learn] skill improve write failed: {e}");
+            None
+        }
     }
 }
 
@@ -259,8 +410,11 @@ mod tests {
 
     #[test]
     fn durable_heuristic() {
-        assert!(looks_durable("Remember my dog is Pixel"));
+        assert!(looks_durable("Remember my dog is Pixel")); // "my dog"
+        assert!(looks_durable("My name is Ada"));
+        assert!(looks_durable("please remember that I prefer UTC"));
         assert!(!looks_durable("what time is it"));
+        assert!(!looks_durable("never mind about that"));
     }
 
     #[test]

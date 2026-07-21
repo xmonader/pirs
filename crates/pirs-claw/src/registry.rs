@@ -29,7 +29,8 @@ pub fn resolve_llm(
 ) -> anyhow::Result<(Arc<dyn LlmProvider>, Option<String>, bool)> {
     use crate::secrets::resolve_provider_and_key;
 
-    let (base, env_key) = resolve_provider_and_key();
+    // Model-aware env fallback: deepseek-* must not hit DashScope when both keys exist.
+    let (base, env_key) = resolve_provider_and_key(Some(model));
     let default: Arc<dyn LlmProvider> =
         Arc::new(OpenAiCompat::new(base).with_max_retries(max_retries));
 

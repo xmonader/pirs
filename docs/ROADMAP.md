@@ -1,9 +1,28 @@
 # pirs product roadmap
 
-**As of:** local `main` @ `7c8589d` (2026-07-21 session arc)  
-**Remote:** **not published** — `main` is **27 commits ahead of `origin/main`** (local only; not a release).
+**As of:** 2026-07-21 (depth-over-breadth pivot)  
+**Remote:** local `main` still **ahead of `origin/main`**; large Hermes-gap + CDP + speech arc may be **uncommitted** — treat publish as ops, not product expansion.
 
-This roadmap is for implementers and product direction after dual-product hardening, Hermes-class spines, core/claw rebalance, and Soulforge-style project tooling.
+**North star (current):** make what we already have **deep and polished**.  
+**Not now:** more messaging channels, Skills Hub, desktop, Modal/Daytona, OpenClaw zoo.
+
+---
+
+## 0. Strategy lock
+
+| Do | Do not |
+|----|--------|
+| Deepen **internals** of spines we already ship | Add Discord/Slack/WhatsApp product depth |
+| **Polish** UX, reliability, diagnostics, tests, docs | Checkbox-chase Hermes feature rows |
+| Make Telegram + harness + schedule + speech + browser **proud** | Expand channel matrix |
+| Fix seams between crates (agent loop, tools, gateway, registry) | New product surfaces |
+
+**Depth means:** correct under load, honest errors, recoverable state, tested edges, docs that match code.  
+**Polish means:** status/doctor, consistent CLI, fewer footguns, predictable tool results, no “spine that lies.”
+
+Channel stubs may remain named; **zero engineering budget** on them until strategy changes.
+
+See also: [PRODUCTS.md](PRODUCTS.md), [HERMES-GAPS.md](HERMES-GAPS.md), [pirs-claw.md](pirs-claw.md).
 
 ---
 
@@ -14,10 +33,10 @@ This roadmap is for implementers and product direction after dual-product harden
 | Product | Binary | Role |
 |---------|--------|------|
 | **Harness** | `pirs` | Multi-model coding harness: strategies, registry, `--weak`, TUI/RPC/ACP, packs |
-| **Agent** | `pirs-claw` | Always-on personal agent **ops**: chat, multi-key sessions, schedule, gateway, pair |
-| **Power tools** | `pirs-bench`, `pirs-orchestrator` | Honest red→green eval; multi-instance fleet — not marketed products |
+| **Agent** | `pirs-claw` | Always-on ops: chat, sessions, schedule, **Telegram** gateway, pair, speech |
+| **Power tools** | `pirs-bench`, `pirs-orchestrator` | Honest red→green; multi-instance fleet |
 
-### Ownership rule (source of truth)
+### Ownership rule
 
 ```
 Shared core (pirs-tools, pirs-skills, pirs-agent, pirs-ai, …)
@@ -27,102 +46,114 @@ pirs-claw only
   → gateway, pairing, schedule daemon/tick, multi-key messaging sessions, deliver targets
 ```
 
-**Rule of thumb:** if both binaries need it by default, and wrong behavior is a product bug or security hole → **Rust core**. If it is “how our team likes to work after the tools exist” → **Rhai pack** (harness first; claw only after extension load is wired).
-
-See also: [PRODUCTS.md](PRODUCTS.md), [HERMES-GAPS.md](HERMES-GAPS.md), [pirs-claw.md](pirs-claw.md).
+**Rule of thumb:** security / wrong-by-default → **Rust core**. Team taste after tools exist → **Rhai pack**.
 
 ---
 
-## 2. Now — already on local `main` (done)
+## 2. Already shipped (do not re-build — deepen)
 
-Do **not** re-implement these; polish or document only.
+### Harness
+- Registry backends + aliases, `--plan-model`, failover  
+- `--weak`, control pins, tool-pair compaction, verify-retry  
+- Strategies (plan-exec family), TUI / RPC / ACP, packs, MCP, graph  
 
-### Multi-model / weak harness
-- Registry backends + aliases, `--plan-model`, failover serve list  
-- `--weak` stack, control pins, tool-pair compaction, auto-verify from project test command  
-- Session stats, TUI mid-session model/strategy, traces/telemetry  
+### Shared core
+- agentskills progressive tools; learn/crystallize; soul  
+- life tools; `project` + monorepo packages + pre-commit gates  
+- browser navigate/screenshot + **CDP** (chromiumoxide); vision; opt-in computer-use  
+- sandbox local / docker / ssh  
 
-### Shared core (harness **and** claw)
-| Capability | Crate / surface |
-|------------|-----------------|
-| Progressive agentskills + `skill_list` / `skill_view` / `skill_manage` | `pirs-skills` |
-| Learn: memory nudge + skill crystallize | `pirs-skills::learn` |
-| Life tools `web_fetch` / `web_search` (+ optional `http_json`) | `pirs-tools::web` in `default_tools` |
-| Soulforge-style **project** profile + tool | `pirs-tools::project` |
-| Monorepo `project(action: "packages")` | pnpm/npm workspaces, Cargo members, go.work |
-| Pre-commit native checks on `git commit` via bash | config tools only; `PIRS_NO_PRECOMMIT=1` to skip |
-| Shell hints → prefer `project(action:…)` | bash success path |
-
-### Claw ops spines
+### Claw ops
 - Telegram long-poll + flock + pairing fail-closed  
-- Multi-channel `serve --channel all|a,b` + 60s in-process cron tick  
-- Schedule lifecycle: add/list/pause/resume/remove/run/tick; skill attach; human durations  
-- Multi-key sessions + meta; WhatsApp verify thin; Discord/Slack **stubs**  
+- STT/TTS multi-backend + attachments  
+- schedule: every / cron / NL / blueprints / tick under serve  
+- sessions search; `status`; speech setup  
 
-### Retired
-- `pirs-work` removed; coding defaults live on claw + shared tools  
-
-### Ops reality
-| Item | Status |
-|------|--------|
-| Local main tip | `7c8589d` |
-| vs `origin/main` | **ahead 27** — **unpushed** |
-| Branch `feat/weak-model-hardening` | Stale pointer; work is on `main` |
+### Explicit stubs / skips
+- Discord / Slack / WhatsApp / Signal: **names only**  
+- Modal / Daytona / Singularity: **no**  
+- Skills Hub / Honcho SaaS / desktop: **no**  
 
 ---
 
-## 3. Next — near-term themes (ordered)
+## 3. Next — depth & polish (ordered)
 
-Prioritize **publish + harden spines**, not new moats.
+No new channels. Work is **internals first**, then UX polish on the same surfaces.
 
-| Priority | Theme | Concrete outcomes | Surface | Rust vs Rhai |
-|----------|--------|-------------------|---------|--------------|
-| **P0** | **Publish local main** | Still **ops**: `git push` (or PR); optional delete `feat/weak-model-hardening` | ops | n/a |
-| **P0** | **Telegram production checklist live** | Still **ops**: needs real `TELEGRAM_BOT_TOKEN` + host; checklist/unit exist | claw | Rust already |
-| **P1** | **Registry single source** | ✅ `pirs_ai::registry_file` shared; claw + harness use it | core | **Rust** |
-| **P1** | **Claw loads extensions (optional)** | ✅ default on chat/code; `--no-extensions`; gateway opt-in `--gateway-extensions` | claw | host wire **Rust**; packs **Rhai** |
-| **P1** | **Policy packs aligned with core** | ✅ crystallizer notes + `project-discipline.rhai` + host APIs | rhai | **Rhai** on Rust tools |
-| **P2** | **One deep non-Telegram channel** | Only if a real user needs it: pick **one** of Slack or Discord and take to production depth (signatures, threads) — do not deepen both stubs | claw | **Rust** |
-| **P2** | **Cron quality without Hermes scope** | Job `last_run` visibility; optional attach model already exists; **no** cron expressions / no-agent scripts unless forced | claw | **Rust** |
-| **P2** | **Bench + weak loop** | Keep pirs-bench as truth; optional wire project profile into more auto-verify ecosystems | bench/core | **Rust** |
-| **P3** | **Host APIs for thinner packs** | e.g. `project_profile()` map, `crystallize_skill(text)` callable from Rhai | core + rhai | thin **Rust** surface |
+### P0 — Foundation (ops + truth)
 
-### Suggested sequencing (sprints)
+| Theme | Concrete outcomes |
+|-------|-------------------|
+| **Land the tree** | Commit Hermes-gap/CDP/speech arc; decide push vs keep local |
+| **Docs match code** | PRODUCTS / HERMES-GAPS / claw docs: Telegram-first; stubs labeled; CDP/speech accurate |
+| **Telegram checklist** | One host green end-to-end (pair, chat, VN, attach, schedule fire, flock) |
 
-1. **Ship** — push main; cut install/docs note that pirs-claw is first-class.  
-2. **Ops** — Telegram go-live checklist for one host.  
-3. **Core hygiene** — registry share; extension load on claw chat/code.  
-4. **Packs** — discipline/crystallize alignment (Rhai).  
-5. **Channel depth** — only under demand.
+### P1 — Internals depth (where “as deep as Hermes” is earned)
+
+| Theme | Why | Concrete depth |
+|-------|-----|----------------|
+| **Agent loop** | Shared brain for `pirs` + claw | ✅ Loop-level tool-result cap + `errorKind` + cancel incomplete; more: compaction edges, retry policy |
+| **Gateway Telegram** | Only channel we care about | ✅ Backoff, HTTP timeouts, offset-after-handle, no silent empty, send retry, lock status, **respawn loop**; more: media edges |
+| **Schedule engine** | Cron is a product we already claim | ✅ Atomic store, fail-closed corrupt, `last_error`/`last_status`/`fail_count`, mark_failed, cron lock, status next_due, **miss recovery** |
+| **Speech path** | Live but sharp edges | ✅ Mock never blocks; short failover timeout; mock TTS skip; **live health probe** in status |
+| **Browser CDP session** | Pure-Rust spine | ✅ Alive reconnect, Drop kill, profile cleanup, goto wait, status alive; more: multi-page if needed |
+| **Memory / learn / soul** | Skeleton → organism (local) | ✅ Soul inject in harness; single extract→memory+soul; merge dedupe; gateway crystallize; durable heuristic polish |
+| **Harness weak/verify** | Our moat | ✅ Weak compose floor + auto-verify notes/tests; project-profile verify path covered |
+| **Compaction / tool retry** | Shared loop | ✅ Estimate-token trigger; shrink oversized tool results pre-compact; one transient tool retry |
+
+### P2 — Polish (same features, better product)
+
+| Theme | Concrete outcomes |
+|-------|-------------------|
+| **`pirs-claw status` / doctor** | One command: keys present (not printed), pairing, flock, schedule next fire, speech backends, CDP env, model registry |
+| **CLI consistency** | Flags, exit codes, help text, JSON vs human where useful |
+| **Tool output UX** | Truncation, paths, actionable errors (“set PIRS_BROWSER_CDP_URL…”) |
+| **Tests on spines** | Gateway unit/integration; schedule next_fire; CDP unit (no Chrome); speech failover; path/SSRF |
+| **TUI / REPL feel** | Mid-session model/strategy already exists — reduce friction, clear errors |
+
+### P3 — Thin enablers (only if they serve depth)
+
+| Theme | Notes |
+|-------|-------|
+| Rhai host APIs for packs | Only to avoid reimplementing core in packs |
+| Observability | Traces/session stats already started — make them default-useful |
+| Security review pass | Pairing, flock, SSRF, path containment, gateway-code opt-in |
+
+### Explicitly deferred (do not start)
+
+- Discord / Slack / any second channel productization  
+- Skills Hub / marketplace  
+- Modal / Daytona / Singularity  
+- Desktop app  
+- Hermes CUA permission product / multi-tab browser product  
+- Full Honcho dialectic  
 
 ---
 
-## 4. Later — intentional non-goals (do not roadmap as P0)
+## 4. Suggested sequencing
 
-These are **Hermes / competitor moats or product classes we skip** unless strategy changes:
+```
+1. Land tree + docs truth
+2. Telegram reliability internals (gateway)
+3. Agent-loop + tool-result robustness (shared)
+4. Schedule durability + visibility
+5. Speech failover polish
+6. CDP session reliability
+7. status/doctor + tests + CLI polish
+8. Learn/soul/session-search quality
+```
 
-1. **Skills Hub / marketplace scanners / skills.sh ecosystem**  
-2. **Honcho dialectic user modeling / full SOUL.md product**  
-3. **Modal / Daytona / Singularity** exec backends  
-4. **Full OpenClaw 20+ messaging matrix** (Matrix, Teams, Feishu, SMS, …)  
-5. **Desktop Work suite** (Cowork / QoderWork class)  
-6. **Trajectory RL / Atropos-style research export** as a product  
-7. **Full browser CDP / computer-use suite** (beyond web_fetch/search)  
-8. **Cron expressions, no-agent script jobs, context_from chains** (Hermes cron product depth)
-
-Stubs may remain for Discord/Slack/Signal names without production depth.
+Harness weak/verify polish can interleave with 3–7 — it is core moat, not a channel.
 
 ---
 
-## 5. Rhai vs Rust for next work
+## 5. Rhai vs Rust (unchanged)
 
 | Work | Prefer |
 |------|--------|
-| Registry unify, project tool, SSRF, pre-commit gate, gateway, schedule, skill_view install/validate | **Rust** |
-| “Prefer project over bash”, crystallize after N edits, team extra pre-commit, persona/tone, optional web re-export | **Rhai** |
-| Gateway transport, flock, pairing fail-closed | **Rust only** (never pack-dependent security) |
-
-**Do not** reimplement `detect_profile`, gateway, or SSRF primarily in Rhai — packs are opt-in and last-wins.
+| Gateway, schedule engine, agent loop, SSRF, pairing, CDP session | **Rust** |
+| Persona, crystallize *policy*, prefer-project hints | **Rhai** |
+| Security-sensitive path | **Rust only** |
 
 ---
 
@@ -130,27 +161,25 @@ Stubs may remain for Discord/Slack/Signal names without production depth.
 
 | Priority | Outcome | Owner |
 |----------|---------|--------|
-| P0 | Origin matches local main (push) | ops |
-| P0 | One Telegram production host green | claw |
-| P1 | Shared registry load for claw | core |
-| P1 | Optional extension load on claw chat/code | claw + rhai |
-| P1 | Packs aligned with pirs-skills / project | rhai |
-| P2 | One messaging channel to production depth (demand-driven) | claw |
-| P2 | Cron visibility polish (not Hermes full cron) | claw |
-| P3 | Host APIs for thinner packs | core |
-| — | Skills Hub, Honcho, Modal/Daytona, 20+ channels, desktop | **non-goal** |
+| P0 | Tree landed; docs honest; Telegram host green | ops + claw |
+| P1 | Gateway + agent loop + schedule + speech + CDP **internals** deep | core + claw |
+| P1 | Weak/verify/bench regression quality | harness |
+| P2 | status/doctor, CLI, tool errors, spine tests | both |
+| P2 | Local learn/soul/session-search quality | core + claw |
+| — | More channels, hub, desktop, cloud sandboxes | **non-goal** |
 
 ---
 
-## 7. Success metrics (lightweight)
+## 7. Success metrics
 
 | Signal | Target |
 |--------|--------|
-| Publish | `origin/main` includes project/skills/claw spines |
-| Harness | `pirs` TUI has `project` + `web_fetch` + skill_view without claw |
-| Claw | `serve --channel telegram` + pair + schedule tick without fake replies |
-| Security | Empty allowlist fails; pre-commit blocks dirty lint; SSRF default on |
-| Honesty | Docs mark Discord/Slack stub; HERMES-GAPS spine/stub/skip accurate |
+| Depth | Telegram path survives disconnect, empty model, bad audio, concurrent flock without lying |
+| Honesty | `status` and docs never claim Discord/Slack production |
+| Harness | Weak + verify + plan-model loop is boringly reliable |
+| Internals | Schedule last_run/error visible; CDP connect/close clean; speech failover order tested |
+| Polish | New user: pair → chat → VN → schedule in one sitting without folklore |
+| Non-goal | Zero new channel code merged |
 
 ---
 
@@ -158,12 +187,12 @@ Stubs may remain for Discord/Slack/Signal names without production depth.
 
 | Doc | Use |
 |-----|-----|
-| [PRODUCTS.md](PRODUCTS.md) | Portfolio positioning |
-| [HERMES-GAPS.md](HERMES-GAPS.md) | Capability matrix vs Hermes |
-| [pirs-claw.md](pirs-claw.md) | Claw CLI + gateway + project notes |
+| [PRODUCTS.md](PRODUCTS.md) | Portfolio + channel policy |
+| [HERMES-GAPS.md](HERMES-GAPS.md) | Capability matrix (coverage, not parity claims) |
+| [pirs-claw.md](pirs-claw.md) | Claw CLI + gateway |
 | [telegram-checklist.md](telegram-checklist.md) | Production Telegram |
-| This roadmap | What to build next (and what not to) |
+| This roadmap | **What to deepen next** (and what not to touch) |
 
 ---
 
-*Implementation of Next items is out of scope for this document.*
+*Channel expansion is out of scope until this depth agenda is boring.*

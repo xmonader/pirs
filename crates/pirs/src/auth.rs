@@ -42,11 +42,14 @@ pub fn set(provider: &str, key: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// flag > stored auth.json > environment variable
+/// flag > stored auth.json > environment variable.
+/// Empty strings are treated as missing so a blank env var cannot block
+/// registry / well-known key fallbacks.
 pub fn resolve(flag: Option<&str>, provider: &str, env_var: &str) -> Option<String> {
     flag.map(|s| s.to_string())
-        .or_else(|| get(provider))
-        .or_else(|| std::env::var(env_var).ok())
+        .filter(|s| !s.is_empty())
+        .or_else(|| get(provider).filter(|s| !s.is_empty()))
+        .or_else(|| std::env::var(env_var).ok().filter(|s| !s.is_empty()))
 }
 
 pub fn login(provider: &str) -> anyhow::Result<()> {

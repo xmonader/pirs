@@ -6,7 +6,10 @@
 //! - exec backends: local / docker / ssh
 //! - voice transcription hook (external CLI)
 
+pub mod attach;
 pub mod channel;
+pub mod cron_blueprints;
+pub mod cron_util;
 pub mod duration_parse;
 pub mod exec_env;
 pub mod gateway;
@@ -19,8 +22,10 @@ pub mod presets;
 pub mod registry;
 pub mod secrets;
 pub mod session;
+pub mod session_search;
 pub mod skill_tools;
 pub mod skills;
+pub mod speech_setup;
 pub mod voice;
 
 use std::fs;
@@ -102,7 +107,12 @@ pub struct ScheduleEntry {
     pub name: Option<String>,
     pub prompt: String,
     pub next_fire: u64,
+    /// Interval recurrence (seconds). Ignored when `cron` is set. `0` = one-shot.
     pub every_secs: u64,
+    /// Optional 5- or 6-field cron expression (Hermes-class schedules).
+    /// When set, `every_secs` is ignored for next-fire calculation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cron: Option<String>,
     pub enabled: bool,
     #[serde(default)]
     pub deliver: DeliverTarget,
@@ -111,8 +121,31 @@ pub struct ScheduleEntry {
     pub skills: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Unix secs of last fire *attempt* (ok or error).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_run: Option<u64>,
+    /// `"ok"` | `"error"` after last attempt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_status: Option<String>,
+    /// Truncated error from last failed attempt (cleared on success).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    /// Consecutive/total fail count (best-effort observability).
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub fail_count: u32,
+}
+
+fn is_zero_u32(n: &u32) -> bool {
+    *n == 0
+}
+
+fn truncate_err(s: &str, max_chars: usize) -> String {
+    let n = s.chars().count();
+    if n <= max_chars {
+        s.to_string()
+    } else {
+        s.chars().take(max_chars).collect::<String>() + "…"
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -144,11 +177,34 @@ impl ScheduleStore {
 
     fn read(&self) -> anyhow::Result<ScheduleFile> {
         let text = fs::read_to_string(&self.path)?;
-        Ok(serde_json::from_str(&text).unwrap_or_default())
+        if text.trim().is_empty() {
+            return Ok(ScheduleFile::default());
+        }
+        match serde_json::from_str(&text) {
+            Ok(f) => Ok(f),
+            Err(e) => {
+                // Never wipe jobs on parse failure — back up corrupt file and fail closed.
+                let bak = self.path.with_extension("json.corrupt");
+                let _ = fs::copy(&self.path, &bak);
+                anyhow::bail!(
+                    "schedule store corrupt at {}: {e} (backup written to {})",
+                    self.path.display(),
+                    bak.display()
+                );
+            }
+        }
     }
 
     fn write(&self, f: &ScheduleFile) -> anyhow::Result<()> {
-        fs::write(&self.path, serde_json::to_string_pretty(f)?)?;
+        // Atomic replace: write temp + fsync + rename so a crash mid-write
+        // cannot leave a truncated schedule.json.
+        let tmp = self.path.with_extension("json.tmp");
+        let data = serde_json::to_string_pretty(f)?;
+        fs::write(&tmp, &data)?;
+        if let Ok(file) = fs::OpenOptions::new().write(true).open(&tmp) {
+            let _ = file.sync_all();
+        }
+        fs::rename(&tmp, &self.path)?;
         Ok(())
     }
 
@@ -194,23 +250,63 @@ impl ScheduleStore {
         skills: Vec<String>,
         model: Option<String>,
     ) -> anyhow::Result<ScheduleEntry> {
+        self.add_full_cron(
+            prompt,
+            every_secs,
+            first_fire_in_secs,
+            None,
+            deliver,
+            name,
+            skills,
+            model,
+        )
+    }
+
+    /// Add a job with optional cron expression (takes precedence over every_secs).
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_full_cron(
+        &self,
+        prompt: &str,
+        every_secs: u64,
+        first_fire_in_secs: u64,
+        cron: Option<String>,
+        deliver: DeliverTarget,
+        name: Option<String>,
+        skills: Vec<String>,
+        model: Option<String>,
+    ) -> anyhow::Result<ScheduleEntry> {
         let mut f = self.read()?;
         let now = now_secs();
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.subsec_nanos())
             .unwrap_or(0);
+        let cron = match cron {
+            Some(c) => Some(cron_util::normalize_cron_expr(&c)?),
+            None => None,
+        };
+        let next_fire = if let Some(ref c) = cron {
+            // First fire: next match after now (ignore first_fire_in unless >0 delay)
+            let after = now.saturating_add(first_fire_in_secs);
+            cron_util::next_fire_after(c, after)?
+        } else {
+            now.saturating_add(first_fire_in_secs)
+        };
         let entry = ScheduleEntry {
             id: format!("job-{}-{}-{}", now, nanos, f.jobs.len()),
             name,
             prompt: prompt.into(),
-            next_fire: now.saturating_add(first_fire_in_secs),
-            every_secs,
+            next_fire,
+            every_secs: if cron.is_some() { 0 } else { every_secs },
+            cron,
             enabled: true,
             deliver,
             skills,
             model,
             last_run: None,
+            last_status: None,
+            last_error: None,
+            fail_count: 0,
         };
         f.jobs.push(entry.clone());
         self.write(&f)?;
@@ -235,7 +331,7 @@ impl ScheduleStore {
                     // Resume: schedule next fire from now if past due.
                     let now = now_secs();
                     if j.next_fire < now {
-                        j.next_fire = now.saturating_add(j.every_secs.max(1));
+                        j.next_fire = next_fire_for_job(j, now).unwrap_or(now + 60);
                     }
                 }
                 found = true;
@@ -274,7 +370,11 @@ impl ScheduleStore {
         for j in &mut f.jobs {
             if j.id == id {
                 j.last_run = Some(now);
-                if j.every_secs == 0 {
+                j.last_status = Some("ok".into());
+                j.last_error = None;
+                if j.cron.is_some() {
+                    j.next_fire = next_fire_for_job(j, now).unwrap_or(now + 60);
+                } else if j.every_secs == 0 {
                     j.enabled = false;
                 } else {
                     j.next_fire = now.saturating_add(j.every_secs);
@@ -284,6 +384,86 @@ impl ScheduleStore {
         self.write(&f)?;
         Ok(())
     }
+
+    /// Record a failed fire attempt without advancing `next_fire` (stays due for retry).
+    pub fn mark_failed(&self, id: &str, now: u64, err: &str) -> anyhow::Result<()> {
+        let mut f = self.read()?;
+        for j in &mut f.jobs {
+            if j.id == id {
+                j.last_run = Some(now);
+                j.last_status = Some("error".into());
+                j.last_error = Some(truncate_err(err, 500));
+                j.fail_count = j.fail_count.saturating_add(1);
+            }
+        }
+        self.write(&f)?;
+        Ok(())
+    }
+
+    /// Soonest enabled job by `next_fire`, if any.
+    pub fn next_due(&self) -> anyhow::Result<Option<ScheduleEntry>> {
+        let mut jobs: Vec<_> = self
+            .read()?
+            .jobs
+            .into_iter()
+            .filter(|j| j.enabled)
+            .collect();
+        jobs.sort_by_key(|j| j.next_fire);
+        Ok(jobs.into_iter().next())
+    }
+
+    /// After long downtime, skip overdue recurring jobs to the next future fire
+    /// instead of thundering-herd firing every missed slot. One-shots stay due.
+    ///
+    /// Policy: if `now - next_fire` exceeds `max(2 * every_secs, 3600)` (or 2h for
+    /// cron), advance `next_fire` once and log via returned count.
+    pub fn recover_missed(&self, now: u64) -> anyhow::Result<u32> {
+        let mut f = self.read()?;
+        let mut n = 0u32;
+        for j in &mut f.jobs {
+            if !j.enabled || j.next_fire >= now {
+                continue;
+            }
+            let overdue = now.saturating_sub(j.next_fire);
+            let threshold = if j.cron.is_some() {
+                2 * 3600 // 2 hours for cron
+            } else if j.every_secs > 0 {
+                (j.every_secs.saturating_mul(2)).max(3600)
+            } else {
+                // one-shot: never skip
+                continue;
+            };
+            if overdue <= threshold {
+                continue;
+            }
+            match next_fire_for_job(j, now) {
+                Ok(next) => {
+                    j.next_fire = next;
+                    j.last_error = Some(truncate_err(
+                        &format!("skipped overdue fire ({overdue}s late); advanced next_fire"),
+                        500,
+                    ));
+                    n += 1;
+                }
+                Err(_) => {}
+            }
+        }
+        if n > 0 {
+            self.write(&f)?;
+        }
+        Ok(n)
+    }
+}
+
+/// Compute next fire for a job after `after` (unix secs).
+fn next_fire_for_job(j: &ScheduleEntry, after: u64) -> anyhow::Result<u64> {
+    if let Some(ref c) = j.cron {
+        return cron_util::next_fire_after(c, after);
+    }
+    if j.every_secs == 0 {
+        anyhow::bail!("one-shot job has no next fire");
+    }
+    Ok(after.saturating_add(j.every_secs.max(1)))
 }
 
 /// Parse `serve --channel` value: `all`, single name, or comma-separated list.
@@ -338,11 +518,46 @@ fn now_secs() -> u64 {
 }
 
 pub fn claw_system_prompt() -> String {
-    "You are pirs-claw, a personal assistant and coding agent.\n\
-     Be helpful, concise, and honest. Use tools carefully for coding tasks.\n\
-     You support chat, schedules, multi-channel gateway (telegram/discord/slack/whatsapp/signal), \
-     skills under ~/.pirs/skills, and FTS memory."
-        .into()
+    let mut s = String::from(
+        "You are pirs-claw, a personal assistant and coding agent.\n\
+         Be helpful, concise, and honest. Use tools carefully for coding tasks.\n\
+         You support chat, schedules, multi-channel gateway (telegram/discord/slack/whatsapp/signal), \
+         skills under ~/.pirs/skills, and FTS memory.\n\
+         When the user asks you to create, send, or share a file, use the attach_file tool so they \
+         receive a real downloadable attachment — do not only paste the contents in chat.\n\
+         Browser: browser_navigate / browser_screenshot. Vision: vision_describe on image paths. \
+         Computer use (only if enabled): computer_screenshot / computer_click / computer_type.\n\
+         Use session_search to recall past conversations across channels.\n",
+    );
+    s.push_str(&pirs_skills::soul_prompt_section());
+    s
+}
+
+/// Gateway handler result: text reply plus optional file attachments.
+#[derive(Debug, Clone, Default)]
+pub struct GatewayReply {
+    pub text: String,
+    pub attachments: Vec<std::path::PathBuf>,
+}
+
+impl GatewayReply {
+    pub fn text(s: impl Into<String>) -> Self {
+        Self {
+            text: s.into(),
+            attachments: Vec::new(),
+        }
+    }
+
+    pub fn with_attachments(mut self, paths: Vec<std::path::PathBuf>) -> Self {
+        self.attachments = paths;
+        self
+    }
+}
+
+impl From<String> for GatewayReply {
+    fn from(text: String) -> Self {
+        Self::text(text)
+    }
 }
 
 pub fn should_mark_schedule_fired(run: bool, fire_succeeded: bool) -> bool {
@@ -374,6 +589,35 @@ pub fn extract_assistant_reply(msgs: &[pirs_ai::Message]) -> Option<String> {
     })
 }
 
+/// Diagnose why [`extract_assistant_reply`] returned `None` (for error messages).
+pub fn empty_assistant_diag(msgs: &[pirs_ai::Message]) -> String {
+    let n = msgs.len();
+    let last = msgs.iter().rev().find_map(|m| match m {
+        pirs_ai::Message::Assistant(a) => Some(a),
+        _ => None,
+    });
+    match last {
+        None => format!("no assistant message in turn ({n} message(s))"),
+        Some(a) => {
+            let text_len = a.text().len();
+            let think_len: usize = a
+                .content
+                .iter()
+                .filter_map(|b| match b {
+                    pirs_ai::ContentBlock::Thinking { thinking, .. } => Some(thinking.len()),
+                    _ => None,
+                })
+                .sum();
+            let tools = a.tool_calls().len();
+            format!(
+                "last assistant: stop={:?} text_len={text_len} thinking_len={think_len} tool_calls={tools} err={:?}",
+                a.stop_reason,
+                a.error_message.as_deref()
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,6 +641,74 @@ mod tests {
         assert_eq!(store.due(now).unwrap().len(), 1);
         store.mark_fired(&job.id, now).unwrap();
         assert!(store.due(now + 10).unwrap().is_empty());
+        let listed = store.list().unwrap();
+        assert_eq!(listed[0].last_status.as_deref(), Some("ok"));
+        assert!(listed[0].last_error.is_none());
+    }
+
+    #[test]
+    fn schedule_mark_failed_keeps_due_and_records_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScheduleStore::open(dir.path().join("schedule.json")).unwrap();
+        let job = store.add("retry me", 0, 0).unwrap();
+        let now = now_secs() + 1;
+        store.mark_failed(&job.id, now, "boom").unwrap();
+        let due = store.due(now).unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].last_status.as_deref(), Some("error"));
+        assert_eq!(due[0].last_error.as_deref(), Some("boom"));
+        assert_eq!(due[0].fail_count, 1);
+    }
+
+    #[test]
+    fn schedule_corrupt_read_fails_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("schedule.json");
+        fs::write(&path, "{not json").unwrap();
+        let store = ScheduleStore::open(&path).unwrap();
+        let err = store.list().unwrap_err().to_string();
+        assert!(err.contains("corrupt"), "{err}");
+        assert!(path.with_extension("json.corrupt").exists());
+    }
+
+    #[test]
+    fn schedule_atomic_write_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScheduleStore::open(dir.path().join("schedule.json")).unwrap();
+        store.add("a", 60, 0).unwrap();
+        assert_eq!(store.list().unwrap().len(), 1);
+        assert!(!dir.path().join("schedule.json.tmp").exists());
+    }
+
+    #[test]
+    fn schedule_recover_missed_skips_old_interval() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScheduleStore::open(dir.path().join("schedule.json")).unwrap();
+        let job = store.add("pulse", 60, 0).unwrap();
+        // Force next_fire deep in the past.
+        {
+            let mut f = store.read().unwrap();
+            f.jobs[0].next_fire = 1;
+            store.write(&f).unwrap();
+        }
+        let now = now_secs();
+        let n = store.recover_missed(now).unwrap();
+        assert_eq!(n, 1);
+        let j = store.find(&job.id).unwrap().unwrap();
+        assert!(j.next_fire > now - 10, "next_fire should be near/future, got {}", j.next_fire);
+        // One-shot overdue should not be skipped.
+        let oneshot = store.add("once", 0, 0).unwrap();
+        {
+            let mut f = store.read().unwrap();
+            for e in &mut f.jobs {
+                if e.id == oneshot.id {
+                    e.next_fire = 1;
+                }
+            }
+            store.write(&f).unwrap();
+        }
+        assert_eq!(store.recover_missed(now).unwrap(), 0);
+        assert!(store.due(now).unwrap().iter().any(|j| j.id == oneshot.id));
     }
 
     #[test]
@@ -444,6 +756,22 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(extract_assistant_reply(&[ok]).as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn extract_skips_thinking_only_assistant() {
+        let only_think = pirs_ai::Message::Assistant(pirs_ai::AssistantMessage {
+            content: vec![pirs_ai::ContentBlock::Thinking {
+                thinking: "hmm".into(),
+                thinking_signature: None,
+                redacted: false,
+            }],
+            ..Default::default()
+        });
+        assert!(extract_assistant_reply(&[only_think.clone()]).is_none());
+        let diag = empty_assistant_diag(&[only_think]);
+        assert!(diag.contains("thinking_len=3"), "{diag}");
+        assert!(diag.contains("text_len=0"), "{diag}");
     }
 
     #[test]

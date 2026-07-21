@@ -7,11 +7,17 @@
 
 pub mod learn;
 pub mod skill;
+pub mod soul;
 pub mod tools;
 
 pub use learn::{
     learn_enabled_cli, learn_enabled_gateway, learn_enabled_interactive, maybe_crystallize_skill,
-    maybe_memory_nudge, session_transcript, LEARN_DISABLE_ENV, LEARN_GATEWAY_ENV,
+    maybe_improve_skill, maybe_memory_nudge, maybe_update_soul, session_transcript,
+    LEARN_DISABLE_ENV, LEARN_GATEWAY_ENV,
+};
+pub use soul::{
+    curator_report, default_soul_path, default_soul_template, merge_soul_updates, read_soul,
+    soul_prompt_section, write_soul,
 };
 pub use skill::{
     default_skills_dir, discover_skills, find_skill, install_skill, install_skill_url, load_skills,

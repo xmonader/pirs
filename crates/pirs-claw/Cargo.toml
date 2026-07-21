@@ -9,6 +9,11 @@ description = "Terminal + gateway agent (Hermes-class gaps; no Modal/Daytona/Sin
 name = "pirs-claw"
 path = "src/main.rs"
 
+[features]
+default = ["cdp"]
+# Pure-Rust CDP (chromiumoxide) — no Node/Playwright runtime.
+cdp = ["pirs-tools/cdp"]
+
 [dependencies]
 pirs-ai = { workspace = true }
 pirs-agent = { workspace = true }
@@ -25,10 +30,13 @@ clap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 futures = { workspace = true }
-reqwest = { workspace = true, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { workspace = true, features = ["blocking", "json", "rustls-tls", "multipart"] }
 toml = { workspace = true }
+schemars = { workspace = true }
+cron = { workspace = true }
 libc = "0.2"
 directories = "6"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [dev-dependencies]
 tempfile = "3"

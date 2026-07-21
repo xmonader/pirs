@@ -96,36 +96,49 @@ fn ip_is_private(ip: &IpAddr) -> bool {
     }
 }
 
+/// Case-insensitive ASCII prefix match at byte offset (UTF-8 safe — no str slice).
+fn bytes_prefix_eq_ignore_ascii_case(hay: &[u8], at: usize, needle: &[u8]) -> bool {
+    let Some(slice) = hay.get(at..at + needle.len()) else {
+        return false;
+    };
+    slice.eq_ignore_ascii_case(needle)
+}
+
 /// Strip tags lightly and collapse whitespace for model context.
+///
+/// Must not panic on non-ASCII (emoji, CJK, …): earlier code sliced a lowercased
+/// `str` at arbitrary byte offsets and crashed mid-codepoint (e.g. inside '💬').
 pub fn html_to_text(html: &str) -> String {
     let mut out = String::with_capacity(html.len() / 2);
     let mut in_tag = false;
     let mut in_script = false;
-    let lower = html.to_ascii_lowercase();
     let bytes = html.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        if !in_tag && lower[i..].starts_with("<script") {
+        if !in_tag && bytes_prefix_eq_ignore_ascii_case(bytes, i, b"<script") {
             in_script = true;
         }
-        if in_script && lower[i..].starts_with("</script") {
+        if in_script && bytes_prefix_eq_ignore_ascii_case(bytes, i, b"</script") {
             in_script = false;
         }
-        let c = bytes[i] as char;
-        if c == '<' {
+        let b = bytes[i];
+        if b == b'<' {
             in_tag = true;
             i += 1;
             continue;
         }
-        if c == '>' {
+        if b == b'>' {
             in_tag = false;
             i += 1;
             continue;
         }
+        // Advance by full UTF-8 char so multi-byte glyphs stay intact.
+        let ch = html[i..].chars().next().unwrap_or('\u{FFFD}');
+        let n = ch.len_utf8();
         if !in_tag && !in_script {
-            out.push(c);
+            out.push(ch);
         }
-        i += 1;
+        i += n;
     }
     collapse_ws(&out)
 }
@@ -352,6 +365,19 @@ mod tests {
         assert!(t.contains("Hello"));
         assert!(t.contains("world"));
         assert!(!t.contains("evil"));
+    }
+
+    #[test]
+    fn html_strip_utf8_emoji_no_panic() {
+        // Repro: byte-index slice mid-codepoint inside 💬 panicked the gateway.
+        let html = format!(
+            "<html><body><p>hi 💬 there</p><script>x</script>{}</body></html>",
+            "💬".repeat(100)
+        );
+        let t = html_to_text(&html);
+        assert!(t.contains('💬'), "{t}");
+        assert!(t.contains("hi"), "{t}");
+        assert!(!t.contains('x'));
     }
 
     #[test]

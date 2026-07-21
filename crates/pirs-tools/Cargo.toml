@@ -25,6 +25,13 @@ similar = "2"
 globset = "0.4"
 tempfile = "3"
 reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+futures = { workspace = true }
+# Pure-Rust Chrome DevTools Protocol client (no Node/Playwright runtime).
+chromiumoxide = { version = "0.9", optional = true }
+
+[features]
+default = ["cdp"]
+cdp = ["dep:chromiumoxide"]
 
 [dev-dependencies]
 tempfile = "3"

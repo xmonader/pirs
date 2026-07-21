@@ -7,7 +7,7 @@ Two products over one Rust agent core. Everything else is a power tool or pack.
 | Product | Binary | Role | Peers |
 |---------|--------|------|--------|
 | **Harness** | `pirs` | Multi-model strategies, registry, `--weak`, TUI/RPC/ACP | **pi**, qwen-code core |
-| **Agent** | `pirs-claw` | Repo work + chat + schedules + **gateway** (telegram/discord/slack/whatsapp/signal); exec local/docker/ssh | Claude Code / Codex CLI; Hermes / OpenClaw (thinner on learning/desktop) |
+| **Agent** | `pirs-claw` | Repo work + chat + schedules + **Telegram-first gateway**; exec local/docker/ssh | Claude Code / Codex CLI; Hermes-class ops (depth over channel count) |
 
 ### Power tools (not separate products)
 
@@ -30,12 +30,14 @@ Product roadmap (now / next / later): [ROADMAP.md](ROADMAP.md).
 
 ## Channel policy
 
-| Supported | Never |
-|-----------|--------|
-| CLI + telegram, discord, slack, whatsapp, signal | Full OpenClaw 20+ matrix |
-| Pairing allowlist (fail closed) | Open bots without pairing |
-| Coding tools on gateway **opt-in** (`--gateway-code`) | Default RCE from chat |
-| Telegram single-instance flock | Concurrent long-poll on same bot |
+**Focus now:** polish + deep internals on **CLI + Telegram**. No new channel product work.
+
+| Supported | Stubs only (no budget) | Never |
+|-----------|------------------------|--------|
+| CLI + **Telegram** | discord, slack, whatsapp, signal names | Full OpenClaw 20+ matrix |
+| Pairing allowlist (fail closed) | — | Open bots without pairing |
+| Coding tools on gateway **opt-in** (`--gateway-code`) | — | Default RCE from chat |
+| Telegram single-instance flock | — | Concurrent long-poll on same bot |
 
 ```bash
 pirs-claw pair add "$CHAT_ID"
@@ -71,10 +73,15 @@ pirs-claw skills add ./my-skill/
 pirs-claw skills install https://example.com/SKILL.md
 pirs-claw sessions
 
-# Agent — schedule (durations; pause/resume; skill attach)
+# Agent — schedule (durations and/or cron expressions; pause/resume; skill attach)
 pirs-claw schedule add --in 1h --every 1d --name pulse --skill my-skill "morning"
+pirs-claw schedule add --cron "0 9 * * 1-5" --name standup "weekday brief"
 pirs-claw schedule pause pulse
 pirs-claw schedule tick --run
+
+# Sessions search (Hermes-class past-chat recall)
+pirs-claw sessions search "weather"
+pirs-claw status
 
 # Agent — gateway (multi-channel + in-process cron every 60s)
 pirs-claw pair add "$CHAT_ID"

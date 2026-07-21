@@ -185,4 +185,25 @@ mod tests {
         assert_eq!(out.profile.as_deref(), Some("weak"));
         assert!(out.strategy.is_none());
     }
+
+    #[test]
+    fn project_profile_style_verify_command_is_honored() {
+        // Mirrors detect_verify_from_profile → ("rust", "cargo test --workspace").
+        let out = apply_weak_preset(
+            base(),
+            Some(("rust".into(), "cargo test --workspace".into())),
+        );
+        assert_eq!(out.verify.as_deref(), Some("cargo test --workspace"));
+        assert!(out.auto_verify_note.unwrap().contains("cargo test --workspace"));
+        assert!(out.max_retries >= 3);
+        assert!(out.sequential);
+        assert!(out.tool_diet);
+    }
+
+    #[test]
+    fn max_retries_never_drops_below_floor() {
+        let mut inp = base();
+        inp.max_retries = 0;
+        assert_eq!(apply_weak_preset(inp, None).max_retries, 3);
+    }
 }

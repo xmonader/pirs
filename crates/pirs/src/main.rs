@@ -698,6 +698,13 @@ async fn main() -> anyhow::Result<()> {
     } else {
         "OPENAI_API_KEY"
     };
+    // Model-aware OpenAI-compat env fallback (DASHSCOPE/DEEPSEEK/OPENROUTER) so a
+    // missing registry or empty OPENAI_API_KEY still works with secrets.env keys.
+    let (compat_base, compat_key) = if cli.provider == "anthropic" {
+        (None, None)
+    } else {
+        pirs_ai::resolve_openai_compat(Some(&cli.model))
+    };
     let api_key = auth::resolve(cli.api_key.as_deref(), &cli.provider, env_var)
         .or_else(|| registry::api_key_for_alias(&model_registry, &cli.model))
         .or_else(|| {
@@ -706,20 +713,31 @@ async fn main() -> anyhow::Result<()> {
                 .and_then(|m| registry::api_key_for_alias(&model_registry, m))
         })
         .or_else(|| registry::first_available_backend_key(&model_registry))
+        .or(compat_key)
         .with_context(|| {
             let mut hint = format!(
                 "no API key: pass --api-key, run `pirs login`, set {env_var}"
             );
-            let envs = registry::expected_key_envs(&model_registry);
-            if !envs.is_empty() {
-                hint.push_str(&format!(
-                    ", or set a backend key from ~/.pirs/config.toml ({})",
-                    envs.join(" / ")
-                ));
+            let mut envs = registry::expected_key_envs(&model_registry);
+            for k in pirs_ai::well_known_key_envs() {
+                if !envs.iter().any(|e| e == k) {
+                    envs.push((*k).to_string());
+                }
             }
-            hint.push_str(" — also ensure ~/.pirs/secrets.env is loaded");
+            if !envs.is_empty() {
+                hint.push_str(&format!(" (also tried {})", envs.join(" / ")));
+            }
+            hint.push_str(" — ensure ~/.pirs/secrets.env is loaded (HOME must point at your user home)");
             hint
         })?;
+
+    // When the user did not pin --base-url / config base_url, use the endpoint
+    // that matches the env key we resolved (deepseek vs dashscope vs …).
+    if cli.base_url.is_none() {
+        if let Some(b) = compat_base {
+            cli.base_url = Some(b);
+        }
+    }
 
     if cli.mode == "rpc" {
         return rpc_mode::run(rpc_mode::RpcOptions {

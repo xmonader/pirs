@@ -37,6 +37,10 @@ pub fn scratch_dir() -> &'static Path {
 }
 
 pub mod bash;
+pub mod browser;
+#[cfg(feature = "cdp")]
+pub mod browser_cdp;
+pub mod computer;
 pub mod edit;
 pub mod edit_block;
 pub mod filelock;
@@ -51,6 +55,7 @@ pub mod recall;
 pub mod run_tests;
 pub mod sandbox;
 pub mod truncate;
+pub mod vision;
 pub mod web;
 pub mod write;
 
@@ -67,6 +72,11 @@ pub use project::{
     ProjectProfile, ProjectTool,
 };
 pub use run_tests::RunTestsTool;
+pub use browser::browser_tools;
+#[cfg(feature = "cdp")]
+pub use browser_cdp::cdp_tools;
+pub use computer::computer_tools;
+pub use vision::vision_tools;
 pub use web::life_tools;
 pub use write::WriteTool;
 
@@ -81,11 +91,17 @@ pub fn default_tools(cwd: PathBuf) -> Vec<Arc<dyn AgentTool>> {
         Arc::new(FindTool::new(cwd.clone())),
         Arc::new(LsTool::new(cwd.clone())),
         Arc::new(ProjectTool::new(cwd.clone())),
-        Arc::new(RunTestsTool::new(cwd)),
+        Arc::new(RunTestsTool::new(cwd.clone())),
         Arc::new(RecallTool::default()),
     ];
     // Shared life tools (harness + claw): web_fetch / web_search.
     tools.extend(web::life_tools(false));
+    // Browser + vision (always available; computer-use opt-in via env).
+    tools.extend(browser::browser_tools(cwd.clone()));
+    #[cfg(feature = "cdp")]
+    tools.extend(browser_cdp::cdp_tools(cwd.clone()));
+    tools.extend(vision::vision_tools(cwd.clone()));
+    tools.extend(computer::computer_tools(cwd));
     for t in job_tools::tools() {
         tools.push(std::sync::Arc::from(t));
     }

@@ -40,32 +40,9 @@ pub fn load_secrets_env() {
 }
 
 /// Resolve OpenAI-compatible base URL + API key from env (post-secrets load).
-pub fn resolve_provider_and_key() -> (Option<String>, Option<String>) {
-    if let Ok(base) = std::env::var("OPENAI_BASE_URL") {
-        let key = std::env::var("OPENAI_API_KEY")
-            .ok()
-            .or_else(|| std::env::var("DASHSCOPE_API_KEY").ok())
-            .or_else(|| std::env::var("DEEPSEEK_API_KEY").ok())
-            .or_else(|| std::env::var("OPENROUTER_API_KEY").ok());
-        return (Some(base), key);
-    }
-    if std::env::var("DASHSCOPE_API_KEY").is_ok() {
-        return (
-            Some("https://coding-intl.dashscope.aliyuncs.com/v1".into()),
-            std::env::var("DASHSCOPE_API_KEY").ok(),
-        );
-    }
-    if std::env::var("DEEPSEEK_API_KEY").is_ok() {
-        return (
-            Some("https://api.deepseek.com/v1".into()),
-            std::env::var("DEEPSEEK_API_KEY").ok(),
-        );
-    }
-    if std::env::var("OPENROUTER_API_KEY").is_ok() {
-        return (
-            Some("https://openrouter.ai/api/v1".into()),
-            std::env::var("OPENROUTER_API_KEY").ok(),
-        );
-    }
-    (None, std::env::var("OPENAI_API_KEY").ok())
+///
+/// `model` selects a provider when several keys are present (e.g. DeepSeek
+/// models must not ride the DashScope endpoint).
+pub fn resolve_provider_and_key(model: Option<&str>) -> (Option<String>, Option<String>) {
+    pirs_ai::resolve_openai_compat(model)
 }

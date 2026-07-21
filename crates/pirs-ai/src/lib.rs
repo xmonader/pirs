@@ -2,13 +2,16 @@ use serde::{Deserialize, Serialize};
 
 pub mod anthropic;
 pub mod embed;
+pub mod env_auth;
 pub mod openai;
 pub mod pricing;
 pub mod registry_file;
 pub mod routing;
+pub mod speech;
 pub mod sse;
 pub use anthropic::AnthropicClient;
 pub use embed::{cosine, EmbeddingClient};
+pub use env_auth::{non_empty_env, resolve_openai_compat, well_known_key_envs};
 pub use openai::OpenAiCompat;
 pub use registry_file::{
     api_key_for_alias, build_routing_provider, expected_key_envs, first_available_backend_key,
@@ -16,6 +19,12 @@ pub use registry_file::{
     user_config_path, BackendEntry, ModelEntry, RegistryFile, ServeEntry,
 };
 pub use routing::{BackendKind, BackendSpec, ModelRoute, RoutingProvider, ServeTarget};
+pub use speech::{
+    env_speech_endpoints, probe_speech_base_health, resolve_speech_route, resolve_speech_route_in,
+    speak_text, speak_with_failover, speech_status_lines, speech_status_lines_probed,
+    transcribe_path, transcribe_with_failover, write_audio_file, SpeakOptions, SpeechClient,
+    SpeechEndpoint, SpeechKind, SpeechRoute, TranscribeOptions,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

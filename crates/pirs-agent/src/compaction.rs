@@ -399,6 +399,52 @@ pub fn last_input_tokens(messages: &[Message]) -> Option<u64> {
     })
 }
 
+/// Shrink oversized tool-result text in history (in place). Returns how many
+/// messages were modified. Used before LLM compaction so cut points stay sane
+/// when MCP/Rhai dumps blew past per-tool caps earlier in the session.
+pub fn shrink_oversized_tool_results(messages: &mut [Message], max_chars: usize) -> usize {
+    let mut n = 0usize;
+    for msg in messages.iter_mut() {
+        let Message::ToolResult(tr) = msg else {
+            continue;
+        };
+        let text: String = tr
+            .content
+            .iter()
+            .filter_map(|b| b.as_text())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if text.chars().count() <= max_chars {
+            continue;
+        }
+        let skip = text.chars().count().saturating_sub(max_chars);
+        let tail: String = text.chars().skip(skip).collect();
+        // Preserve full text in details when missing.
+        let has_ui = tr
+            .details
+            .as_ref()
+            .and_then(|d| d.get("uiText"))
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        if !has_ui {
+            match &mut tr.details {
+                Some(serde_json::Value::Object(map)) => {
+                    map.insert("uiText".into(), serde_json::Value::String(text));
+                }
+                _ => {
+                    tr.details = Some(serde_json::json!({ "uiText": text }));
+                }
+            }
+        }
+        tr.content = vec![ContentBlock::text(format!(
+            "[tool result re-truncated for context]\n{tail}"
+        ))];
+        n += 1;
+    }
+    n
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -653,6 +699,34 @@ mod demote_tests {
                 })),
             ]))
         }
+    }
+
+    #[test]
+    fn shrink_oversized_tool_results_keeps_tail() {
+        let big = "z".repeat(5_000);
+        let mut messages = vec![
+            Message::user("hi"),
+            Message::ToolResult(pirs_ai::ToolResultMessage {
+                tool_call_id: "1".into(),
+                tool_name: "bash".into(),
+                content: vec![ContentBlock::text(big.clone())],
+                details: None,
+                is_error: false,
+                terminate: false,
+                timestamp: 0,
+            }),
+        ];
+        let n = shrink_oversized_tool_results(&mut messages, 100);
+        assert_eq!(n, 1);
+        let Message::ToolResult(tr) = &messages[1] else {
+            panic!("expected tool result");
+        };
+        assert!(tr.model_text().chars().count() <= 100 + 50);
+        assert!(tr
+            .details
+            .as_ref()
+            .and_then(|d| d.get("uiText"))
+            .is_some());
     }
 
     /// Compaction demotes the dropped range into the memory store instead of
