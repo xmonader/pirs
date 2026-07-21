@@ -25,7 +25,8 @@ Multi-model agent harness. Plan on a strong model, execute on a cheap one. Strat
 **pirs-claw**  
 Always-on personal agent **ops** on that same core: multi-key sessions, schedules, gateway (telegram/…), pairing. Coding/chat use the same tools/skills/learn libraries as `pirs` — claw is not a second stack for those.
 
-Hermes coverage detail: [HERMES-GAPS.md](HERMES-GAPS.md).
+Hermes coverage detail: [HERMES-GAPS.md](HERMES-GAPS.md).  
+Product roadmap (now / next / later): [ROADMAP.md](ROADMAP.md).
 
 ## Channel policy
 
