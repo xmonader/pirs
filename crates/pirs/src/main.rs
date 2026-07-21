@@ -117,6 +117,17 @@ struct Cli {
     #[arg(long, env = "PIRS_APPROVAL", default_value = "auto")]
     approval: String,
 
+    /// Safety profile (Vibe-class): default | plan | accept-edits | auto-approve
+    /// Enforced on every tool call (plan = read-only; accept-edits auto-allows file tools;
+    /// auto-approve skips approval prompts for all tools).
+    #[arg(long = "agent-profile", env = "PIRS_AGENT_PROFILE", default_value = "default")]
+    agent_profile: String,
+
+    /// Run this session inside a git worktree for the named branch (create or reuse
+    /// under `.pirs/worktrees/<name>`). Session cwd becomes that worktree.
+    #[arg(long, env = "PIRS_WORKTREE")]
+    worktree: Option<String>,
+
     /// Retry failed/rate-limited requests up to N times
     #[arg(long, default_value = "0")]
     max_retries: u32,
@@ -298,15 +309,21 @@ impl Default for Printer {
     }
 }
 
-/// Installs the approval gate as the before-tool hook when nothing else
-/// claimed the slot. Yolo mode explicitly waives the gate.
+/// Installs the approval/profile gate as the before-tool hook when nothing else
+/// claimed the slot. Pure yolo without a safety profile waives the gate;
+/// non-default `--agent-profile` always installs (hard denials).
 fn install_gate_if_absent(
     hooks: &mut pirs_agent::Hooks,
     gate_hook: &Option<pirs_agent::events::BeforeToolCallHook>,
     approval: &str,
 ) {
     let yolo = approval::ApprovalMode::parse(approval) == Some(approval::ApprovalMode::Yolo);
-    if !yolo && hooks.before_tool_call.is_none() {
+    // If a gate_hook is present, it may encode safety-profile denials even when
+    // approval is auto; only skip when yolo *and* no hook was built.
+    if yolo && gate_hook.is_none() {
+        return;
+    }
+    if hooks.before_tool_call.is_none() {
         hooks.before_tool_call = gate_hook.clone();
     }
 }
@@ -395,7 +412,28 @@ async fn main() -> anyhow::Result<()> {
         ..cli
     };
 
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let mut cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    // Optional git worktree bind (Vibe --worktree class) before tools use cwd.
+    if let Some(ref wt) = cli.worktree.clone() {
+        match pirs_tools::bind_session_worktree(&cwd, &wt) {
+            Ok(sess) => {
+                eprintln!(
+                    "[worktree: branch={} cwd={} created={}]",
+                    sess.branch,
+                    sess.cwd.display(),
+                    sess.created
+                );
+                if let Err(e) = std::env::set_current_dir(&sess.cwd) {
+                    eprintln!("[worktree: set_current_dir failed: {e}]");
+                } else {
+                    cwd = sess.cwd;
+                }
+            }
+            Err(e) => {
+                anyhow::bail!("--worktree {wt:?}: {e}");
+            }
+        }
+    }
     let (project_cfg, user_cfg) = config_file::load_layers(&cwd);
     // `base_url`/`approval` are security-relevant (redirect API traffic /
     // disable the approval gate) so they are deliberately NEVER read from the
@@ -812,8 +850,25 @@ async fn main() -> anyhow::Result<()> {
     let mut hooks = Hooks::default();
     let approval_mode =
         approval::ApprovalMode::parse(&cli.approval).unwrap_or(approval::ApprovalMode::Auto);
-    let gate = std::sync::Arc::new(approval::ApprovalGate::new(approval_mode, cwd.clone()));
-    let gate_hook = if approval_mode == approval::ApprovalMode::Ask {
+    let safety = pirs_tools::SafetyProfile::parse(&cli.agent_profile).ok_or_else(|| {
+        anyhow::anyhow!(
+            "unknown --agent-profile {:?}; expected default|plan|accept-edits|auto-approve",
+            cli.agent_profile
+        )
+    })?;
+    if safety != pirs_tools::SafetyProfile::Default {
+        eprintln!("[agent-profile: {}]", safety.name());
+    }
+    // Always install gate when a non-default safety profile is set (hard denials),
+    // or when approval is Ask. Auto+default stays open; yolo still skips rhai policy.
+    let gate = std::sync::Arc::new(approval::ApprovalGate::with_profile(
+        approval_mode,
+        cwd.clone(),
+        safety,
+    ));
+    let gate_hook = if approval_mode == approval::ApprovalMode::Ask
+        || safety != pirs_tools::SafetyProfile::Default
+    {
         Some(gate.hook())
     } else {
         None

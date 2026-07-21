@@ -128,10 +128,20 @@ pub struct ApprovalGate {
     remembered: Arc<Mutex<HashSet<String>>>,
     cwd: PathBuf,
     prompter: Mutex<Prompter>,
+    /// Optional Vibe-class safety profile (plan / accept-edits / auto-approve).
+    profile: pirs_tools::SafetyProfile,
 }
 
 impl ApprovalGate {
     pub fn new(mode: ApprovalMode, cwd: PathBuf) -> Self {
+        Self::with_profile(mode, cwd, pirs_tools::SafetyProfile::Default)
+    }
+
+    pub fn with_profile(
+        mode: ApprovalMode,
+        cwd: PathBuf,
+        profile: pirs_tools::SafetyProfile,
+    ) -> Self {
         ApprovalGate {
             mode: Arc::new(Mutex::new(mode)),
             remembered: Arc::new(Mutex::new(HashSet::new())),
@@ -143,6 +153,7 @@ impl ApprovalGate {
                 let _ = std::io::stdin().read_line(&mut line);
                 line.trim().to_string()
             })),
+            profile,
         }
     }
 
@@ -170,7 +181,16 @@ impl ApprovalGate {
         let remembered = Arc::clone(&self.remembered);
         let cwd = self.cwd.clone();
         let prompter = self.prompter.lock().unwrap().clone();
+        let profile = self.profile;
         Arc::new(move |_id, tool, args| {
+            // Hard profile denials first (e.g. plan blocks bash/write).
+            if let Some(reason) = pirs_tools::profile_deny_reason(profile, tool) {
+                return Some(reason);
+            }
+            // Profile may skip interactive approval for some tools.
+            if pirs_tools::profile_skips_approval(profile, tool) {
+                return None;
+            }
             if *mode.lock().unwrap() != ApprovalMode::Ask {
                 return None;
             }
@@ -264,5 +284,53 @@ mod tests {
             let hook = gate.hook();
             assert!(hook("1", "bash", &json!({"command": "rm -rf /"})).is_none());
         }
+    }
+
+    #[test]
+    fn plan_profile_denies_bash_allows_read() {
+        let gate = ApprovalGate::with_profile(
+            ApprovalMode::Ask,
+            PathBuf::from("/work"),
+            pirs_tools::SafetyProfile::Plan,
+        )
+        .with_prompter(|_| panic!("should not prompt for hard deny"));
+        let hook = gate.hook();
+        assert!(hook("1", "bash", &json!({"command": "ls"}))
+            .unwrap()
+            .contains("plan"));
+        assert!(hook("2", "read", &json!({"path": "a.rs"})).is_none());
+        assert!(hook("3", "write", &json!({"path": "a.rs", "content": "x"}))
+            .unwrap()
+            .contains("plan"));
+    }
+
+    #[test]
+    fn accept_edits_skips_approval_for_write_not_bash() {
+        let gate = ApprovalGate::with_profile(
+            ApprovalMode::Ask,
+            PathBuf::from("/work"),
+            pirs_tools::SafetyProfile::AcceptEdits,
+        )
+        .with_prompter(|_| "n".into());
+        let hook = gate.hook();
+        // write outside cwd would be sensitive, but profile skips approval for file tools
+        assert!(hook("1", "write", &json!({"path": "/etc/passwd", "content": "x"})).is_none());
+        // bash still asked / denied
+        assert_eq!(
+            hook("2", "bash", &json!({"command": "rm -rf x"})).as_deref(),
+            Some("denied by user")
+        );
+    }
+
+    #[test]
+    fn auto_approve_profile_never_prompts() {
+        let gate = ApprovalGate::with_profile(
+            ApprovalMode::Ask,
+            PathBuf::from("/work"),
+            pirs_tools::SafetyProfile::AutoApprove,
+        )
+        .with_prompter(|_| panic!("no prompt under auto-approve"));
+        let hook = gate.hook();
+        assert!(hook("1", "bash", &json!({"command": "rm -rf /"})).is_none());
     }
 }

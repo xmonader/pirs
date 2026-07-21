@@ -28,6 +28,25 @@ Always-on personal agent **ops** on that same core: multi-key sessions, schedule
 Hermes coverage detail: [HERMES-GAPS.md](HERMES-GAPS.md).  
 Product roadmap (now / next / later): [ROADMAP.md](ROADMAP.md).
 
+## Mistral Vibe gaps (coding CLI peers)
+
+Closed (achievable without rebuilding Textual):
+
+| Vibe capability | pirs |
+|-----------------|------|
+| `ask_user_question` | tool `ask_user` (options + labels in tool result) |
+| Agent profiles `plan` / `accept-edits` / `auto-approve` | `--agent-profile` / `PIRS_AGENT_PROFILE` enforced at tool gate |
+| Session `todo` | tool `todo` (add/update/list, durable under `.pirs/todos.json`) |
+| `--worktree` | `--worktree NAME` / `PIRS_WORKTREE` → `.pirs/worktrees/<name>` |
+
+Deferred (non-goals / different product class):
+
+- Textual TUI chrome (themes, path autocomplete widgets, double-escape rewind UI, voice widgets)
+- Full ACP characterization matrix / PyPI packaging parity
+- MCP OAuth connector product depth
+- Mistral browser sign-in / Mistral-only model lock-in
+- New messaging channels
+
 ## Channel policy
 
 **Focus now:** polish + deep internals on **CLI + Telegram**. No new channel product work.

@@ -64,12 +64,26 @@ pub fn coding_tools(cwd: &Path) -> Vec<Arc<dyn AgentTool>> {
     pirs_tools::default_tools(cwd.to_path_buf())
 }
 
+/// Optional safety profile from `PIRS_AGENT_PROFILE` (shared with pirs harness).
+pub fn env_safety_profile() -> pirs_tools::SafetyProfile {
+    std::env::var("PIRS_AGENT_PROFILE")
+        .ok()
+        .and_then(|s| pirs_tools::SafetyProfile::parse(&s))
+        .unwrap_or(pirs_tools::SafetyProfile::Default)
+}
+
 /// Build an agent for coding (monolithic path / phase factory base).
 pub fn build_code_agent(provider: Arc<dyn LlmProvider>, opts: &CodeOptions) -> Agent {
     let tools = coding_tools(&opts.cwd);
     let mut agent = Agent::new(provider, opts.model.clone())
         .with_system_prompt(coding_system_prompt(&opts.cwd))
         .with_tools(tools);
+    let profile = env_safety_profile();
+    if profile != pirs_tools::SafetyProfile::Default {
+        let mut hooks = pirs_agent::Hooks::default();
+        hooks.before_tool_call = Some(pirs_tools::profile_hook(profile));
+        agent = agent.with_hooks(hooks);
+    }
     if let Some(n) = opts.max_turns {
         agent.budgets.max_turns = Some(n);
     }

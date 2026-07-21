@@ -36,6 +36,7 @@ pub fn scratch_dir() -> &'static Path {
     })
 }
 
+pub mod ask_user;
 pub mod bash;
 pub mod browser;
 #[cfg(feature = "cdp")]
@@ -53,12 +54,19 @@ pub mod project;
 pub mod read;
 pub mod recall;
 pub mod run_tests;
+pub mod safety_profile;
 pub mod sandbox;
+pub mod todo_tool;
 pub mod truncate;
 pub mod vision;
 pub mod web;
+pub mod worktree;
 pub mod write;
 
+pub use ask_user::{
+    env_or_stdin_answer_source, queue_answer_source, resolve_answer, AskUserArgs, AskUserTool,
+    ResolvedAnswer,
+};
 pub use bash::BashTool;
 pub use edit::EditTool;
 pub use edit_block::EditBlockTool;
@@ -72,15 +80,34 @@ pub use project::{
     ProjectProfile, ProjectTool,
 };
 pub use run_tests::RunTestsTool;
+pub use safety_profile::{
+    profile_deny_reason, profile_hook, profile_skips_approval, SafetyProfile,
+};
+pub use todo_tool::{TodoStore, TodoTool};
 pub use browser::browser_tools;
 #[cfg(feature = "cdp")]
 pub use browser_cdp::cdp_tools;
 pub use computer::computer_tools;
 pub use vision::vision_tools;
 pub use web::life_tools;
+pub use worktree::{
+    bind_session_worktree, ensure_worktree, git_repo_root, sanitize_worktree_name,
+    worktree_path_for, WorktreeSession,
+};
 pub use write::WriteTool;
 
+/// Session-aware tools (ask_user, todo) plus coding defaults.
+///
+/// `session_dir` holds durable todo state (defaults to `{cwd}/.pirs` when None).
 pub fn default_tools(cwd: PathBuf) -> Vec<Arc<dyn AgentTool>> {
+    default_tools_with_session(cwd, None)
+}
+
+pub fn default_tools_with_session(
+    cwd: PathBuf,
+    session_dir: Option<PathBuf>,
+) -> Vec<Arc<dyn AgentTool>> {
+    let sess = session_dir.unwrap_or_else(|| cwd.join(".pirs"));
     let mut tools: Vec<Arc<dyn AgentTool>> = vec![
         Arc::new(BashTool::new(cwd.clone())),
         Arc::new(ReadTool::new(cwd.clone())),
@@ -93,7 +120,11 @@ pub fn default_tools(cwd: PathBuf) -> Vec<Arc<dyn AgentTool>> {
         Arc::new(ProjectTool::new(cwd.clone())),
         Arc::new(RunTestsTool::new(cwd.clone())),
         Arc::new(RecallTool::default()),
+        Arc::new(AskUserTool::default_interactive()),
     ];
+    if let Ok(todo) = TodoTool::open_at(&sess) {
+        tools.push(Arc::new(todo));
+    }
     // Shared life tools (harness + claw): web_fetch / web_search.
     tools.extend(web::life_tools(false));
     // Browser + vision (always available; computer-use opt-in via env).
