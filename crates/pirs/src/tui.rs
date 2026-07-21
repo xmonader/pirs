@@ -1399,6 +1399,13 @@ fn submit_input(
         app.running = true;
         app.clock.mark_user_turn();
         app.clock.agent_start();
+        // Snapshot conversation before this turn for /undo.
+        if let Ok(a) = agent.try_lock() {
+            pirs_tools::rewind_snapshot(
+                &text.chars().take(80).collect::<String>(),
+                &a.messages,
+            );
+        }
         let status = if app.strategy.is_some() {
             format!(
                 "strategy:{} · model:{}{}",
@@ -1468,6 +1475,13 @@ fn handle_slash_command(
         None => (text, ""),
     };
     match cmd {
+        "/help" | "/?" => {
+            app.show_help = true;
+            app.notice(
+                "slash: /model /plan-model /strategy /stats /undo /doctor /audit /profile \
+                 /image /compact /clear /quit  ·  !cmd shell  ·  Esc cancel",
+            );
+        }
         "/model" => {
             if arg.is_empty() {
                 let aliases = if app.model_aliases.is_empty() {
@@ -1550,12 +1564,144 @@ fn handle_slash_command(
                 Err(_) => app.notice("busy — try /stats after the run finishes"),
             }
         }
+        "/undo" => match agent.try_lock() {
+            Ok(mut a) => match pirs_tools::host_undo(&mut a.messages) {
+                Ok(msg) => {
+                    app.notice(msg);
+                    app.push(ChatItem::System("conversation rewound".into()));
+                }
+                Err(e) => app.notice(format!("undo: {e}")),
+            },
+            Err(_) => app.notice("busy — wait for the run, then /undo"),
+        },
+        "/doctor" => {
+            let report = pirs_tools::doctor_report(&app.cwd).join("\n");
+            app.push(ChatItem::System(report));
+            app.notice("doctor report (see chat)");
+        }
+        "/audit" => {
+            let n: usize = arg.parse().unwrap_or(30).clamp(1, 200);
+            let path = pirs_agent::default_audit_path();
+            let text = if !path.is_file() {
+                format!("no audit log yet at {}", path.display())
+            } else {
+                let body = std::fs::read_to_string(&path).unwrap_or_default();
+                let lines: Vec<&str> = body.lines().collect();
+                let start = lines.len().saturating_sub(n);
+                format!(
+                    "audit {} (last {} of {}):\n{}",
+                    path.display(),
+                    lines.len() - start,
+                    lines.len(),
+                    lines[start..].join("\n")
+                )
+            };
+            app.push(ChatItem::System(text));
+            app.notice("audit tail (see chat)");
+        }
+        "/profile" => {
+            if arg.is_empty() {
+                app.notice(format!(
+                    "agent-profile: {}",
+                    std::env::var("PIRS_AGENT_PROFILE").unwrap_or_else(|_| "default".into())
+                ));
+            } else if pirs_tools::SafetyProfile::parse(arg).is_some() {
+                std::env::set_var("PIRS_AGENT_PROFILE", arg);
+                app.notice(format!("agent-profile → {arg}"));
+            } else {
+                app.notice("usage: /profile default|plan|accept-edits|auto-approve");
+            }
+        }
+        "/image" => {
+            if arg.is_empty() {
+                app.notice("usage: /image <path.png|jpg|webp>");
+            } else {
+                match agent.try_lock() {
+                    Ok(mut a) => match attach_image_to_agent(&mut a, &app.cwd, arg) {
+                        Ok(msg) => {
+                            app.notice(msg);
+                            app.push(ChatItem::System(format!("image attached: {arg}")));
+                        }
+                        Err(e) => app.notice(format!("image: {e}")),
+                    },
+                    Err(_) => app.notice("busy — wait, then /image"),
+                }
+            }
+        }
+        "/compact" => {
+            if agent.try_lock().is_err() {
+                app.notice("busy — try /compact after the run");
+            } else {
+                let agent = Arc::clone(agent);
+                tokio::spawn(async move {
+                    let mut a = agent.lock().await;
+                    let _ = a.compact_now().await;
+                });
+                app.notice("compact started (messages may shrink after next turn)");
+            }
+        }
+        "/voice" => {
+            app.notice(
+                "voice: use pirs-claw with speech backends (STT/TTS), or set \
+                 PIRS_STT_BACKEND / PIRS_TTS_BACKEND. TUI live mic is planned — \
+                 paste transcript or use Telegram voice notes via claw.",
+            );
+        }
         other => {
             app.notice(format!(
-                "unknown command {other} — try /model /plan-model /strategy /stats /help"
+                "unknown command {other} — /help for slash list"
             ));
         }
     }
+}
+
+fn attach_image_to_agent(
+    agent: &mut Agent,
+    cwd: &std::path::Path,
+    path: &str,
+) -> anyhow::Result<String> {
+    use base64::Engine as _;
+    let p = std::path::Path::new(path);
+    let abs = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        cwd.join(p)
+    };
+    if !abs.is_file() {
+        anyhow::bail!("not found: {}", abs.display());
+    }
+    let bytes = std::fs::read(&abs)?;
+    if bytes.len() > 12 * 1024 * 1024 {
+        anyhow::bail!("image too large");
+    }
+    let mime = match abs
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        other => anyhow::bail!("unsupported .{other}"),
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    agent.messages.push(Message::User(pirs_ai::UserMessage {
+        content: pirs_ai::UserContent::Blocks(vec![
+            pirs_ai::ContentBlock::Text {
+                text: format!("[image attached: {}]", abs.display()),
+                text_signature: None,
+            },
+            pirs_ai::ContentBlock::Image {
+                data: b64,
+                mime_type: mime.into(),
+            },
+        ]),
+        timestamp: pirs_ai::now_millis(),
+    }));
+    Ok(format!("attached {} ({} bytes)", abs.display(), bytes.len()))
 }
 
 // ── Drawing ─────────────────────────────────────────────────────────────────

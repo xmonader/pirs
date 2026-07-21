@@ -39,13 +39,30 @@ Closed (achievable without rebuilding Textual):
 | Session `todo` | tool `todo` (add/update/list, durable under `.pirs/todos.json`) |
 | `--worktree` | `--worktree NAME` / `PIRS_WORKTREE` → `.pirs/worktrees/<name>` |
 
+Shipped in the capability upgrade pass (beyond Vibe parity):
+
+| Capability | pirs |
+|------------|------|
+| Native audit log | `~/.pirs/audit.jsonl`, `audit_tail`, `PIRS_AUDIT` |
+| Conversation undo | `/undo`, `session_rewind`, snapshots each user turn |
+| LSP diagnostics | `lsp` action=`diagnostics` (+ hover/definition/refs) |
+| Blast radius 2-hop | `code_map` action=`blast` |
+| PR workflow | tool `pr` (status/diff/create/checks via git+gh) |
+| Doctor | `pirs --doctor`, tool `doctor` |
+| Research | tool `research` → `.pirs/research/` |
+| Fleet | tool `fleet` + `pirs-orchestrator` |
+| ACP | image prompts, `fs/read_text_file` / `fs/write_text_file` |
+| TUI slash parity | `/model` `/undo` `/doctor` `/audit` `/image` `/profile` `/voice`… |
+| Web UI | `pirs --serve` chat SPA |
+| Computer use | key + move + click + type + screenshot |
+
 Deferred (non-goals / different product class):
 
-- Textual TUI chrome (themes, path autocomplete widgets, double-escape rewind UI, voice widgets)
-- Full ACP characterization matrix / PyPI packaging parity
+- Full Textual-class chrome (path autocomplete widgets as a product)
 - MCP OAuth connector product depth
 - Mistral browser sign-in / Mistral-only model lock-in
 - New messaging channels
+- Email/calendar product (planned later on MCP + life tools)
 
 **Rust vs Rhai:** hard profile denials, tools (`ask_user`, `todo`, `browser_cdp`), and gates stay Rust. Team taste lives in optional packs: `strict-plan.rhai` (extra plan denials), `session-discipline.rhai` (todo/ask_user steering), `browser-cdp-workflow.rhai` (CDP recipes). Packs may only **add** denials, never loosen Rust plan.
 

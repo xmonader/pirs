@@ -121,13 +121,28 @@ impl AgentTool for CodeMapTool {
             "blast" => {
                 let callers = graph.callers(&target);
                 let callees = graph.callees(&target);
+                // One-hop transitive: callers-of-callers (unique names).
+                let mut transitive: Vec<String> = Vec::new();
+                let mut seen = std::collections::HashSet::new();
+                for c in &callers {
+                    for t in graph.callers(&c.name) {
+                        let key = format!("{}:{}", t.file.display(), t.name);
+                        if seen.insert(key) {
+                            transitive.push(fmt_symbol(t, &self.root));
+                        }
+                    }
+                }
                 let lines: Vec<String> =
                     callers.iter().map(|s| fmt_symbol(s, &self.root)).collect();
                 format!(
-                    "'{target}' blast radius: {} direct caller(s), {} direct callee(s)\ncallers:\n{}",
+                    "'{target}' blast radius: {} direct caller(s), {} direct callee(s), {} second-hop caller(s)\n\
+                     direct callers:\n{}\n\
+                     second-hop callers:\n{}",
                     callers.len(),
                     callees.len(),
-                    join_within_budget(&lines, DEFAULT_TOKEN_BUDGET)
+                    transitive.len(),
+                    join_within_budget(&lines, DEFAULT_TOKEN_BUDGET / 2),
+                    join_within_budget(&transitive, DEFAULT_TOKEN_BUDGET / 2)
                 )
             }
             other => {

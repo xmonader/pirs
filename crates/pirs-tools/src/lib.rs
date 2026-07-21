@@ -37,25 +37,31 @@ pub fn scratch_dir() -> &'static Path {
 }
 
 pub mod ask_user;
+pub mod audit_tool;
 pub mod bash;
 pub mod browser;
 #[cfg(feature = "cdp")]
 pub mod browser_cdp;
 pub mod computer;
+pub mod doctor;
 pub mod edit;
 pub mod edit_block;
 pub mod filelock;
 pub mod find;
+pub mod fleet;
 pub mod grep;
 pub mod job_tools;
 pub mod ls;
 pub mod paths;
+pub mod pr_tools;
 pub mod project;
 pub mod read;
 pub mod recall;
+pub mod research;
 pub mod run_tests;
 pub mod safety_profile;
 pub mod sandbox;
+pub mod session_rewind;
 pub mod todo_tool;
 pub mod truncate;
 pub mod vision;
@@ -89,6 +95,11 @@ pub use browser::browser_tools;
 pub use browser_cdp::cdp_tools;
 pub use computer::computer_tools;
 pub use vision::vision_tools;
+pub use doctor::{doctor_report, DoctorTool};
+pub use fleet::fleet_tools;
+pub use pr_tools::pr_tools;
+pub use research::research_tools;
+pub use session_rewind::{host_undo, snapshot as rewind_snapshot, RewindTool};
 pub use web::life_tools;
 pub use worktree::{
     bind_session_worktree, ensure_worktree, git_repo_root, sanitize_worktree_name,
@@ -125,6 +136,12 @@ pub fn default_tools_with_session(
     if let Ok(todo) = TodoTool::open_at(&sess) {
         tools.push(Arc::new(todo));
     }
+    tools.push(Arc::new(audit_tool::AuditTailTool));
+    tools.push(Arc::new(DoctorTool::new(cwd.clone())));
+    tools.push(Arc::new(RewindTool));
+    tools.extend(pr_tools(cwd.clone()));
+    tools.extend(research_tools(cwd.clone()));
+    tools.extend(fleet_tools());
     // Shared life tools (harness + claw): web_fetch / web_search.
     tools.extend(web::life_tools(false));
     // Browser + vision (always available; computer-use opt-in via env).

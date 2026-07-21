@@ -17,6 +17,8 @@ pub struct LspClient {
     pending: PendingMap,
     next_id: AtomicU64,
     opened: Mutex<HashMap<String, u64>>,
+    /// Latest diagnostics by URI from textDocument/publishDiagnostics.
+    diagnostics: Arc<Mutex<HashMap<String, Value>>>,
     child: tokio::sync::Mutex<Child>,
 }
 
@@ -90,8 +92,11 @@ impl LspClient {
         let stdout = child.stdout.take().context("no stdout on LSP server")?;
 
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
+        let diagnostics: Arc<Mutex<HashMap<String, Value>>> =
+            Arc::new(Mutex::new(HashMap::new()));
         {
             let pending = Arc::clone(&pending);
+            let diagnostics = Arc::clone(&diagnostics);
             let stdin_writer = std::sync::Arc::clone(&stdin);
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stdout);
@@ -104,6 +109,19 @@ impl LspClient {
                             // start at 1). Treating it as a response would resolve
                             // the wrong pending future and drop the real reply.
                             if let Some(method) = value.get("method").and_then(|m| m.as_str()) {
+                                if method == "textDocument/publishDiagnostics" {
+                                    if let Some(params) = value.get("params") {
+                                        if let Some(uri) =
+                                            params.get("uri").and_then(|u| u.as_str())
+                                        {
+                                            diagnostics
+                                                .lock()
+                                                .unwrap()
+                                                .insert(uri.to_string(), params.clone());
+                                        }
+                                    }
+                                    continue;
+                                }
                                 let Some(id) = value.get("id").and_then(|i| i.as_u64()) else {
                                     // notification (no id): nothing to answer
                                     continue;
@@ -167,6 +185,7 @@ impl LspClient {
             pending,
             next_id: AtomicU64::new(1),
             opened: Mutex::new(HashMap::new()),
+            diagnostics,
             child: tokio::sync::Mutex::new(child),
         });
 
@@ -441,6 +460,37 @@ impl LspClient {
             json!({ "textDocument": { "uri": uri_for(path) } }),
         )
         .await
+    }
+
+    /// Latest published diagnostics for a file (from textDocument/publishDiagnostics).
+    /// Call after open_document; may be empty if server has not pushed yet.
+    pub fn diagnostics_for(&self, path: &std::path::Path) -> Option<Value> {
+        let uri = uri_for(path);
+        self.diagnostics.lock().unwrap().get(&uri).cloned()
+    }
+
+    /// Snapshot all known diagnostics URIs.
+    pub fn all_diagnostics(&self) -> Vec<(String, Value)> {
+        self.diagnostics
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    /// Brief wait so publishDiagnostics can arrive after open/didChange.
+    pub async fn wait_for_diagnostics(&self, path: &std::path::Path, ms: u64) -> Option<Value> {
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(ms);
+        loop {
+            if let Some(d) = self.diagnostics_for(path) {
+                return Some(d);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return self.diagnostics_for(path);
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
     }
 
     pub async fn shutdown(&self) {

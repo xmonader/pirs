@@ -75,6 +75,13 @@ pub fn is_readonly_tool(tool: &str) -> bool {
             | "code_search"
             | "code_map"
             | "semantic_search"
+            | "lsp"
+            | "pr"
+            | "doctor"
+            | "audit_tail"
+            | "research"
+            | "session_rewind"
+            | "fleet"
     )
 }
 

@@ -247,6 +247,11 @@ struct Cli {
     /// flag / env var / project config / user config / default) and exit.
     #[arg(long)]
     show_config: bool,
+
+    /// Print runtime doctor report (API keys present, toolchain, LSP, MCP,
+    /// git, browser/CDP, computer-use, gh, soul/audit) and exit.
+    #[arg(long)]
+    doctor: bool,
 }
 
 struct Printer {
@@ -514,6 +519,13 @@ async fn main() -> anyhow::Result<()> {
             base_url_src.label()
         );
         println!("approval:   {approval:<24} ({})", approval_src.label());
+        return Ok(());
+    }
+    if cli.doctor {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        for line in pirs_tools::doctor_report(&cwd) {
+            println!("{line}");
+        }
         return Ok(());
     }
     let mut cli = Cli {
@@ -1422,6 +1434,15 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| "unknown".to_string());
     pirs_rhai::set_session_meta(&session_stem, &cli.model);
 
+    // First-class action audit (not pack-only). Disable with PIRS_AUDIT=0.
+    {
+        let audit = pirs_agent::AuditLog::default_open();
+        if pirs_agent::audit_enabled() {
+            eprintln!("[audit: {}]", audit.path().display());
+        }
+        agent.subscribe(pirs_agent::audit_listener(audit));
+    }
+
     // Optional flight recorder: agent events + strategy phase boundaries.
     let run_id = observability::make_run_id(&session_stem);
     let trace_path = observability::resolve_trace_path(cli.trace.as_deref(), &run_id);
@@ -1705,7 +1726,22 @@ async fn run_turn(
 /// Tools a read-only (planning/critique) phase may use: navigation and search
 /// only, nothing that can change the tree. An allowlist — not a denylist — so a
 /// newly added mutating tool can never silently leak into a planner's scope.
-const READONLY_PHASE_TOOLS: &[&str] = &["read", "grep", "find", "ls", "recall", "code_map", "lsp"];
+const READONLY_PHASE_TOOLS: &[&str] = &[
+    "read",
+    "grep",
+    "find",
+    "ls",
+    "recall",
+    "code_map",
+    "lsp",
+    "doctor",
+    "audit_tail",
+    "research",
+    "web_fetch",
+    "web_search",
+    "fleet",
+    "pr",
+];
 
 /// Run a shell verification command in `cwd`. Returns `(passed, output_tail)`;
 /// the last 4000 chars of combined stdout+stderr (errors cluster at the end) are
@@ -2004,12 +2040,57 @@ async fn repl(
                 let sp = session_path.lock().unwrap().clone();
                 clock.mark_user_turn();
                 clock.agent_start();
+                // Snapshot before the turn so /undo can rewind conversation.
+                pirs_tools::rewind_snapshot(
+                    &line.chars().take(80).collect::<String>(),
+                    &agent.messages,
+                );
                 let before = agent.messages.len();
+                let user_line = line.to_string();
                 if let Err(e) = run_turn(agent, line, printer, &sp, mode, host).await {
                     eprintln!("[error: {e}]");
                 }
                 clock.agent_end();
                 clock.absorb_messages(&agent.messages[before..]);
+                // Long-term memory of the user (soul + memory.db) when durable.
+                if pirs_skills::learn_enabled_interactive() || pirs_skills::looks_durable(&user_line)
+                {
+                    let reply = agent
+                        .messages
+                        .iter()
+                        .rev()
+                        .find_map(|m| match m {
+                            pirs_ai::Message::Assistant(a) => {
+                                let t = a.text();
+                                if t.trim().is_empty() {
+                                    None
+                                } else {
+                                    Some(t)
+                                }
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or_default();
+                    let state_dir = cwd.join(".pirs");
+                    let key = session_path
+                        .lock()
+                        .ok()
+                        .and_then(|p| {
+                            p.file_stem()
+                                .map(|s| s.to_string_lossy().into_owned())
+                        })
+                        .unwrap_or_else(|| "repl".into());
+                    pirs_skills::maybe_memory_nudge(
+                        agent.provider.clone(),
+                        &agent.model,
+                        None, // env/auth store resolves keys
+                        &state_dir,
+                        &key,
+                        &user_line,
+                        &reply,
+                    )
+                    .await;
+                }
             }
             Err(ReadlineError::Interrupted) => continue,
             Err(ReadlineError::Eof) => break,
@@ -2073,15 +2154,74 @@ async fn handle_command(
                 println!("/{:<12} {}", fc.name, fc.description);
             }
             println!(
-                "/model [id]   show or set model\n\
-                 /stats        session wall time, agent time, tokens\n\
-                 /usage        same as /stats\n\
-                 /export <p>   export session to a JSONL file\n\
-                 /compact      compact history now\n\
-                 /quit         exit (prints session stats)\n\
-                 !<cmd>        run command locally, record output in context\n\
-                 !!<cmd>       run command locally, do not record"
+                "/model [id]     show or set model\n\
+                 /stats          session wall time, agent time, tokens\n\
+                 /usage          same as /stats\n\
+                 /export <p>     export session to a JSONL file\n\
+                 /compact        compact history now\n\
+                 /undo           rewind conversation to previous snapshot\n\
+                 /doctor         runtime diagnostics (keys, lsp, mcp, browser)\n\
+                 /audit [n]      tail last N audit log lines\n\
+                 /profile [p]    show or set agent safety profile\n\
+                 /image <path>   attach image to next prompt (vision)\n\
+                 /approval       auto|ask|yolo\n\
+                 /fork [n]       fork session at entry\n\
+                 /tree           session lineage\n\
+                 /quit           exit (prints session stats)\n\
+                 !<cmd>          run command locally, record output in context\n\
+                 !!<cmd>         run command locally, do not record"
             );
+        }
+        "/undo" => match pirs_tools::host_undo(&mut agent.messages) {
+            Ok(msg) => println!("{msg}"),
+            Err(e) => eprintln!("[undo] {e}"),
+        },
+        "/doctor" => {
+            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            for line in pirs_tools::doctor_report(&cwd) {
+                println!("{line}");
+            }
+        }
+        "/audit" => {
+            let n: usize = arg.parse().unwrap_or(40).clamp(1, 200);
+            let path = pirs_agent::default_audit_path();
+            if !path.is_file() {
+                println!("no audit log yet at {}", path.display());
+            } else {
+                let text = std::fs::read_to_string(&path).unwrap_or_default();
+                let lines: Vec<&str> = text.lines().collect();
+                let start = lines.len().saturating_sub(n);
+                println!(
+                    "audit {} (last {} of {}):\n{}",
+                    path.display(),
+                    lines.len() - start,
+                    lines.len(),
+                    lines[start..].join("\n")
+                );
+            }
+        }
+        "/profile" => {
+            if arg.is_empty() {
+                println!(
+                    "agent-profile: {}",
+                    std::env::var("PIRS_AGENT_PROFILE").unwrap_or_else(|_| "default".into())
+                );
+            } else if pirs_tools::SafetyProfile::parse(arg).is_some() {
+                std::env::set_var("PIRS_AGENT_PROFILE", arg);
+                println!("agent-profile set to {arg} (new denials apply on next tool call)");
+            } else {
+                println!("usage: /profile <default|plan|accept-edits|auto-approve>");
+            }
+        }
+        "/image" => {
+            if arg.is_empty() {
+                println!("usage: /image <path-to-png-or-jpg>");
+            } else {
+                match attach_image_message(agent, Path::new(arg)) {
+                    Ok(msg) => println!("{msg}"),
+                    Err(e) => eprintln!("[image] {e}"),
+                }
+            }
         }
         "/model" => {
             if arg.is_empty() {
@@ -2187,6 +2327,55 @@ async fn handle_command(
         }
     }
     Ok(false)
+}
+
+/// Attach a local image as a multimodal user message (for vision models).
+fn attach_image_message(agent: &mut Agent, path: &Path) -> anyhow::Result<String> {
+    use base64::Engine as _;
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    if !abs.is_file() {
+        bail!("image not found: {}", abs.display());
+    }
+    let bytes = std::fs::read(&abs)?;
+    if bytes.len() > 12 * 1024 * 1024 {
+        bail!("image too large ({} bytes)", bytes.len());
+    }
+    let mime = match abs
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        other => bail!("unsupported image type .{other}; use png/jpg/webp/gif"),
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    agent.messages.push(Message::User(pirs_ai::UserMessage {
+        content: pirs_ai::UserContent::Blocks(vec![
+            pirs_ai::ContentBlock::Text {
+                text: format!("[image attached: {}]", abs.display()),
+                text_signature: None,
+            },
+            pirs_ai::ContentBlock::Image {
+                data: b64,
+                mime_type: mime.into(),
+            },
+        ]),
+        timestamp: pirs_ai::now_millis(),
+    }));
+    Ok(format!(
+        "attached {} ({} bytes) — send a follow-up message to discuss it",
+        abs.display(),
+        bytes.len()
+    ))
 }
 
 /// A 256-bit random bearer token, hex-encoded. Never derive serve auth from a

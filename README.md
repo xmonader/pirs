@@ -31,7 +31,7 @@ export OPENAI_API_KEY=...            # or --api-key; OPENAI_BASE_URL for compati
 ./target/release/pirs "fix the failing test"   # one-shot
 ```
 
-REPL commands: `/model`, `/export`, `/compact`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`).
+REPL / TUI slash: `/model`, `/undo`, `/doctor`, `/audit`, `/image <path>`, `/profile`, `/export`, `/compact`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`). Runtime diagnostics: `pirs --doctor`. Action audit: `~/.pirs/audit.jsonl` (disable with `PIRS_AUDIT=0`).
 
 **Strategies (product set):** `monolithic` (one growing loop on `--model`), `plan-exec` (read-only plan → fresh exec), `plan-critic-exec` / alias `plan-exec-critic` (plan → critic → exec). **Strong plan / weak exec:** `--model <cheap> --plan-model <strong> --strategy plan-exec` (or `plan-critic-exec`) — planning (and critique) run on `--plan-model`, the executor keeps `--model`.
 
@@ -121,7 +121,7 @@ Shipped packs in `extensions/`:
 | `sandbox.rhai` | OS-level sandbox for `bash` (bubblewrap/Seatbelt, falls back to Docker/Podman): read-only fs outside cwd, no network (or a domain allowlist via `.pirs/sandbox-allowlist.txt`) |
 | `guardrails.rhai` | block destructive bash patterns, ask-first policy |
 | `path-guard.rhai` | block sensitive bash commands targeting paths outside cwd, plus `find -exec`/`-delete` |
-| `audit-log.rhai` | tool calls + results to `~/.pirs/audit.jsonl` |
+| `audit-log.rhai` | (optional pack) tool calls to JSONL — **native audit is always on** via `~/.pirs/audit.jsonl` unless `PIRS_AUDIT=0` |
 | `conductor.rhai` | strong-planner/weak-executor guidance + plan tool |
 | `context-janitor.rhai` | shrink stale giant tool outputs in outgoing context |
 | `review-gate.rhai` | independent fresh-context sub-agent reviews every diff (request-compliance + adversarial), can refuse completion |

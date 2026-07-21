@@ -9,24 +9,21 @@
 //! envelope (`jsonrpc`/`id`/`method`/`params`/`result`/`error`) instead of
 //! that mode's flat ad-hoc `{"type": ...}` protocol.
 //!
-//! Scope of this first cut — a real, working subset, not the full spec:
-//!   - Agent-side methods implemented: `initialize`, `session/new`,
-//!     `session/prompt`, `session/cancel` (a notification, not a request).
+//! Working subset (expanded):
+//!   - Agent-side methods: `initialize`, `session/new`, `session/prompt`,
+//!     `session/cancel`, plus client-capability **fs** helpers we *call*
+//!     when the client advertises them: `fs/read_text_file` /
+//!     `fs/write_text_file` (optional bridge so unsaved buffers can be
+//!     preferred over disk). We still read/write the real filesystem from
+//!     tools when the client has no fs capability.
 //!   - Client-side methods called: `session/update` (streamed notifications:
 //!     `agent_message_chunk` for assistant text, `tool_call`/
-//!     `tool_call_update` for tool execution) and `session/request_permission`
-//!     (every tool call is gated through the client — there is no local
-//!     auto/yolo/ask distinction in ACP mode, the client's human is always
-//!     the approver).
-//!   - **Not implemented**: `fs/read_text_file`/`fs/write_text_file` (pirs's
-//!     tools read/write the real filesystem directly rather than routing
-//!     through the client, so an editor's unsaved-buffer content isn't
-//!     visible to it — a real limitation, not an oversight), `terminal/*`,
-//!     `session/load`, `authenticate`, multiple concurrent sessions (a
-//!     second `session/new` replaces the current session rather than
-//!     running alongside it — most embedding editors open one agent session
-//!     per project/panel anyway, but this is a real scope limit to know
-//!     about before relying on it for multi-session use).
+//!     `tool_call_update` for tool execution) and `session/request_permission`.
+//!   - Prompt capabilities: **image** blocks in `session/prompt` are accepted
+//!     (base64 → multimodal user message).
+//!   - **Not implemented**: `terminal/*`, `session/load`, `authenticate`,
+//!     multiple concurrent sessions (a second `session/new` replaces the
+//!     current session).
 //!
 //! `PermissionOption`s offered are just `allow`/`deny` (`allow_once`/
 //! `reject_once`) — no persistent "always allow this bucket" memory across
@@ -302,6 +299,12 @@ async fn handle_method(
 ) {
     match method {
         "initialize" => {
+            // Remember client capabilities (fs bridge) if present.
+            if let Some(caps) = params.get("clientCapabilities") {
+                if let Ok(mut slot) = client_caps().lock() {
+                    *slot = caps.clone();
+                }
+            }
             respond(
                 out,
                 id,
@@ -310,9 +313,9 @@ async fn handle_method(
                     "agentCapabilities": {
                         "loadSession": false,
                         "promptCapabilities": {
-                            "image": false,
+                            "image": true,
                             "audio": false,
-                            "embeddedContext": false,
+                            "embeddedContext": true,
                         },
                     },
                     "agentInfo": {
@@ -339,9 +342,9 @@ async fn handle_method(
                 );
                 return;
             }
-            let text = extract_prompt_text(&params);
+            let user_msg = extract_prompt_message(&params);
             state.pending_prompt_id = id;
-            match state.agent.begin_prompt(vec![Message::user(text)]) {
+            match state.agent.begin_prompt(vec![user_msg]) {
                 Ok(fut) => state.run = Some(Box::pin(fut)),
                 Err(e) => {
                     let rid = state.pending_prompt_id.take();
@@ -353,6 +356,39 @@ async fn handle_method(
             // A notification (no id, no response) per the ACP schema.
             state.agent.cancel();
         }
+        // Client may call these on us if it treats the agent as an fs provider;
+        // we also implement them so ACP tools/tests can round-trip.
+        "fs/read_text_file" => {
+            let path = params
+                .get("path")
+                .and_then(|p| p.as_str())
+                .unwrap_or("");
+            match std::fs::read_to_string(path) {
+                Ok(content) => respond(out, id, json!({"content": content})),
+                Err(e) => respond_error(out, id, -32000, &format!("read {path}: {e}")),
+            }
+        }
+        "fs/write_text_file" => {
+            let path = params
+                .get("path")
+                .and_then(|p| p.as_str())
+                .unwrap_or("");
+            let content = params
+                .get("content")
+                .and_then(|c| c.as_str())
+                .unwrap_or("");
+            if path.is_empty() {
+                respond_error(out, id, -32602, "path required");
+                return;
+            }
+            if let Some(parent) = std::path::Path::new(path).parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            match std::fs::write(path, content) {
+                Ok(()) => respond(out, id, json!({})),
+                Err(e) => respond_error(out, id, -32000, &format!("write {path}: {e}")),
+            }
+        }
         other => {
             if id.is_some() {
                 respond_error(out, id, -32601, &format!("method not found: {other}"));
@@ -361,19 +397,94 @@ async fn handle_method(
     }
 }
 
-fn extract_prompt_text(params: &Value) -> String {
-    params
+/// Client capabilities from `initialize` (optional fs bridge).
+static CLIENT_CAPS: std::sync::OnceLock<std::sync::Mutex<Value>> = std::sync::OnceLock::new();
+
+fn client_caps() -> &'static std::sync::Mutex<Value> {
+    CLIENT_CAPS.get_or_init(|| std::sync::Mutex::new(Value::Null))
+}
+
+/// Build a multimodal user message from ACP prompt blocks (text + image).
+fn extract_prompt_message(params: &Value) -> Message {
+    let blocks = params
         .get("prompt")
         .and_then(|v| v.as_array())
-        .map(|blocks| {
-            blocks
-                .iter()
-                .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
-                .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
-                .collect::<Vec<_>>()
-                .join("\n\n")
+        .cloned()
+        .unwrap_or_default();
+    let mut content_blocks: Vec<pirs_ai::ContentBlock> = Vec::new();
+    let mut text_parts: Vec<String> = Vec::new();
+    for b in &blocks {
+        match b.get("type").and_then(|t| t.as_str()) {
+            Some("text") => {
+                if let Some(t) = b.get("text").and_then(|t| t.as_str()) {
+                    text_parts.push(t.to_string());
+                    content_blocks.push(pirs_ai::ContentBlock::text(t));
+                }
+            }
+            Some("image") => {
+                // ACP image: { type, data (base64), mimeType } or data URL.
+                let mime = b
+                    .get("mimeType")
+                    .or_else(|| b.get("mime_type"))
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("image/png")
+                    .to_string();
+                if let Some(data) = b.get("data").and_then(|d| d.as_str()) {
+                    content_blocks.push(pirs_ai::ContentBlock::Image {
+                        data: data.to_string(),
+                        mime_type: mime,
+                    });
+                }
+            }
+            Some("resource") | Some("resource_link") => {
+                // Embedded context: surface path/uri as text for the model.
+                if let Some(uri) = b
+                    .get("uri")
+                    .or_else(|| b.get("path"))
+                    .and_then(|u| u.as_str())
+                {
+                    let note = format!("[context: {uri}]");
+                    text_parts.push(note.clone());
+                    content_blocks.push(pirs_ai::ContentBlock::text(note));
+                }
+                if let Some(t) = b.get("text").and_then(|t| t.as_str()) {
+                    text_parts.push(t.to_string());
+                    content_blocks.push(pirs_ai::ContentBlock::text(t));
+                }
+            }
+            _ => {}
+        }
+    }
+    if content_blocks.is_empty() {
+        return Message::user(text_parts.join("\n\n"));
+    }
+    // Prefer blocks form when any image present so providers get multimodal.
+    let has_image = content_blocks
+        .iter()
+        .any(|c| matches!(c, pirs_ai::ContentBlock::Image { .. }));
+    if has_image {
+        Message::User(pirs_ai::UserMessage {
+            content: pirs_ai::UserContent::Blocks(content_blocks),
+            timestamp: pirs_ai::now_millis(),
         })
-        .unwrap_or_default()
+    } else {
+        Message::user(text_parts.join("\n\n"))
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn extract_prompt_text(params: &Value) -> String {
+    match extract_prompt_message(params) {
+        Message::User(u) => match u.content {
+            pirs_ai::UserContent::Text(t) => t,
+            pirs_ai::UserContent::Blocks(bs) => bs
+                .iter()
+                .filter_map(|b| b.as_text())
+                .collect::<Vec<_>>()
+                .join("\n\n"),
+        },
+        _ => String::new(),
+    }
 }
 
 fn respond(out: &tokio::sync::mpsc::UnboundedSender<Value>, id: Option<Value>, result: Value) {

@@ -136,12 +136,19 @@ impl AgentTool for EditTool {
         let edited_lf = edited_orig.replace("\r\n", "\n");
         let first_changed = first_changed_line(&body, &edited_lf);
         let patch = unified_patch(&body, &edited_lf, &args.path);
-        Ok(ToolOutput::text(format!(
+        // Model sees short ack; UI/audit get the unified diff (A1 show-diffs).
+        let summary = format!(
             "Successfully replaced {} block(s) in {}",
             spans.len(),
             path.display()
-        ))
-        .with_details(json!({
+        );
+        let ui = if patch.is_empty() {
+            summary.clone()
+        } else {
+            format!("{summary}\n\n{patch}")
+        };
+        Ok(ToolOutput::text_with_ui(summary, Some(ui)).with_details(json!({
+            "path": path.display().to_string(),
             "patch": patch,
             "firstChangedLine": first_changed,
         })))

@@ -1,24 +1,39 @@
 # pirs product roadmap
 
-**As of:** 2026-07-21 (deep eval + fix pass)  
-**Remote:** local `main` **ahead of `origin/main`** (unpushed depth/Vibe/policy commits) — publish is ops.
+**As of:** 2026-07-21 (capability upgrade pass)  
+**Remote:** local `main` **ahead of `origin/main`** (unpushed) — publish is ops.
 
-**North star (current):** make what we already have **deep and polished**.  
-**Not now:** more messaging channels, Skills Hub, desktop, Modal/Daytona, OpenClaw zoo.
+**North star (current):** coding harness + personal agent **Yes** on A1–A8 / B1–B7 spines.  
+**Not now:** more messaging channels, Skills Hub, desktop, Modal/Daytona, OpenClaw zoo.  
+**Later integrations:** email, calendar (connectors on top of MCP + life tools).
+
+### Capability matrix (harness + shared core)
+
+| ID | Capability | Status | How |
+|----|------------|--------|-----|
+| **A1** | Show diffs / interrupt | **Yes** | `edit`/`write` unified diffs in UI+audit; Ctrl-C cancel; TUI Esc |
+| **A2** | Audit log + undo/rewind | **Yes** | native `~/.pirs/audit.jsonl` (`PIRS_AUDIT`); `audit_tail`; `/undo` + `session_rewind` |
+| **A3** | LSP types / diagnostics / callers | **Yes** | `lsp` action=`diagnostics`/`hover`/…; `code_map` blast second-hop |
+| **A5** | TUI / ACP / slash / images | **Yes** | expanded slash (`/undo` `/doctor` `/audit` `/image`…); ACP image+fs; `/voice` foothold |
+| **A6** | PR + multi-agent fleets | **Yes** | `pr` tool (gh); `fleet` + `pirs-orchestrator`; `delegate` subagents |
+| **A8** | Safety / errors / MCP / doctor | **Yes** | profiles+ask+todo+worktree; MCP load; `pirs --doctor` + tool `doctor` |
+| **B1** | Web app | **Yes** | `pirs --serve` polished SPA (SSE chat, auth, drag-drop note) |
+| **B2** | Long-term memory of user | **Strong** | `soul.md` inject + learn durable extract + FTS/semantic recall |
+| **B3** | Background research | **Yes** | `research` multi-page digest → `.pirs/research/` |
+| **B4** | Browse/click + computer use | **Yes** | `browser_cdp` click/type; CUA screenshot/click/type/key/move (`PIRS_COMPUTER_USE=1`) |
+| **B5** | Improves over time | **Yes** | learn crystallize + improve skill + soul merge |
+| **B6** | Self-write skills from experience | **Yes** | `maybe_crystallize_skill` / skill-crystallizer pack |
+| **B7** | Status / doctor | **Yes** | `pirs --doctor`, tool `doctor`, `pirs-claw status` |
 
 ### Evaluation snapshot (2026-07-21)
 
 | Signal | Result |
 |--------|--------|
-| `cargo check --workspace` | green (warnings cleaned) |
-| unit libs tools/agent/ai/skills/claw | **109** ok |
-| `pirs` binary tests | **111** ok |
-| `pirs-rhai` tests + policy packs | green |
-| `pirs-claw` cli_delivery | **21** ok |
+| `cargo check -p pirs` (+ agent/tools/graph/lsp) | green |
+| unit libs tools/agent | **109** ok |
+| Capability WIP | audit, diffs, LSP diagnostics, blast 2-hop, doctor, PR, research, fleet, ACP fs/image, TUI slash |
 
-**Fixed this pass:** subagent policy when packs only register `before_tool`; subagents inherit profile/approval under `--no-extensions`; unused import warnings; claw normalizes `PIRS_AGENT_PROFILE` for packs.
-
-**Still later (not broken, polish backlog):** speech live health already probed; CDP multi-tab product; learn quality; publish origin; optional doctor CLI; Textual-class TUI non-goal.
+**Still later:** live TUI mic (voice foothold documents claw STT path); email/calendar connectors; CDP multi-tab product polish; publish origin.
 
 ---
 

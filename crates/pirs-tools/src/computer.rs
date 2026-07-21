@@ -211,10 +211,104 @@ impl AgentTool for ComputerTypeTool {
     }
 }
 
+#[derive(Deserialize, JsonSchema)]
+struct KeyArgs {
+    /// Key name for xdotool (e.g. Return, Escape, ctrl+c, Tab)
+    key: String,
+}
+
+pub struct ComputerKeyTool;
+
+#[async_trait]
+impl AgentTool for ComputerKeyTool {
+    fn name(&self) -> &str {
+        "computer_key"
+    }
+
+    fn description(&self) -> &str {
+        "Press a key or key-chord via xdotool (requires PIRS_COMPUTER_USE=1). \
+         Examples: Return, Escape, Tab, ctrl+s, alt+Tab."
+    }
+
+    fn parameters(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(KeyArgs)).unwrap()
+    }
+
+    fn prompt_snippet(&self) -> Option<&str> {
+        Some("computer_key: press key/chord on desktop")
+    }
+
+    async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+        if !cu_enabled() {
+            anyhow::bail!("computer use disabled — set PIRS_COMPUTER_USE=1");
+        }
+        let Some(xdotool) = which("xdotool") else {
+            anyhow::bail!("xdotool not installed");
+        };
+        let args: KeyArgs = serde_json::from_value(ctx.args)?;
+        if args.key.len() > 64 || args.key.chars().any(|c| c.is_control()) {
+            anyhow::bail!("invalid key");
+        }
+        let status = Command::new(xdotool)
+            .args(["key", "--clearmodifiers", &args.key])
+            .status()?;
+        if !status.success() {
+            anyhow::bail!("xdotool key failed");
+        }
+        Ok(ToolOutput::text(format!("pressed key {}", args.key)))
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct MoveArgs {
+    x: i32,
+    y: i32,
+}
+
+pub struct ComputerMoveTool;
+
+#[async_trait]
+impl AgentTool for ComputerMoveTool {
+    fn name(&self) -> &str {
+        "computer_move"
+    }
+
+    fn description(&self) -> &str {
+        "Move mouse pointer via xdotool (requires PIRS_COMPUTER_USE=1)."
+    }
+
+    fn parameters(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(MoveArgs)).unwrap()
+    }
+
+    fn prompt_snippet(&self) -> Option<&str> {
+        Some("computer_move: move mouse to x,y")
+    }
+
+    async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+        if !cu_enabled() {
+            anyhow::bail!("computer use disabled — set PIRS_COMPUTER_USE=1");
+        }
+        let Some(xdotool) = which("xdotool") else {
+            anyhow::bail!("xdotool not installed");
+        };
+        let args: MoveArgs = serde_json::from_value(ctx.args)?;
+        let status = Command::new(xdotool)
+            .args(["mousemove", &args.x.to_string(), &args.y.to_string()])
+            .status()?;
+        if !status.success() {
+            anyhow::bail!("xdotool mousemove failed");
+        }
+        Ok(ToolOutput::text(format!("moved to ({}, {})", args.x, args.y)))
+    }
+}
+
 pub fn computer_tools(cwd: PathBuf) -> Vec<Arc<dyn AgentTool>> {
     vec![
         Arc::new(ComputerScreenshotTool::new(cwd)),
         Arc::new(ComputerClickTool),
         Arc::new(ComputerTypeTool),
+        Arc::new(ComputerKeyTool),
+        Arc::new(ComputerMoveTool),
     ]
 }

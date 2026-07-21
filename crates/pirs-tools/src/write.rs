@@ -60,12 +60,50 @@ impl AgentTool for WriteTool {
                 .with_context(|| format!("failed to create {}", parent.display()))?;
         }
         let bytes = args.content.len();
+        let existed = path.exists();
+        let old = if existed {
+            std::fs::read_to_string(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
         std::fs::write(&path, &args.content)
             .with_context(|| format!("failed to write {}", path.display()))?;
-        Ok(ToolOutput::text(format!(
-            "Successfully wrote {bytes} bytes to {}",
-            path.display()
-        )))
+        let summary = format!(
+            "Successfully wrote {bytes} bytes to {} ({})",
+            path.display(),
+            if existed { "overwrite" } else { "create" }
+        );
+        let patch = if existed {
+            similar::TextDiff::from_lines(&old, &args.content)
+                .unified_diff()
+                .context_radius(3)
+                .header(&format!("a/{}", args.path), &format!("b/{}", args.path))
+                .to_string()
+        } else {
+            let body: String = args
+                .content
+                .lines()
+                .take(40)
+                .map(|l| format!("+{l}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("+++ b/{}\n{body}", args.path)
+        };
+        let ui = if patch.is_empty() {
+            summary.clone()
+        } else {
+            let p = if patch.chars().count() > 8000 {
+                patch.chars().take(8000).collect::<String>() + "\n…(diff truncated)"
+            } else {
+                patch.clone()
+            };
+            format!("{summary}\n\n{p}")
+        };
+        Ok(ToolOutput::text_with_ui(summary, Some(ui)).with_details(serde_json::json!({
+            "path": path.display().to_string(),
+            "patch": patch,
+            "bytes": bytes,
+        })))
     }
 }
 

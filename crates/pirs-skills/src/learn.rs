@@ -91,6 +91,19 @@ pub fn looks_durable(user: &str) -> bool {
         || l.contains("my dog")
         || l.contains("my email")
         || l.contains("my stack")
+        || l.contains("my preferred")
+        || l.contains("from now on")
+        || l.contains("going forward")
+        || l.contains("i always")
+        || l.contains("i never")
+        || l.contains("don't ever")
+        || l.contains("do not ever")
+        || l.contains("my role is")
+        || l.contains("i am a ")
+        || l.contains("i'm a ")
+        || l.contains("pronouns")
+        || l.contains("my company")
+        || l.contains("my team")
 }
 
 const SOUL_EXTRACT_PROMPT: &str = r#"From this exchange, extract up to 5 durable identity/preference facts for a long-lived user profile.
