@@ -57,13 +57,10 @@ pub fn search_sessions_scoped(
             .to_string();
         let session_key = rel.trim_end_matches(".jsonl").replace('\\', "/");
         if let Some(ref sc) = scope {
-            if !session_key.starts_with(sc.as_str())
-                && !session_key.starts_with(&format!("{sc}/"))
-            {
-                // Also allow exact channel/peer prefix match.
-                if !session_key.starts_with(sc) {
-                    return;
-                }
+            // Exact key or nested under `scope/` — never bare starts_with(scope),
+            // which would let `telegram/1` match `telegram/10`.
+            if !session_key_in_scope(&session_key, sc) {
+                return;
             }
         }
         let Ok(text) = fs::read_to_string(path) else {
@@ -112,6 +109,18 @@ fn snippet(s: &str, max: usize) -> String {
     } else {
         format!("{}…", one.chars().take(max).collect::<String>())
     }
+}
+
+/// True if `session_key` is exactly `scope` or a path under `scope/`.
+///
+/// Deliberately does **not** use bare `starts_with(scope)` — that would admit
+/// `telegram/10` when the caller is scoped to `telegram/1`.
+pub fn session_key_in_scope(session_key: &str, scope: &str) -> bool {
+    let scope = scope.trim().trim_start_matches('/').trim_end_matches('/');
+    if scope.is_empty() {
+        return true;
+    }
+    session_key == scope || session_key.starts_with(&format!("{scope}/"))
 }
 
 fn walk_jsonl(dir: &Path, f: &mut dyn FnMut(&Path)) {
@@ -262,13 +271,69 @@ mod tests {
             .unwrap();
         assert!(!scoped.is_empty());
         assert!(
-            scoped.iter().all(|h| h.session_key.starts_with("telegram/1")),
+            scoped
+                .iter()
+                .all(|h| session_key_in_scope(&h.session_key, "telegram/1")),
             "scoped hits: {:?}",
             scoped.iter().map(|h| &h.session_key).collect::<Vec<_>>()
         );
         assert!(
             !scoped.iter().any(|h| h.snippet.contains("beta")),
             "must not return other peer: {scoped:?}"
+        );
+    }
+
+    #[test]
+    fn session_key_in_scope_rejects_numeric_prefix_collision() {
+        assert!(session_key_in_scope("telegram/1", "telegram/1"));
+        assert!(session_key_in_scope("telegram/1/extra", "telegram/1"));
+        assert!(!session_key_in_scope("telegram/10", "telegram/1"));
+        assert!(!session_key_in_scope("telegram/12", "telegram/1"));
+        assert!(!session_key_in_scope("telegram/111", "telegram/1"));
+        assert!(session_key_in_scope("telegram/10", "telegram/10"));
+        // Channel-wide scope still matches all peers under that channel.
+        assert!(session_key_in_scope("telegram/10", "telegram"));
+        assert!(!session_key_in_scope("discord/1", "telegram"));
+    }
+
+    /// Regression: scope `telegram/1` must not admit session `telegram/10`.
+    #[test]
+    fn peer_1_scope_does_not_include_peer_10() {
+        let dir = tempfile::tempdir().unwrap();
+        let p1 = SessionStore::open_for(dir.path(), SessionId::new("telegram", "1")).unwrap();
+        let p10 = SessionStore::open_for(dir.path(), SessionId::new("telegram", "10")).unwrap();
+        p1.append("user", "marker-one-only confidential").unwrap();
+        p10.append("user", "marker-ten-only confidential").unwrap();
+
+        let scoped =
+            search_sessions_scoped(dir.path(), "confidential marker", 20, Some("telegram/1"))
+                .unwrap();
+        assert!(
+            !scoped.is_empty(),
+            "peer 1 should have hits: {scoped:?}"
+        );
+        assert!(
+            scoped.iter().all(|h| h.session_key == "telegram/1"
+                || h.session_key.starts_with("telegram/1/")),
+            "only telegram/1 keys: {:?}",
+            scoped.iter().map(|h| &h.session_key).collect::<Vec<_>>()
+        );
+        assert!(
+            !scoped.iter().any(|h| h.session_key == "telegram/10"
+                || h.snippet.contains("marker-ten")),
+            "telegram/1 scope must not include telegram/10: {scoped:?}"
+        );
+
+        let ten =
+            search_sessions_scoped(dir.path(), "confidential marker", 20, Some("telegram/10"))
+                .unwrap();
+        assert!(
+            ten.iter().any(|h| h.snippet.contains("marker-ten")),
+            "peer 10 must still find its own hits: {ten:?}"
+        );
+        assert!(
+            !ten.iter().any(|h| h.snippet.contains("marker-one")),
+            "peer 10 must not see peer 1: {ten:?}"
         );
     }
 
