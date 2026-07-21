@@ -20,7 +20,7 @@ Two products over one Rust agent core. Everything else is a power tool or pack.
 
 **pirs**  
 Multi-model agent harness. Plan on a strong model, execute on a cheap one. Strategies, registry, weak-model hardening.  
-**Shared core** (also used by claw): agentskills progressive skills + `skill_view`, life tools (`web_fetch`/`web_search`), optional learn/crystallize.
+**Shared core** (also used by claw): agentskills progressive skills + `skill_view`, life tools (`web_fetch`/`web_search`), Soulforge-style `project` toolchain profile (detect + tool + monorepo packages + pre-commit native checks), optional learn/crystallize.
 
 **pirs-claw**  
 Always-on personal agent **ops** on that same core: multi-key sessions, schedules, gateway (telegram/…), pairing. Coding/chat use the same tools/skills/learn libraries as `pirs` — claw is not a second stack for those.

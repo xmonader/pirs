@@ -3,6 +3,8 @@
 use std::path::{Path, PathBuf};
 
 // Skills live in the shared crate so pirs and pirs-claw stay in sync.
+// Re-export for discovery tests and any external callers of this module.
+#[allow(unused_imports)]
 pub use pirs_skills::{discover_skills, Skill};
 
 #[derive(Debug, Clone)]
@@ -114,6 +116,7 @@ pub fn discover_commands(cwd: &Path) -> Vec<FileCommand> {
 }
 
 /// Backward-compatible progressive skill block (markdown, shared with claw).
+#[allow(dead_code)]
 pub fn skills_prompt_block(skills: &[Skill]) -> Option<String> {
     let s = pirs_skills::skills_prompt_section(skills);
     if s.is_empty() {

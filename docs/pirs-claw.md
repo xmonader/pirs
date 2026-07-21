@@ -97,6 +97,17 @@ Ecosystems include Bun/Deno/npm-pnpm-yarn, Cargo, Go, Python (uv/poetry/pip),
 .NET, PHP, Ruby, Gradle/Maven, CMake/Make, Zig. Prefer `project` over inventing
 shell. Weak auto-verify uses `profile.test` when present.
 
+```text
+project(action: "packages")   # monorepo: pnpm/npm workspaces, Cargo members, go.work
+```
+
+**Pre-commit:** `bash` running `git commit` first runs native lint+typecheck
+(config tools only — not arbitrary package.json scripts). Fail blocks the commit.
+Skip with `PIRS_NO_PRECOMMIT=1`.
+
+**Shell hints:** successful `cargo clippy` / `npm test` / etc. append a nudge to
+use `project(action: …)` next time.
+
 ## Exec backends
 
 ```bash

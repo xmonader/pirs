@@ -435,6 +435,310 @@ pub fn detect_toolchain_label(cwd: &Path) -> Option<String> {
     detect_profile(cwd).toolchain
 }
 
+// ─── Monorepo discovery ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageInfo {
+    pub name: String,
+    pub path: String,
+    pub toolchain: Option<String>,
+    pub has_lint: bool,
+    pub has_test: bool,
+    pub has_typecheck: bool,
+}
+
+/// Discover workspace packages (pnpm/npm/yarn workspaces, Cargo members, go.work).
+pub fn discover_packages(cwd: &Path) -> Vec<PackageInfo> {
+    let mut packages = Vec::new();
+
+    for glob in js_workspace_globs(cwd) {
+        let base = glob
+            .trim_end_matches("/*")
+            .trim_end_matches("/**")
+            .trim_end_matches('*')
+            .trim_end_matches('/');
+        if base.is_empty() {
+            continue;
+        }
+        scan_dir_for_marker(&cwd.join(base), cwd, &mut packages, "package.json");
+    }
+
+    if has(cwd, "Cargo.toml") {
+        if let Ok(cargo) = std::fs::read_to_string(cwd.join("Cargo.toml")) {
+            if let Some(start) = cargo.find("members") {
+                let slice = &cargo[start..];
+                if let Some(ob) = slice.find('[') {
+                    if let Some(cb) = slice[ob..].find(']') {
+                        let inner = &slice[ob + 1..ob + cb];
+                        for m in inner.split(',') {
+                            let m = m.trim().trim_matches('"').trim_matches('\'');
+                            if m.is_empty() {
+                                continue;
+                            }
+                            if m.contains('*') {
+                                let base = m.trim_end_matches("/*").trim_end_matches('*');
+                                scan_dir_for_marker(
+                                    &cwd.join(base),
+                                    cwd,
+                                    &mut packages,
+                                    "Cargo.toml",
+                                );
+                            } else if has(&cwd.join(m), "Cargo.toml") {
+                                push_package(&mut packages, &cwd.join(m), cwd);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if has(cwd, "go.work") {
+        if let Ok(gw) = std::fs::read_to_string(cwd.join("go.work")) {
+            for line in gw.lines() {
+                let line = line.trim();
+                let dir = if let Some(rest) = line.strip_prefix("use ") {
+                    rest.trim().trim_matches('"')
+                } else {
+                    continue;
+                };
+                if dir == "(" || dir == ")" || dir.is_empty() {
+                    continue;
+                }
+                if has(&cwd.join(dir), "go.mod") {
+                    push_package(&mut packages, &cwd.join(dir), cwd);
+                }
+            }
+        }
+    }
+
+    packages.sort_by(|a, b| a.path.cmp(&b.path));
+    packages.dedup_by(|a, b| a.path == b.path);
+    packages
+}
+
+fn js_workspace_globs(cwd: &Path) -> Vec<String> {
+    if has(cwd, "pnpm-workspace.yaml") {
+        if let Ok(raw) = std::fs::read_to_string(cwd.join("pnpm-workspace.yaml")) {
+            let mut globs = Vec::new();
+            for line in raw.lines() {
+                let line = line.trim();
+                if let Some(rest) = line.strip_prefix("- ") {
+                    let g = rest.trim().trim_matches('"').trim_matches('\'');
+                    if !g.is_empty() {
+                        globs.push(g.to_string());
+                    }
+                }
+            }
+            if !globs.is_empty() {
+                return globs;
+            }
+        }
+    }
+    if has(cwd, "package.json") {
+        if let Ok(raw) = std::fs::read_to_string(cwd.join("package.json")) {
+            if let Ok(v) = serde_json::from_str::<Value>(&raw) {
+                if let Some(arr) = v.get("workspaces").and_then(|w| w.as_array()) {
+                    return arr
+                        .iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect();
+                }
+                if let Some(arr) = v
+                    .get("workspaces")
+                    .and_then(|w| w.get("packages"))
+                    .and_then(|p| p.as_array())
+                {
+                    return arr
+                        .iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect();
+                }
+            }
+        }
+    }
+    Vec::new()
+}
+
+fn scan_dir_for_marker(dir: &Path, root: &Path, packages: &mut Vec<PackageInfo>, marker: &str) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for ent in rd.flatten() {
+        if !ent.path().is_dir() {
+            continue;
+        }
+        if has(&ent.path(), marker) {
+            push_package(packages, &ent.path(), root);
+        }
+    }
+}
+
+fn push_package(packages: &mut Vec<PackageInfo>, pkg_dir: &Path, root: &Path) {
+    let rel = pkg_dir
+        .strip_prefix(root)
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| pkg_dir.display().to_string());
+    if packages.iter().any(|p| p.path == rel) {
+        return;
+    }
+    let profile = detect_profile(pkg_dir);
+    let name = if has(pkg_dir, "package.json") {
+        std::fs::read_to_string(pkg_dir.join("package.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(str::to_string))
+            .unwrap_or_else(|| rel.clone())
+    } else if has(pkg_dir, "Cargo.toml") {
+        std::fs::read_to_string(pkg_dir.join("Cargo.toml"))
+            .ok()
+            .and_then(|t| {
+                t.lines()
+                    .find_map(|l| l.trim().strip_prefix("name = ").map(|n| n.trim_matches('"').to_string()))
+            })
+            .unwrap_or_else(|| rel.clone())
+    } else {
+        rel.clone()
+    };
+    packages.push(PackageInfo {
+        name,
+        path: rel,
+        toolchain: profile.toolchain,
+        has_lint: profile.lint.is_some(),
+        has_test: profile.test.is_some(),
+        has_typecheck: profile.typecheck.is_some(),
+    });
+}
+
+// ─── Native pre-commit checks (config tools only, not package.json scripts) ─
+
+/// Lint + typecheck from config files (Soulforge `detectNativeChecks`).
+/// Used before `git commit` via bash tool. Returns shell command or None.
+pub fn detect_native_checks(cwd: &Path) -> Option<String> {
+    let mut cmds = Vec::new();
+
+    if has(cwd, "package.json")
+        || has(cwd, "bun.lock")
+        || has(cwd, "bun.lockb")
+        || has(cwd, "tsconfig.json")
+    {
+        let runner = if has(cwd, "bun.lock") || has(cwd, "bun.lockb") {
+            "bunx"
+        } else if detect_js_pm(cwd) == "pnpm" {
+            "pnpm exec"
+        } else {
+            "npx"
+        };
+        if let Some(lint) = detect_js_linter(cwd, runner) {
+            cmds.push(lint);
+        }
+        if has(cwd, "tsconfig.json") {
+            let tc = if has(cwd, "bun.lock") || has(cwd, "bun.lockb") {
+                "bunx tsc --noEmit"
+            } else {
+                "npx tsc --noEmit"
+            };
+            cmds.push(tc.into());
+        }
+        if !cmds.is_empty() {
+            return Some(cmds.join(" && "));
+        }
+    }
+
+    if has(cwd, "deno.json") || has(cwd, "deno.lock") {
+        return Some("deno lint && deno check .".into());
+    }
+    if has(cwd, "Cargo.toml") {
+        return Some("cargo clippy --all-targets -- -D warnings && cargo check".into());
+    }
+    if has(cwd, "go.mod") {
+        let lint = if has(cwd, ".golangci.yml") || has(cwd, ".golangci.yaml") {
+            "golangci-lint run"
+        } else {
+            "go vet ./..."
+        };
+        return Some(format!("{lint} && go build ./..."));
+    }
+    if has(cwd, "pyproject.toml") || has(cwd, "setup.py") || has(cwd, "requirements.txt") {
+        let pm = if has(cwd, "uv.lock") {
+            "uv run "
+        } else if has(cwd, "poetry.lock") {
+            "poetry run "
+        } else {
+            ""
+        };
+        let lint = if has(cwd, "ruff.toml") || has(cwd, ".ruff.toml") {
+            format!("{pm}ruff check")
+        } else {
+            format!("{pm}flake8")
+        };
+        let tc = if has(cwd, "pyrightconfig.json") {
+            format!("{pm}pyright")
+        } else {
+            format!("{pm}mypy .")
+        };
+        return Some(format!("{lint} && {tc}"));
+    }
+    None
+}
+
+/// True if this shell command looks like a git commit (for pre-commit gate).
+pub fn looks_like_git_commit(command: &str) -> bool {
+    let c = command.trim();
+    // Match common forms without catching `git commit-tree` etc. carelessly.
+    let lower = c.to_ascii_lowercase();
+    lower.contains("git commit")
+        && !lower.contains("git commit-tree")
+        && !lower.contains("git commit-graph")
+}
+
+/// Map a raw shell command to a `project` action hint (Soulforge shell redirect).
+pub fn detect_project_command_hint(command: &str) -> Option<String> {
+    let c = command.trim();
+    let mapped = if c.starts_with("cargo test")
+        || c.starts_with("bun test")
+        || c.starts_with("npm test")
+        || c.starts_with("pnpm test")
+        || c.starts_with("yarn test")
+        || c.starts_with("go test")
+        || c.starts_with("pytest")
+        || c.contains(" run test")
+    {
+        Some("test")
+    } else if c.starts_with("cargo clippy")
+        || c.starts_with("cargo fmt")
+        || c.contains("eslint")
+        || c.contains("biome check")
+        || c.contains("ruff check")
+        || c.contains("golangci-lint")
+        || c.starts_with("go vet")
+    {
+        if c.starts_with("cargo fmt") || c.contains("biome format") || c.contains("ruff format") {
+            Some("format")
+        } else {
+            Some("lint")
+        }
+    } else if c.starts_with("cargo check")
+        || c.contains("tsc --noEmit")
+        || c.contains("mypy")
+        || c.contains("pyright")
+        || c.starts_with("deno check")
+    {
+        Some("typecheck")
+    } else if c.starts_with("cargo build")
+        || c.starts_with("go build")
+        || c.contains(" run build")
+        || c.starts_with("cmake --build")
+    {
+        Some("build")
+    } else {
+        None
+    }?;
+    Some(format!(
+        "\n\n[hint] Next time use project(action: \"{mapped}\") — auto-detected toolchain, structured output."
+    ))
+}
+
 /// Preferred verify command for weak auto-verify: profile.test when present.
 /// Returns a short ecosystem id (rust/go/node/python/…) for callers that branch on it.
 pub fn detect_verify_from_profile(root: &Path) -> Option<(String, String)> {
@@ -483,8 +787,8 @@ impl AgentTool for ProjectTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["test", "lint", "typecheck", "build", "format", "run", "list"],
-                    "description": "Action to run, or list to show detected commands"
+                    "enum": ["test", "lint", "typecheck", "build", "format", "run", "list", "packages"],
+                    "description": "Action to run; list = root profile; packages = monorepo packages"
                 },
                 "cwd": {
                     "type": "string",
@@ -521,6 +825,37 @@ impl AgentTool for ProjectTool {
         };
         let profile = detect_profile(&root);
 
+        if action == "packages" {
+            let pkgs = discover_packages(&root);
+            if pkgs.is_empty() {
+                return Ok(ToolOutput::text(
+                    "no monorepo packages detected (no workspaces / Cargo members / go.work)",
+                ));
+            }
+            let mut s = format!("{} packages:\n", pkgs.len());
+            for p in &pkgs {
+                let mut caps = Vec::new();
+                if p.has_lint {
+                    caps.push("lint");
+                }
+                if p.has_typecheck {
+                    caps.push("typecheck");
+                }
+                if p.has_test {
+                    caps.push("test");
+                }
+                s.push_str(&format!(
+                    "  {} -- {} ({}) [{}]\n",
+                    p.name,
+                    p.path,
+                    p.toolchain.as_deref().unwrap_or("?"),
+                    caps.join(", ")
+                ));
+            }
+            s.push_str("\nUse project(action: \"lint\", cwd: \"<path>\") to target a package.\n");
+            return Ok(ToolOutput::text(s));
+        }
+
         if action == "list" {
             if profile.is_empty() {
                 return Ok(ToolOutput::text(
@@ -542,6 +877,13 @@ impl AgentTool for ProjectTool {
                 if let Some(cmd) = v {
                     s.push_str(&format!("{k}: {cmd}\n"));
                 }
+            }
+            let pkgs = discover_packages(&root);
+            if !pkgs.is_empty() {
+                s.push_str(&format!(
+                    "\n{} monorepo package(s) — project(action: \"packages\") for details\n",
+                    pkgs.len()
+                ));
             }
             return Ok(ToolOutput::text(s));
         }
@@ -683,5 +1025,69 @@ mod tests {
         let (eco, cmd) = detect_verify_from_profile(dir.path()).unwrap();
         assert!(eco.contains("rust") || eco.contains("cargo"));
         assert_eq!(cmd, "cargo test");
+    }
+
+    #[test]
+    fn native_checks_rust() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname=\"t\"\nversion=\"0.1.0\"\n",
+        )
+        .unwrap();
+        let c = detect_native_checks(dir.path()).unwrap();
+        assert!(c.contains("clippy"));
+        assert!(c.contains("cargo check"));
+    }
+
+    #[test]
+    fn monorepo_cargo_members() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/a\", \"crates/b\"]\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join("crates/a")).unwrap();
+        fs::create_dir_all(dir.path().join("crates/b")).unwrap();
+        fs::write(
+            dir.path().join("crates/a/Cargo.toml"),
+            "[package]\nname = \"a\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("crates/b/Cargo.toml"),
+            "[package]\nname = \"b\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        let pkgs = discover_packages(dir.path());
+        assert_eq!(pkgs.len(), 2);
+        assert!(pkgs.iter().any(|p| p.name == "a"));
+        assert!(pkgs.iter().any(|p| p.path.contains("crates/b")));
+    }
+
+    #[test]
+    fn monorepo_pnpm_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n").unwrap();
+        fs::write(dir.path().join("package.json"), "{}").unwrap();
+        fs::create_dir_all(dir.path().join("packages/web")).unwrap();
+        fs::write(
+            dir.path().join("packages/web/package.json"),
+            r#"{"name":"@app/web"}"#,
+        )
+        .unwrap();
+        let pkgs = discover_packages(dir.path());
+        assert_eq!(pkgs.len(), 1);
+        assert_eq!(pkgs[0].name, "@app/web");
+    }
+
+    #[test]
+    fn shell_hint_and_git_commit() {
+        assert!(looks_like_git_commit("git commit -m 'x'"));
+        assert!(!looks_like_git_commit("git status"));
+        let h = detect_project_command_hint("cargo clippy --all-targets").unwrap();
+        assert!(h.contains("project(action: \"lint\")"));
+        assert!(detect_project_command_hint("echo hi").is_none());
     }
 }

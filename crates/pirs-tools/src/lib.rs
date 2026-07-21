@@ -62,7 +62,10 @@ pub use grep::GrepTool;
 pub use ls::LsTool;
 pub use read::ReadTool;
 pub use recall::RecallTool;
-pub use project::{detect_profile, detect_toolchain_label, ProjectProfile, ProjectTool};
+pub use project::{
+    detect_native_checks, detect_profile, detect_toolchain_label, discover_packages,
+    ProjectProfile, ProjectTool,
+};
 pub use run_tests::RunTestsTool;
 pub use web::life_tools;
 pub use write::WriteTool;

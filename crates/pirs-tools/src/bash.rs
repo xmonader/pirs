@@ -92,6 +92,39 @@ impl AgentTool for BashTool {
         if !self.cwd.exists() {
             bail!("working directory {} does not exist", self.cwd.display());
         }
+
+        // Soulforge-style pre-commit: run native lint+typecheck before git commit.
+        // Skip with PIRS_NO_PRECOMMIT=1.
+        if crate::project::looks_like_git_commit(&args.command)
+            && !std::env::var("PIRS_NO_PRECOMMIT")
+                .map(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+                .unwrap_or(false)
+        {
+            if let Some(checks) = crate::project::detect_native_checks(&self.cwd) {
+                ctx.emit_update(format!("pre-commit checks: {checks}"));
+                let pre = exec_local(
+                    &checks,
+                    &self.cwd,
+                    Some(std::time::Duration::from_secs(args.timeout.unwrap_or(300))),
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!("pre-commit checks failed to run: {e}"))?;
+                if !matches!(pre.code, Some(0)) || pre.timed_out {
+                    let body = format!("{}{}", pre.stdout, pre.stderr);
+                    let tail = if body.len() > 4000 {
+                        body[body.len() - 4000..].to_string()
+                    } else {
+                        body
+                    };
+                    bail!(
+                        "pre-commit blocked git commit (native checks failed).\n\
+                         Ran: {checks}\n\
+                         Fix the issues or set PIRS_NO_PRECOMMIT=1 to skip.\n\n{tail}"
+                    );
+                }
+            }
+        }
+
         let sandbox_is_local = std::env::var("PIRS_SANDBOX").is_err();
         if (args.background.unwrap_or(false) || args.auto_restart.unwrap_or(false))
             && !sandbox_is_local
@@ -126,7 +159,13 @@ impl AgentTool for BashTool {
         if sandbox.name() == "local" {
             // Local path keeps live streaming updates and cancellation.
             let out = run_command_raw(&self.cwd, &args.command, args.timeout, Some(&ctx)).await?;
-            return finish_output(out, &ctx.tool_call_id, "local", args.timeout);
+            return finish_output_with_hint(
+                out,
+                &ctx.tool_call_id,
+                "local",
+                args.timeout,
+                &args.command,
+            );
         }
         let out = sandbox
             .exec(
@@ -136,7 +175,13 @@ impl AgentTool for BashTool {
             )
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-        finish_output(out, &ctx.tool_call_id, sandbox.name(), args.timeout)
+        finish_output_with_hint(
+            out,
+            &ctx.tool_call_id,
+            sandbox.name(),
+            args.timeout,
+            &args.command,
+        )
     }
 }
 
@@ -157,6 +202,16 @@ pub fn finish_output(
     sandbox_name: &str,
     timeout_secs: Option<u64>,
 ) -> anyhow::Result<ToolOutput> {
+    finish_output_with_hint(out, call_id, sandbox_name, timeout_secs, "")
+}
+
+fn finish_output_with_hint(
+    out: crate::sandbox::ExecOutput,
+    call_id: &str,
+    sandbox_name: &str,
+    timeout_secs: Option<u64>,
+    command: &str,
+) -> anyhow::Result<ToolOutput> {
     let combined = format!("{}{}", out.stdout, out.stderr);
     if out.timed_out {
         let ui = tail_with_footer(&combined, call_id);
@@ -173,10 +228,15 @@ pub fn finish_output(
     } else {
         format!(" [sandbox: {sandbox_name}]")
     };
-    let ui_full = if ui_text.is_empty() {
-        "(no output)".to_string()
+    let hint = if matches!(out.code, Some(0)) {
+        crate::project::detect_project_command_hint(command).unwrap_or_default()
     } else {
-        format!("{ui_text}{note}")
+        String::new()
+    };
+    let ui_full = if ui_text.is_empty() {
+        format!("(no output){note}{hint}")
+    } else {
+        format!("{ui_text}{note}{hint}")
     };
     let (model_text, truncated) = truncate::cap_for_model(&ui_full);
     match out.code {
