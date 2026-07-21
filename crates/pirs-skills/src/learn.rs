@@ -228,6 +228,10 @@ NEW_SESSION:
 "#;
 
 /// Improve an existing skill when the session looks related (Hermes-style self-improve).
+///
+/// Honors [`EvolutionMode::from_env`] like crystallize: observe = no write;
+/// draft = `skills-drafts/`; apply = live skills dir. Always writes under the
+/// original `skill_name` (model-chosen names cannot overwrite a different skill).
 pub async fn maybe_improve_skill(
     provider: Arc<dyn LlmProvider>,
     model: &str,
@@ -241,6 +245,12 @@ pub async fn maybe_improve_skill(
         return None;
     }
     if validate_skill_name(skill_name).is_err() {
+        return None;
+    }
+    let mode = EvolutionMode::from_env();
+    record_evolution_case(transcript);
+    if mode == EvolutionMode::Observe {
+        eprintln!("[learn] skill improve skipped: evolution mode=observe");
         return None;
     }
     let prompt = IMPROVE_PROMPT
@@ -257,28 +267,43 @@ pub async fn maybe_improve_skill(
     if text.is_empty() || text.starts_with("NOTHING") || !text.starts_with("---") {
         return None;
     }
-    let (name, description, body) = match parse_crystallized(&text) {
+    let (_name, description, body) = match parse_crystallized(&text) {
         Some(x) => x,
         None => {
             eprintln!("[learn] skill improve: bad frontmatter");
             return None;
         }
     };
-    // Keep original name if model drifted.
-    let name = if validate_skill_name(&name).is_ok() {
-        name
+    // Force original skill name so improve cannot overwrite a different skill.
+    let name = skill_name.to_string();
+    let dest = if mode == EvolutionMode::Draft {
+        drafts_dir()
     } else {
-        skill_name.to_string()
+        default_skills_dir()
     };
-    match write_skill(&default_skills_dir(), &name, &description, &body) {
+    match write_skill(&dest, &name, &description, &body) {
         Ok(p) => {
-            eprintln!("[learn] improved skill → {}", p.display());
+            eprintln!(
+                "[learn] improved skill (mode={}) → {}",
+                mode.name(),
+                p.display()
+            );
             Some(p)
         }
         Err(e) => {
             eprintln!("[learn] skill improve write failed: {e}");
             None
         }
+    }
+}
+
+/// Destination directory for skill improve/crystallize under the given mode
+/// (testable without LLM). `None` means observe (no write).
+pub fn evolution_write_dir(mode: EvolutionMode) -> Option<std::path::PathBuf> {
+    match mode {
+        EvolutionMode::Observe => None,
+        EvolutionMode::Draft => Some(drafts_dir()),
+        EvolutionMode::Apply => Some(default_skills_dir()),
     }
 }
 
@@ -433,6 +458,16 @@ mod evolution_mode_tests {
         assert_eq!(EvolutionMode::parse("draft"), Some(EvolutionMode::Draft));
         assert_eq!(EvolutionMode::parse("apply"), Some(EvolutionMode::Apply));
         assert_eq!(EvolutionMode::Draft.name(), "draft");
+    }
+
+    #[test]
+    fn improve_honors_evolution_write_dir() {
+        assert!(evolution_write_dir(EvolutionMode::Observe).is_none());
+        let draft = evolution_write_dir(EvolutionMode::Draft).expect("draft dir");
+        assert!(draft.to_string_lossy().contains("skills-drafts"));
+        let apply = evolution_write_dir(EvolutionMode::Apply).expect("apply dir");
+        assert!(apply.to_string_lossy().contains("skills"));
+        assert!(!apply.to_string_lossy().contains("skills-drafts"));
     }
 
     #[test]

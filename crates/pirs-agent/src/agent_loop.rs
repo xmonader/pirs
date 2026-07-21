@@ -191,24 +191,9 @@ pub async fn run_agent_loop(
                     )
                     .await;
                 }
-                // Thrash stop: inject a synthetic error and end if detectors fired.
-                if let Some(guard) = &config.thrash {
-                    if let Some(msg) = guard.take_stop() {
-                        let stop = Message::user(format!("[system thrash stop] {msg}"));
-                        emit(AgentEvent::MessageStart {
-                            message: Box::new(stop.clone()),
-                        });
-                        context.messages.push(stop.clone());
-                        emit(AgentEvent::MessageEnd {
-                            message: Box::new(stop.clone()),
-                        });
-                        new_messages.push(stop);
-                        emit(AgentEvent::AgentEnd {
-                            messages: new_messages.clone(),
-                        });
-                        return (new_messages, None);
-                    }
-                }
+                // Always attach tool_results before any thrash stop. Returning early
+                // here used to leave assistant tool_use without matching results and
+                // permanently wedge the next Anthropic request (400 forever).
                 for r in &results {
                     // Spill every tool result to searchable session memory —
                     // except recall's own output, which would recursively
@@ -240,6 +225,26 @@ pub async fn run_agent_loop(
                 message: Box::new(assistant.clone()),
                 tool_results: results.clone(),
             });
+            // Thrash stop after tool_results are on the wire (protocol-safe).
+            if had_calls {
+                if let Some(guard) = &config.thrash {
+                    if let Some(msg) = guard.take_stop() {
+                        let stop = Message::user(format!("[system thrash stop] {msg}"));
+                        emit(AgentEvent::MessageStart {
+                            message: Box::new(stop.clone()),
+                        });
+                        context.messages.push(stop.clone());
+                        emit(AgentEvent::MessageEnd {
+                            message: Box::new(stop.clone()),
+                        });
+                        new_messages.push(stop);
+                        emit(AgentEvent::AgentEnd {
+                            messages: new_messages.clone(),
+                        });
+                        return (new_messages, None);
+                    }
+                }
+            }
             turn_count += 1;
             tool_call_count += results.len();
             if config
@@ -973,10 +978,19 @@ async fn execute_tool_calls(
             }
         }
     } else {
-        // Parallel path still observes thrash (criterion 2: default execution mode).
+        // Parallel path still observes thrash (criterion 2: default execution mode)
+        // and honors mid-batch steer skip before launching work.
         let mut prepared = Vec::new();
         let mut thrash_blocked = false;
+        let mut steer_skip = false;
         for (index, call) in calls.into_iter().enumerate() {
+            if !steer_skip {
+                if let Some(pred) = skip_remaining_if {
+                    if pred() {
+                        steer_skip = true;
+                    }
+                }
+            }
             emit(AgentEvent::ToolExecutionStart {
                 tool_call_id: call.id.clone(),
                 tool_name: call.name.clone(),
@@ -988,6 +1002,21 @@ async fn execute_tool_calls(
                     &call.name,
                     "Skipped due to thrash stop.",
                     "skipped_thrash",
+                );
+                emit(AgentEvent::ToolExecutionEnd {
+                    tool_call_id: skipped.tool_call_id.clone(),
+                    tool_name: skipped.tool_name.clone(),
+                    result: Box::new(skipped.clone()),
+                });
+                results[index] = Some(skipped);
+                continue;
+            }
+            if steer_skip {
+                let skipped = error_result_kind(
+                    &call.id,
+                    &call.name,
+                    "Skipped due to queued user message.",
+                    "skipped_steer",
                 );
                 emit(AgentEvent::ToolExecutionEnd {
                     tool_call_id: skipped.tool_call_id.clone(),
@@ -1043,6 +1072,29 @@ async fn execute_tool_calls(
 
         let mut in_flight = FuturesUnordered::new();
         for p in prepared {
+            // Re-check steer before launching each prepared tool.
+            if let Some(pred) = skip_remaining_if {
+                if pred() {
+                    if let Prepared::Ready {
+                        index, id, name, ..
+                    } = p
+                    {
+                        let skipped = error_result_kind(
+                            &id,
+                            &name,
+                            "Skipped due to queued user message.",
+                            "skipped_steer",
+                        );
+                        emit(AgentEvent::ToolExecutionEnd {
+                            tool_call_id: skipped.tool_call_id.clone(),
+                            tool_name: skipped.tool_name.clone(),
+                            result: Box::new(skipped.clone()),
+                        });
+                        results[index] = Some(skipped);
+                    }
+                    continue;
+                }
+            }
             if let Prepared::Ready {
                 index,
                 id,
@@ -1369,5 +1421,48 @@ mod skip_remaining_tests {
                 || results.iter().any(|r| r.model_text().contains("loop")),
             "thrash stop should be set after parallel identical signatures"
         );
+    }
+
+    #[tokio::test]
+    async fn parallel_batch_honors_steer_skip_remaining() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let tools: Vec<Arc<dyn AgentTool>> = vec![Arc::new(CountTool {
+            name: "bash".into(),
+            hits: Arc::clone(&hits),
+        })];
+        // First pred check is false (allow first tool); later checks true (skip).
+        let n = Arc::new(AtomicUsize::new(0));
+        let n2 = Arc::clone(&n);
+        let pred = move || {
+            let i = n2.fetch_add(1, Ordering::SeqCst);
+            i >= 1
+        };
+        let calls: Vec<_> = (0..3)
+            .map(|i| ToolCallData {
+                id: format!("s{i}"),
+                name: "bash".into(),
+                arguments: json!({"command": "x"}),
+            })
+            .collect();
+        let emit: Emit = Arc::new(|_| {});
+        let results = execute_tool_calls_for_test(
+            calls,
+            &tools,
+            &Hooks::default(),
+            CancellationToken::new(),
+            &emit,
+            false, // parallel
+            None,
+            Some(&pred),
+        )
+        .await;
+        assert_eq!(results.len(), 3);
+        assert!(
+            results[1].model_text().contains("Skipped")
+                || results[2].model_text().contains("Skipped"),
+            "parallel path must skip remaining on steer: {:?}",
+            results.iter().map(|r| r.model_text()).collect::<Vec<_>>()
+        );
+        assert!(hits.load(Ordering::SeqCst) <= 1, "at most first tool runs");
     }
 }

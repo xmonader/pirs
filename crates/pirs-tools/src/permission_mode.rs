@@ -105,6 +105,38 @@ pub fn required_mode_for_tool(tool: &str) -> PermissionMode {
 
 /// Deny reason if current mode is below the tool's requirement.
 pub fn permission_deny_reason(mode: PermissionMode, tool: &str) -> Option<String> {
+    permission_deny_reason_with_args(mode, tool, &serde_json::Value::Null)
+}
+
+/// Permission denials with tool args (action-aware for checkpoint restore / pr create).
+pub fn permission_deny_reason_with_args(
+    mode: PermissionMode,
+    tool: &str,
+    args: &serde_json::Value,
+) -> Option<String> {
+    // Mutating actions on otherwise-readonly tools need workspace-write+.
+    if let Some(reason) = crate::safety_profile::mutating_action_deny(tool, args) {
+        if mode < PermissionMode::WorkspaceWrite {
+            return Some(reason);
+        }
+        // Under workspace-write+, allow (approval may still apply for pr create).
+        // pr create is network-side-effectful — require danger-full-access.
+        if tool == "pr"
+            && args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .map(|a| a.eq_ignore_ascii_case("create"))
+                .unwrap_or(false)
+            && mode < PermissionMode::DangerFullAccess
+        {
+            return Some(format!(
+                "tool `pr` action `create` requires permission mode `{}` (current: `{}`)",
+                PermissionMode::DangerFullAccess.name(),
+                mode.name()
+            ));
+        }
+        return None;
+    }
     let need = required_mode_for_tool(tool);
     if mode >= need {
         None
@@ -122,9 +154,9 @@ pub fn permission_deny_reason(mode: PermissionMode, tool: &str) -> Option<String
 pub fn permission_hook(_initial: PermissionMode) -> BeforeToolCallHook {
     // Seed live slot if not already set by init.
     let _ = live_permission_mode();
-    Arc::new(move |_id, tool, _args| {
+    Arc::new(move |_id, tool, args| {
         let mode = live_permission_mode();
-        permission_deny_reason(mode, tool)
+        permission_deny_reason_with_args(mode, tool, args)
     })
 }
 
@@ -193,5 +225,37 @@ mod tests {
         );
         set_live_permission_mode(PermissionMode::DangerFullAccess);
         assert!(h("1", "bash", &serde_json::json!({})).is_none());
+    }
+
+    #[test]
+    fn read_only_denies_checkpoint_restore_and_pr_create() {
+        let restore = serde_json::json!({"action": "restore"});
+        let create = serde_json::json!({"action": "create", "title": "x"});
+        assert!(permission_deny_reason_with_args(
+            PermissionMode::ReadOnly,
+            "checkpoint",
+            &restore
+        )
+        .is_some());
+        assert!(permission_deny_reason_with_args(PermissionMode::ReadOnly, "pr", &create).is_some());
+        assert!(permission_deny_reason_with_args(
+            PermissionMode::ReadOnly,
+            "checkpoint",
+            &serde_json::json!({"action": "list"})
+        )
+        .is_none());
+        // pr create needs danger-full-access even under workspace-write
+        assert!(permission_deny_reason_with_args(
+            PermissionMode::WorkspaceWrite,
+            "pr",
+            &create
+        )
+        .is_some());
+        assert!(permission_deny_reason_with_args(
+            PermissionMode::DangerFullAccess,
+            "pr",
+            &create
+        )
+        .is_none());
     }
 }

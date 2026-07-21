@@ -64,7 +64,10 @@ type RunOutput = (
     Vec<Message>,
     Option<pirs_agent::agent_loop::BudgetHit>,
 );
-type RunFuture = std::pin::Pin<Box<dyn std::future::Future<Output = RunOutput> + Send>>;
+/// Completion channel for a turn running on a **separate** tokio task.
+/// Permission hooks block that task on std::sync::mpsc; the stdin select loop
+/// must stay free to deliver client permission replies into the pending map.
+type RunWait = tokio::sync::oneshot::Receiver<RunOutput>;
 
 /// Senders waiting on a response to a request *we* sent to the client
 /// (currently only `session/request_permission`), keyed by the outbound
@@ -77,7 +80,7 @@ type PendingMap = Arc<Mutex<HashMap<u64, std::sync::mpsc::Sender<Value>>>>;
 struct SessionState {
     agent: Agent,
     session_id: String,
-    run: Option<RunFuture>,
+    run: Option<RunWait>,
     /// The `session/prompt` request id to answer once `run` resolves —
     /// `session/prompt` doesn't respond until the whole turn (including any
     /// steering/tool calls) finishes.
@@ -117,13 +120,18 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
     let session_id_slot: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
+    // Live permission ladder (same as interactive modes) + ACP client gate.
+    let mut gate_hook: Option<pirs_agent::events::BeforeToolCallHook> =
+        Some(pirs_tools::live_permission_hook());
+    let acp_perm = acp_permission_hook(
+        Arc::clone(&pending),
+        out_tx.clone(),
+        Arc::clone(&next_out_id),
+        Arc::clone(&session_id_slot),
+    );
+    gate_hook = pirs_agent::Hooks::chain_before(gate_hook, Some(acp_perm));
     let mut hooks = Hooks {
-        before_tool_call: Some(acp_permission_hook(
-            Arc::clone(&pending),
-            out_tx.clone(),
-            Arc::clone(&next_out_id),
-            Arc::clone(&session_id_slot),
-        )),
+        before_tool_call: gate_hook,
         ..Default::default()
     };
 
@@ -258,7 +266,13 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
             }
             result = async {
                 match state.run.as_mut() {
-                    Some(f) => f.await,
+                    Some(rx) => match rx.await {
+                        Ok(out) => out,
+                        Err(_) => {
+                            // Task dropped — synthesize empty finish.
+                            (vec![], vec![], None)
+                        }
+                    },
                     None => std::future::pending().await,
                 }
             } => Cmd::RunFinished(result),
@@ -415,7 +429,17 @@ async fn handle_method(
             let user_msg = extract_prompt_message(&params);
             state.pending_prompt_id = id;
             match state.agent.begin_prompt(vec![user_msg]) {
-                Ok(fut) => state.run = Some(Box::pin(fut)),
+                Ok(fut) => {
+                    // Run the agent on a separate task so blocking permission
+                    // hooks cannot starve the stdin reader (which delivers the
+                    // permission response into `pending`).
+                    let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                    tokio::spawn(async move {
+                        let out = fut.await;
+                        let _ = done_tx.send(out);
+                    });
+                    state.run = Some(done_rx);
+                }
                 Err(e) => {
                     let rid = state.pending_prompt_id.take();
                     respond_error(out, rid, -32000, &e.to_string());
@@ -667,11 +691,12 @@ fn emit_session_update(
     }
 }
 
-/// Every tool call is gated through the client via `session/request_permission`
-/// — this closure is `pirs_agent`'s synchronous `BeforeToolCallHook`, so it
-/// blocks the calling task on a `std::sync::mpsc::Receiver` until the stdin
-/// reader loop resolves the matching pending outbound request (see `run`'s
-/// `Cmd::Incoming` handling for responses with no `method`).
+/// Every tool call is gated through the client via `session/request_permission`.
+///
+/// This is a synchronous `BeforeToolCallHook` that blocks **the agent task** on
+/// a `std::sync::mpsc::Receiver` until the stdin reader resolves the matching
+/// pending outbound request. The agent turn is spawned on a separate tokio task
+/// so this block never freezes the stdin select loop.
 fn acp_permission_hook(
     pending: PendingMap,
     out: tokio::sync::mpsc::UnboundedSender<Value>,
@@ -997,6 +1022,23 @@ mod tests {
         );
         assert_eq!(msgs[1]["params"]["update"]["status"], json!("completed"));
         assert_eq!(msgs[1]["params"]["update"]["rawOutput"], json!("total 0"));
+    }
+
+    #[test]
+    fn agent_turn_spawned_off_stdin_task() {
+        let src = include_str!("acp_mode.rs");
+        assert!(
+            src.contains("tokio::spawn(async move") && src.contains("done_tx.send"),
+            "agent turn must run on a separate task so permission recv cannot starve stdin"
+        );
+        assert!(
+            src.contains("live_permission_hook"),
+            "ACP must install the live permission ladder like interactive modes"
+        );
+        assert!(
+            src.contains("oneshot::channel") || src.contains("oneshot::Receiver"),
+            "run wait must be a channel, not a future polled on the stdin select task"
+        );
     }
 
     #[test]

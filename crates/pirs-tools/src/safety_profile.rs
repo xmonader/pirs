@@ -48,6 +48,9 @@ impl SafetyProfile {
 }
 
 /// Tools that only observe state (safe under `plan`).
+///
+/// Action-sensitive tools (`checkpoint`, `pr`) are listed here for list/status
+/// style actions; mutating actions are denied via [`mutating_action_deny`].
 pub fn is_readonly_tool(tool: &str) -> bool {
     matches!(
         tool,
@@ -87,6 +90,29 @@ pub fn is_readonly_tool(tool: &str) -> bool {
     )
 }
 
+/// Deny reason for action-sensitive tools that are "mostly" readonly but have
+/// mutating actions (checkpoint restore, pr create/push).
+pub fn mutating_action_deny(tool: &str, args: &serde_json::Value) -> Option<String> {
+    let action = args
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match tool {
+        "checkpoint" if action == "restore" => Some(
+            "tool `checkpoint` action `restore` mutates the workspace \
+             (not allowed under plan/read-only; raise permission or leave plan mode)"
+                .into(),
+        ),
+        "pr" if action == "create" => Some(
+            "tool `pr` action `create` pushes and opens a remote PR \
+             (not allowed under plan/read-only; raise permission or leave plan mode)"
+                .into(),
+        ),
+        _ => None,
+    }
+}
+
 /// File mutation tools (auto-allowed under `accept-edits`).
 pub fn is_file_mutation_tool(tool: &str) -> bool {
     matches!(
@@ -105,9 +131,21 @@ pub fn is_shell_tool(tool: &str) -> bool {
 
 /// Whether the profile hard-denies this tool. `None` = allowed by profile.
 pub fn profile_deny_reason(profile: SafetyProfile, tool: &str) -> Option<String> {
+    profile_deny_reason_with_args(profile, tool, &serde_json::Value::Null)
+}
+
+/// Profile denials with tool args (action-aware for checkpoint/pr).
+pub fn profile_deny_reason_with_args(
+    profile: SafetyProfile,
+    tool: &str,
+    args: &serde_json::Value,
+) -> Option<String> {
     match profile {
         SafetyProfile::Default | SafetyProfile::AutoApprove => None,
         SafetyProfile::Plan => {
+            if let Some(r) = mutating_action_deny(tool, args) {
+                return Some(r);
+            }
             if is_readonly_tool(tool) {
                 None
             } else {
@@ -144,7 +182,7 @@ pub fn profile_skips_approval(profile: SafetyProfile, tool: &str) -> bool {
 
 /// Build a `before_tool_call` hook that enforces profile denials.
 pub fn profile_hook(profile: SafetyProfile) -> BeforeToolCallHook {
-    Arc::new(move |_id, tool, _args| profile_deny_reason(profile, tool))
+    Arc::new(move |_id, tool, args| profile_deny_reason_with_args(profile, tool, args))
 }
 
 #[cfg(test)]
@@ -201,5 +239,23 @@ mod tests {
         let r = h("1", "bash", &serde_json::json!({"command": "ls"}));
         assert!(r.unwrap().contains("plan"));
         assert!(h("1", "read", &serde_json::json!({"path": "a"})).is_none());
+    }
+
+    #[test]
+    fn plan_blocks_checkpoint_restore_and_pr_create() {
+        let restore = serde_json::json!({"action": "restore", "id": "cp1"});
+        let create = serde_json::json!({"action": "create", "title": "t"});
+        let list = serde_json::json!({"action": "list"});
+        assert!(
+            profile_deny_reason_with_args(SafetyProfile::Plan, "checkpoint", &restore).is_some()
+        );
+        assert!(profile_deny_reason_with_args(SafetyProfile::Plan, "pr", &create).is_some());
+        assert!(profile_deny_reason_with_args(SafetyProfile::Plan, "checkpoint", &list).is_none());
+        assert!(profile_deny_reason_with_args(
+            SafetyProfile::Plan,
+            "pr",
+            &serde_json::json!({"action": "status"})
+        )
+        .is_none());
     }
 }

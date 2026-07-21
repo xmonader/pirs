@@ -17,8 +17,22 @@ pub struct SessionHit {
     pub ts: u64,
 }
 
-/// Search all `sessions/**/*.jsonl` under `state_dir` for query tokens.
+/// Search `sessions/**/*.jsonl` under `state_dir` for query tokens.
+///
+/// When `peer_scope` is set (e.g. `telegram/12345` or `telegram/`), only sessions
+/// whose key starts with that prefix are searched — prevents cross-peer leaks on
+/// a shared gateway by default.
 pub fn search_sessions(state_dir: &Path, query: &str, limit: usize) -> anyhow::Result<Vec<SessionHit>> {
+    search_sessions_scoped(state_dir, query, limit, None)
+}
+
+/// Like [`search_sessions`] with optional peer/channel scope prefix.
+pub fn search_sessions_scoped(
+    state_dir: &Path,
+    query: &str,
+    limit: usize,
+    peer_scope: Option<&str>,
+) -> anyhow::Result<Vec<SessionHit>> {
     let root = state_dir.join("sessions");
     if !root.is_dir() {
         return Ok(Vec::new());
@@ -31,6 +45,9 @@ pub fn search_sessions(state_dir: &Path, query: &str, limit: usize) -> anyhow::R
     if tokens.is_empty() {
         anyhow::bail!("query too short");
     }
+    let scope = peer_scope
+        .map(|s| s.trim().trim_start_matches('/').to_string())
+        .filter(|s| !s.is_empty());
     let mut hits = Vec::new();
     walk_jsonl(&root, &mut |path| {
         let rel = path
@@ -39,6 +56,16 @@ pub fn search_sessions(state_dir: &Path, query: &str, limit: usize) -> anyhow::R
             .to_string_lossy()
             .to_string();
         let session_key = rel.trim_end_matches(".jsonl").replace('\\', "/");
+        if let Some(ref sc) = scope {
+            if !session_key.starts_with(sc.as_str())
+                && !session_key.starts_with(&format!("{sc}/"))
+            {
+                // Also allow exact channel/peer prefix match.
+                if !session_key.starts_with(sc) {
+                    return;
+                }
+            }
+        }
         let Ok(text) = fs::read_to_string(path) else {
             return;
         };
@@ -102,12 +129,27 @@ fn walk_jsonl(dir: &Path, f: &mut dyn FnMut(&Path)) {
 }
 
 /// Agent tool: search past gateway/CLI sessions.
+///
+/// `peer_scope` defaults from `PIRS_CLAW_SESSION_PEER` when set (gateway sets this
+/// per inbound peer). Without a scope, search is global (CLI / owner tools).
 pub fn session_search_tool(state_dir: PathBuf) -> std::sync::Arc<dyn pirs_agent::AgentTool> {
-    std::sync::Arc::new(SessionSearchTool { state_dir })
+    let peer_scope = std::env::var("PIRS_CLAW_SESSION_PEER").ok().filter(|s| !s.is_empty());
+    session_search_tool_scoped(state_dir, peer_scope)
+}
+
+pub fn session_search_tool_scoped(
+    state_dir: PathBuf,
+    peer_scope: Option<String>,
+) -> std::sync::Arc<dyn pirs_agent::AgentTool> {
+    std::sync::Arc::new(SessionSearchTool {
+        state_dir,
+        peer_scope,
+    })
 }
 
 struct SessionSearchTool {
     state_dir: PathBuf,
+    peer_scope: Option<String>,
 }
 
 #[derive(serde::Deserialize, schemars::JsonSchema)]
@@ -129,8 +171,11 @@ impl pirs_agent::AgentTool for SessionSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search past conversation sessions (all channels) by keyword. \
-         Use when the user asks what was said earlier, across chats, or to recall prior context."
+        if self.peer_scope.is_some() {
+            "Search this peer's past conversation sessions by keyword."
+        } else {
+            "Search past conversation sessions by keyword (scoped to caller peer when set)."
+        }
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -146,7 +191,12 @@ impl pirs_agent::AgentTool for SessionSearchTool {
         ctx: pirs_agent::ToolExecContext,
     ) -> anyhow::Result<pirs_agent::ToolOutput> {
         let args: SessionSearchArgs = serde_json::from_value(ctx.args)?;
-        let hits = search_sessions(&self.state_dir, &args.query, args.limit.max(1))?;
+        let hits = search_sessions_scoped(
+            &self.state_dir,
+            &args.query,
+            args.limit.max(1),
+            self.peer_scope.as_deref(),
+        )?;
         if hits.is_empty() {
             return Ok(pirs_agent::ToolOutput::text(format!(
                 "No session matches for {:?}",
@@ -183,5 +233,26 @@ mod tests {
         let hits = search_sessions(dir.path(), "pixel dog", 10).unwrap();
         assert!(!hits.is_empty());
         assert!(hits[0].snippet.to_ascii_lowercase().contains("pixel"));
+    }
+
+    #[test]
+    fn peer_scope_hides_other_peers() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = SessionStore::open_for(dir.path(), SessionId::new("telegram", "1")).unwrap();
+        let b = SessionStore::open_for(dir.path(), SessionId::new("telegram", "2")).unwrap();
+        a.append("user", "secret alpha token zebra").unwrap();
+        b.append("user", "secret beta token zebra").unwrap();
+        let scoped = search_sessions_scoped(dir.path(), "zebra secret", 10, Some("telegram/1"))
+            .unwrap();
+        assert!(!scoped.is_empty());
+        assert!(
+            scoped.iter().all(|h| h.session_key.starts_with("telegram/1")),
+            "scoped hits: {:?}",
+            scoped.iter().map(|h| &h.session_key).collect::<Vec<_>>()
+        );
+        assert!(
+            !scoped.iter().any(|h| h.snippet.contains("beta")),
+            "must not return other peer: {scoped:?}"
+        );
     }
 }

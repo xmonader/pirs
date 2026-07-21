@@ -50,6 +50,9 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
         }));
     }
 
+    // Cancel handle lives outside the agent mutex so POST /cancel never waits
+    // on an in-flight prompt (mirrors TUI cancel_handle).
+    let cancel_slot = opts.agent.cancel_handle();
     let agent = Arc::new(tokio::sync::Mutex::new(opts.agent));
     let (prompt_tx, mut prompt_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     {
@@ -57,35 +60,47 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
         let tx = tx.clone();
         tokio::spawn(async move {
             while let Some(text) = prompt_rx.recv().await {
-                let running = {
-                    let a = agent.lock().await;
+                // Short lock: either steer an in-flight run or begin_prompt and
+                // release before awaiting (so cancel/steer stay responsive).
+                let run = {
+                    let mut a = agent.lock().await;
                     if a.is_running() {
                         a.steer(Message::user(text.clone()));
-                        true
+                        None
                     } else {
-                        false
+                        match a.begin_prompt(vec![Message::user(text.clone())]) {
+                            Ok(fut) => Some(fut),
+                            Err(_) => {
+                                a.steer(Message::user(text.clone()));
+                                None
+                            }
+                        }
                     }
                 };
-                if running {
+                if run.is_none() {
                     let _ = tx.send(json!({"type": "status", "text": "steered"}).to_string());
                     continue;
                 }
                 let _ = tx
                     .send(json!({"type": "message_end", "role": "user", "text": text}).to_string());
-                let mut a = agent.lock().await;
-                let _ = a.prompt(text).await;
-                let report = a.usage_report();
-                let total = report.grand_total();
-                let _ = tx.send(
-                    json!({
-                        "type": "usage",
-                        "input": total.input,
-                        "cacheRead": total.cache_read,
-                        "output": total.output,
-                        "calls": report.calls.len(),
-                    })
-                    .to_string(),
-                );
+                if let Some(fut) = run {
+                    let (full, _new, hit) = fut.await;
+                    let mut a = agent.lock().await;
+                    a.budget_hit = hit;
+                    a.complete_run(full);
+                    let report = a.usage_report();
+                    let total = report.grand_total();
+                    let _ = tx.send(
+                        json!({
+                            "type": "usage",
+                            "input": total.input,
+                            "cacheRead": total.cache_read,
+                            "output": total.output,
+                            "calls": report.calls.len(),
+                        })
+                        .to_string(),
+                    );
+                }
             }
         });
     }
@@ -114,6 +129,7 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
             events: tx.clone(),
             prompts: prompt_tx.clone(),
             agent: Arc::clone(&agent),
+            cancel: Arc::clone(&cancel_slot),
             token: opts.token.clone(),
             embed_token,
         };
@@ -130,6 +146,8 @@ struct AppState {
     events: broadcast::Sender<String>,
     prompts: tokio::sync::mpsc::UnboundedSender<String>,
     agent: Arc<tokio::sync::Mutex<Agent>>,
+    /// Cancel without taking the agent mutex (works mid-prompt).
+    cancel: std::sync::Arc<std::sync::Mutex<tokio_util::sync::CancellationToken>>,
     token: String,
     /// Embed the auth token in the served page. Only safe when loopback-bound;
     /// on external binds the page must prompt for the token instead.
@@ -286,15 +304,26 @@ where
             let v: serde_json::Value = serde_json::from_slice(&body).unwrap_or(json!({}));
             let text = v.get("text").and_then(|t| t.as_str()).unwrap_or("");
             if !text.trim().is_empty() {
-                let _ = state.prompts.send(text.to_string());
+                // Mid-run: steer without queueing a second full turn. Short lock
+                // only — worker does not hold the mutex across prompt().await.
+                let steered = {
+                    let a = state.agent.lock().await;
+                    if a.is_running() {
+                        a.steer(Message::user(text));
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if !steered {
+                    let _ = state.prompts.send(text.to_string());
+                }
             }
             respond(&mut write, 200, "application/json", "{\"ok\":true}").await?;
         }
         ("POST", "/cancel") => {
-            {
-                let a = state.agent.lock().await;
-                a.cancel();
-            }
+            // Do not take agent.lock — cancel_slot reaches the live run.
+            state.cancel.lock().unwrap().cancel();
             respond(&mut write, 200, "application/json", "{\"ok\":true}").await?;
         }
         ("GET", "/state") => {
@@ -428,6 +457,30 @@ mod tests {
     }
 
     #[test]
+    fn serve_worker_uses_begin_prompt_not_prompt_across_lock() {
+        // Structural: worker must begin_prompt + await outside the mutex, and
+        // cancel must use cancel_slot (not agent.lock).
+        let src = include_str!("serve.rs");
+        assert!(
+            src.contains("begin_prompt"),
+            "serve worker must use begin_prompt so lock is not held across the turn"
+        );
+        assert!(
+            src.contains("cancel_slot") || src.contains("cancel.lock()"),
+            "cancel must not require agent mutex across the whole turn"
+        );
+        assert!(
+            src.contains("if a.is_running()") && src.contains("a.steer("),
+            "POST /prompt must steer mid-run instead of only queueing"
+        );
+        // Must use begin_prompt (not hold mutex across prompt().await).
+        assert!(
+            src.contains("begin_prompt(vec![Message::user"),
+            "worker must begin_prompt then await outside the lock"
+        );
+    }
+
+    #[test]
     fn query_param_extracts_token() {
         assert_eq!(
             query_param("/events?token=abc123", "token"),
@@ -464,6 +517,7 @@ mod tests {
             AppState {
                 events,
                 prompts,
+                cancel: agent.cancel_handle(),
                 agent: std::sync::Arc::new(tokio::sync::Mutex::new(agent)),
                 token: token.to_string(),
                 embed_token: true,

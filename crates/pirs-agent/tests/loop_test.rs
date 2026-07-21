@@ -1109,3 +1109,97 @@ async fn host_restores_stop_gate_when_transform_strips_all_reminders() {
         "LLM-facing context must still carry stop_gate after hostile transform: {first:?}"
     );
 }
+
+/// Thrash stop must still leave every tool_use paired with a tool_result.
+/// Regression: early-return used to drop batch results and wedge the session.
+#[tokio::test]
+async fn thrash_stop_keeps_tool_use_result_pairs() {
+    use pirs_agent::agent_loop::{run_agent_loop, Budgets, LoopConfig};
+    use pirs_agent::compaction::tool_pairs_intact;
+    use pirs_agent::events::Hooks;
+    use pirs_agent::{Emit, ThrashGuard};
+
+    // One assistant turn with three identical tool calls — thrash trips on 2nd.
+    let multi = AssistantMessage {
+        content: vec![
+            ContentBlock::ToolCall {
+                id: "t0".into(),
+                name: "echo".into(),
+                arguments: json!({"text": "same"}),
+                thought_signature: None,
+            },
+            ContentBlock::ToolCall {
+                id: "t1".into(),
+                name: "echo".into(),
+                arguments: json!({"text": "same"}),
+                thought_signature: None,
+            },
+            ContentBlock::ToolCall {
+                id: "t2".into(),
+                name: "echo".into(),
+                arguments: json!({"text": "same"}),
+                thought_signature: None,
+            },
+        ],
+        stop_reason: StopReason::ToolUse,
+        ..Default::default()
+    };
+
+    let provider: Arc<dyn LlmProvider> = Arc::new(MockProvider::new(vec![multi]));
+    let thrash = ThrashGuard::with_limits(2, 10);
+    let tools: Vec<Arc<dyn AgentTool>> = vec![Arc::new(EchoTool)];
+    let cfg = LoopConfig {
+        model: "m".into(),
+        completion: CompletionOptions::default(),
+        tool_execution: ExecutionMode::Sequential,
+        hooks: Hooks::default(),
+        compaction: None,
+        visible_tools: None,
+        extra_usage: Arc::new(Mutex::new(pirs_ai::Usage::default())),
+        cascade: None,
+        budgets: Budgets::default(),
+        thrash: Some(thrash),
+        skip_remaining_if: None,
+    };
+    let emit: Emit = Arc::new(|_| {});
+    let mut ctx = Context {
+        system_prompt: None,
+        messages: vec![],
+        tools: vec![],
+    };
+    let (msgs, _) = run_agent_loop(
+        vec![Message::user("go")],
+        &mut ctx,
+        &tools,
+        &provider,
+        &cfg,
+        &emit,
+        tokio_util::sync::CancellationToken::new(),
+    )
+    .await;
+
+    assert!(
+        tool_pairs_intact(&msgs),
+        "thrash stop must not leave dangling tool_use: {msgs:?}"
+    );
+    assert!(
+        tool_pairs_intact(&ctx.messages),
+        "persisted context must keep tool pairs: {:?}",
+        ctx.messages
+    );
+    // Every tool call id has a matching result.
+    for id in ["t0", "t1", "t2"] {
+        assert!(
+            msgs.iter()
+                .any(|m| matches!(m, Message::ToolResult(r) if r.tool_call_id == id)),
+            "missing tool_result for {id} in {msgs:?}"
+        );
+    }
+    assert!(
+        msgs.iter().any(|m| matches!(
+            m,
+            Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("thrash stop") || t.contains("loop detection"))
+        )),
+        "expected thrash stop user message: {msgs:?}"
+    );
+}

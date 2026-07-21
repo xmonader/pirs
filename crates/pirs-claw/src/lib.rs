@@ -43,9 +43,10 @@ pub use pairing::{
     allow_all_enabled, warn_if_allow_all, PairingAllowlist, ALLOW_ALL_ENV, ALLOW_ALL_WARNING,
 };
 pub use presets::{
-    apply_code_defaults, build_code_agent, coding_system_prompt, coding_tools, looks_like_repo,
-    phase_scope_summary, resolve_code_strategy, CodeOptions, DEFAULT_MODEL, DEFAULT_PLAN_MODEL,
-    DEFAULT_STRATEGY,
+    apply_code_defaults, build_code_agent, coding_system_prompt, coding_tools, is_unattended,
+    looks_like_repo, phase_scope_summary, resolve_code_strategy, unattended_forbidden_tool_names,
+    unattended_tools, CodeOptions, DEFAULT_MODEL, DEFAULT_PLAN_MODEL, DEFAULT_STRATEGY,
+    UNATTENDED_ENV,
 };
 pub use duration_parse::parse_duration_secs;
 pub use secrets::{load_secrets_env, resolve_provider_and_key};

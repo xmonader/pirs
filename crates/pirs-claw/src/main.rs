@@ -1042,6 +1042,7 @@ async fn fire_schedule_job(
         .arg("--state-dir")
         .arg(&job_state)
         .arg("--no-learn")
+        .env(pirs_claw::UNATTENDED_ENV, "1")
         .arg("chat")
         .arg(&prompt)
         .output()?;
@@ -1294,8 +1295,16 @@ async fn run_chat(
     if let Some(ref m) = mem {
         sys.push_str(&memory_bridge::recall_context(m, text, 5));
     }
-    let mut tools = pirs_tools::default_tools(cwd.to_path_buf());
-    tools.extend(chat_safe_tools(cwd, skills, false, true));
+    // Cron/heartbeat set PIRS_CLAW_UNATTENDED=1 — never install unrestricted bash
+    // unless the operator opts in with PIRS_CLAW_SCHEDULE_CODE=1.
+    let mut tools = if pirs_claw::is_unattended() {
+        eprintln!("[pirs-claw] unattended tool profile (no bash/write by default)");
+        pirs_claw::unattended_tools(cwd)
+    } else {
+        let mut t = pirs_tools::default_tools(cwd.to_path_buf());
+        t.extend(chat_safe_tools(cwd, skills, false, true));
+        t
+    };
     // Dedupe by name (default_tools may already include recall).
     {
         let mut seen = std::collections::HashSet::new();

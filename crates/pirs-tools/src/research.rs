@@ -60,10 +60,7 @@ impl AgentTool for ResearchTool {
             anyhow::bail!("research requires query");
         }
         let max = args.max_pages.unwrap_or(3).clamp(1, 6);
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(25))
-            .user_agent(concat!("pirs/", env!("CARGO_PKG_VERSION")))
-            .build()?;
+        let client = crate::web::ssrf_safe_client(25).map_err(|e| anyhow::anyhow!(e))?;
 
         let mut urls = args.urls;
         // If no seeds, use DuckDuckGo HTML search for a few result links.
@@ -121,18 +118,8 @@ impl AgentTool for ResearchTool {
 }
 
 async fn fetch_page(client: &reqwest::Client, url: &str) -> anyhow::Result<String> {
-    if !(url.starts_with("http://") || url.starts_with("https://")) {
-        anyhow::bail!("url must be http(s)");
-    }
-    // Reuse SSRF checks via reqwest only on public hosts — block obvious local.
-    let lower = url.to_ascii_lowercase();
-    if lower.contains("127.0.0.1")
-        || lower.contains("localhost")
-        || lower.contains("0.0.0.0")
-        || lower.contains("[::1]")
-    {
-        anyhow::bail!("refusing local URL");
-    }
+    // Shared SSRF policy (scheme, private/metadata, DNS, redirects via client).
+    crate::web::url_allowed(url).map_err(|e| anyhow::anyhow!("{e}"))?;
     let resp = client.get(url).send().await?;
     if !resp.status().is_success() {
         anyhow::bail!("HTTP {}", resp.status());

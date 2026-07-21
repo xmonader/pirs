@@ -64,6 +64,48 @@ pub fn coding_tools(cwd: &Path) -> Vec<Arc<dyn AgentTool>> {
     pirs_tools::default_tools(cwd.to_path_buf())
 }
 
+/// Env set by cron/heartbeat/schedule tick so `chat` does not install bash.
+pub const UNATTENDED_ENV: &str = "PIRS_CLAW_UNATTENDED";
+
+/// True when this process is a scheduled/heartbeat unattended turn.
+pub fn is_unattended() -> bool {
+    matches!(
+        std::env::var(UNATTENDED_ENV).as_deref(),
+        Ok("1") | Ok("true") | Ok("yes") | Ok("on")
+    )
+}
+
+/// Restricted tool set for cron / heartbeat (no bash, write, edit by default).
+///
+/// Opt into full coding tools for scheduled jobs with `PIRS_CLAW_SCHEDULE_CODE=1`.
+pub fn unattended_tools(cwd: &Path) -> Vec<Arc<dyn AgentTool>> {
+    if matches!(
+        std::env::var("PIRS_CLAW_SCHEDULE_CODE").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes") | Ok("on")
+    ) {
+        return coding_tools(cwd);
+    }
+    let mut tools: Vec<Arc<dyn AgentTool>> = vec![
+        Arc::new(pirs_tools::ReadTool::new(cwd.to_path_buf())),
+        Arc::new(pirs_tools::GrepTool::new(cwd.to_path_buf())),
+        Arc::new(pirs_tools::FindTool::new(cwd.to_path_buf())),
+        Arc::new(pirs_tools::LsTool::new(cwd.to_path_buf())),
+        Arc::new(pirs_tools::RecallTool::default()),
+        Arc::new(pirs_tools::ProjectTool::new(cwd.to_path_buf())),
+    ];
+    tools.extend(pirs_tools::life_tools(false));
+    tools.extend(pirs_tools::browser_tools(cwd.to_path_buf()));
+    // Explicitly no bash / write / edit / jobs / computer.
+    let mut seen = std::collections::HashSet::new();
+    tools.retain(|t| seen.insert(t.name().to_string()));
+    tools
+}
+
+/// Tool names that must never appear in the default unattended profile.
+pub fn unattended_forbidden_tool_names() -> &'static [&'static str] {
+    &["bash", "write", "edit", "edit_block", "ast_edit"]
+}
+
 /// Optional safety profile from `PIRS_AGENT_PROFILE` (shared with pirs harness).
 pub fn env_safety_profile() -> pirs_tools::SafetyProfile {
     std::env::var("PIRS_AGENT_PROFILE")
@@ -181,6 +223,23 @@ mod tests {
                 "missing tool {need} in {names:?}"
             );
         }
+    }
+
+    #[test]
+    fn unattended_tools_exclude_bash_by_default() {
+        let dir = tempfile::tempdir().unwrap();
+        // Ensure schedule-code opt-in is off for this process.
+        std::env::remove_var("PIRS_CLAW_SCHEDULE_CODE");
+        let tools = unattended_tools(dir.path());
+        let names: Vec<_> = tools.iter().map(|t| t.name().to_string()).collect();
+        for bad in unattended_forbidden_tool_names() {
+            assert!(
+                !names.iter().any(|n| n == *bad),
+                "unattended must not include {bad}: {names:?}"
+            );
+        }
+        assert!(names.iter().any(|n| n == "read"));
+        assert!(names.iter().any(|n| n == "web_fetch") || names.iter().any(|n| n == "web_search"));
     }
 
     #[test]

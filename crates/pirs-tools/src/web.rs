@@ -47,6 +47,9 @@ fn allow_private() -> bool {
 }
 
 /// Reject SSRF-prone targets unless explicitly allowed.
+///
+/// Checks scheme, blocked hostnames, literal private IPs (incl. IPv4-mapped),
+/// and best-effort DNS resolution of the host to private addresses.
 pub fn url_allowed(url: &str) -> Result<(), String> {
     let url = url.trim();
     if url.is_empty() {
@@ -60,14 +63,20 @@ pub fn url_allowed(url: &str) -> Result<(), String> {
     if allow_private() {
         return Ok(());
     }
-    let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
-    if host.is_empty() {
+    // host_str() for IPv6 includes brackets (`[::1]`) which break IpAddr::parse.
+    let host_raw = parsed.host_str().unwrap_or("").to_ascii_lowercase();
+    if host_raw.is_empty() {
         return Err("URL missing host".into());
     }
+    let host = host_raw
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_string();
     if host == "localhost"
         || host.ends_with(".localhost")
         || host == "metadata.google.internal"
         || host.ends_with(".local")
+        || host == "metadata"
     {
         return Err(format!(
             "blocked host {host:?} (set {ALLOW_PRIVATE_URLS_ENV}=1 to allow private URLs)"
@@ -79,8 +88,46 @@ pub fn url_allowed(url: &str) -> Result<(), String> {
                 "blocked private IP {ip} (set {ALLOW_PRIVATE_URLS_ENV}=1 to allow)"
             ));
         }
+        return Ok(());
+    }
+    // Best-effort DNS: reject if any resolved address is private/link-local.
+    use std::net::ToSocketAddrs;
+    let port = parsed.port_or_known_default().unwrap_or(80);
+    if let Ok(addrs) = (host.as_str(), port).to_socket_addrs() {
+        for addr in addrs {
+            if ip_is_private(&addr.ip()) {
+                return Err(format!(
+                    "blocked host {host:?} resolves to private IP {} \
+                     (set {ALLOW_PRIVATE_URLS_ENV}=1 to allow)",
+                    addr.ip()
+                ));
+            }
+        }
     }
     Ok(())
+}
+
+/// reqwest redirect policy that re-runs [`url_allowed`] on every hop.
+pub fn ssrf_redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= 5 {
+            return attempt.error("too many redirects");
+        }
+        match url_allowed(attempt.url().as_str()) {
+            Ok(()) => attempt.follow(),
+            Err(e) => attempt.error(e),
+        }
+    })
+}
+
+/// HTTP client with SSRF-safe redirect policy and a short timeout.
+pub fn ssrf_safe_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .user_agent(concat!("pirs/", env!("CARGO_PKG_VERSION")))
+        .redirect(ssrf_redirect_policy())
+        .build()
+        .map_err(|e| e.to_string())
 }
 
 fn ip_is_private(ip: &IpAddr) -> bool {
@@ -91,8 +138,19 @@ fn ip_is_private(ip: &IpAddr) -> bool {
                 || v4.is_link_local()
                 || v4.octets()[0] == 169 && v4.octets()[1] == 254
                 || v4.is_unspecified()
+                // CGNAT
+                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0xc0) == 64)
         }
-        IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local() || v6.is_unspecified(),
+        IpAddr::V6(v6) => {
+            // IPv4-mapped (::ffff:x.x.x.x) and compatible forms.
+            if let Some(v4) = v6.to_ipv4_mapped().or_else(|| v6.to_ipv4()) {
+                return ip_is_private(&IpAddr::V4(v4));
+            }
+            v6.is_loopback()
+                || v6.is_unique_local()
+                || v6.is_unspecified()
+                || (v6.segments()[0] & 0xffc0) == 0xfe80 // link-local
+        }
     }
 }
 
@@ -200,11 +258,7 @@ impl AgentTool for WebFetchTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("url required"))?;
         url_allowed(url).map_err(|e| anyhow::anyhow!(e))?;
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
-            .user_agent("pirs-claw")
-            .redirect(reqwest::redirect::Policy::limited(5))
-            .build()?;
+        let client = ssrf_safe_client(20).map_err(|e| anyhow::anyhow!(e))?;
         let resp = client.get(url).send().await?;
         let status = resp.status();
         let ct = resp
@@ -264,10 +318,7 @@ impl AgentTool for WebSearchTool {
             format!("https://lite.duckduckgo.com/lite/?q={encoded}")
         };
         url_allowed(&url).map_err(|e| anyhow::anyhow!(e))?;
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
-            .user_agent("Mozilla/5.0 (compatible; pirs-claw)")
-            .build()?;
+        let client = ssrf_safe_client(20).map_err(|e| anyhow::anyhow!(e))?;
         let body = client.get(&url).send().await?.text().await?;
         let text = truncate_chars(&html_to_text(&body), MAX_SEARCH_CHARS);
         Ok(ToolOutput::text(format!("Search results for {q:?}:\n\n{text}")))
@@ -311,10 +362,7 @@ impl AgentTool for HttpJsonTool {
             .get("method")
             .and_then(|v| v.as_str())
             .unwrap_or("GET");
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
-            .user_agent("pirs-claw")
-            .build()?;
+        let client = ssrf_safe_client(20).map_err(|e| anyhow::anyhow!(e))?;
         let resp = if method.eq_ignore_ascii_case("POST") {
             let body = ctx.args.get("body").and_then(|v| v.as_str()).unwrap_or("{}");
             client
@@ -356,7 +404,19 @@ mod tests {
         assert!(url_allowed("http://127.0.0.1/").is_err());
         assert!(url_allowed("http://10.0.0.1/").is_err());
         assert!(url_allowed("http://169.254.169.254/latest").is_err());
+        assert!(url_allowed("http://metadata.google.internal/").is_err());
+        assert!(url_allowed("http://[::ffff:127.0.0.1]/").is_err());
         assert!(url_allowed("https://example.com/a").is_ok());
+    }
+
+    #[test]
+    fn ssrf_redirect_policy_rejects_private_hop() {
+        // Policy construction must re-check url_allowed — exercise via Policy
+        // by ensuring private URLs fail url_allowed (used by custom policy).
+        assert!(url_allowed("http://127.0.0.1/redirect-target").is_err());
+        let _policy = ssrf_redirect_policy();
+        // Client builds with the policy (no network).
+        assert!(ssrf_safe_client(5).is_ok());
     }
 
     #[test]
@@ -388,3 +448,4 @@ mod tests {
         assert!(truncate_chars(s, 2).contains("truncated"));
     }
 }
+

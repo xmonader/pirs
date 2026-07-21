@@ -17,8 +17,9 @@ pub use heartbeat::{
 };
 pub use learn::{
     learn_enabled_cli, learn_enabled_gateway, learn_enabled_interactive, looks_durable,
-    maybe_crystallize_skill, maybe_improve_skill, maybe_memory_nudge, maybe_update_soul,
-    record_evolution_case, session_transcript, EvolutionMode, LEARN_DISABLE_ENV, LEARN_GATEWAY_ENV,
+    evolution_write_dir, maybe_crystallize_skill, maybe_improve_skill, maybe_memory_nudge,
+    maybe_update_soul, record_evolution_case, session_transcript, EvolutionMode, LEARN_DISABLE_ENV,
+    LEARN_GATEWAY_ENV,
 };
 pub use soul::{
     curator_report, default_soul_path, default_soul_template, merge_soul_updates, read_soul,

@@ -51,7 +51,7 @@ impl AgentTool for AstEditTool {
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: AstEditArgs = serde_json::from_value(ctx.args)?;
-        let path = resolve(&self.cwd, &args.path);
+        let path = pirs_tools::paths::resolve_contained(&self.cwd, &args.path)?;
         let lang = Lang::from_path(&path)
             .filter(|l| matches!(l, Lang::Rust | Lang::Python))
             .context("ast_edit supports Rust and Python files")?;
@@ -60,7 +60,7 @@ impl AgentTool for AstEditTool {
             "replace_function_body" => replace_function_body(&path, lang, &args.name, &args.value)?,
             "rename_symbol" => rename_symbol(&path, lang, &args.name, &args.value)?,
             "move_function" => {
-                let dest = resolve(&self.cwd, &args.value);
+                let dest = pirs_tools::paths::resolve_contained(&self.cwd, &args.value)?;
                 move_function(&path, &dest, lang, &args.name)?
             }
             other => {
@@ -82,12 +82,16 @@ struct EditResult {
     first_line: usize,
 }
 
-fn resolve(cwd: &Path, input: &str) -> PathBuf {
-    let p = Path::new(input);
-    if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        cwd.join(p)
+#[cfg(test)]
+mod path_tests {
+    #[test]
+    fn ast_edit_rejects_path_outside_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path();
+        let err = pirs_tools::paths::resolve_contained(cwd, "/etc/passwd");
+        assert!(err.is_err(), "absolute escape must fail");
+        let err2 = pirs_tools::paths::resolve_contained(cwd, "../../etc/passwd");
+        assert!(err2.is_err(), "relative escape must fail");
     }
 }
 

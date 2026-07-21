@@ -357,19 +357,19 @@ fn install_profile_under_yolo_if_needed(
 }
 
 /// Chain approval/profile gate with extension before_tool hooks.
-/// Under yolo, skip the interactive approval gate unless a non-default safety
-/// profile requires hard denials (then chain gate first, then extensions).
+///
+/// Pure yolo still keeps `gate_hook` when present — production always folds the
+/// live permission ladder into `gate_hook`, and yolo must not drop that ladder
+/// (only interactive approval prompts are waived via ApprovalMode::Yolo).
+/// Non-default safety profiles still run hard denials under yolo.
 fn chain_gate_with_extensions(
     gate_hook: Option<pirs_agent::events::BeforeToolCallHook>,
     ext_before: Option<pirs_agent::events::BeforeToolCallHook>,
     yolo: bool,
     safety: pirs_tools::SafetyProfile,
 ) -> Option<pirs_agent::events::BeforeToolCallHook> {
-    if yolo && safety == pirs_tools::SafetyProfile::Default {
-        // Pure yolo: extensions only (no interactive approval gate).
-        return ext_before;
-    }
-    // ask/auto, or yolo+profile: gate first (profile denials / prompts), then ext.
+    let _ = (yolo, safety); // gate_hook already encodes profile/permission; always chain.
+    // Gate first (permission ladder / profile denials / optional prompts), then ext.
     pirs_agent::Hooks::chain_before(gate_hook, ext_before)
 }
 
@@ -2587,7 +2587,9 @@ mod tests {
     }
 
     #[test]
-    fn pure_yolo_with_default_profile_keeps_extension_only() {
+    fn pure_yolo_still_chains_gate_hook_then_extension() {
+        // Production pure-yolo gate_hook is the live permission ladder (no prompts).
+        // Yolo must not drop that ladder — only interactive approval is waived.
         let ext: pirs_agent::events::BeforeToolCallHook =
             Arc::new(|_, _, _| Some("ext-only".into()));
         let chained = chain_gate_with_extensions(
@@ -2596,12 +2598,33 @@ mod tests {
             true,
             pirs_tools::SafetyProfile::Default,
         )
-        .expect("ext only");
-        // Gate must not run under pure yolo.
+        .expect("chained");
+        // Gate runs first.
         assert_eq!(
             chained("1", "danger", &serde_json::json!({})).as_deref(),
+            Some("blocked by gate")
+        );
+        // Non-danger falls through to extension.
+        assert_eq!(
+            chained("1", "read", &serde_json::json!({})).as_deref(),
             Some("ext-only")
         );
+    }
+
+    #[test]
+    fn pure_yolo_with_permission_ladder_denies_bash_under_read_only() {
+        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::ReadOnly);
+        let perm = Some(pirs_tools::live_permission_hook());
+        let chained = chain_gate_with_extensions(
+            perm,
+            None,
+            true,
+            pirs_tools::SafetyProfile::Default,
+        )
+        .expect("perm under yolo");
+        assert!(chained("1", "bash", &serde_json::json!({"command": "ls"})).is_some());
+        assert!(chained("1", "read", &serde_json::json!({"path": "a"})).is_none());
+        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::DangerFullAccess);
     }
 
     #[test]

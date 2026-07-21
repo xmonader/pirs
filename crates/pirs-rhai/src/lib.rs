@@ -195,17 +195,29 @@ pub fn register_core_host_apis() {
 }
 
 /// Parse `label` or `label|/abs/cwd` for checkpoint host APIs.
+///
+/// Absolute cwd is only accepted when it stays under the process current
+/// directory (or `PIRS_ALLOW_OUTSIDE_CWD=1`). Prevents pack-driven restore of
+/// arbitrary host trees.
 fn split_label_cwd(arg: &str) -> (String, std::path::PathBuf) {
     let arg = arg.trim();
+    let process_cwd =
+        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     if let Some((label, cwd)) = arg.rsplit_once('|') {
-        if std::path::Path::new(cwd).is_absolute() || cwd.starts_with('.') {
-            return (label.trim().to_string(), std::path::PathBuf::from(cwd));
+        let cand = std::path::PathBuf::from(cwd.trim());
+        if cand.is_absolute() || cwd.starts_with('.') {
+            if let Ok(resolved) = pirs_tools::paths::resolve_contained(&process_cwd, cwd.trim()) {
+                return (label.trim().to_string(), resolved);
+            }
+            // Outside process cwd — fall back to process cwd (safe default).
+            eprintln!(
+                "[rhai] checkpoint cwd {cwd:?} escapes process cwd; using {}",
+                process_cwd.display()
+            );
+            return (label.trim().to_string(), process_cwd);
         }
     }
-    (
-        arg.to_string(),
-        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-    )
+    (arg.to_string(), process_cwd)
 }
 
 fn build_engine(state: &StateStore, caps: &caps::Caps) -> Engine {

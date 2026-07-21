@@ -183,8 +183,9 @@ impl ApprovalGate {
         let prompter = self.prompter.lock().unwrap().clone();
         let profile = self.profile;
         Arc::new(move |_id, tool, args| {
-            // Hard profile denials first (e.g. plan blocks bash/write).
-            if let Some(reason) = pirs_tools::profile_deny_reason(profile, tool) {
+            // Hard profile denials first (e.g. plan blocks bash/write;
+            // action-aware for checkpoint restore / pr create).
+            if let Some(reason) = pirs_tools::profile_deny_reason_with_args(profile, tool, args) {
                 return Some(reason);
             }
             // Profile may skip interactive approval for some tools.

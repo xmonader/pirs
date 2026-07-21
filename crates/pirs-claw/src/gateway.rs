@@ -267,7 +267,11 @@ async fn cron_ticker_loop(state_dir: PathBuf) {
             let mut cmd = std::process::Command::new(
                 std::env::current_exe().unwrap_or_else(|_| "pirs-claw".into()),
             );
-            cmd.arg("--state-dir").arg(&state_dir).arg("chat").arg(&prompt);
+            cmd.arg("--state-dir")
+                .arg(&state_dir)
+                .env(crate::UNATTENDED_ENV, "1")
+                .arg("chat")
+                .arg(&prompt);
             match cmd.output() {
                 Ok(out) if out.status.success() => {
                     let reply = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -305,7 +309,10 @@ async fn cron_ticker_loop(state_dir: PathBuf) {
             let mut cmd = std::process::Command::new(
                 std::env::current_exe().unwrap_or_else(|_| "pirs-claw".into()),
             );
-            cmd.arg("--state-dir").arg(&state_dir).arg("chat");
+            cmd.arg("--state-dir")
+                .arg(&state_dir)
+                .env(crate::UNATTENDED_ENV, "1")
+                .arg("chat");
             if let Some(ref m) = j.model {
                 cmd.arg("--model").arg(m);
             }

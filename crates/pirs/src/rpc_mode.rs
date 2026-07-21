@@ -65,12 +65,25 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         .ok()
         .and_then(|m| crate::approval::ApprovalMode::parse(&m))
         .unwrap_or(crate::approval::ApprovalMode::Auto);
-    let gate = crate::approval::ApprovalGate::new(approval_mode, cwd.clone());
-    let gate_hook = if approval_mode == crate::approval::ApprovalMode::Ask {
+    let safety = std::env::var("PIRS_AGENT_PROFILE")
+        .ok()
+        .and_then(|s| pirs_tools::SafetyProfile::parse(&s))
+        .unwrap_or(pirs_tools::SafetyProfile::Default);
+    let perm_mode = std::env::var("PIRS_PERMISSION_MODE")
+        .ok()
+        .and_then(|s| pirs_tools::PermissionMode::parse(&s))
+        .unwrap_or_else(pirs_tools::PermissionMode::from_env);
+    pirs_tools::init_live_permission_mode(perm_mode);
+    let gate = crate::approval::ApprovalGate::with_profile(approval_mode, cwd.clone(), safety);
+    let mut gate_hook = if approval_mode == crate::approval::ApprovalMode::Ask
+        || safety != pirs_tools::SafetyProfile::Default
+    {
         Some(gate.hook())
     } else {
         None
     };
+    // Same live permission ladder as interactive / serve modes.
+    gate_hook = pirs_agent::Hooks::chain_before(gate_hook, Some(pirs_tools::live_permission_hook()));
     let mut host = pirs_rhai::ExtensionHost::new();
     let policy_slot: std::sync::Arc<
         std::sync::Mutex<
@@ -501,5 +514,21 @@ fn queue_mode_name(m: QueueMode) -> &'static str {
     match m {
         QueueMode::All => "all",
         QueueMode::OneAtATime => "one-at-a-time",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn rpc_installs_live_permission_ladder() {
+        let src = include_str!("rpc_mode.rs");
+        assert!(
+            src.contains("live_permission_hook"),
+            "RPC agent construction must install live_permission_hook like interactive modes"
+        );
+        assert!(
+            src.contains("init_live_permission_mode"),
+            "RPC must seed live permission mode from env"
+        );
     }
 }

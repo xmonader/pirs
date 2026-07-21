@@ -83,7 +83,7 @@ impl AgentTool for LspTool {
                     .path
                     .as_deref()
                     .ok_or_else(|| anyhow::anyhow!("diagnostics requires path"))?;
-                let path = self.root.join(path_s);
+                let path = pirs_tools::paths::resolve_contained(&self.root, path_s)?;
                 if !path.exists() {
                     anyhow::bail!("file not found: {}", path.display());
                 }
@@ -102,7 +102,7 @@ impl AgentTool for LspTool {
                     .path
                     .as_deref()
                     .ok_or_else(|| anyhow::anyhow!("path required"))?;
-                let path = self.root.join(path_s);
+                let path = pirs_tools::paths::resolve_contained(&self.root, path_s)?;
                 if !path.exists() {
                     anyhow::bail!("file not found: {}", path.display());
                 }
@@ -117,7 +117,7 @@ impl AgentTool for LspTool {
                     .path
                     .as_deref()
                     .ok_or_else(|| anyhow::anyhow!("path required"))?;
-                let path = self.root.join(path_s);
+                let path = pirs_tools::paths::resolve_contained(&self.root, path_s)?;
                 if !path.exists() {
                     anyhow::bail!("file not found: {}", path.display());
                 }

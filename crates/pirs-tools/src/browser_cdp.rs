@@ -381,6 +381,7 @@ impl AgentTool for BrowserCdpTool {
                 if !(url.starts_with("http://") || url.starts_with("https://")) {
                     anyhow::bail!("url must be http(s)");
                 }
+                crate::web::url_allowed(&url).map_err(|e| anyhow::anyhow!("{e}"))?;
                 g.ensure_connected(None).await?;
                 let page = g.page.as_ref().unwrap();
                 page.goto(&url)
