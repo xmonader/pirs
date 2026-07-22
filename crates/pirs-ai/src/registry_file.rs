@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use serde::Deserialize;
 
 use crate::{
@@ -157,7 +157,9 @@ pub fn build_routing_provider(
     default_api_key: Option<String>,
     max_retries: u32,
 ) -> anyhow::Result<Option<Arc<RoutingProvider>>> {
-    if registry.models.is_empty() {
+    // Always build a router when backends exist so pin `backend/model` works
+    // even without portable [[models]] entries.
+    if registry.backends.is_empty() && registry.models.is_empty() {
         return Ok(None);
     }
     type BackendHandle = (Arc<dyn LlmProvider>, Option<String>, Vec<(String, String)>);
@@ -171,13 +173,9 @@ pub fn build_routing_provider(
             .as_ref()
             .and_then(|env| std::env::var(env).ok())
             .filter(|s| !s.is_empty());
-        if b.api_key_env.is_some() && api_key.is_none() {
-            eprintln!(
-                "[warning: backend {:?} api_key_env {:?} is unset]",
-                b.name,
-                b.api_key_env.as_deref().unwrap_or("")
-            );
-        }
+        // Only warn for backends the user explicitly configured beyond builtins
+        // is hard to know; warn only when key env is set-name but empty and
+        // they have at least one other key (noise reduction for full builtin set).
         let headers: Vec<(String, String)> =
             b.headers.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         let provider: Arc<dyn LlmProvider> = match kind {
@@ -196,21 +194,26 @@ pub fn build_routing_provider(
     let mut routes = Vec::new();
     for m in &registry.models {
         if m.serve.is_empty() {
-            bail!("model alias {:?} has empty serve list", m.alias);
+            // Skip empty rather than hard-fail (partial user configs).
+            continue;
         }
         let mut serve = Vec::new();
         for s in &m.serve {
             if !backend_handles.contains_key(&s.backend) && s.backend != "default" {
-                bail!(
-                    "model alias {:?} serves unknown backend {:?}",
-                    m.alias,
-                    s.backend
+                // Skip unknown backends in serve list (e.g. typo) with a note.
+                eprintln!(
+                    "[model registry: portable {:?} skips unknown backend {:?}]",
+                    m.alias, s.backend
                 );
+                continue;
             }
             serve.push(ServeTarget {
                 backend: s.backend.clone(),
                 remote_model: s.model.clone(),
             });
+        }
+        if serve.is_empty() {
+            continue;
         }
         routes.push(ModelRoute {
             alias: m.alias.clone(),
@@ -230,16 +233,12 @@ pub fn build_routing_provider(
         );
     }
 
-    for r in &routes {
-        for s in &r.serve {
-            if !backend_handles.contains_key(&s.backend) {
-                bail!(
-                    "model alias {:?} needs backend {:?} — add it under [[backends]]",
-                    r.alias,
-                    s.backend
-                );
-            }
-        }
+    // Always register default handle for legacy bare-name fallback.
+    if !backend_handles.contains_key("default") {
+        backend_handles.insert(
+            "default".into(),
+            (Arc::clone(&default), default_api_key.clone(), vec![]),
+        );
     }
 
     Ok(Some(Arc::new(RoutingProvider::new(

@@ -47,56 +47,47 @@ REPL / TUI slash: `/tour`, `/model`, `/plan`, `/act`, `/undo`, `/doctor`, `/audi
 
 **Strategies (product set):** `monolithic` (one growing loop on `--model`), `plan-exec` (read-only plan → fresh exec), `plan-critic-exec` / alias `plan-exec-critic` (plan → critic → exec). **Strong plan / weak exec:** `--model <cheap> --plan-model <strong> --strategy plan-exec` (or `plan-critic-exec`) — planning (and critique) run on `--plan-model`, the executor keeps `--model`.
 
-### Multi-backend model registry
+### Multi-backend models (pin + portable)
 
-Use several subscriptions (OpenRouter, DashScope, Groq, …) via aliases in
-`~/.pirs/config.toml` (backends with keys/URLs are **user-config only**; project
-configs may only add aliases that point at those backends):
+Built-in backends: `openrouter`, `dashscope`, `deepseek`, `openai`, `anthropic`, `groq`.
+Put keys in `~/.pirs/secrets.env` (or the environment) — no TOML required for common use.
 
-```toml
-[[backends]]
-name = "openrouter"
-kind = "openai_compatible"
-base_url = "https://openrouter.ai/api/v1"
-api_key_env = "OPENROUTER_API_KEY"
-headers = { HTTP-Referer = "https://example.com", X-Title = "pirs" }
-
-[[backends]]
-name = "dashscope"
-kind = "openai_compatible"
-base_url = "https://coding-intl.dashscope.aliyuncs.com/v1"
-api_key_env = "DASHSCOPE_API_KEY"
-
-[[models]]
-alias = "deepseek-v4-flash"
-tier = "fast"
-ctx = 1000000
-# Ordered serve list: first is primary; later entries are failover if the
-# primary stream errors before producing content.
-serve = [
-  { backend = "openrouter", model = "deepseek/deepseek-v4-flash" },
-  { backend = "dashscope", model = "deepseek-v4-flash" },
-]
-
-[[models]]
-alias = "qwen-plus"
-serve = [{ backend = "dashscope", model = "qwen3.5-plus" }]
-```
+| Mode | Example | Meaning |
+|------|---------|---------|
+| **Pin** | `--model dashscope/qwen3.5-plus` | One subscription + remote id (split on first `/`) |
+| **Pin** | `--model openrouter/deepseek/deepseek-v4-flash` | Remote id may contain more `/` |
+| **Portable** | `--model qwen-plus` | Failover across backends that list that model (skip missing keys) |
 
 ```bash
-# Weak executor on DashScope, strong planner on OpenRouter — each uses its own key
-export DASHSCOPE_API_KEY=... OPENROUTER_API_KEY=...
-pirs --model qwen-plus --plan-model deepseek-v4-flash \
+echo 'OPENROUTER_API_KEY=…' >> ~/.pirs/secrets.env
+echo 'DASHSCOPE_API_KEY=…'  >> ~/.pirs/secrets.env
+
+pirs backends                     # keys + catalog status
+pirs models                       # portable names
+pirs models refresh               # fetch each active backend's /models
+pirs models search deepseek       # search caches → pin strings
+
+pirs --model dashscope/qwen3.5-plus "…"
+pirs --model qwen-plus --plan-model openrouter/anthropic/claude-sonnet-4 \
   --strategy plan-exec "fix the failing test"
 ```
 
-- **Backends** with secrets/URLs: prefer `~/.pirs/config.toml`. Project
-  `.pirs/config.toml` backends load only if the project is **trusted**
-  (`pirs trust`); otherwise they are ignored (aliases still load).
-- **Failover:** every `serve` entry after the first is tried when the previous
-  target fails before any text/tool content.
-- Unregistered `--model` names still hit the CLI default provider
-  (`--provider` / `--base-url` / `OPENAI_API_KEY`).
+Second OpenRouter account (same API, different name + key) in `~/.pirs/config.toml`:
+
+```toml
+[[backends]]
+name = "openrouter-work"
+kind = "openai_compatible"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_WORK_API_KEY"
+```
+
+```bash
+pirs --model openrouter-work/deepseek/deepseek-v4-flash "…"
+```
+
+Optional `[[models]]` overrides/adds **portable** names (ordered `serve` lists).
+Project `.pirs/config.toml` backends load only if trusted (`pirs trust`).
 
 Hardening flags: `--tool-diet`, `--sequential`, `--no-compaction` / `--context-window N`, `--max-retries N`. **`--weak`**: tool-diet + sequential + retries≥3 + default strategy `plan-exec` (one-shot) + bundled packs (`weak-model` → `context-janitor` → `env-doctor` → `goal`) + larger **repo_map** + **auto-verify** when a test ecosystem is detected. Pair with `--plan-model` for multi-model. **`edit_block`** accepts SEARCH/REPLACE. `delegate` supports a per-subagent `model` override. Auto-compaction summarizes old history. `extensions/weak-model.rhai` adds loop/thrash/stop-gate/plan pins; the host restores protected control pins if a context rewrite drops them.
 

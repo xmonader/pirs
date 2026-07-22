@@ -100,7 +100,8 @@ pub fn expected_key_envs(registry: &RegistryFile) -> Vec<String> {
 }
 
 pub fn load_registry_layers(cwd: &Path) -> RegistryFile {
-    let mut reg = RegistryFile::default();
+    // Lowest layer: builtin backends + curated portable models.
+    let mut reg = pirs_ai::builtin_registry();
     if let Some(path) = crate::config_file::user_config_path() {
         if let Ok(text) = std::fs::read_to_string(&path) {
             if let Ok(v) = text.parse::<toml::Value>() {

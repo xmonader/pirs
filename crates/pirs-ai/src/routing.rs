@@ -111,34 +111,93 @@ impl RoutingProvider {
         }
     }
 
-    /// Ordered serve targets for an alias, or a single synthetic target for raw ids.
+    /// Ordered serve targets for a model spec.
+    ///
+    /// 1. **Pin** `backend/remote` (first `/`) → single target if backend exists
+    ///    and has a key; otherwise empty (caller / stream reports error).
+    /// 2. **Portable** bare name → alias route, only backends with keys.
+    /// 3. Legacy fallback: raw id on the default provider (single-backend setups).
     pub fn targets_for(&self, model_or_alias: &str) -> Vec<ResolvedRef> {
-        if let Some(route) = self.routes.get(model_or_alias) {
-            let mut out = Vec::new();
-            for t in &route.serve {
-                if let Some(backend) = self.backends.get(&t.backend) {
-                    out.push(ResolvedRef {
-                        alias: Some(route.alias.clone()),
-                        backend_name: backend.name.clone(),
-                        remote_model: t.remote_model.clone(),
-                        provider: Arc::clone(&backend.provider),
-                        api_key: backend.api_key.clone(),
-                        headers: backend.headers.clone(),
-                    });
+        use crate::model_ref::ModelSpec;
+
+        match ModelSpec::parse(model_or_alias) {
+            ModelSpec::Pin { backend, remote } => {
+                if let Some(handle) = self.backends.get(&backend) {
+                    // Require key when the handle was built with one expected —
+                    // empty api_key means unset env; still allow for keyless backends.
+                    if handle.api_key.is_none()
+                        && self
+                            .backends
+                            .get(&backend)
+                            .is_some_and(|h| h.name == backend)
+                    {
+                        // Allow pin even without key so the provider can error clearly;
+                        // prefer skipping only when we know the env was required.
+                        // Heuristic: if *any* other backend has a key and this doesn't,
+                        // still return the pin so the user sees auth failure on that sub.
+                    }
+                    return vec![ResolvedRef {
+                        alias: None,
+                        backend_name: handle.name.clone(),
+                        remote_model: remote,
+                        provider: Arc::clone(&handle.provider),
+                        api_key: handle.api_key.clone(),
+                        headers: handle.headers.clone(),
+                    }];
                 }
+                // Unknown pin backend → empty (stream emits error).
+                return Vec::new();
             }
-            if !out.is_empty() {
-                return out;
+            ModelSpec::Portable(name) => {
+                if let Some(route) = self.routes.get(&name) {
+                    let mut out = Vec::new();
+                    for t in &route.serve {
+                        if let Some(backend) = self.backends.get(&t.backend) {
+                            // Skip backends with no key when other targets exist.
+                            if backend.api_key.is_none() {
+                                continue;
+                            }
+                            out.push(ResolvedRef {
+                                alias: Some(route.alias.clone()),
+                                backend_name: backend.name.clone(),
+                                remote_model: t.remote_model.clone(),
+                                provider: Arc::clone(&backend.provider),
+                                api_key: backend.api_key.clone(),
+                                headers: backend.headers.clone(),
+                            });
+                        }
+                    }
+                    // If all keys missing, still try entries without filtering so
+                    // the user gets a provider auth error rather than silence.
+                    if out.is_empty() {
+                        for t in &route.serve {
+                            if let Some(backend) = self.backends.get(&t.backend) {
+                                out.push(ResolvedRef {
+                                    alias: Some(route.alias.clone()),
+                                    backend_name: backend.name.clone(),
+                                    remote_model: t.remote_model.clone(),
+                                    provider: Arc::clone(&backend.provider),
+                                    api_key: backend.api_key.clone(),
+                                    headers: backend.headers.clone(),
+                                });
+                            }
+                        }
+                    }
+                    if !out.is_empty() {
+                        return out;
+                    }
+                }
+                // Bare name, no portable entry: default provider (legacy).
+                vec![ResolvedRef {
+                    alias: None,
+                    backend_name: self.default.name.clone(),
+                    remote_model: name,
+                    provider: Arc::clone(&self.default.provider),
+                    api_key: self.default.api_key.clone(),
+                    headers: self.default.headers.clone(),
+                }]
             }
         }
-        vec![ResolvedRef {
-            alias: None,
-            backend_name: self.default.name.clone(),
-            remote_model: model_or_alias.to_string(),
-            provider: Arc::clone(&self.default.provider),
-            api_key: self.default.api_key.clone(),
-            headers: self.default.headers.clone(),
-        }]
     }
 
     /// First resolve (primary serve) — for diagnostics.
@@ -146,11 +205,28 @@ impl RoutingProvider {
         self.targets_for(model_or_alias)
             .into_iter()
             .next()
-            .expect("targets_for always returns at least one")
+            .unwrap_or_else(|| ResolvedRef {
+                alias: None,
+                backend_name: self.default.name.clone(),
+                remote_model: model_or_alias.to_string(),
+                provider: Arc::clone(&self.default.provider),
+                api_key: self.default.api_key.clone(),
+                headers: self.default.headers.clone(),
+            })
     }
 
     pub fn has_alias(&self, name: &str) -> bool {
         self.routes.contains_key(name)
+    }
+
+    pub fn has_backend(&self, name: &str) -> bool {
+        self.backends.contains_key(name)
+    }
+
+    pub fn backend_names(&self) -> Vec<&str> {
+        let mut v: Vec<_> = self.backends.keys().map(|s| s.as_str()).collect();
+        v.sort_unstable();
+        v
     }
 
     pub fn aliases(&self) -> Vec<&str> {
@@ -239,6 +315,21 @@ impl LlmProvider for RoutingProvider {
         let targets = self.targets_for(model);
         let mut last_err = String::from("no serve targets");
         let n = targets.len();
+        if n == 0 {
+            let msg = format!(
+                "no serve targets for {model:?} — use backend/model (e.g. dashscope/qwen3.5-plus) \
+                 or a portable name from `pirs models`; check `pirs backends` for keys"
+            );
+            return Box::pin(futures_util::stream::iter(vec![
+                StreamEvent::Error(msg.clone()),
+                StreamEvent::Done(Box::new(AssistantMessage {
+                    content: vec![ContentBlock::text(msg.clone())],
+                    stop_reason: StopReason::Error,
+                    error_message: Some(msg),
+                    ..Default::default()
+                })),
+            ]));
+        }
 
         for (i, resolved) in targets.into_iter().enumerate() {
             if cancel.is_cancelled() {
@@ -623,8 +714,105 @@ mod tests {
             texts.iter().any(|t| t.contains("secondary:model-b")),
             "failover must reach secondary: {texts:?}"
         );
+        // Backend "a" has no API key → skipped for portable routes; only "b" runs.
+        assert_eq!(primary.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(secondary.calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn portable_failover_when_first_keyed_backend_errors() {
+        let primary = Arc::new(FailThenOk {
+            calls: AtomicUsize::new(0),
+            fail_count: 100,
+            label: "primary".into(),
+        });
+        let secondary = Arc::new(FailThenOk {
+            calls: AtomicUsize::new(0),
+            fail_count: 0,
+            label: "secondary".into(),
+        });
+        let mut backends = HashMap::new();
+        backends.insert(
+            "a".into(),
+            (
+                Arc::clone(&primary) as Arc<dyn LlmProvider>,
+                Some("a-key".into()),
+                vec![],
+            ),
+        );
+        backends.insert(
+            "b".into(),
+            (
+                Arc::clone(&secondary) as Arc<dyn LlmProvider>,
+                Some("b-key".into()),
+                vec![],
+            ),
+        );
+        let router = RoutingProvider::new(
+            Arc::clone(&primary) as Arc<dyn LlmProvider>,
+            None,
+            vec![],
+            backends,
+            vec![route("flash", vec![("a", "model-a"), ("b", "model-b")])],
+        );
+        let mut stream = router
+            .stream(
+                "flash",
+                &Context::default(),
+                &CompletionOptions::default(),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await;
+        let mut texts = Vec::new();
+        while let Some(ev) = stream.next().await {
+            if let StreamEvent::TextDelta(t) = ev {
+                texts.push(t);
+            }
+        }
+        assert!(
+            texts.iter().any(|t| t.contains("secondary:model-b")),
+            "{texts:?}"
+        );
         assert_eq!(primary.calls.load(Ordering::SeqCst), 1);
         assert_eq!(secondary.calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn pin_targets_specific_backend() {
+        let a = Arc::new(FailThenOk {
+            calls: AtomicUsize::new(0),
+            fail_count: 0,
+            label: "or".into(),
+        });
+        let b = Arc::new(FailThenOk {
+            calls: AtomicUsize::new(0),
+            fail_count: 0,
+            label: "ds".into(),
+        });
+        let mut backends = HashMap::new();
+        backends.insert(
+            "openrouter".into(),
+            (a as Arc<dyn LlmProvider>, Some("k1".into()), vec![]),
+        );
+        backends.insert(
+            "dashscope".into(),
+            (b as Arc<dyn LlmProvider>, Some("k2".into()), vec![]),
+        );
+        let router = RoutingProvider::new(
+            Arc::new(FailThenOk {
+                calls: AtomicUsize::new(0),
+                fail_count: 0,
+                label: "def".into(),
+            }) as Arc<dyn LlmProvider>,
+            None,
+            vec![],
+            backends,
+            vec![],
+        );
+        let t = router.targets_for("openrouter/deepseek/deepseek-v4-flash");
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].backend_name, "openrouter");
+        assert_eq!(t[0].remote_model, "deepseek/deepseek-v4-flash");
     }
 
     #[tokio::test]

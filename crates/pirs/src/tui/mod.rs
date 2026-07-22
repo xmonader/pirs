@@ -1818,16 +1818,29 @@ fn handle_slash_command(
                 let aliases = if app.model_aliases.is_empty() {
                     String::new()
                 } else {
-                    format!("\naliases: {}", app.model_aliases.join(", "))
+                    format!("\nportable: {}", app.model_aliases.join(", "))
                 };
-                app.notice(format!("model: {}{aliases}", app.model));
+                let spec = pirs_ai::ModelSpec::parse(&app.model);
+                let kind = if spec.is_pin() { "pin" } else { "portable" };
+                app.notice(format!(
+                    "model: {} ({kind}){aliases}\n\
+                     pin: backend/remote  e.g. dashscope/qwen3.5-plus · openrouter/deepseek/…\n\
+                     portable: bare name e.g. qwen-plus (failover across keys)\n\
+                     CLI: pirs backends · pirs models · pirs models refresh",
+                    app.model
+                ));
             } else {
                 // Try_lock: agent worker may hold the lock while a turn runs.
                 match agent.try_lock() {
                     Ok(mut a) => {
                         a.model = arg.to_string();
                         app.model = arg.to_string();
-                        app.notice(format!("model → {arg}"));
+                        let kind = if pirs_ai::ModelSpec::parse(arg).is_pin() {
+                            "pin"
+                        } else {
+                            "portable"
+                        };
+                        app.notice(format!("model → {arg} ({kind})"));
                     }
                     Err(_) => {
                         app.notice("busy — wait for the current run to finish, then /model");

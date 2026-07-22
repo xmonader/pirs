@@ -17,11 +17,11 @@ pub(crate) const SLASH_CMDS: &[SlashCmd] = &[
     },
     SlashCmd {
         name: "/model",
-        desc: "show or set exec model",
+        desc: "pin backend/id or portable name",
     },
     SlashCmd {
         name: "/plan-model",
-        desc: "strong planner model (none to clear)",
+        desc: "planner model (pin or portable)",
     },
     SlashCmd {
         name: "/strategy",

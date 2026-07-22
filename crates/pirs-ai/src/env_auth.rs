@@ -18,6 +18,7 @@ pub fn well_known_key_envs() -> &'static [&'static str] {
         "DEEPSEEK_API_KEY",
         "OPENROUTER_API_KEY",
         "ANTHROPIC_API_KEY",
+        "GROQ_API_KEY",
     ]
 }
 

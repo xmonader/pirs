@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 pub mod anthropic;
+pub mod backends_builtin;
+pub mod catalog;
 pub mod embed;
 pub mod env_auth;
+pub mod model_ref;
 pub mod openai;
 pub mod pricing;
 pub mod registry_file;
@@ -10,8 +13,16 @@ pub mod routing;
 pub mod speech;
 pub mod sse;
 pub use anthropic::AnthropicClient;
+pub use backends_builtin::{
+    active_backends, active_portable_models, backend_key_present, builtin_registry,
+};
+pub use catalog::{
+    catalog_status, load_catalog, refresh_active, refresh_backend, search_catalogs, CatalogFile,
+    CatalogModel,
+};
 pub use embed::{cosine, EmbeddingClient};
 pub use env_auth::{non_empty_env, resolve_openai_compat, well_known_key_envs};
+pub use model_ref::{format_pin, parse_pin, ModelSpec};
 pub use openai::OpenAiCompat;
 pub use registry_file::{
     api_key_for_alias, build_routing_provider, expected_key_envs, first_available_backend_key,

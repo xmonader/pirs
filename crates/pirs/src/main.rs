@@ -25,6 +25,7 @@ mod subagent;
 mod system_prompt;
 mod tui;
 mod observability;
+mod models_cmd;
 mod registry;
 mod session_stats;
 mod weak_compose;
@@ -585,6 +586,13 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    // Model/backends inspection (no API key required for listing).
+    if let Some(spec) = cli.prompt.first().cloned() {
+        if models_cmd::try_run(&cwd, &spec)? {
+            return Ok(());
+        }
+    }
+
     if let Some(dir) = cli
         .prompt
         .first()
@@ -878,8 +886,8 @@ async fn main() -> anyhow::Result<()> {
             cli.provider
         );
     };
-    // Multi-backend registry: aliases in --model / --plan-model route to
-    // per-subscription base_url + API key (see [[backends]] / [[models]]).
+    // Multi-backend registry: pin `backend/model` or portable bare names.
+    // Builtins + user config; see `pirs backends` / `pirs models`.
     let provider: Arc<dyn pirs_ai::LlmProvider> =
         if let Some(router) = registry::build_routing_provider(
             &model_registry,
@@ -887,19 +895,23 @@ async fn main() -> anyhow::Result<()> {
             Some(api_key.clone()),
             cli.max_retries,
         )? {
-            if !model_registry.models.is_empty() {
-                let aliases: Vec<_> = model_registry
-                    .models
-                    .iter()
-                    .map(|m| m.alias.as_str())
-                    .collect();
-                eprintln!(
-                    "[model registry: {} alias(es), {} backend(s) — {}]",
-                    model_registry.models.len(),
-                    model_registry.backends.len(),
-                    aliases.join(", ")
-                );
-            }
+            let active_n = pirs_ai::active_backends(&model_registry).len();
+            let portable: Vec<_> = pirs_ai::active_portable_models(&model_registry)
+                .into_iter()
+                .map(|m| m.alias.as_str())
+                .take(12)
+                .collect();
+            eprintln!(
+                "[model registry: {} backend(s), {} with keys; portable: {}{} — pin with backend/model]",
+                model_registry.backends.len(),
+                active_n,
+                portable.join(", "),
+                if pirs_ai::active_portable_models(&model_registry).len() > 12 {
+                    ", …"
+                } else {
+                    ""
+                }
+            );
             router
         } else {
             default_provider
