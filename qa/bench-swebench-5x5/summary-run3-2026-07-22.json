@@ -1,0 +1,26 @@
+{
+  "model": "qwen3.5-plus",
+  "label": "pirs-qwen35",
+  "run": "run3_full_force",
+  "n": 50,
+  "resolved": 46,
+  "pct": 92.0,
+  "run2_resolved": 40,
+  "run1_resolved": 41,
+  "gained": [
+    "scikit-learn__scikit-learn-25570",
+    "django__django-10914",
+    "sympy__sympy-15678",
+    "django__django-15781",
+    "astropy__astropy-7746",
+    "sympy__sympy-13647"
+  ],
+  "lost": [],
+  "still_miss": [
+    "django__django-11019",
+    "django__django-11797",
+    "django__django-15213",
+    "django__django-11910"
+  ],
+  "hero_shrimp": 32
+}
