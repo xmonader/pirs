@@ -127,8 +127,9 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
                 for line in diff.splitlines():
                     if line.startswith("+++ b/"):
                         cur_file = line[6:].strip()
-                    # Newly added or context def lines in the patched file.
-                    m = re.match(r"^[+ ]def (test_\w+)\s*\(", line)
+                    # Newly added or context def lines (unified diff: leading
+                    # +/-/space, then indentation, then def).
+                    m = re.match(r"^[+ ]\s*def (test_\w+)\s*\(", line)
                     if not m:
                         continue
                     name = m.group(1)
