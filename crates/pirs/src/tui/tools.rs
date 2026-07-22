@@ -86,7 +86,7 @@ pub(crate) fn render_tool_call(
     let (glyph, gstyle) = tool_status_glyph(done, is_error, 0);
     let verb = tool_verb(name, done);
     let mut spans = vec![
-        Span::styled(format!("  {glyph} "), gstyle),
+        Span::styled(format!("    {glyph} "), gstyle),
         Span::styled(format!("{verb} "), theme.tool_name),
         Span::styled(name.to_string(), theme.tool_name),
     ];
@@ -115,7 +115,7 @@ pub(crate) fn render_tool_call(
         let n = preview.lines().count();
         if n > 0 && !expanded {
             out.push(Line::from(Span::styled(
-                format!("    ▶ +{n} lines  (tab expand)"),
+                format!("      ▶ +{n} lines  (tab expand)"),
                 theme.dim,
             )));
             return out;
@@ -156,13 +156,13 @@ pub(crate) fn render_tool_call(
                 default_style
             };
             out.push(Line::from(Span::styled(
-                format!("  {border} {l}"),
+                format!("    {border} {l}"),
                 style,
             )));
         }
         if total > TOOL_BODY_SHOW {
             out.push(Line::from(Span::styled(
-                format!("  ⎣ ▶ +{} lines", total - TOOL_BODY_SHOW),
+                format!("    ⎣ ▶ +{} lines", total - TOOL_BODY_SHOW),
                 theme.dim,
             )));
         }
@@ -189,7 +189,7 @@ pub(crate) fn render_tool_group(
     let (glyph, gstyle) = tool_status_glyph(true, any_err, 0);
     let label = tool_group_label(name, members.len());
     let mut out = vec![Line::from(vec![
-        Span::styled(format!("  {glyph} "), gstyle),
+        Span::styled(format!("    {glyph} "), gstyle),
         Span::styled(label, theme.tool_name),
         Span::styled(
             if expanded {
@@ -209,7 +209,7 @@ pub(crate) fn render_tool_group(
                 tool_operand_style(theme, name)
             };
             out.push(Line::from(Span::styled(
-                format!("  {border} {}", truncate_chars(summary, 90)),
+                format!("    {border} {}", truncate_chars(summary, 90)),
                 style,
             )));
         }

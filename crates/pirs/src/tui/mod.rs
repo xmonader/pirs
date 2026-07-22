@@ -21,6 +21,7 @@ use pirs_ai::Message;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::block::Padding;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Terminal;
 
@@ -81,10 +82,16 @@ enum ChatItem {
 impl ChatItem {
     fn render(&self, theme: &Theme, width: usize, thinking_expanded: bool) -> Vec<Line<'static>> {
         match self {
-            ChatItem::System(text) => text
-                .lines()
-                .map(|l| Line::from(Span::styled(l.to_string(), theme.system)))
-                .collect(),
+            ChatItem::System(text) => {
+                let mut out: Vec<Line<'static>> = text
+                    .lines()
+                    .map(|l| {
+                        Line::from(Span::styled(format!("    {l}"), theme.system))
+                    })
+                    .collect();
+                out.push(Line::from(""));
+                out
+            }
             ChatItem::Welcome {
                 model,
                 plan_model,
@@ -102,13 +109,17 @@ impl ChatItem {
                 *first_run,
             ),
             ChatItem::User(text) => {
-                let mut out = vec![Line::from(vec![
-                    Span::styled("│ ", theme.user_label),
-                    Span::styled("you", theme.user_label),
-                ])];
+                // Extra blank above/below so turns don't stack edge-to-edge.
+                let mut out = vec![
+                    Line::from(""),
+                    Line::from(vec![
+                        Span::styled("  │ ", theme.user_label),
+                        Span::styled("you", theme.user_label),
+                    ]),
+                ];
                 for l in text.lines() {
                     out.push(Line::from(vec![
-                        Span::styled("│ ", theme.user_label),
+                        Span::styled("  │ ", theme.user_label),
                         Span::styled(l.to_string(), theme.user_text),
                     ]));
                 }
@@ -120,21 +131,26 @@ impl ChatItem {
                 text,
                 error,
             } => {
-                let mut out = vec![Line::from(vec![
-                    Span::styled("│ ", theme.assistant_label),
-                    Span::styled("assistant", theme.assistant_label),
-                ])];
+                let mut out = vec![
+                    Line::from(""),
+                    Line::from(vec![
+                        Span::styled("  │ ", theme.assistant_label),
+                        Span::styled("assistant", theme.assistant_label),
+                    ]),
+                ];
                 if !thinking.trim().is_empty() {
                     out.extend(render_thinking(thinking, theme, thinking_expanded));
                 }
                 if !text.trim().is_empty() {
-                    for line in render_markdown(text, theme, width.saturating_sub(2)) {
-                        // Prefix accent on plain content lines that already have "  " indent.
+                    for line in render_markdown(text, theme, width.saturating_sub(4)) {
                         out.push(line);
                     }
                 }
                 if let Some(err) = error {
-                    out.push(Line::from(Span::styled(format!("  ⚠ {err}"), theme.error)));
+                    out.push(Line::from(Span::styled(
+                        format!("    ⚠ {err}"),
+                        theme.error,
+                    )));
                 }
                 out.push(Line::from(""));
                 out
@@ -152,10 +168,10 @@ impl ChatItem {
                 members,
                 expanded,
             } => render_tool_group(theme, name, members, *expanded),
-            ChatItem::Notice(text) => vec![Line::from(Span::styled(
-                format!("  · {text}"),
-                theme.system,
-            ))],
+            ChatItem::Notice(text) => vec![
+                Line::from(Span::styled(format!("    · {text}"), theme.system)),
+                Line::from(""),
+            ],
         }
     }
 }
@@ -169,18 +185,21 @@ fn render_thinking(thinking: &str, theme: &Theme, expanded: bool) -> Vec<Line<'s
     }
     if !expanded {
         return vec![Line::from(Span::styled(
-            format!("  ▶ thought · {total} line{}", if total == 1 { "" } else { "s" }),
+            format!(
+                "    ▶ thought · {total} line{}",
+                if total == 1 { "" } else { "s" }
+            ),
             theme.thinking,
         ))];
     }
     let skip = total.saturating_sub(MAX);
     let mut out = vec![Line::from(Span::styled(
-        format!("  ▼ thought · {total} lines  (ctrl-o collapse)"),
+        format!("    ▼ thought · {total} lines  (ctrl-o collapse)"),
         theme.thinking,
     ))];
     for l in lines.into_iter().skip(skip) {
         out.push(Line::from(Span::styled(
-            format!("    {l}"),
+            format!("      {l}"),
             theme.thinking,
         )));
     }
@@ -197,11 +216,13 @@ fn render_markdown(text: &str, theme: &Theme, width: usize) -> Vec<Line<'static>
 
     for raw in text.lines() {
         let line = raw;
+        // Content indent: 4 cols so chat breathes vs chrome.
+        const IND: &str = "    ";
         if let Some(rest) = line.strip_prefix("```") {
             if in_code {
                 in_code = false;
                 code_lang.clear();
-                out.push(Line::from(Span::styled("  ╰──", theme.dim)));
+                out.push(Line::from(Span::styled(format!("{IND}╰──"), theme.dim)));
             } else {
                 in_code = true;
                 code_lang = rest.trim().to_string();
@@ -210,35 +231,44 @@ fn render_markdown(text: &str, theme: &Theme, width: usize) -> Vec<Line<'static>
                 } else {
                     code_lang.clone()
                 };
-                out.push(Line::from(Span::styled(format!("  ╭─ {label}"), theme.dim)));
+                out.push(Line::from(Span::styled(
+                    format!("{IND}╭─ {label}"),
+                    theme.dim,
+                )));
             }
             continue;
         }
         if in_code {
             out.push(Line::from(Span::styled(
-                format!("  │ {line}"),
+                format!("{IND}│ {line}"),
                 theme.code_block,
             )));
             continue;
         }
 
         if let Some(rest) = line.strip_prefix("### ") {
-            out.push(Line::from(Span::styled(format!("  {rest}"), theme.heading)));
+            out.push(Line::from(Span::styled(
+                format!("{IND}{rest}"),
+                theme.heading,
+            )));
             continue;
         }
         if let Some(rest) = line.strip_prefix("## ") {
-            out.push(Line::from(Span::styled(format!("  {rest}"), theme.heading)));
+            out.push(Line::from(Span::styled(
+                format!("{IND}{rest}"),
+                theme.heading,
+            )));
             continue;
         }
         if let Some(rest) = line.strip_prefix("# ") {
             out.push(Line::from(Span::styled(
-                format!("  {rest}"),
+                format!("{IND}{rest}"),
                 theme.heading.add_modifier(Modifier::UNDERLINED),
             )));
             continue;
         }
         if let Some(rest) = line.strip_prefix("- ").or_else(|| line.strip_prefix("* ")) {
-            let mut spans = vec![Span::styled("  • ", theme.accent)];
+            let mut spans = vec![Span::styled(format!("{IND}• "), theme.accent)];
             spans.extend(inline_spans(rest, theme));
             out.push(Line::from(spans));
             continue;
@@ -250,19 +280,19 @@ fn render_markdown(text: &str, theme: &Theme, width: usize) -> Vec<Line<'static>
 
         // Soft-wrap long plain lines at word boundaries for readability.
         let content_w = width.max(20);
+        let ind_w = 4usize;
         let rendered = inline_spans(line, theme);
         let plain_w: usize = rendered
             .iter()
             .map(|s| unicode_width::UnicodeWidthStr::width(s.content.as_ref()))
             .sum();
-        if plain_w + 2 <= content_w {
-            let mut spans = vec![Span::raw("  ")];
+        if plain_w + ind_w <= content_w {
+            let mut spans = vec![Span::raw(IND.to_string())];
             spans.extend(rendered);
             out.push(Line::from(spans));
         } else {
-            // Fall back to character wrap on the plain string with styles reapplied simply.
-            for chunk in wrap_words(line, content_w.saturating_sub(2)) {
-                let mut spans = vec![Span::raw("  ")];
+            for chunk in wrap_words(line, content_w.saturating_sub(ind_w)) {
+                let mut spans = vec![Span::raw(IND.to_string())];
                 spans.extend(inline_spans(&chunk, theme));
                 out.push(Line::from(spans));
             }
@@ -2435,29 +2465,35 @@ fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
         ..full
     };
 
-    let input_lines = app.input.lines().count().clamp(1, 6) as u16;
+    // Roomier chrome: taller compose (min 2 text rows), 1-row gutters between
+    // header/chat/status so regions don't weld together.
+    let input_lines = app.input.lines().count().clamp(2, 8) as u16;
     let input_h = input_lines + 2; // borders
     let pending = app.pending_approval.lock().unwrap().is_some();
-    // Approval modal needs a taller status strip for the overlay cue.
-    let status_h: u16 = if pending { 1 } else { 1 };
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),       // header
-            Constraint::Min(3),          // chat
-            Constraint::Length(status_h), // turn-status
-            Constraint::Length(input_h), // input
+            Constraint::Length(1), // header
+            Constraint::Length(1), // gutter
+            Constraint::Min(4),    // chat
+            Constraint::Length(1), // gutter
+            Constraint::Length(1), // turn-status
+            Constraint::Length(1), // gutter before composer
+            Constraint::Length(input_h),
         ])
         .split(area);
 
     draw_header(frame, chunks[0], app, &theme);
-    draw_chat(frame, chunks[1], app, &theme);
-    draw_status(frame, chunks[2], app, &theme);
-    draw_input(frame, chunks[3], app, &theme);
+    // chunks[1] = air
+    draw_chat(frame, chunks[2], app, &theme);
+    // chunks[3] = air
+    draw_status(frame, chunks[4], app, &theme);
+    // chunks[5] = air
+    draw_input(frame, chunks[6], app, &theme);
 
     if slash_completing(&app.input) && !pending && app.model_picker.is_none() {
-        draw_slash_popup(frame, chunks[3], app, &theme);
+        draw_slash_popup(frame, chunks[6], app, &theme);
     }
     if pending {
         draw_approval_overlay(frame, area, app, &theme);
@@ -2529,8 +2565,8 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme)
     // Thin identity chrome; token usage lives on the turn-status row (qwen footer pattern).
     let mode_style = composer_mode_style(theme, &app.approval_mode, false, false);
     let mut left = vec![
-        Span::styled(" pirs ", theme.brand),
-        Span::styled("│ ", theme.dim),
+        Span::styled("  pirs ", theme.brand),
+        Span::styled(" · ", theme.dim),
         Span::styled(app.model.clone(), theme.header_bg),
     ];
     if let Some(p) = &app.plan_model {
@@ -2566,7 +2602,9 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
     let block = Block::default()
         .borders(Borders::TOP)
         .border_style(theme.border)
-        .title(Span::styled(" chat ", theme.dim));
+        .title(Span::styled(" chat ", theme.dim))
+        // Side padding so transcript doesn't hug the terminal edge.
+        .padding(Padding::new(1, 1, 0, 0));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -2596,17 +2634,20 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
     // tokens), so it is wrapped fresh each time — only the tail, cheap.
     let mut live_rows: Vec<Line<'static>> = Vec::new();
     if let Some((thinking, text)) = &app.live {
-        let mut logical: Vec<Line<'static>> = vec![Line::from(vec![
-            Span::styled("│ ", theme.assistant_label),
-            Span::styled("assistant", theme.assistant_label),
-            Span::styled("  streaming", theme.dim),
-        ])];
+        let mut logical: Vec<Line<'static>> = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  │ ", theme.assistant_label),
+                Span::styled("assistant", theme.assistant_label),
+                Span::styled("  streaming", theme.dim),
+            ]),
+        ];
         if !thinking.trim().is_empty() {
             // While streaming, show thinking expanded lightly (last lines).
             logical.extend(render_thinking(thinking, theme, true));
         }
         if !text.trim().is_empty() {
-            logical.extend(render_markdown(text, theme, width.saturating_sub(2)));
+            logical.extend(render_markdown(text, theme, width.saturating_sub(4)));
         }
         let cursor = if (app.tick / 4).is_multiple_of(2) {
             "▌"
@@ -2614,7 +2655,7 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
             " "
         };
         logical.push(Line::from(Span::styled(
-            format!("  {cursor}"),
+            format!("    {cursor}"),
             theme.accent,
         )));
         live_rows = flatten_rows(&logical, width);
@@ -2773,14 +2814,14 @@ fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Th
         left.push(Span::styled("  ·  type to steer", theme.dim));
         right.push(Span::styled(" esc cancel ", theme.dim));
     } else {
-        left.push(Span::styled(" ○ ", theme.dim));
+        left.push(Span::styled("  ○  ", theme.dim));
         left.push(Span::styled("ready", theme.status));
         if !app.status_msg.is_empty() {
             left.push(Span::styled(format!("  ·  {}", app.status_msg), theme.dim));
         } else {
             // Single place for idle hints (compose box stays clean).
             left.push(Span::styled(
-                "  ·  enter send · ? help · /model",
+                "  ·  enter send  ·  ? help  ·  /model",
                 theme.dim,
             ));
         }
@@ -2839,13 +2880,12 @@ fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &The
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title(Span::styled(title, theme.dim));
+        .title(Span::styled(title, theme.dim))
+        .padding(Padding::new(1, 1, 0, 0));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     // Empty compose: leave blank so the terminal cursor is the only cue.
-    // (A placeholder + title both saying "enter send · ? help" looked doubled
-    // and flickered when the frame/cursor redrawn.)
     let (display, style) = if app.input.is_empty() && !pending {
         (String::new(), theme.input)
     } else {
