@@ -48,7 +48,8 @@ pirs --profile minimal
 |-------|---------|
 | `"*"` / `"all"` | Full embedded catalog (`BUNDLED_ORDER`) |
 | `["goal", "btw", …]` | Those stems, in order |
-| omit / `[]` | No catalog packs (dirs may still load) |
+| omit | Inherit built-in `default` packs (`*`) |
+| `[]` | Explicitly no catalog packs (dirs may still load) |
 
 `--no-extensions` disables catalog packs **and** project/user extension dirs.
 

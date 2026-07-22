@@ -74,6 +74,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         &opts.provider,
     );
 
+    pirs_rhai::register_core_host_apis();
     let mut host = pirs_rhai::ExtensionHost::new();
     let policy_slot: std::sync::Arc<
         std::sync::Mutex<
@@ -96,7 +97,7 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         std::sync::Arc::new(std::sync::Mutex::new(pirs_ai::Usage::default())),
     ));
     if let Ok(p) = pirs_rhai::discover::resolve_pack_profile(None, cwd) {
-        pirs_rhai::weak_packs::load_profile_packs(&mut host, &p.packs);
+        pirs_rhai::weak_packs::load_profile_packs(&mut host, p.packs.as_deref());
     } else {
         pirs_rhai::weak_packs::load_into(&mut host);
     }

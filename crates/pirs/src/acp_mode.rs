@@ -141,6 +141,7 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
         Arc::clone(&session_id_slot),
     );
 
+    pirs_rhai::register_core_host_apis();
     let mut host = pirs_rhai::ExtensionHost::new();
     let policy_slot: std::sync::Arc<
         std::sync::Mutex<
@@ -163,7 +164,7 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
     ));
     // Pack set from built-in `default` profile (`packs: "*"`).
     if let Ok(p) = pirs_rhai::discover::resolve_pack_profile(None, &cwd) {
-        pirs_rhai::weak_packs::load_profile_packs(&mut host, &p.packs);
+        pirs_rhai::weak_packs::load_profile_packs(&mut host, p.packs.as_deref());
     } else {
         pirs_rhai::weak_packs::load_into(&mut host);
     }

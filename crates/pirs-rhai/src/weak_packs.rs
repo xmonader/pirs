@@ -183,14 +183,33 @@ pub fn load_stems(host: &mut crate::ExtensionHost, stems: &[String]) {
 }
 
 /// Load packs from a profile's `packs` field (expands `"*"`).
-pub fn load_profile_packs(host: &mut crate::ExtensionHost, packs: &[String]) {
-    let stems = expand_packs(packs);
+///
+/// `None` inherits the built-in default catalog (`packs: "*"`). `Some([])`
+/// loads no catalog packs. `Some(["goal", …])` loads those stems.
+pub fn load_profile_packs(host: &mut crate::ExtensionHost, packs: Option<&[String]>) {
+    let inherited;
+    let stems = match packs {
+        None => {
+            inherited = vec!["*".to_string()];
+            expand_packs(&inherited)
+        }
+        Some(spec) => expand_packs(spec),
+    };
     load_stems(host, &stems);
+}
+
+/// Effective pack stems for logging / diagnostics (same rules as
+/// [`load_profile_packs`]).
+pub fn effective_pack_stems(packs: Option<&[String]>) -> Vec<String> {
+    match packs {
+        None => expand_packs(&["*".to_string()]),
+        Some(spec) => expand_packs(spec),
+    }
 }
 
 /// Load the full catalog (same as profile `packs: "*"`).
 pub fn load_into(host: &mut crate::ExtensionHost) {
-    load_profile_packs(host, &["*".into()]);
+    load_profile_packs(host, Some(&["*".into()]));
 }
 
 #[cfg(test)]
@@ -254,7 +273,7 @@ mod tests {
     fn default_and_weak_profiles_parse() {
         let d = crate::profile_script::load_profile_str(DEFAULT_PROFILE, "default").unwrap();
         assert_eq!(d.name, "default");
-        assert_eq!(d.packs, vec!["*".to_string()]);
+        assert_eq!(d.packs, Some(vec!["*".to_string()]));
         assert_eq!(d.strategy.name, "monolithic");
 
         let w = crate::profile_script::load_profile_str(WEAK_PROFILE, "weak").unwrap();
@@ -263,14 +282,26 @@ mod tests {
         assert!(w.persona.is_some());
         assert_eq!(
             w.packs,
-            vec![
+            Some(vec![
                 "weak-model".to_string(),
                 "context-janitor".to_string(),
                 "env-doctor".to_string(),
                 "goal".to_string()
-            ]
+            ])
         );
-        let stems = expand_packs(&w.packs);
+        let stems = effective_pack_stems(w.packs.as_deref());
         assert_eq!(stems.len(), 4);
+
+        // Role profile that omits packs inherits full catalog at load time.
+        let role = crate::profile_script::load_profile_str(
+            r#"#{ name: "reviewer", strategy: "plan-exec", persona: "careful" }"#,
+            "reviewer",
+        )
+        .unwrap();
+        assert_eq!(role.packs, None);
+        assert_eq!(
+            effective_pack_stems(role.packs.as_deref()).len(),
+            BUNDLED_ORDER.len()
+        );
     }
 }

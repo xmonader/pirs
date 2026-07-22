@@ -24,8 +24,8 @@ pub use audit::{
     audit_enabled, audit_listener, default_audit_path, wrap_emit, AuditLog,
 };
 pub use control_pins::{
-    is_reminder_kind, preserve_control_pins, reminder_kind, strip_reminder_kind, wrap_reminder,
-    PROTECTED_KINDS,
+    enforce_tool_result_adjacency, is_reminder_kind, preserve_control_pins, reminder_kind,
+    strip_reminder_kind, wrap_reminder, PROTECTED_KINDS,
 };
 pub use events::{AgentEvent, Emit, Hooks, ToolResultPatch};
 pub use gate::GreenEvidence;

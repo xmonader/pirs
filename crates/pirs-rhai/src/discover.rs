@@ -279,10 +279,10 @@ mod tests {
         let root = dir.path().join(".pirs");
         let d = resolve_profile_in("default", &[root.clone()]).unwrap();
         assert_eq!(d.name, "default");
-        assert_eq!(d.packs, vec!["*".to_string()]);
+        assert_eq!(d.packs, Some(vec!["*".to_string()]));
         let w = resolve_profile_in("weak", &[root]).unwrap();
         assert_eq!(w.name, "weak");
-        assert_eq!(w.packs.len(), 4);
+        assert_eq!(w.packs.as_ref().map(|p| p.len()), Some(4));
     }
 
     #[test]
@@ -302,10 +302,10 @@ mod tests {
         let cwd = dir.path();
         let d = resolve_pack_profile(None, cwd).unwrap();
         assert_eq!(d.name, "default");
-        assert_eq!(d.packs, vec!["*".to_string()]);
+        assert_eq!(d.packs, Some(vec!["*".to_string()]));
         let explicit = resolve_pack_profile(Some("weak"), cwd).unwrap();
         assert_eq!(explicit.name, "weak");
-        assert_eq!(explicit.packs.len(), 4);
+        assert_eq!(explicit.packs.as_ref().map(|p| p.len()), Some(4));
     }
 
     #[test]

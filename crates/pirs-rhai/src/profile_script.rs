@@ -29,7 +29,8 @@
 //! `packs` selects which embedded catalog extensions load for the session:
 //! - `"*"` / `"all"` — full catalog (see `weak_packs::BUNDLED_ORDER`)
 //! - `["goal", "btw", …]` — named stems in that order
-//! - omit or `[]` — no catalog packs (project/user dirs may still load)
+//! - `[]` — explicitly no catalog packs (project/user dirs may still load)
+//! - omit — inherit built-in `default` packs when loading the session
 //!
 //! `strategy` is optional and defaults to the built-in `monolithic` strategy
 //! so pack-only profiles (roles that only curate extensions) stay concise.
@@ -91,26 +92,29 @@ fn strategy_field(map: &Map, default_name: &str) -> anyhow::Result<Strategy> {
 }
 
 /// Parse optional `packs`: `"*"` / `"all"`, or an array of pack stems.
-fn packs_field(map: &Map) -> anyhow::Result<Vec<String>> {
+/// Missing key → `None` (inherit default catalog at load time).
+fn packs_field(map: &Map) -> anyhow::Result<Option<Vec<String>>> {
     let Some(dyn_val) = map.get("packs").cloned() else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
     if let Ok(s) = dyn_val.clone().into_string() {
         let t = s.trim();
         if t.is_empty() {
-            return Ok(Vec::new());
+            return Ok(Some(Vec::new()));
         }
-        return Ok(vec![t.to_string()]);
+        return Ok(Some(vec![t.to_string()]));
     }
     let arr = dyn_val
         .try_cast::<Array>()
         .ok_or_else(|| anyhow!("`packs` must be \"*\" or an array of pack stem strings"))?;
-    arr.into_iter()
+    let list = arr
+        .into_iter()
         .map(|d| {
             d.into_string()
                 .map_err(|_| anyhow!("`packs` entries must be strings"))
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(list))
 }
 
 /// Parse the optional `tools` policy: `#{ allow: [...], deny: [...] }`.
@@ -226,7 +230,7 @@ mod tests {
     fn missing_strategy_defaults_to_monolithic() {
         let p = load_profile_str(r#"#{ name: "x", packs: ["goal"] }"#, "x").unwrap();
         assert_eq!(p.strategy.name, "monolithic");
-        assert_eq!(p.packs, vec!["goal".to_string()]);
+        assert_eq!(p.packs, Some(vec!["goal".to_string()]));
     }
 
     #[test]
@@ -247,7 +251,7 @@ mod tests {
     #[test]
     fn packs_star_and_array_parse() {
         let star = load_profile_str(r#"#{ packs: "*" }"#, "d").unwrap();
-        assert_eq!(star.packs, vec!["*".to_string()]);
+        assert_eq!(star.packs, Some(vec!["*".to_string()]));
         let list = load_profile_str(
             r#"#{ packs: ["goal", "btw", "guardrails"] }"#,
             "m",
@@ -255,13 +259,15 @@ mod tests {
         .unwrap();
         assert_eq!(
             list.packs,
-            vec![
+            Some(vec![
                 "goal".to_string(),
                 "btw".to_string(),
                 "guardrails".to_string()
-            ]
+            ])
         );
-        let none = load_profile_str(r#"#{ strategy: "monolithic" }"#, "n").unwrap();
-        assert!(none.packs.is_empty());
+        let omitted = load_profile_str(r#"#{ strategy: "monolithic" }"#, "n").unwrap();
+        assert_eq!(omitted.packs, None);
+        let empty = load_profile_str(r#"#{ packs: [] }"#, "e").unwrap();
+        assert_eq!(empty.packs, Some(vec![]));
     }
 }

@@ -63,9 +63,11 @@ pub struct Profile {
     pub strategy: Strategy,
     pub tools: ToolPolicy,
     /// Bundled extension pack stems to load (`"goal"`, `"btw"`, …).
-    /// A single entry `"*"` (or `"all"`) means the full catalog in default order.
-    /// Empty means no catalog packs (project/user dirs may still load).
-    pub packs: Vec<String>,
+    /// - `None` — not specified; pack loader inherits built-in `default` (`*`)
+    /// - `Some([])` — explicitly load no catalog packs
+    /// - `Some(["*"])` / `Some(["all"])` — full catalog
+    /// - `Some(["goal", …])` — those stems in order
+    pub packs: Option<Vec<String>>,
 }
 
 impl Profile {
@@ -78,7 +80,7 @@ impl Profile {
             model: None,
             strategy,
             tools: ToolPolicy::allow_all(),
-            packs: Vec::new(),
+            packs: None,
         }
     }
 
@@ -212,7 +214,7 @@ mod tests {
             model: None,
             strategy: plan_exec(),
             tools: ToolPolicy::allow_all(),
-            packs: Vec::new(),
+            packs: None,
         };
         let resolved = profile.resolved_strategy();
         for step in &resolved.steps {
@@ -237,7 +239,7 @@ mod tests {
             model: Some("cheap-model".into()),
             strategy: plan_oracle_exec("strong-oracle"),
             tools: ToolPolicy::allow_all(),
-            packs: Vec::new(),
+            packs: None,
         };
         let resolved = profile.resolved_strategy();
         let models: Vec<Option<String>> = resolved
@@ -261,7 +263,7 @@ mod tests {
             model: Some("m".into()),
             strategy: wide_plan_exec(3),
             tools: ToolPolicy::allow_all(),
-            packs: Vec::new(),
+            packs: None,
         };
         let resolved = profile.resolved_strategy();
         match &resolved.steps[0] {

@@ -713,11 +713,11 @@ async fn main() -> anyhow::Result<()> {
         }
         eprintln!(
             "[weak mode: tool-diet, sequential, max-retries={}, strategy={:?}, \
-             verify={:?}, packs={:?}; multi-model: phase `model:` in strategies and/or --cascade <draft>]",
+             verify={:?}; packs stay on profile default (*); multi-model: phase \
+             `model:` in strategies and/or --cascade <draft>]",
             cli.max_retries,
             cli.strategy.as_deref().or(cli.profile.as_deref()),
             cli.verify.as_deref(),
-            composed.bundled_packs,
         );
     }
 
@@ -1294,17 +1294,21 @@ async fn main() -> anyhow::Result<()> {
         // Project/user dirs load after so last-wins overrides.
         match pirs_rhai::discover::resolve_pack_profile(cli.profile.as_deref(), &cwd) {
             Ok(pack_profile) => {
-                pirs_rhai::weak_packs::load_profile_packs(&mut h, &pack_profile.packs);
-                if !pack_profile.packs.is_empty() {
-                    eprintln!(
-                        "[profile packs: {} · {}]",
-                        pack_profile.name,
-                        if pack_profile.packs.iter().any(|p| p == "*" || p == "all") {
+                let packs = pack_profile.packs.as_deref();
+                pirs_rhai::weak_packs::load_profile_packs(&mut h, packs);
+                let stems = pirs_rhai::weak_packs::effective_pack_stems(packs);
+                if !stems.is_empty() {
+                    let summary = match packs {
+                        None => format!(
+                            "inherit default * ({} packs)",
+                            pirs_rhai::weak_packs::BUNDLED_ORDER.len()
+                        ),
+                        Some(p) if p.iter().any(|s| s == "*" || s == "all") => {
                             format!("* ({} packs)", pirs_rhai::weak_packs::BUNDLED_ORDER.len())
-                        } else {
-                            pack_profile.packs.join(", ")
                         }
-                    );
+                        Some(p) => p.join(", "),
+                    };
+                    eprintln!("[profile packs: {} · {}]", pack_profile.name, summary);
                 }
             }
             Err(e) => {
