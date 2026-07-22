@@ -984,11 +984,24 @@ impl ExtensionHost {
     }
 
     pub fn run_command(&self, name: &str, args: &str) -> Result<String, String> {
-        let Some(cmd) = self.command_registry.iter().find(|c| c.name == name) else {
+        // Last registration wins (matches tool last-wins / project overrides).
+        let Some(cmd) = self.command_registry.iter().rev().find(|c| c.name == name) else {
             return Err(format!("unknown command: {name}"));
         };
         let fn_name = format!("cmd_{name}");
-        let result = self.call_extension(cmd.ext, &fn_name, (args.to_string(),))?;
+        // Commands must not silently no-op when the extension lock is busy
+        // (hooks skip; slash UX must report the miss).
+        let mut guard = match self.extensions[cmd.ext].try_lock() {
+            Ok(g) => g,
+            Err(_) => {
+                return Err(format!("{name}: extension busy; retry"));
+            }
+        };
+        let ext = &mut *guard;
+        let result: Dynamic = ext
+            .engine
+            .call_fn(&mut ext.scope, &ext.ast, &fn_name, (args.to_string(),))
+            .map_err(|e| e.to_string())?;
         Ok(if result.is_unit() {
             String::new()
         } else if result.is::<String>() {

@@ -19,6 +19,9 @@ pub const PROTECTED_KINDS: &[&str] = &[
     "edit_fail",
     "repeat",
     "no_progress",
+    // weak-model thrash steers (same one-shot control channel)
+    "cmd_fail",
+    "cmd_fail_hard",
 ];
 
 /// Wrap a body in the standard reminder envelope.
@@ -352,11 +355,20 @@ mod tests {
             user(&wrap_reminder("edit_fail", "re-read")),
             user(&wrap_reminder("repeat", "different approach")),
             user(&wrap_reminder("no_progress", "one step")),
+            user(&wrap_reminder("cmd_fail", "command failed")),
+            user(&wrap_reminder("cmd_fail_hard", "hard fail")),
             user("done"),
         ];
         let after = vec![user("done")];
         let out = preserve_control_pins(&before, after);
-        for kind in ["verify", "edit_fail", "repeat", "no_progress"] {
+        for kind in [
+            "verify",
+            "edit_fail",
+            "repeat",
+            "no_progress",
+            "cmd_fail",
+            "cmd_fail_hard",
+        ] {
             assert!(
                 out.iter().any(|m| is_reminder_kind(m, kind)),
                 "missing restored kind={kind} in {out:?}"

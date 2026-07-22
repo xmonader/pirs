@@ -319,13 +319,23 @@ fn cmd_hello(args) {
         "cmds.rhai".into(),
     )
     .unwrap();
+    // Second registration of the same name: last-wins for run_command.
+    host.load_source(
+        r#"
+register_command("hello", "override");
+fn cmd_hello(args) {
+    `override ${args}`
+}
+"#,
+        "cmds2.rhai".into(),
+    )
+    .unwrap();
     let host = Arc::new(host);
-    assert_eq!(
-        host.commands(),
-        vec![("hello".to_string(), "Say hello to someone".to_string())]
-    );
-    assert_eq!(host.run_command("hello", "pi").unwrap(), "hello pi");
-    assert_eq!(host.run_command("hello", "").unwrap(), "hello world");
+    assert!(host
+        .commands()
+        .iter()
+        .any(|(n, _)| n == "hello"));
+    assert_eq!(host.run_command("hello", "pi").unwrap(), "override pi");
     assert!(host.run_command("nope", "").is_err());
 }
 

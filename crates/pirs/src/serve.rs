@@ -12,7 +12,7 @@ const PAGE: &str = include_str!("../assets/serve.html");
 
 pub struct ServeOptions {
     pub agent: Agent,
-    #[allow(dead_code)]
+    /// Extension host for slash commands (`/goal`, …) on POST /prompt.
     pub host: Option<Arc<pirs_rhai::ExtensionHost>>,
     pub port: u16,
     pub bind: String,
@@ -54,12 +54,24 @@ pub async fn run(mut opts: ServeOptions) -> anyhow::Result<()> {
     // on an in-flight prompt (mirrors TUI cancel_handle).
     let cancel_slot = opts.agent.cancel_handle();
     let agent = Arc::new(tokio::sync::Mutex::new(opts.agent));
+    let host = opts.host.clone();
     let (prompt_tx, mut prompt_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     {
         let agent = Arc::clone(&agent);
         let tx = tx.clone();
+        let host = host.clone();
         tokio::spawn(async move {
             while let Some(text) = prompt_rx.recv().await {
+                // Extension slash commands (e.g. /goal) — mirror TUI/REPL.
+                if let Some(out) = try_extension_slash(&host, &text) {
+                    let _ = tx.send(
+                        json!({"type": "message_end", "role": "user", "text": text}).to_string(),
+                    );
+                    let _ = tx.send(
+                        json!({"type": "message_end", "role": "system", "text": out}).to_string(),
+                    );
+                    continue;
+                }
                 // Short lock: either steer an in-flight run or begin_prompt and
                 // release before awaiting (so cancel/steer stay responsive).
                 let run = {
@@ -158,6 +170,32 @@ fn env_flag(name: &str) -> bool {
     std::env::var(name)
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
+}
+
+/// If `text` is a registered extension slash command, run it and return output.
+/// Built-in TUI/REPL commands are not handled here (web UI is chat + ext cmds).
+fn try_extension_slash(
+    host: &Option<Arc<pirs_rhai::ExtensionHost>>,
+    text: &str,
+) -> Option<String> {
+    let t = text.trim();
+    if !t.starts_with('/') {
+        return None;
+    }
+    let h = host.as_ref()?;
+    let (cmd, arg) = match t.split_once(char::is_whitespace) {
+        Some((c, a)) => (c, a.trim()),
+        None => (t, ""),
+    };
+    let name = cmd.trim_start_matches('/');
+    if name.is_empty() || !h.commands().iter().any(|(n, _)| n == name) {
+        return None;
+    }
+    Some(match h.run_command(name, arg) {
+        Ok(out) if !out.is_empty() => out,
+        Ok(_) => format!("/{name} done"),
+        Err(e) => format!("/{name}: {e}"),
+    })
 }
 
 /// Compare an Authorization header value against the expected token. The

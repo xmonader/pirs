@@ -1535,6 +1535,19 @@ async fn main() -> anyhow::Result<()> {
     if let Some(ctx) = system_prompt::read_project_context(&cwd) {
         system.push_str(&ctx);
     }
+    // Interactive role: stamp profile persona onto the system prompt so TUI/REPL
+    // honor `--profile` beyond pack selection. Strategy seed is applied below
+    // when launching the TUI.
+    if let Some(p) = cli.profile.as_deref() {
+        if let Ok(prof) = pirs_rhai::discover::resolve_profile(p, &cwd) {
+            if let Some(persona) = prof.persona.as_deref() {
+                if !persona.is_empty() {
+                    system = format!("{persona}\n\n{system}");
+                    eprintln!("[profile persona: {}]", prof.name);
+                }
+            }
+        }
+    }
 
     let completion = CompletionOptions {
         api_key: Some(api_key.clone()),
@@ -1830,6 +1843,19 @@ async fn main() -> anyhow::Result<()> {
             .iter()
             .map(|m| m.alias.clone())
             .collect();
+        // Seed strategy from --strategy, else from --profile's strategy name.
+        let tui_strategy = if let Some(s) = cli.strategy.clone() {
+            Some(s)
+        } else if let Some(p) = cli.profile.as_deref() {
+            pirs_rhai::discover::resolve_profile(p, &cwd)
+                .ok()
+                .map(|prof| prof.strategy.name)
+        } else {
+            None
+        };
+        if let Some(ref s) = tui_strategy {
+            eprintln!("[tui strategy: {s}]");
+        }
         return tui::run(tui::TuiOptions {
             agent,
             host,
@@ -1837,7 +1863,7 @@ async fn main() -> anyhow::Result<()> {
             approval_mode,
             approval_gate: Some(gate),
             cwd,
-            strategy: cli.strategy.clone(),
+            strategy: tui_strategy,
             plan_model: cli.plan_model.clone(),
             verify: cli.verify.clone(),
             max_attempts: cli.max_attempts,
