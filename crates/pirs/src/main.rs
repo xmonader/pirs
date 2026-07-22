@@ -1878,6 +1878,7 @@ async fn main() -> anyhow::Result<()> {
             &session_path,
             approval_mode,
             host.as_ref(),
+            true, // one-shot: no rustyline readline follows, safe to steer from stdin
         )
         .await?;
         // Shared learning loop (same as pirs-claw): crystallize after substantial one-shots.
@@ -1941,9 +1942,19 @@ async fn run_turn(
     _session_path: &Path,
     approval_mode: approval::ApprovalMode,
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
+    steer_from_stdin: bool,
 ) -> anyhow::Result<()> {
     let cancel = agent.cancel_handle();
-    let steer_handle = if approval_mode == approval::ApprovalMode::Ask {
+    // The stdin steer thread lets you inject a line into the *running* turn, but
+    // it reads stdin in the background and its stop() only signals a flag the
+    // thread checks *before* its blocking read -- so once a turn ends it stays
+    // parked in that read, competing with the next rustyline `readline` for the
+    // same terminal fd and stealing keystrokes (dropped characters). The
+    // interactive REPL therefore opts out (`steer_from_stdin = false`): with no
+    // background reader, whatever you type during a turn stays in the terminal's
+    // line buffer and rustyline picks it up as your next line (type-ahead). Only
+    // callers with no subsequent readline (one-shot) keep it on.
+    let steer_handle = if approval_mode == approval::ApprovalMode::Ask || !steer_from_stdin {
         None
     } else {
         Some(SteerHandle::start(agent))
@@ -2283,7 +2294,9 @@ async fn repl(
                 );
                 let before = agent.messages.len();
                 let user_line = line.to_string();
-                if let Err(e) = run_turn(agent, line, printer, &sp, mode, host).await {
+                // false: the interactive REPL reads the next line with rustyline,
+                // so a background stdin steer thread would race it and drop chars.
+                if let Err(e) = run_turn(agent, line, printer, &sp, mode, host, false).await {
                     eprintln!("[error: {e}]");
                 }
                 clock.agent_end();
@@ -2609,7 +2622,9 @@ async fn handle_command(
                     let prompt = discovery::expand_command(fc, arg);
                     let mode = *approval_shared.lock().unwrap();
                     let sp = session_path.lock().unwrap().clone();
-                    if let Err(e) = run_turn(agent, &prompt, printer, &sp, mode, host).await {
+                    // false: handle_command runs inside the interactive REPL loop,
+                    // so a rustyline readline follows -- same stdin race as above.
+                    if let Err(e) = run_turn(agent, &prompt, printer, &sp, mode, host, false).await {
                         eprintln!("[error: {e}]");
                     }
                 } else {
