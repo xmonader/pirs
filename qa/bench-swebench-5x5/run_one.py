@@ -121,6 +121,37 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             targets = as_list(inst["FAIL_TO_PASS"])
             logline("WARNING: test-id filter removed all targets; using original FAIL_TO_PASS")
 
+        # Cap keep-green size. Huge PASS_TO_PASS lists (django-11019: 16 targets
+        # + large media suite) burned the full 1800s agent timeout before a
+        # fix landed. Official oracle still grades full P2P; harness only needs
+        # a regression sample. Prefer tests that share a module prefix with a
+        # FAIL_TO_PASS target.
+        max_kg = int(os.environ.get("PIRS_MAX_KEEP_GREEN", "40"))
+        if max_kg > 0 and len(keep_green) > max_kg:
+            def kg_score(k: str) -> tuple:
+                # Higher score = keep earlier. Prefer same module/file as targets.
+                score = 0
+                for t in targets:
+                    if "::" in t and "::" in k and t.split("::")[0] == k.split("::")[0]:
+                        score += 10
+                    # django: "test_x (mod.Class)" — share parenthesized class/mod
+                    if " (" in t and " (" in k:
+                        tm = t[t.find("(") : t.find(")") + 1]
+                        km = k[k.find("(") : k.find(")") + 1]
+                        if tm and tm == km:
+                            score += 10
+                        elif tm and km and tm.split(".")[0] == km.split(".")[0]:
+                            score += 5
+                    if t.split("::")[-1].split("(")[0][:12] and t[:8] in k:
+                        score += 1
+                return (-score, k)
+
+            ranked = sorted(keep_green, key=kg_score)
+            keep_green = ranked[:max_kg]
+            logline(
+                f"capped keep_green {n_kg}->{len(keep_green)} (PIRS_MAX_KEEP_GREEN={max_kg})"
+            )
+
         if strategy_script:
             sh(["docker", "cp", strategy_script, f"{cname}:/tmp/strategy.rhai"], stdout=log, stderr=log)
 

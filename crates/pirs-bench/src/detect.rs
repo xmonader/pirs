@@ -89,9 +89,10 @@ impl DetectorHost {
         // Ranked first: the CI oracle is the highest-trust hypothesis (§ runner
         // discovery), so a CI-confirmed runner is probed before structural guesses.
         host.load_detector("ci", include_str!("../detectors/ci.rhai"))?;
-        // Django before generic pytest: both markers fire on django trees, and
-        // pytest never confirms on SWE-bench django images (unittest labels).
+        // Django / sympy before generic pytest: SWE-bench images for those
+        // ecosystems use unittest-style runners that pytest never confirms.
         host.load_detector("django", include_str!("../detectors/django.rhai"))?;
+        host.load_detector("sympy", include_str!("../detectors/sympy.rhai"))?;
         host.load_detector("pytest", include_str!("../detectors/pytest.rhai"))?;
         host.load_detector("go", include_str!("../detectors/go.rhai"))?;
         host.load_detector("rust", include_str!("../detectors/rust.rhai"))?;
@@ -273,6 +274,22 @@ mod tests {
         assert!(dj.test_cmd.contains("pirs_django_run") || dj.test_cmd.contains("base64"));
         assert!(dj.shell_quote_tests, "django ids have spaces/parens");
         assert!(dj.list_cmd.contains("runtests.py") || dj.list_cmd.contains("django"));
+    }
+
+    #[test]
+    fn bundled_sympy_detects_bin_test_layout() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("bin")).unwrap();
+        std::fs::create_dir_all(dir.path().join("sympy")).unwrap();
+        std::fs::write(dir.path().join("bin/test"), "#!/usr/bin/env python\n").unwrap();
+        let host = DetectorHost::with_bundled().unwrap();
+        let specs = host.detect(dir.path());
+        let sp = specs
+            .iter()
+            .find(|s| s.framework == "sympy")
+            .expect("sympy spec");
+        assert!(sp.test_cmd.contains("pirs_sympy_run") || sp.test_cmd.contains("base64"));
+        assert!(sp.list_cmd.contains("bin/test"));
     }
 
     #[test]

@@ -60,6 +60,9 @@ impl GitWorkspace {
     /// newly-created files**. Stages everything to capture new files in the diff,
     /// captures `diff --cached`, then unstages so the tree's staged state is left
     /// exactly as it was found (edits stay on disk, index reset).
+    ///
+    /// The returned patch is pass-through [`sanitize_export_patch`] so agent-only
+    /// paths (`.pirs/`, …) never leak into SWE-bench oracle applies.
     pub fn diff(&self) -> anyhow::Result<String> {
         self.git("add -A").context("stage for diff")?;
         // Capture with the index staged. `diff --cached HEAD` yields the full
@@ -67,7 +70,7 @@ impl GitWorkspace {
         let patch = self.git("diff --cached HEAD").context("compute patch")?;
         // Restore the index to unstaged so we don't leave a surprise staged state.
         self.git("reset -q").context("unstage after diff")?;
-        Ok(patch)
+        Ok(sanitize_export_patch(&patch))
     }
 
     /// Return the tree to a pristine base checkout: revert tracked edits and
@@ -97,6 +100,71 @@ impl GitWorkspace {
 /// Minimal single-quote shell escaping for a value embedded in a shell command.
 pub(crate) fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// Paths the agent creates for its own bookkeeping — never part of the gold
+/// deliverable. Including them has broken official SWE-bench applies
+/// (`patch unexpectedly ends in middle of line` on `.pirs/todos.json`).
+fn is_agent_junk_path(path: &str) -> bool {
+    // `diff --git` tokens look like `a/.pirs/todos.json` / `b/django/foo.py`.
+    let p = path
+        .strip_prefix("a/")
+        .or_else(|| path.strip_prefix("b/"))
+        .unwrap_or(path)
+        .trim_start_matches("./");
+    p.starts_with(".pirs/")
+        || p == ".pirs"
+        || p.starts_with(".grok/")
+        || p == ".grok"
+        || p.contains("/.pirs/")
+        || p.contains("/.grok/")
+}
+
+/// Drop agent-only file hunks from a unified diff and ensure a trailing newline.
+/// Empty input stays empty (no spurious newline that would look like a patch).
+pub fn sanitize_export_patch(patch: &str) -> String {
+    if patch.trim().is_empty() {
+        return String::new();
+    }
+    // Split on file headers. Keep the first empty chunk if the patch starts with
+    // `diff --git` (standard).
+    let mut out = String::new();
+    let mut parts = patch.split("diff --git ").peekable();
+    // If the patch doesn't start with diff --git, keep a leading preamble.
+    if let Some(first) = parts.next() {
+        if !first.is_empty() && !patch.starts_with("diff --git ") {
+            out.push_str(first);
+        } else if !first.is_empty() {
+            // leading garbage before first header — rare; keep only if not junk
+            out.push_str(first);
+        }
+    }
+    for part in parts {
+        if part.is_empty() {
+            continue;
+        }
+        // Header line: `a/path b/path\n...`
+        let header_end = part.find('\n').unwrap_or(part.len());
+        let header = &part[..header_end];
+        // paths are space-separated: `a/foo b/foo` (no spaces in normal git paths)
+        let junk = header
+            .split_whitespace()
+            .any(|tok| is_agent_junk_path(tok));
+        if junk {
+            continue;
+        }
+        out.push_str("diff --git ");
+        out.push_str(part);
+        if !part.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    // `patch(1)` / SWE-bench apply is picky about EOF; always end with newline
+    // when there is content.
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
 }
 
 /// Whether `git` is usable in `dir` (a repo with at least one commit). Lets the
@@ -225,5 +293,68 @@ mod tests {
         assert_eq!(sha.len(), 40, "expected a full SHA-1: {sha}");
         assert!(sha.chars().all(|c| c.is_ascii_hexdigit()));
         assert!(is_git_repo(dir.path()));
+    }
+
+    #[test]
+    fn sanitize_drops_pirs_todos_and_keeps_source() {
+        let raw = "\
+diff --git a/.pirs/todos.json b/.pirs/todos.json
+new file mode 100644
+index 0000000..fc69ce2
+--- /dev/null
++++ b/.pirs/todos.json
+@@ -0,0 +1,3 @@
++{
++  \"items\": []
++}
+\\ No newline at end of file
+diff --git a/django/utils/autoreload.py b/django/utils/autoreload.py
+index 25c3b44..d8b0f68 100644
+--- a/django/utils/autoreload.py
++++ b/django/utils/autoreload.py
+@@ -139,7 +139,7 @@ def iter_modules_and_files(modules, extra_files):
+-        except FileNotFoundError:
++        except (FileNotFoundError, ValueError):
+";
+        let clean = sanitize_export_patch(raw);
+        assert!(
+            !clean.contains(".pirs"),
+            "agent junk must be stripped:\n{clean}"
+        );
+        assert!(
+            clean.contains("django/utils/autoreload.py"),
+            "real source must remain:\n{clean}"
+        );
+        assert!(
+            clean.ends_with('\n'),
+            "export patch must end with newline for patch(1)"
+        );
+        assert!(sanitize_export_patch("").is_empty());
+        assert!(sanitize_export_patch("   \n").is_empty());
+    }
+
+    #[test]
+    fn diff_excludes_pirs_dir_from_export() {
+        let Some(dir) = repo_with_commit() else {
+            eprintln!("skipping: git unavailable");
+            return;
+        };
+        let ws = GitWorkspace::new(dir.path().to_path_buf());
+        std::fs::create_dir_all(dir.path().join(".pirs")).unwrap();
+        std::fs::write(dir.path().join(".pirs/todos.json"), "{\"items\":[]}\n").unwrap();
+        std::fs::write(
+            dir.path().join("mymod.py"),
+            "def add(a, b):\n    return a + b\n",
+        )
+        .unwrap();
+        let patch = ws.diff().unwrap();
+        assert!(
+            !patch.contains(".pirs"),
+            "export must not include .pirs:\n{patch}"
+        );
+        assert!(
+            patch.contains("return a + b"),
+            "export must include real edit:\n{patch}"
+        );
     }
 }
