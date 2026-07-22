@@ -1765,6 +1765,29 @@ async fn main() -> anyhow::Result<()> {
                     n.0 = text.len();
                 }
             }
+            AgentEvent::MessageEnd { message } if message.is_assistant() => {
+                // The streamed assistant text/thinking above is printed as raw
+                // deltas with no trailing newline. Terminate the line here so
+                // the next `pirs> ` prompt starts at column 0. Without this the
+                // prompt renders glued to the end of the response, and rustyline
+                // -- which assumes it starts at column 0 -- miscomputes cursor
+                // columns on every refresh and visibly drops/scrambles the
+                // characters you type ("cool, you have a handoff command" ->
+                // "oy a hdfoa"). Printer::MessageEnd can't do this: its guard
+                // (`if *streaming`) never trips because this callback consumes
+                // the assistant MessageStart before Printer ever sees it. Only
+                // emit the newline when we actually streamed something, then let
+                // Printer still surface a terminal-error stop_reason.
+                {
+                    let mut n = printed.lock().unwrap();
+                    if n.0 > 0 || n.1 > 0 {
+                        println!();
+                        *n = (0, 0);
+                    }
+                }
+                let _ = std::io::stdout().flush();
+                p.event(event);
+            }
             _ => p.event(event),
         }));
     }
