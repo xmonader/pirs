@@ -451,6 +451,41 @@ fn summarize_args(tool: &str, args: &serde_json::Value) -> String {
 #[cfg(test)]
 pub(crate) static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// Detect the `login` pseudo-subcommand and resolve which provider to store a
+/// key for, returning `None` when this is not a login invocation.
+///
+/// `prompt` is the *flattened* one-shot prompt (all trailing argv joined by
+/// single spaces by the time this is called), `mode` is `--mode`, and
+/// `provider` is the already-resolved `--provider`/config value.
+///
+/// Matches only the exact shapes `login`, `login openai`, `login anthropic`
+/// (or `--mode login`). We split the flattened prompt back into tokens because
+/// after flattening `cli.prompt.first()` is the whole `"login openai"` string,
+/// not `"login"` -- the original bug where `pirs login openai` silently ran the
+/// agent with "login openai" as a prompt instead of logging in. The narrow
+/// match keeps a genuine prompt that merely starts with the word "login"
+/// (e.g. `pirs "login and restart the box"`) out of the login path. An explicit
+/// `login <provider>` token wins over the ambient `--provider` value.
+fn parse_login_request(prompt: Option<&str>, mode: &str, provider: &str) -> Option<&'static str> {
+    let tokens: Vec<&str> = prompt
+        .map(|s| s.split_whitespace().collect())
+        .unwrap_or_default();
+    let is_login = mode == "login"
+        || matches!(
+            tokens.as_slice(),
+            ["login"] | ["login", "openai"] | ["login", "anthropic"]
+        );
+    if !is_login {
+        return None;
+    }
+    Some(match tokens.get(1).copied() {
+        Some("anthropic") => "anthropic",
+        Some("openai") => "openai",
+        _ if provider == "anthropic" => "anthropic",
+        _ => "openai",
+    })
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -878,12 +913,9 @@ async fn main() -> anyhow::Result<()> {
     }
     let cwd = std::env::current_dir()?;
 
-    if cli.prompt.first().map(|s| s.as_str()) == Some("login") || cli.mode == "login" {
-        let provider = if cli.provider == "anthropic" {
-            "anthropic"
-        } else {
-            "openai"
-        };
+    if let Some(provider) =
+        parse_login_request(cli.prompt.first().map(|s| s.as_str()), &cli.mode, &cli.provider)
+    {
         return auth::login(provider);
     }
 
@@ -1733,6 +1765,29 @@ async fn main() -> anyhow::Result<()> {
                     n.0 = text.len();
                 }
             }
+            AgentEvent::MessageEnd { message } if message.is_assistant() => {
+                // The streamed assistant text/thinking above is printed as raw
+                // deltas with no trailing newline. Terminate the line here so
+                // the next `pirs> ` prompt starts at column 0. Without this the
+                // prompt renders glued to the end of the response, and rustyline
+                // -- which assumes it starts at column 0 -- miscomputes cursor
+                // columns on every refresh and visibly drops/scrambles the
+                // characters you type ("cool, you have a handoff command" ->
+                // "oy a hdfoa"). Printer::MessageEnd can't do this: its guard
+                // (`if *streaming`) never trips because this callback consumes
+                // the assistant MessageStart before Printer ever sees it. Only
+                // emit the newline when we actually streamed something, then let
+                // Printer still surface a terminal-error stop_reason.
+                {
+                    let mut n = printed.lock().unwrap();
+                    if n.0 > 0 || n.1 > 0 {
+                        println!();
+                        *n = (0, 0);
+                    }
+                }
+                let _ = std::io::stdout().flush();
+                p.event(event);
+            }
             _ => p.event(event),
         }));
     }
@@ -1823,6 +1878,7 @@ async fn main() -> anyhow::Result<()> {
             &session_path,
             approval_mode,
             host.as_ref(),
+            true, // one-shot: no rustyline readline follows, safe to steer from stdin
         )
         .await?;
         // Shared learning loop (same as pirs-claw): crystallize after substantial one-shots.
@@ -1886,9 +1942,19 @@ async fn run_turn(
     _session_path: &Path,
     approval_mode: approval::ApprovalMode,
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
+    steer_from_stdin: bool,
 ) -> anyhow::Result<()> {
     let cancel = agent.cancel_handle();
-    let steer_handle = if approval_mode == approval::ApprovalMode::Ask {
+    // The stdin steer thread lets you inject a line into the *running* turn, but
+    // it reads stdin in the background and its stop() only signals a flag the
+    // thread checks *before* its blocking read -- so once a turn ends it stays
+    // parked in that read, competing with the next rustyline `readline` for the
+    // same terminal fd and stealing keystrokes (dropped characters). The
+    // interactive REPL therefore opts out (`steer_from_stdin = false`): with no
+    // background reader, whatever you type during a turn stays in the terminal's
+    // line buffer and rustyline picks it up as your next line (type-ahead). Only
+    // callers with no subsequent readline (one-shot) keep it on.
+    let steer_handle = if approval_mode == approval::ApprovalMode::Ask || !steer_from_stdin {
         None
     } else {
         Some(SteerHandle::start(agent))
@@ -2228,7 +2294,9 @@ async fn repl(
                 );
                 let before = agent.messages.len();
                 let user_line = line.to_string();
-                if let Err(e) = run_turn(agent, line, printer, &sp, mode, host).await {
+                // false: the interactive REPL reads the next line with rustyline,
+                // so a background stdin steer thread would race it and drop chars.
+                if let Err(e) = run_turn(agent, line, printer, &sp, mode, host, false).await {
                     eprintln!("[error: {e}]");
                 }
                 clock.agent_end();
@@ -2554,7 +2622,9 @@ async fn handle_command(
                     let prompt = discovery::expand_command(fc, arg);
                     let mode = *approval_shared.lock().unwrap();
                     let sp = session_path.lock().unwrap().clone();
-                    if let Err(e) = run_turn(agent, &prompt, printer, &sp, mode, host).await {
+                    // false: handle_command runs inside the interactive REPL loop,
+                    // so a rustyline readline follows -- same stdin race as above.
+                    if let Err(e) = run_turn(agent, &prompt, printer, &sp, mode, host, false).await {
                         eprintln!("[error: {e}]");
                     }
                 } else {
@@ -2631,6 +2701,51 @@ fn generate_serve_token() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn login_bare_uses_ambient_provider() {
+        // `pirs login` -> provider comes from --provider/config.
+        assert_eq!(parse_login_request(Some("login"), "repl", "openai"), Some("openai"));
+        assert_eq!(
+            parse_login_request(Some("login"), "repl", "anthropic"),
+            Some("anthropic")
+        );
+    }
+
+    #[test]
+    fn login_with_provider_token_wins_over_ambient() {
+        // The regression: flattened prompt is "login openai", must still log in
+        // (previously fell through to agent mode), and the token wins.
+        assert_eq!(
+            parse_login_request(Some("login openai"), "repl", "anthropic"),
+            Some("openai")
+        );
+        assert_eq!(
+            parse_login_request(Some("login anthropic"), "repl", "openai"),
+            Some("anthropic")
+        );
+    }
+
+    #[test]
+    fn mode_login_forces_login_regardless_of_prompt() {
+        assert_eq!(parse_login_request(None, "login", "openai"), Some("openai"));
+        assert_eq!(
+            parse_login_request(None, "login", "anthropic"),
+            Some("anthropic")
+        );
+    }
+
+    #[test]
+    fn genuine_prompt_starting_with_login_is_not_intercepted() {
+        assert_eq!(
+            parse_login_request(Some("login and restart the box"), "repl", "openai"),
+            None
+        );
+        // Unknown trailing token is not a provider -> treated as a prompt.
+        assert_eq!(parse_login_request(Some("login foo"), "repl", "openai"), None);
+        // No prompt at all in the default REPL mode -> not a login.
+        assert_eq!(parse_login_request(None, "repl", "openai"), None);
+    }
 
     #[test]
     fn serve_token_is_random_and_long() {

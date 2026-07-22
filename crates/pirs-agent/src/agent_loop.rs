@@ -418,6 +418,10 @@ async fn stream_once(
         messages = t(messages);
     }
     messages = crate::control_pins::preserve_control_pins(&original_messages, messages);
+    // A pin inserted at len-1 by a transform (or preserve_control_pins) can land
+    // between a trailing assistant tool_use and its tool_result; repair adjacency
+    // before serialization or the backend rejects the request (dangling tool_call).
+    crate::control_pins::enforce_tool_result_adjacency(&mut messages);
     let llm_ctx = Context {
         system_prompt: context.system_prompt.clone(),
         messages,

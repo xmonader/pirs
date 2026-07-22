@@ -907,6 +907,11 @@ impl<T> LatestSlot<T> {
         }
     }
 
+    /// Replace-semantics push. Production frame writes go through
+    /// [`LatestSlot::push_coalesce`] instead (see it for why replacing drops
+    /// ratatui diff cells); this remains only to exercise the generic
+    /// cvar/close mechanics in tests.
+    #[cfg(test)]
     fn push(&self, value: T) {
         let mut guard = self.state.lock().unwrap();
         guard.value = Some(value);
@@ -931,17 +936,47 @@ impl<T> LatestSlot<T> {
     }
 }
 
+impl LatestSlot<Vec<u8>> {
+    /// Frame-delta variant of [`LatestSlot::push`]: *appends* to any
+    /// not-yet-written pending bytes instead of replacing them.
+    ///
+    /// The rendered frames handed to the writer are ratatui *incremental
+    /// diffs* (only the cells that changed since the previous frame, emitted
+    /// with absolute cursor moves), not full repaints. Replacing a pending
+    /// diff would silently drop the cells it painted -- and ratatui's double
+    /// buffer already believes those cells are on screen, so it never re-emits
+    /// them. Under heavy token streaming the writer thread is frequently mid-
+    /// flush, so this dropped exactly the deltas that paint keystrokes typed
+    /// during a response, garbling the input line.
+    ///
+    /// Concatenating consecutive diffs reproduces byte-for-byte what a
+    /// keeping-up writer would have written, so the screen still converges on
+    /// the latest state with nothing lost. The buffer stays small: deltas are
+    /// tiny and the writer coalesces them into a single `write_all`, so there
+    /// is still no backpressure on the render loop.
+    fn push_coalesce(&self, mut bytes: Vec<u8>) {
+        let mut guard = self.state.lock().unwrap();
+        match guard.value.as_mut() {
+            Some(pending) => pending.append(&mut bytes),
+            None => guard.value = Some(bytes),
+        }
+        self.cvar.notify_one();
+    }
+}
+
 /// Decouples the actual terminal write (a blocking OS syscall that can stall
 /// under a slow pty/tmux/SSH pipe) from the async event loop that computes
 /// frames. The loop renders each frame into an in-memory
 /// `CrosstermBackend<Vec<u8>>` (cheap, CPU-only) and hands the resulting
 /// bytes to this writer, which owns real stdout on a dedicated OS thread.
-/// Only the LATEST pending frame is kept (via `LatestSlot`): if the writer
-/// thread is still flushing a previous frame when a new one is computed,
-/// the stale one is replaced rather than queued, so heavy token streaming
-/// (many redraws in quick succession) never backs up waiting on terminal
-/// I/O — the screen just catches up to the latest state once the writer is
-/// free, which is all a human watching the screen can perceive anyway.
+/// Pending frames are coalesced (via `LatestSlot::push_coalesce`): if the
+/// writer thread is still flushing a previous frame when a new one is
+/// computed, the new delta is appended to the pending bytes rather than
+/// queued as a separate flush, so heavy token streaming (many redraws in
+/// quick succession) never backs up waiting on terminal I/O — the writer
+/// catches up in a single write, and the screen converges on the latest
+/// state. (Appending, not replacing: the frames are ratatui incremental
+/// diffs, so a dropped delta would lose the cells it painted for good.)
 struct TuiWriter {
     slot: Arc<LatestSlot<Vec<u8>>>,
     handle: Option<std::thread::JoinHandle<()>>,
@@ -964,13 +999,17 @@ impl TuiWriter {
         }
     }
 
-    /// Hands off a rendered frame's bytes to the writer thread, replacing —
-    /// not queuing behind — any not-yet-written previous frame. Never
-    /// blocks: this is the backpressure gate, expressed as "keep only the
-    /// newest thing", not as flow control on the sender.
+    /// Hands off a rendered frame's delta bytes to the writer thread. If a
+    /// previous frame is still pending (writer mid-flush), the new delta is
+    /// *appended* to it rather than replacing it -- see
+    /// [`LatestSlot::push_coalesce`] for why replacing corrupts the screen
+    /// with diff-based frames. Never blocks: coalescing keeps the pending
+    /// buffer to a single write, so this is still the backpressure gate, just
+    /// expressed as "collapse pending deltas into one write" instead of "drop
+    /// all but the newest".
     fn push(&self, bytes: Vec<u8>) {
         if !bytes.is_empty() {
-            self.slot.push(bytes);
+            self.slot.push_coalesce(bytes);
         }
     }
 
@@ -4117,6 +4156,26 @@ mod tests {
             Some(3),
             "second push should replace, not queue behind, the first"
         );
+    }
+
+    #[test]
+    fn push_coalesce_appends_pending_frame_deltas_instead_of_dropping() {
+        // Regression: ratatui hands the writer incremental diffs. If a pending
+        // delta is replaced instead of appended while the writer is mid-flush,
+        // the cells it painted (e.g. keystrokes typed during token streaming)
+        // are lost for good -> garbled input line. Coalescing must preserve the
+        // earlier delta's bytes, in order, ahead of the newer one.
+        let slot: LatestSlot<Vec<u8>> = LatestSlot::new();
+        slot.push_coalesce(b"AB".to_vec());
+        slot.push_coalesce(b"CD".to_vec());
+        assert_eq!(
+            slot.take_blocking(),
+            Some(b"ABCD".to_vec()),
+            "unconsumed frame deltas must concatenate in push order, not drop"
+        );
+        // Once drained, the next delta stands alone again.
+        slot.push_coalesce(b"EF".to_vec());
+        assert_eq!(slot.take_blocking(), Some(b"EF".to_vec()));
     }
 
     #[test]
