@@ -177,26 +177,40 @@ impl ChatItem {
 }
 
 fn render_thinking(thinking: &str, theme: &Theme, expanded: bool) -> Vec<Line<'static>> {
-    const MAX: usize = 8;
+    // Show a generous window when expanded (was 8 — felt like expand was broken).
+    const MAX: usize = 80;
     let lines: Vec<&str> = thinking.lines().filter(|l| !l.trim().is_empty()).collect();
     let total = lines.len();
     if total == 0 {
         return Vec::new();
     }
     if !expanded {
-        return vec![Line::from(Span::styled(
-            format!(
-                "    ▶ thought · {total} line{}",
-                if total == 1 { "" } else { "s" }
+        // Bright chevron so it's obvious this is a control, not dead chrome.
+        return vec![Line::from(vec![
+            Span::styled("    ▶ ", theme.accent),
+            Span::styled(
+                format!(
+                    "thought · {total} line{}  (t or ctrl-o to expand)",
+                    if total == 1 { "" } else { "s" }
+                ),
+                theme.thinking,
             ),
-            theme.thinking,
-        ))];
+        ])];
     }
     let skip = total.saturating_sub(MAX);
-    let mut out = vec![Line::from(Span::styled(
-        format!("    ▼ thought · {total} lines  (ctrl-o collapse)"),
-        theme.thinking,
-    ))];
+    let mut out = vec![Line::from(vec![
+        Span::styled("    ▼ ", theme.accent),
+        Span::styled(
+            format!("thought · {total} lines  (t or ctrl-o to collapse)"),
+            theme.thinking,
+        ),
+    ])];
+    if skip > 0 {
+        out.push(Line::from(Span::styled(
+            format!("      … {skip} earlier lines omitted"),
+            theme.dim,
+        )));
+    }
     for l in lines.into_iter().skip(skip) {
         out.push(Line::from(Span::styled(
             format!("      {l}"),
@@ -549,9 +563,28 @@ impl App {
     fn invalidate_item(&mut self, idx: usize) {
         if let Some(c) = self.item_caches.get_mut(idx) {
             c.rows = None;
-            c.row_count = 1;
+            // Keep a modest estimate so scroll doesn't jump to zero height
+            // before the next measure pass; draw_chat remeasures when near.
+            c.row_count = c.row_count.max(1);
         }
         self.dirty = true;
+    }
+
+    /// Toggle collapsed thinking on all assistant messages + live stream.
+    fn toggle_thoughts(&mut self) {
+        self.thinking_expanded = !self.thinking_expanded;
+        for i in 0..self.items.len() {
+            if matches!(self.items[i], ChatItem::Assistant { .. }) {
+                self.invalidate_item(i);
+            }
+        }
+        // Live stream also uses thinking_expanded on next paint.
+        self.dirty = true;
+        self.set_status(if self.thinking_expanded {
+            "thoughts expanded (t / ctrl-o to collapse)"
+        } else {
+            "thoughts collapsed (t / ctrl-o to expand)"
+        });
     }
 
     fn start_tool(&mut self, name: String, summary: String) {
@@ -1383,26 +1416,26 @@ fn handle_key(
                 app.cursor = 0;
             }
         }
-        (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
+        (KeyCode::Char('l'), m) if m.contains(KeyModifiers::CONTROL) => {
             app.clear_chat();
         }
-        (KeyCode::Char('o'), KeyModifiers::CONTROL) => {
-            app.thinking_expanded = !app.thinking_expanded;
-            // Invalidate assistant rows so thinking re-renders.
-            for i in 0..app.items.len() {
-                if matches!(app.items[i], ChatItem::Assistant { .. }) {
-                    app.invalidate_item(i);
-                }
-            }
-            app.dirty = true;
+        // Thoughts: ctrl-o always; bare `t` when compose is empty (easy to hit).
+        (KeyCode::Char('o'), m) if m.contains(KeyModifiers::CONTROL) => {
+            app.toggle_thoughts();
         }
-        (KeyCode::Char('w'), KeyModifiers::CONTROL) => {
+        (KeyCode::Char('t'), KeyModifiers::NONE) if app.input.is_empty() => {
+            app.toggle_thoughts();
+        }
+        (KeyCode::Char('T'), KeyModifiers::SHIFT) if app.input.is_empty() => {
+            app.toggle_thoughts();
+        }
+        (KeyCode::Char('w'), m) if m.contains(KeyModifiers::CONTROL) => {
             delete_word_before_cursor(app);
         }
-        (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
+        (KeyCode::Char('a'), m) if m.contains(KeyModifiers::CONTROL) => {
             app.cursor = 0;
         }
-        (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+        (KeyCode::Char('e'), m) if m.contains(KeyModifiers::CONTROL) => {
             app.cursor = app.input.len();
         }
         (KeyCode::Tab, KeyModifiers::NONE) if app.input.is_empty() => {
@@ -2081,6 +2114,9 @@ fn handle_slash_command(
             app.push(ChatItem::System(s));
             app.notice("setup status (see chat)");
         }
+        "/thoughts" | "/think" | "/thinking" => {
+            app.toggle_thoughts();
+        }
         "/models" => {
             // /models [plan] [query…]  |  /models refresh
             let mut rest = arg.trim();
@@ -2644,7 +2680,8 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
         ];
         if !thinking.trim().is_empty() {
             // While streaming, show thinking expanded lightly (last lines).
-            logical.extend(render_thinking(thinking, theme, true));
+            // Honor toggle during stream too (was always force-expanded).
+            logical.extend(render_thinking(thinking, theme, app.thinking_expanded));
         }
         if !text.trim().is_empty() {
             logical.extend(render_markdown(text, theme, width.saturating_sub(4)));
@@ -3035,7 +3072,7 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  ctrl-o              expand/collapse thoughts",
+            "  t / ctrl-o / /thoughts   expand/collapse thoughts",
             theme.assistant_text,
         )),
         Line::from(Span::styled(

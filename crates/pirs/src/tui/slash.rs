@@ -40,6 +40,10 @@ pub(crate) const SLASH_CMDS: &[SlashCmd] = &[
         desc: "keys + backend setup status",
     },
     SlashCmd {
+        name: "/thoughts",
+        desc: "expand/collapse model thinking",
+    },
+    SlashCmd {
         name: "/plan-model",
         desc: "planner fuzzy picker or set",
     },

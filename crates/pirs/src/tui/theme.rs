@@ -58,26 +58,26 @@ impl Theme {
                 .fg(Color::Rgb(167, 139, 250))
                 .add_modifier(Modifier::BOLD),
             assistant_text: Style::default().fg(Color::Rgb(226, 232, 240)),
-            thinking: Style::default()
-                .fg(Color::Rgb(100, 116, 139))
-                .add_modifier(Modifier::ITALIC),
+            // Soft violet — readable, not the old mud-slate "background grey".
+            thinking: Style::default().fg(Color::Rgb(196, 181, 253)),
             tool_name: Style::default()
                 .fg(Color::Rgb(251, 191, 36))
                 .add_modifier(Modifier::BOLD),
-            tool_args: Style::default().fg(Color::Rgb(148, 163, 184)),
-            tool_ok: Style::default().fg(Color::Rgb(100, 116, 139)),
+            tool_args: Style::default().fg(Color::Rgb(186, 198, 214)),
+            // Tool output: light slate, still secondary to assistant text.
+            tool_ok: Style::default().fg(Color::Rgb(176, 190, 210)),
             tool_err: Style::default().fg(Color::Rgb(248, 113, 113)),
             path: Style::default().fg(Color::Rgb(251, 146, 60)),
             command: Style::default().fg(Color::Rgb(250, 204, 21)),
             success: Style::default().fg(Color::Rgb(74, 222, 128)),
             warning: Style::default().fg(Color::Rgb(251, 191, 36)),
-            system: Style::default().fg(Color::Rgb(100, 116, 139)),
+            system: Style::default().fg(Color::Rgb(148, 163, 184)),
             error: Style::default()
                 .fg(Color::Rgb(248, 113, 113))
                 .add_modifier(Modifier::BOLD),
-            dim: Style::default().fg(Color::Rgb(71, 85, 105)),
+            dim: Style::default().fg(Color::Rgb(100, 116, 139)),
             accent: Style::default().fg(Color::Rgb(56, 189, 248)),
-            border: Style::default().fg(Color::Rgb(51, 65, 85)),
+            border: Style::default().fg(Color::Rgb(71, 85, 105)),
             border_focus: Style::default().fg(Color::Rgb(56, 189, 248)),
             input: Style::default().fg(Color::Rgb(241, 245, 249)),
             input_border: Style::default().fg(Color::Rgb(56, 189, 248)),
@@ -88,7 +88,7 @@ impl Theme {
             yolo: Style::default()
                 .fg(Color::Rgb(248, 113, 113))
                 .add_modifier(Modifier::BOLD),
-            status: Style::default().fg(Color::Rgb(148, 163, 184)),
+            status: Style::default().fg(Color::Rgb(186, 198, 214)),
             code: Style::default().fg(Color::Rgb(125, 211, 252)),
             code_block: Style::default().fg(Color::Rgb(186, 230, 253)),
             bold: Style::default()
@@ -97,7 +97,7 @@ impl Theme {
             heading: Style::default()
                 .fg(Color::Rgb(165, 243, 252))
                 .add_modifier(Modifier::BOLD),
-            placeholder: Style::default().fg(Color::Rgb(71, 85, 105)),
+            placeholder: Style::default().fg(Color::Rgb(100, 116, 139)),
         }
     }
 

@@ -14,7 +14,7 @@ pub(crate) const STARTER_PROMPTS: &[&str] = &[
 pub(crate) const SESSION_TIPS: &[&str] = &[
     "Type a goal in plain English — Enter sends, alt+enter is newline",
     "While the agent works, type to steer · esc cancels",
-    "Tab expands the last tool card · ctrl-o toggles thoughts",
+    "Tab expands tools · t or ctrl-o expands thoughts",
     "/plan is read-only explore · /act enables writes",
     "Approvals: y = once · a = always this session · n = deny",
     "!cargo test runs a local shell command (records in context)",
