@@ -31,12 +31,18 @@ pub fn resolve(cwd: &Path, input: &str) -> PathBuf {
 pub fn resolve_contained(cwd: &Path, input: &str) -> anyhow::Result<PathBuf> {
     let lexical = resolve(cwd, input);
     if allow_outside_cwd() {
-        return Ok(lexical);
+        // Still prefer the resolved form when the path exists so callers open
+        // the same inode we inspected.
+        return Ok(canonicalize_existing_prefix(&lexical));
     }
     let root = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
     let resolved = canonicalize_existing_prefix(&lexical);
     if resolved.starts_with(&root) {
-        Ok(lexical)
+        // Return the *canonicalized* path (or longest-existing-prefix form),
+        // not the lexical one — otherwise a symlink swap between check and
+        // open, or an unresolved `notes -> /etc/passwd` style link that only
+        // materializes later, can bypass the containment check.
+        Ok(resolved)
     } else {
         bail!(
             "path {} escapes the allowed root {} (set PIRS_ALLOW_OUTSIDE_CWD=1 to permit)",
@@ -112,6 +118,17 @@ mod tests {
         std::fs::create_dir(root.join("src")).unwrap();
         assert!(resolve_contained(root, "src/main.rs").is_ok());
         assert!(resolve_contained(root, "./a/b/c.txt").is_ok());
+    }
+
+    #[test]
+    fn contained_returns_canonical_existing_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let f = root.join("file.txt");
+        std::fs::write(&f, b"hi").unwrap();
+        let out = resolve_contained(root, "file.txt").unwrap();
+        let expect = std::fs::canonicalize(&f).unwrap();
+        assert_eq!(out, expect, "must return canonical path, not lexical");
     }
 
     #[test]

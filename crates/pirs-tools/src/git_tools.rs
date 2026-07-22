@@ -56,6 +56,29 @@ impl GitTool {
     }
 }
 
+/// Reject git rev args that look like options (`--output=…`, `-c`, …).
+/// Those would be injected before `--` and can escape the read-only tool.
+pub fn validate_git_rev(rev: &str) -> anyhow::Result<()> {
+    let rev = rev.trim();
+    if rev.is_empty() {
+        anyhow::bail!("git rev must not be empty");
+    }
+    if rev.starts_with('-') {
+        anyhow::bail!(
+            "git rev must not start with '-' (rejected option-like rev {rev:?}; \
+             use a commit/branch/range without leading dashes)"
+        );
+    }
+    // Keep charset tight: common rev-parse tokens only.
+    if !rev.chars().all(|c| {
+        c.is_ascii_alphanumeric()
+            || matches!(c, '/' | '.' | '_' | '-' | '~' | '^' | ':' | '@' | '{' | '}' | '*')
+    }) {
+        anyhow::bail!("git rev contains disallowed characters: {rev:?}");
+    }
+    Ok(())
+}
+
 #[async_trait]
 impl AgentTool for GitTool {
     fn name(&self) -> &str {
@@ -84,6 +107,7 @@ impl AgentTool for GitTool {
                     cmd.push("--cached".into());
                 }
                 if let Some(rev) = &args.rev {
+                    validate_git_rev(rev)?;
                     cmd.push(rev.clone());
                 }
                 if let Some(p) = &args.path {
@@ -102,6 +126,7 @@ impl AgentTool for GitTool {
                     format!("-n{n}"),
                 ];
                 if let Some(rev) = &args.rev {
+                    validate_git_rev(rev)?;
                     cmd.push(rev.clone());
                 }
                 if let Some(p) = &args.path {
@@ -113,6 +138,7 @@ impl AgentTool for GitTool {
             }
             "show" => {
                 let rev = args.rev.as_deref().unwrap_or("HEAD");
+                validate_git_rev(rev)?;
                 self.run(&["show", "--no-color", "--stat", rev])?
             }
             "blame" => {
@@ -181,5 +207,39 @@ mod tests {
             "{text}"
         );
         let _ = Arc::new(tool);
+    }
+
+    #[test]
+    fn rejects_option_like_rev() {
+        assert!(validate_git_rev("--output=/tmp/x").is_err());
+        assert!(validate_git_rev("-c").is_err());
+        assert!(validate_git_rev("HEAD").is_ok());
+        assert!(validate_git_rev("main").is_ok());
+        assert!(validate_git_rev("abc123~1").is_ok());
+        assert!(validate_git_rev("origin/main").is_ok());
+    }
+
+    #[tokio::test]
+    async fn diff_rejects_output_flag_as_rev() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().to_path_buf();
+        let _ = Command::new("git")
+            .args(["init"])
+            .current_dir(&cwd)
+            .output();
+        let tool = GitTool::new(cwd);
+        let err = tool
+            .execute(ToolExecContext {
+                tool_call_id: "1".into(),
+                args: serde_json::json!({"action": "diff", "rev": "--output=/tmp/pwned"}),
+                cancel: CancellationToken::new(),
+                on_update: None,
+            })
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("must not start with"),
+            "{err}"
+        );
     }
 }

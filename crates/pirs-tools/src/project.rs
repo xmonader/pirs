@@ -815,7 +815,10 @@ impl AgentTool for ProjectTool {
             .and_then(|v| v.as_str())
             .unwrap_or("list");
         let root = if let Some(rel) = ctx.args.get("cwd").and_then(|v| v.as_str()) {
-            let p = self.cwd.join(rel);
+            // Contain to workspace root — absolute `rel` or `../` must not
+            // escape and run cargo/npm test outside the agent cwd (plan mode
+            // used to treat `project` as readonly).
+            let p = crate::paths::resolve_contained(&self.cwd, rel)?;
             if !p.exists() {
                 anyhow::bail!("cwd not found: {}", p.display());
             }

@@ -61,7 +61,8 @@ pub fn is_readonly_tool(tool: &str) -> bool {
             | "recall"
             | "web_fetch"
             | "web_search"
-            | "project"
+            // `project` can spawn test/build commands — not readonly. Kept out
+            // of this list; list/packages-only still allowed via mutating_action_deny.
             | "ask_user"
             | "todo"
             | "vision_describe"
@@ -109,8 +110,29 @@ pub fn mutating_action_deny(tool: &str, args: &serde_json::Value) -> Option<Stri
              (not allowed under plan/read-only; raise permission or leave plan mode)"
                 .into(),
         ),
+        // project(list|packages) is observation-only; test/lint/build/run spawn
+        // processes and must not run under plan/read-only.
+        "project"
+            if !matches!(action.as_str(), "list" | "packages" | "") =>
+        {
+            Some(format!(
+                "tool `project` action `{action}` runs a process \
+                 (not allowed under plan/read-only; use list/packages or leave plan mode)"
+            ))
+        }
         _ => None,
     }
+}
+
+/// Whether `project` is allowed as a plan-mode tool for the given action.
+/// Used by `is_readonly_tool` consumers that only have the tool name.
+pub fn project_action_is_readonly(args: &serde_json::Value) -> bool {
+    let action = args
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("list")
+        .to_ascii_lowercase();
+    matches!(action.as_str(), "list" | "packages" | "")
 }
 
 /// File mutation tools (auto-allowed under `accept-edits`).
@@ -125,7 +147,13 @@ pub fn is_file_mutation_tool(tool: &str) -> bool {
 pub fn is_shell_tool(tool: &str) -> bool {
     matches!(
         tool,
-        "bash" | "run_tests" | "job_kill" | "job_steer" | "computer_click" | "computer_type"
+        "bash"
+            | "run_tests"
+            | "project"
+            | "job_kill"
+            | "job_steer"
+            | "computer_click"
+            | "computer_type"
     ) || tool.starts_with("computer_")
 }
 
@@ -145,6 +173,10 @@ pub fn profile_deny_reason_with_args(
         SafetyProfile::Plan => {
             if let Some(r) = mutating_action_deny(tool, args) {
                 return Some(r);
+            }
+            // project list/packages are observation-only under plan.
+            if tool == "project" && project_action_is_readonly(args) {
+                return None;
             }
             if is_readonly_tool(tool) {
                 None
@@ -216,6 +248,20 @@ mod tests {
         assert!(profile_deny_reason(SafetyProfile::Plan, "grep").is_none());
         assert!(profile_deny_reason(SafetyProfile::Plan, "ask_user").is_none());
         assert!(profile_deny_reason(SafetyProfile::Plan, "todo").is_none());
+        // project list ok; project test blocked
+        assert!(profile_deny_reason_with_args(
+            SafetyProfile::Plan,
+            "project",
+            &serde_json::json!({"action": "list"})
+        )
+        .is_none());
+        assert!(profile_deny_reason_with_args(
+            SafetyProfile::Plan,
+            "project",
+            &serde_json::json!({"action": "test"})
+        )
+        .is_some());
+        assert!(!is_readonly_tool("project"));
     }
 
     #[test]

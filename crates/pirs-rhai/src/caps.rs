@@ -144,10 +144,27 @@ pub fn parse_caps(source: &str) -> Caps {
 /// these, `exec: ["git"]` would still grant everything (`git ...; rm -rf`).
 const EXEC_METACHARS: &[&str] = &["|", ";", "&", ">", "<", "`", "$(", "\n", "\\"];
 
+/// When `PIRS_STRICT_CAPS=1`, packs without an `exec` allowlist cannot shell out.
+/// Default remains backward-compatible (absent = unrestricted) so the 49
+/// shipped packs keep working; operators who load untrusted `~/.pirs/extensions`
+/// should set the env.
+fn strict_caps() -> bool {
+    matches!(
+        std::env::var("PIRS_STRICT_CAPS").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
 /// Check a command against the exec capability. Returns Err(reason) when
 /// blocked; the reason is shown to the model.
 pub fn check_exec(caps: &Caps, command: &str) -> Result<(), String> {
     let Some(allow) = &caps.exec else {
+        if strict_caps() {
+            return Err(
+                "blocked by PIRS_STRICT_CAPS: pack has no exec allowlist (add // caps: {\"exec\":[...]})"
+                    .into(),
+            );
+        }
         return Ok(());
     };
     for m in EXEC_METACHARS {
@@ -196,7 +213,8 @@ fn contained_normal(path: &str) -> Option<String> {
 /// (see `contained_normal`); anything absolute or `..`-escaping is denied.
 pub fn check_fs(caps: &Caps, path: &str) -> bool {
     let Some(patterns) = &caps.fs else {
-        return true;
+        // Strict mode: no fs allowlist ⇒ deny writes/reads via host fs APIs.
+        return !strict_caps();
     };
     let Some(norm) = contained_normal(path) else {
         return false;

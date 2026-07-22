@@ -1012,22 +1012,65 @@ fn load_claw_extensions(cwd: &Path, enabled: bool) -> Option<Arc<pirs_rhai::Exte
     Some(host)
 }
 
-fn apply_extension_host(
-    agent: Agent,
+/// Profile denials + optional extension packs + audit log (Opus review §2.4).
+///
+/// Gateway/chat peers previously had only the tool *list* as policy. This wires
+/// the same profile gate + audit listener the `pirs` CLI uses. Interactive
+/// approval prompts are not available on remote channels; use
+/// `PIRS_AGENT_PROFILE=plan|accept-edits|auto-approve` (default: accept-edits
+/// for interactive, plan for unattended).
+fn install_claw_safety(
+    mut agent: Agent,
+    unattended: bool,
     host: Option<&Arc<pirs_rhai::ExtensionHost>>,
 ) -> Agent {
-    let Some(host) = host else {
-        return agent;
+    let profile = if unattended {
+        pirs_tools::SafetyProfile::parse(
+            &std::env::var("PIRS_CLAW_UNATTENDED_PROFILE").unwrap_or_else(|_| "plan".into()),
+        )
+        .unwrap_or(pirs_tools::SafetyProfile::Plan)
+    } else {
+        pirs_tools::SafetyProfile::parse(
+            &std::env::var("PIRS_AGENT_PROFILE")
+                .or_else(|_| std::env::var("PIRS_CLAW_PROFILE"))
+                .unwrap_or_else(|_| "accept-edits".into()),
+        )
+        .unwrap_or(pirs_tools::SafetyProfile::AcceptEdits)
     };
-    let mut tools = agent.tools.clone();
-    tools.extend(host.tools());
-    // Dedupe by name (packs may re-register).
-    {
+    std::env::set_var("PIRS_AGENT_PROFILE", profile.name());
+
+    if let Some(host) = host {
+        let mut tools = agent.tools.clone();
+        tools.extend(host.tools());
         let mut seen = std::collections::HashSet::new();
         tools.retain(|t| seen.insert(t.name().to_string()));
+        agent = agent.with_tools(tools);
     }
-    let hooks = host.hooks();
-    agent.with_tools(tools).with_hooks(hooks)
+
+    // Profile denials first, then pack before_tool_call (first blocker wins).
+    let profile_hook = pirs_tools::profile_hook(profile);
+    let mut hooks = host.map(|h| h.hooks()).unwrap_or_default();
+    let prev = hooks.before_tool_call.take();
+    hooks.before_tool_call = Some(std::sync::Arc::new(move |id, name, args| {
+        if let Some(r) = profile_hook(id, name, args) {
+            return Some(r);
+        }
+        if let Some(ref p) = prev {
+            return p(id, name, args);
+        }
+        None
+    }));
+    agent = agent.with_hooks(hooks);
+
+    let audit = pirs_agent::AuditLog::default_open();
+    if pirs_agent::audit_enabled() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            eprintln!("[pirs-claw audit: {}]", audit.path().display());
+        });
+    }
+    agent.subscribe(pirs_agent::audit_listener(audit));
+    agent
 }
 
 async fn fire_schedule_job(
@@ -1202,6 +1245,7 @@ async fn handle_gateway_message(
         .with_system_prompt(sys)
         .with_tools(tools)
         .with_completion(completion);
+    agent = install_claw_safety(agent, pirs_claw::is_unattended(), None);
     if let Ok(mut msgs) = store.to_agent_messages() {
         if let Some(pirs_ai::Message::User(_)) = msgs.last() {
             msgs.pop();
@@ -1336,7 +1380,7 @@ async fn run_chat(
         .with_system_prompt(sys)
         .with_tools(tools)
         .with_completion(completion);
-    agent = apply_extension_host(agent, host.as_ref());
+    agent = install_claw_safety(agent, pirs_claw::is_unattended(), host.as_ref());
 
     let prior = store.load()?;
     if prior.len() > 1 {
@@ -1520,7 +1564,7 @@ async fn run_code(
                 .with_system_prompt(system)
                 .with_tools(tools)
                 .with_completion(completion_c.clone());
-            agent = apply_extension_host(agent, host_c.as_ref());
+            agent = install_claw_safety(agent, false, host_c.as_ref());
             if let Some(n) = opts_c.max_turns {
                 agent.budgets.max_turns = Some(n);
             }
@@ -1574,7 +1618,7 @@ async fn run_code(
         .with_completion(completion)
         .with_system_prompt(sys)
         .with_tools(tools);
-    agent = apply_extension_host(agent, host.as_ref());
+    agent = install_claw_safety(agent, false, host.as_ref());
     let msgs = agent.prompt(prompt).await?;
     if let Some(reply) = extract_assistant_reply(&msgs) {
         if do_learn {

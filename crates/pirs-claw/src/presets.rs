@@ -123,11 +123,14 @@ pub fn build_code_agent(provider: Arc<dyn LlmProvider>, opts: &CodeOptions) -> A
     let profile = env_safety_profile();
     // Normalize env so Rhai packs (strict-plan) see the same profile as the gate.
     std::env::set_var("PIRS_AGENT_PROFILE", profile.name());
-    if profile != pirs_tools::SafetyProfile::Default {
+    {
         let mut hooks = pirs_agent::Hooks::default();
         hooks.before_tool_call = Some(pirs_tools::profile_hook(profile));
         agent = agent.with_hooks(hooks);
     }
+    // Always-on audit for code path (same as chat/gateway).
+    let audit = pirs_agent::AuditLog::default_open();
+    agent.subscribe(pirs_agent::audit_listener(audit));
     if let Some(n) = opts.max_turns {
         agent.budgets.max_turns = Some(n);
     }

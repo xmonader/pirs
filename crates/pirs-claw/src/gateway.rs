@@ -1168,11 +1168,20 @@ async fn run_webhook_listener(
                 return;
             }
             // Crude HTTP: find body after \r\n\r\n
-            let body = raw
-                .split("\r\n\r\n")
-                .nth(1)
-                .unwrap_or("")
-                .trim_end_matches('\0');
+            let (headers, body) = match raw.split_once("\r\n\r\n") {
+                Some((h, b)) => (h, b.trim_end_matches('\0')),
+                None => ("", raw.trim_end_matches('\0')),
+            };
+            // Signature gate when a shared secret is configured (Opus §2.5).
+            // Without a secret we still rely on pairing allowlist + localhost
+            // bind default; with a secret, unsigned POSTs are rejected.
+            if let Err(reason) = verify_webhook_signature(channel, headers, body) {
+                eprintln!("[{channel}] webhook signature rejected: {reason}");
+                let _ = sock
+                    .write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n")
+                    .await;
+                return;
+            }
             let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else {
                 let _ = sock
                     .write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
@@ -1226,6 +1235,103 @@ async fn run_webhook_listener(
                 .await;
         });
     }
+}
+
+/// Verify webhook authenticity when `PIRS_WEBHOOK_SECRET` (or channel-specific
+/// env) is set. Supports:
+/// - generic: `X-Pirs-Signature: sha256=<hex>` HMAC-SHA256 of body
+/// - Slack: `X-Slack-Signature` + `X-Slack-Request-Timestamp` (v0 scheme)
+/// - GitHub-style: `X-Hub-Signature-256: sha256=<hex>`
+///
+/// If no secret is configured, returns Ok (pairing allowlist remains the gate).
+/// If a secret is configured and the signature is missing/wrong, returns Err.
+pub fn verify_webhook_signature(
+    channel: &str,
+    headers: &str,
+    body: &str,
+) -> Result<(), String> {
+    let secret = webhook_secret_for(channel);
+    let Some(secret) = secret else {
+        return Ok(());
+    };
+    let hdrs = parse_http_headers(headers);
+    // Prefer channel-native headers, then generic.
+    if let Some(sig) = hdrs
+        .get("x-slack-signature")
+        .cloned()
+        .or_else(|| hdrs.get("x-hub-signature-256").cloned())
+        .or_else(|| hdrs.get("x-pirs-signature").cloned())
+    {
+        if let Some(ts) = hdrs.get("x-slack-request-timestamp") {
+            // Slack: v0:{ts}:{body}
+            let base = format!("v0:{ts}:{body}");
+            if hmac_sha256_hex_eq(secret.as_bytes(), base.as_bytes(), &sig) {
+                return Ok(());
+            }
+            // Also accept raw body HMAC under the same header (tests / simple relays).
+            if hmac_sha256_hex_eq(secret.as_bytes(), body.as_bytes(), &sig) {
+                return Ok(());
+            }
+            return Err("slack/hmac signature mismatch".into());
+        }
+        if hmac_sha256_hex_eq(secret.as_bytes(), body.as_bytes(), &sig) {
+            return Ok(());
+        }
+        return Err("hmac signature mismatch".into());
+    }
+    Err("webhook secret configured but no X-Pirs-Signature / X-Hub-Signature-256 / X-Slack-Signature header".into())
+}
+
+fn webhook_secret_for(channel: &str) -> Option<String> {
+    let keys = [
+        format!("PIRS_{}_WEBHOOK_SECRET", channel.to_ascii_uppercase()),
+        "PIRS_WEBHOOK_SECRET".into(),
+        "WEBHOOK_SECRET".into(),
+    ];
+    for k in keys {
+        if let Ok(v) = std::env::var(&k) {
+            if !v.trim().is_empty() {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn parse_http_headers(headers: &str) -> std::collections::HashMap<String, String> {
+    let mut m = std::collections::HashMap::new();
+    for line in headers.lines().skip(1) {
+        if let Some((k, v)) = line.split_once(':') {
+            m.insert(k.trim().to_ascii_lowercase(), v.trim().to_string());
+        }
+    }
+    m
+}
+
+fn hmac_sha256_hex_eq(key: &[u8], msg: &[u8], presented: &str) -> bool {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    type HmacSha256 = Hmac<Sha256>;
+    let Ok(mut mac) = HmacSha256::new_from_slice(key) else {
+        return false;
+    };
+    mac.update(msg);
+    let expect = mac.finalize().into_bytes();
+    let expect_hex = hex::encode(expect);
+    let presented = presented
+        .trim()
+        .strip_prefix("sha256=")
+        .or_else(|| presented.trim().strip_prefix("v0="))
+        .unwrap_or(presented.trim());
+    // Constant-time-ish compare
+    if expect_hex.len() != presented.len() {
+        return false;
+    }
+    expect_hex
+        .bytes()
+        .zip(presented.bytes())
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+        == 0
 }
 
 /// Parse WhatsApp cloud API verify GET query; returns challenge if token matches.
@@ -1698,5 +1804,36 @@ mod tests {
         );
         assert!(bad.is_none());
         std::env::remove_var("WHATSAPP_VERIFY_TOKEN");
+    }
+
+    #[test]
+    fn webhook_no_secret_allows() {
+        std::env::remove_var("PIRS_WEBHOOK_SECRET");
+        std::env::remove_var("WEBHOOK_SECRET");
+        std::env::remove_var("PIRS_SLACK_WEBHOOK_SECRET");
+        assert!(verify_webhook_signature("slack", "POST /\r\n\r\n", "{}").is_ok());
+    }
+
+    #[test]
+    fn webhook_secret_requires_signature_header() {
+        std::env::set_var("PIRS_WEBHOOK_SECRET", "s3cret");
+        let err = verify_webhook_signature("slack", "POST /\r\nHost: x\r\n", "{}").unwrap_err();
+        assert!(err.contains("no X-Pirs") || err.contains("Signature"), "{err}");
+        std::env::remove_var("PIRS_WEBHOOK_SECRET");
+    }
+
+    #[test]
+    fn webhook_valid_hmac_passes() {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        let secret = b"s3cret";
+        let body = r#"{"ok":true}"#;
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret).unwrap();
+        mac.update(body.as_bytes());
+        let sig = format!("sha256={}", hex::encode(mac.finalize().into_bytes()));
+        std::env::set_var("PIRS_WEBHOOK_SECRET", "s3cret");
+        let hdr = format!("POST / HTTP/1.1\r\nX-Pirs-Signature: {sig}");
+        assert!(verify_webhook_signature("slack", &hdr, body).is_ok());
+        std::env::remove_var("PIRS_WEBHOOK_SECRET");
     }
 }

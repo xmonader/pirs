@@ -35,39 +35,28 @@ impl ApprovalMode {
     }
 }
 
-const BASH_PATTERNS: &[&str] = &[
-    "rm ",
-    "rm -",
-    "mv ",
-    "dd ",
-    "mkfs",
-    "chmod",
-    "chown",
-    "git push",
-    "git commit",
-    "git reset",
-    "git clean",
-    "pip install",
-    "pip uninstall",
-    "npm install",
-    "npm uninstall",
-    "apt ",
-    "apt-get",
-    "doas",
-    "sudo",
-    ">",
-    "curl ",
-    "wget ",
-];
-
+/// Under `Ask`, every process-spawning tool is treated as sensitive. Substring
+/// denylists are bypassable (`rm$IFS-rf`, `/bin/rm`, `eval`, …); capability
+/// gating is the honest model.
 pub fn is_sensitive(tool: &str, args: &Value, cwd: &Path) -> bool {
     match tool {
-        "bash" => {
-            let cmd = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
-            BASH_PATTERNS.iter().any(|p| cmd.contains(p))
+        "bash" | "run_tests" => true,
+        "project" => {
+            // list/packages only inspect; anything else runs a command.
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("list")
+                .to_ascii_lowercase();
+            !matches!(action.as_str(), "list" | "packages" | "")
         }
-        "edit" | "write" => {
-            let raw = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        "edit" | "write" | "edit_block" | "safe_edit" | "ast_edit" => {
+            let raw = args
+                .get("path")
+                .or_else(|| args.get("file_path"))
+                .or_else(|| args.get("target_file"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let joined = if raw.starts_with('/') {
                 PathBuf::from(raw)
             } else {
@@ -100,12 +89,30 @@ pub fn normalize(path: &Path) -> PathBuf {
 }
 
 fn bucket(tool: &str, args: &Value) -> String {
-    if tool == "bash" {
-        let cmd = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
-        let first = cmd.split_whitespace().next().unwrap_or("");
-        format!("bash:{first}")
-    } else {
-        tool.to_string()
+    // Always-approve must key the *full* command (or path), not just the first
+    // token — otherwise "always" on `git status` would whitelist `git push --force`.
+    match tool {
+        "bash" => {
+            let cmd = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
+            let key: String = cmd.chars().take(200).collect();
+            format!("bash:{key}")
+        }
+        "project" => {
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("list");
+            format!("project:{action}")
+        }
+        "edit" | "write" | "edit_block" | "safe_edit" | "ast_edit" => {
+            let path = args
+                .get("path")
+                .or_else(|| args.get("file_path"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            format!("{tool}:{path}")
+        }
+        _ => tool.to_string(),
     }
 }
 
@@ -227,12 +234,30 @@ mod tests {
     #[test]
     fn sensitive_classification() {
         let cwd = Path::new("/work");
+        // All bash is sensitive under Ask (no substring allowlist).
         assert!(is_sensitive("bash", &json!({"command": "rm -rf x"}), cwd));
-        assert!(!is_sensitive("bash", &json!({"command": "ls -la"}), cwd));
+        assert!(is_sensitive("bash", &json!({"command": "ls -la"}), cwd));
         assert!(is_sensitive("edit", &json!({"path": "/etc/passwd"}), cwd));
         assert!(!is_sensitive("edit", &json!({"path": "src/main.rs"}), cwd));
         assert!(is_sensitive("mcp_fs_delete", &json!({}), cwd));
         assert!(!is_sensitive("read", &json!({"path": "x"}), cwd));
+        assert!(!is_sensitive(
+            "project",
+            &json!({"action": "list"}),
+            cwd
+        ));
+        assert!(is_sensitive(
+            "project",
+            &json!({"action": "test"}),
+            cwd
+        ));
+    }
+
+    #[test]
+    fn always_bucket_is_full_command() {
+        let a = bucket("bash", &json!({"command": "git status"}));
+        let b = bucket("bash", &json!({"command": "git push --force"}));
+        assert_ne!(a, b, "must not collapse all git.* into one always-bucket");
     }
 
     #[test]
@@ -258,10 +283,21 @@ mod tests {
         let gate = ApprovalGate::new(ApprovalMode::Ask, PathBuf::from("/work"))
             .with_prompter(move |_| answers2.lock().unwrap().remove(0));
         let hook = gate.hook();
-        assert!(hook("1", "bash", &json!({"command": "rm -rf x"})).is_none());
+        let cmd = json!({"command": "rm -rf x"});
+        assert!(hook("1", "bash", &cmd).is_none());
         assert!(
-            hook("2", "bash", &json!({"command": "rm -rf y"})).is_none(),
-            "remembered always"
+            hook("2", "bash", &cmd).is_none(),
+            "remembered always for the same full command"
+        );
+        // Different command must prompt again (no more tokens left → panic if called).
+        let answers3 = Arc::new(Mutex::new(vec!["n".to_string()]));
+        let answers4 = Arc::clone(&answers3);
+        let gate2 = ApprovalGate::new(ApprovalMode::Ask, PathBuf::from("/work"))
+            .with_prompter(move |_| answers4.lock().unwrap().remove(0));
+        let hook2 = gate2.hook();
+        assert_eq!(
+            hook2("3", "bash", &json!({"command": "rm -rf y"})),
+            Some("denied by user".into())
         );
         assert_eq!(answers.lock().unwrap().len(), 0);
     }
