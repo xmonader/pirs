@@ -126,6 +126,11 @@ struct Cli {
     #[arg(long = "agent-profile", env = "PIRS_AGENT_PROFILE", default_value = "default")]
     agent_profile: String,
 
+    /// Working directory for the session (project root). Equivalent to `cd DIR && pirs …`.
+    /// Applied before config/registry/tools resolve. Env: `PIRS_CWD`.
+    #[arg(long, env = "PIRS_CWD", value_name = "DIR")]
+    cwd: Option<PathBuf>,
+
     /// Run this session inside a git worktree for the named branch (create or reuse
     /// under `.pirs/worktrees/<name>`). Session cwd becomes that worktree.
     #[arg(long, env = "PIRS_WORKTREE")]
@@ -461,6 +466,24 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let mut cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    // Optional project directory (before config/tools resolve).
+    if let Some(ref dir) = cli.cwd.clone() {
+        let abs = if dir.is_absolute() {
+            dir.clone()
+        } else {
+            cwd.join(dir)
+        };
+        let abs = abs
+            .canonicalize()
+            .with_context(|| format!("--cwd {}: path not found", dir.display()))?;
+        if !abs.is_dir() {
+            anyhow::bail!("--cwd {}: not a directory", abs.display());
+        }
+        std::env::set_current_dir(&abs)
+            .with_context(|| format!("--cwd {}: set_current_dir failed", abs.display()))?;
+        cwd = abs;
+        eprintln!("[cwd: {}]", cwd.display());
+    }
     // Optional git worktree bind (Vibe --worktree class) before tools use cwd.
     if let Some(ref wt) = cli.worktree.clone() {
         match pirs_tools::bind_session_worktree(&cwd, &wt) {
