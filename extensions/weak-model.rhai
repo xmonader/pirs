@@ -8,6 +8,7 @@
 // 4) Verify-after-edit — force build/test after file mutations
 // 5) Stop gate — ending without verify injects <system-reminder> (fire-capped)
 // 6) Plan pin via update_plan using the same <system-reminder> channel
+// 7) Command-fail — bash/run_tests/project errors nudge a DIFFERENT next step
 
 // Note: rhai top-level const is NOT visible inside nested script functions
 // (only the host-called entry). Use string literals inside helpers.
@@ -15,9 +16,14 @@ const MAX_REPEAT = 3;
 const MAX_EDIT_FAILS = 2;
 const MAX_NO_PROGRESS = 6;
 const MAX_STOP_FIRES = 2;
+const MAX_CMD_FAILS = 2;
 
 fn is_mutate(name) {
     name == "edit" || name == "edit_block" || name == "write" || name == "safe_edit" || name == "ast_edit"
+}
+
+fn is_exec(name) {
+    name == "bash" || name == "run_tests" || name == "project"
 }
 
 // Normalize thrash key: tool name + path (if any) + arg JSON with whitespace
@@ -128,12 +134,21 @@ fn on_tool_result(id, name, result) {
         }
     }
 
-    if name == "bash" && !err {
-        state_set("idle_rounds", 0);
-        if state_has("had_successful_mutate") && state_get("had_successful_mutate") {
-            state_set("needs_verify", false);
-            state_set("verified_since_edit", true);
-            state_set("had_test_run", true);
+    if is_exec(name) {
+        if err {
+            let streak = (if state_has("cmd_fail_streak") { state_get("cmd_fail_streak") } else { 0 }) + 1;
+            state_set("cmd_fail_streak", streak);
+            // First failure: soft nudge. Second consecutive: stronger "change approach".
+            state_set("nudge", true);
+            state_set("nudge_kind", if streak >= MAX_CMD_FAILS { "cmd_fail_hard" } else { "cmd_fail" });
+        } else {
+            state_set("cmd_fail_streak", 0);
+            state_set("idle_rounds", 0);
+            if state_has("had_successful_mutate") && state_get("had_successful_mutate") {
+                state_set("needs_verify", false);
+                state_set("verified_since_edit", true);
+                state_set("had_test_run", true);
+            }
         }
     }
 
@@ -148,6 +163,17 @@ fn on_steering() {
             let path = if state_has("edit_fail_path") { state_get("edit_fail_path") } else { "the file" };
             return `<system-reminder> kind=edit_fail
 Your edits to ${path} keep failing. Re-read the full function, then use edit_block (SEARCH/REPLACE) with a larger unique block, or safe_edit. Do not retry the same oldText.
+</system-reminder>`;
+        }
+        if kind == "cmd_fail_hard" {
+            state_set("cmd_fail_streak", 0);
+            return `<system-reminder> kind=cmd_fail_hard
+Multiple consecutive shell/command failures. STOP retyping variations of the same broken command. Read the last error carefully, then take ONE different step: fix flags/path/cwd, use project/run_tests, or diagnose with read/grep/find first.
+</system-reminder>`;
+        }
+        if kind == "cmd_fail" {
+            return `<system-reminder> kind=cmd_fail
+Your last shell/command failed. Do NOT re-run the same command. If the invocation is wrong, try a DIFFERENT command; if tests/build failed, fix the code then re-run.
 </system-reminder>`;
         }
         if kind == "no_progress" {

@@ -205,6 +205,36 @@ pub fn finish_output(
     finish_output_with_hint(out, call_id, sandbox_name, timeout_secs, "")
 }
 
+/// Recovery footer for non-zero / timeout shell results.
+///
+/// Wrong invocations (not found, bad flags, missing path) get a hard "try a
+/// DIFFERENT command" nudge — models otherwise retype the same broken line.
+/// Real test/build failures get a softer dual-path hint so we don't push the
+/// agent off a correct `pytest`/`cargo test` command.
+fn command_failure_hint(code: Option<i32>, output: &str) -> &'static str {
+    let lower = output.to_ascii_lowercase();
+    let looks_wrong_invocation = matches!(code, Some(127) | Some(126))
+        || lower.contains("command not found")
+        || lower.contains("no such file or directory")
+        || lower.contains("not a directory")
+        || lower.contains("unrecognized arguments")
+        || lower.contains("unrecognized option")
+        || lower.contains("unknown option")
+        || lower.contains("invalid option")
+        || lower.contains("error: unexpected argument")
+        || lower.contains("is not recognized as")
+        || lower.contains("no module named")
+        || (lower.contains("usage:") && !lower.contains("failed"));
+    if looks_wrong_invocation {
+        "\n\n[hint] This looks like a wrong/invalid command (not a test assertion failure). \
+         Do NOT re-run the same command. Fix the invocation (flags, path, cwd) or use a \
+         different approach (project / read / grep / find)."
+    } else {
+        "\n\n[hint] Command failed. If the invocation itself is wrong, try a DIFFERENT \
+         command; if tests/build failed, fix the code then re-run the same test command."
+    }
+}
+
 fn finish_output_with_hint(
     out: crate::sandbox::ExecOutput,
     call_id: &str,
@@ -217,7 +247,10 @@ fn finish_output_with_hint(
         let ui = tail_with_footer(&combined, call_id);
         let (model, _) = truncate::cap_for_model(&ui);
         bail!(
-            "Command timed out after {} seconds\n{}",
+            "Command timed out after {} seconds\n{}\n\n\
+             [hint] Do NOT re-run the same command with the same timeout. Narrow the scope \
+             (single test / smaller path), raise timeout if appropriate, or diagnose hang \
+             with a different command.",
             timeout_secs.unwrap_or(0),
             model
         );
@@ -251,8 +284,14 @@ fn finish_output_with_hint(
             }
             Ok(out)
         }
-        Some(n) => bail!("{model_text}\nCommand exited with code {n}{note}"),
-        None => bail!("{model_text}\nCommand terminated by signal{note}"),
+        Some(n) => {
+            let recover = command_failure_hint(Some(n), &combined);
+            bail!("{model_text}\nCommand exited with code {n}{note}{recover}")
+        }
+        None => {
+            let recover = command_failure_hint(None, &combined);
+            bail!("{model_text}\nCommand terminated by signal{note}{recover}")
+        }
     }
 }
 
@@ -544,6 +583,36 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("partial"));
         assert!(msg.contains("exited with code 3"));
+        assert!(
+            msg.contains("[hint]"),
+            "failed commands must include a recovery nudge: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn command_not_found_nudges_different_command() {
+        let tool = BashTool::new(std::env::temp_dir());
+        let err = tool
+            .execute(ctx(serde_json::json!({
+                "command": "definitely_not_a_real_binary_xyz_987 2>&1; exit 127"
+            })))
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("exited with code 127") || msg.contains("command not found") || msg.contains("[hint]"));
+        assert!(
+            msg.contains("Do NOT re-run the same command")
+                || msg.contains("wrong/invalid command"),
+            "wrong-invocation should hard-nudge different command: {msg}"
+        );
+    }
+
+    #[test]
+    fn failure_hint_classifies_wrong_invocation() {
+        assert!(command_failure_hint(Some(127), "bash: foo: command not found")
+            .contains("wrong/invalid"));
+        assert!(command_failure_hint(Some(1), "FAILED test_foo\n1 failed")
+            .contains("tests/build failed"));
     }
 
     #[tokio::test]
@@ -556,7 +625,12 @@ mod tests {
             ))
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("timed out after 1 seconds"));
+        let msg = err.to_string();
+        assert!(msg.contains("timed out after 1 seconds"));
+        assert!(
+            msg.contains("[hint]"),
+            "timeout must include recovery nudge: {msg}"
+        );
         assert!(start.elapsed() < Duration::from_secs(10));
     }
 

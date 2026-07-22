@@ -94,74 +94,132 @@ pub fn run_instance(
         Ok(out)
     })?;
 
-    let (runner, used_undetected_fallback): (Box<dyn TestRunner>, bool) = if confirmed.is_empty() {
-        match undetected_fallback {
-            Some(make_fallback) => {
-                tracing::warn!(
-                    "no runner confirmed; falling back to an agent-discovered runner \
-                     (self-reported, not independently verified)"
-                );
-                (make_fallback(), true)
-            }
-            None => {
-                tracing::warn!("no runner confirmed");
-                return bail(Outcome::Failed(FailBucket::RunnerUndetected), timings);
-            }
-        }
-    } else {
-        // 2. Make the environment usable (install + re-probe), trying confirmed
-        //    candidates in trust order. A higher-trust candidate's own install can
-        //    break an environment that was already probing fine (e.g. a CI-mined
-        //    command that blindly upgrades pip/setuptools against a
-        //    pre-provisioned venv) — that must degrade to the next candidate, not
-        //    fail the whole instance outright.
-        let mut spec = None;
-        let mut last_hint = String::new();
+    // 2. Bootstrap every confirmed candidate that can install. We keep the full
+    //    ready list (not just the first) so a later ReproFailed / BaselineUnusable
+    //    can fall through to the next runner — "detected-wrong" is not the same
+    //    as "undetected", and quitting on the first green-at-baseline wrapper
+    //    wastes the instance (observed: sympy specialized runner vs pytest).
+    let mut ready_specs: Vec<RunnerSpec> = Vec::new();
+    let mut last_hint = String::new();
+    let had_confirmed = !confirmed.is_empty();
+    if had_confirmed {
         timings.time("bootstrap", || -> anyhow::Result<()> {
             for candidate in confirmed {
                 match bootstrap(&candidate, &inst.repo_root)? {
-                    Bootstrap::Ready(_) => {
-                        spec = Some(candidate);
-                        break;
-                    }
+                    Bootstrap::Ready(_) => ready_specs.push(candidate),
                     Bootstrap::Failed(hint) => last_hint = hint,
                 }
             }
             Ok(())
         })?;
-        let spec = match spec {
-            Some(s) => s,
-            None => {
-                tracing::warn!("environment setup failed for every candidate runner: {last_hint}");
-                return bail(Outcome::Failed(FailBucket::EnvSetup), timings);
-            }
-        };
-
-        // 3. Build the concrete runner. The executor edits the real tree; the
-        //    outcome decides whether we keep or discard those edits.
-        //    (baseline/fix/verify phases are timed inside the driver.)
-        let runner: Box<dyn TestRunner> =
-            Box::new(CommandRunner::new(spec, inst.repo_root.clone()));
-        (runner, false)
-    };
+    }
 
     let task = TaskSpec {
         targets: inst.targets.clone(),
         keep_green: inst.keep_green.clone(),
     };
 
-    let outcome = match &inst.base_sha {
-        Some(sha) => run_task_cached(
-            &task,
-            &*runner,
-            executor,
-            max_attempts,
-            cache,
-            sha,
-            &mut timings,
-        )?,
-        None => run_task(&task, &*runner, executor, max_attempts, &mut timings)?,
-    };
+    /// Outcomes that mean "this runner cannot reproduce / baseline" — safe to
+    /// try the next candidate. Anything else (Solved, FixNoFlip, agent ran) is
+    /// terminal for the multi-candidate ladder.
+    fn runner_unusable(o: &Outcome) -> bool {
+        matches!(
+            o,
+            Outcome::Failed(FailBucket::ReproFailed)
+                | Outcome::Failed(FailBucket::BaselineUnusable)
+        )
+    }
+
+    let mut used_undetected_fallback = false;
+    let mut outcome: Option<Outcome> = None;
+
+    if ready_specs.is_empty() && !had_confirmed {
+        // No static detector confirmed anything.
+        match undetected_fallback {
+            Some(make_fallback) => {
+                tracing::warn!(
+                    "no runner confirmed; falling back to an agent-discovered runner \
+                     (self-reported, not independently verified)"
+                );
+                used_undetected_fallback = true;
+                let runner = make_fallback();
+                outcome = Some(match &inst.base_sha {
+                    Some(sha) => run_task_cached(
+                        &task,
+                        &*runner,
+                        executor,
+                        max_attempts,
+                        cache,
+                        sha,
+                        &mut timings,
+                    )?,
+                    None => run_task(&task, &*runner, executor, max_attempts, &mut timings)?,
+                });
+            }
+            None => {
+                tracing::warn!("no runner confirmed");
+                return bail(Outcome::Failed(FailBucket::RunnerUndetected), timings);
+            }
+        }
+    } else if ready_specs.is_empty() {
+        tracing::warn!("environment setup failed for every candidate runner: {last_hint}");
+        return bail(Outcome::Failed(FailBucket::EnvSetup), timings);
+    } else {
+        // 3. Try ready runners in trust order. First success path (or non-repro
+        //    failure after the agent could start) wins. On ReproFailed /
+        //    BaselineUnusable, advance — and use uncached baseline for retries
+        //    so a prior runner's green cache cannot poison the next.
+        for (i, spec) in ready_specs.iter().enumerate() {
+            let runner: Box<dyn TestRunner> =
+                Box::new(CommandRunner::new(spec.clone(), inst.repo_root.clone()));
+            let o = if i == 0 {
+                match &inst.base_sha {
+                    Some(sha) => run_task_cached(
+                        &task,
+                        &*runner,
+                        executor,
+                        max_attempts,
+                        cache,
+                        sha,
+                        &mut timings,
+                    )?,
+                    None => run_task(&task, &*runner, executor, max_attempts, &mut timings)?,
+                }
+            } else {
+                tracing::warn!(
+                    framework = %spec.framework,
+                    "prior runner failed reproduce/baseline; trying next candidate"
+                );
+                // Fresh baseline for this runner — ignore SHA cache from peers.
+                run_task(&task, &*runner, executor, max_attempts, &mut timings)?
+            };
+            if !runner_unusable(&o) {
+                outcome = Some(o);
+                break;
+            }
+            outcome = Some(o);
+        }
+
+        // Still stuck on repro with only static runners → optional agent fallback.
+        if outcome.as_ref().is_some_and(runner_unusable) {
+            if let Some(make_fallback) = undetected_fallback {
+                tracing::warn!(
+                    "all static runners failed reproduce/baseline; agent-discovery fallback"
+                );
+                used_undetected_fallback = true;
+                let runner = make_fallback();
+                outcome = Some(run_task(
+                    &task,
+                    &*runner,
+                    executor,
+                    max_attempts,
+                    &mut timings,
+                )?);
+            }
+        }
+    }
+
+    let outcome = outcome.expect("outcome set on every non-bail path");
 
     // 4. Keep the fix (as a patch) or roll back to pristine.
     let patch = match workspace {

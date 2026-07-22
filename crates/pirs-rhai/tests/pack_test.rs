@@ -126,7 +126,11 @@ async fn loop_detector_blocks_third_identical_call() {
 
     let blocked = new.iter().any(|m| matches!(
         m,
-        Message::ToolResult(r) if r.is_error && r.content[0].as_text().unwrap().contains("fingerprint was already used")
+        Message::ToolResult(r) if r.is_error && r.content.iter().any(|b| b.as_text().is_some_and(|t|
+            t.contains("fingerprint was already used")
+                || t.contains("loop detection")
+                || t.contains("identical args")
+        ))
     ));
     assert!(blocked, "third identical call should be blocked: {new:?}");
 }
@@ -221,12 +225,59 @@ async fn edit_thrash_blocks_after_repeated_failures() {
                     t.contains("already failed")
                         || t.contains("fingerprint was already used")
                         || t.contains("already made")
+                        || t.contains("loop detection")
+                        || t.contains("identical args")
                 ))
         )
     });
     assert!(
         blocked,
         "third failing edit on same path should be blocked: {new:?}"
+    );
+}
+
+#[tokio::test]
+async fn bash_failure_steers_different_command() {
+    struct FailBash;
+    #[async_trait]
+    impl AgentTool for FailBash {
+        fn name(&self) -> &str {
+            "bash"
+        }
+        fn description(&self) -> &str {
+            "fail"
+        }
+        fn parameters(&self) -> Value {
+            json!({"type":"object","properties":{"command":{"type":"string"}}})
+        }
+        async fn execute(&self, _ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+            anyhow::bail!("bash: foo: command not found\nCommand exited with code 127")
+        }
+    }
+
+    let (mut agent, seen) = build(
+        vec![
+            tc("1", "bash", json!({"command": "foo"})),
+            text("trying something else"),
+        ],
+        vec![Arc::new(FailBash)],
+    );
+    agent.prompt("go").await.unwrap();
+
+    let calls = seen.lock().unwrap();
+    assert!(calls.len() >= 2, "cmd_fail should trigger a steered second turn");
+    let has_cmd_fail = calls.iter().any(|round| {
+        round.iter().any(|m| {
+            matches!(
+                m,
+                Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t)
+                    if t.contains("kind=cmd_fail") && t.contains("Do NOT re-run the same command"))
+            )
+        })
+    });
+    assert!(
+        has_cmd_fail,
+        "expected cmd_fail steering after bash error: {calls:?}"
     );
 }
 

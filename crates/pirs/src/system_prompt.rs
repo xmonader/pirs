@@ -71,6 +71,7 @@ pub fn build_system_prompt_with_map(
             - After every file change, run the project tests/build with bash.\n\
             - For edits, copy exact text from read output; include 2–3 surrounding lines so oldText is unique.\n\
             - If edit fails twice on the same file, re-read the full function or use edit_block / safe_edit.\n\
+            - If a shell command fails (not found, bad flags, missing path), do NOT re-run it — try a different command or diagnose first.\n\
             - Do not claim success without test evidence.\n",
         );
     }

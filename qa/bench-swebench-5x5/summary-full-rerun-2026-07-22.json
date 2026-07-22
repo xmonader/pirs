@@ -1,0 +1,120 @@
+{
+  "model": "qwen3.5-plus",
+  "label": "pirs-qwen35",
+  "n": 50,
+  "resolved": 40,
+  "pct": 80.0,
+  "run1_resolved": 41,
+  "run1_n": 50,
+  "gained": [
+    "astropy__astropy-6938",
+    "django__django-11422",
+    "django__django-12113"
+  ],
+  "lost": [
+    "django__django-15213",
+    "django__django-15781",
+    "scikit-learn__scikit-learn-25570",
+    "sympy__sympy-15678"
+  ],
+  "still_miss": [
+    "astropy__astropy-7746",
+    "django__django-10914",
+    "django__django-11019",
+    "django__django-11797",
+    "django__django-11910",
+    "sympy__sympy-13647"
+  ],
+  "misses": [
+    {
+      "id": "astropy__astropy-7746",
+      "kind": "timeout",
+      "wall": 1802.9,
+      "agent_s": null,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "django__django-10914",
+      "kind": "early_fail(<30s)",
+      "wall": 5.1,
+      "agent_s": 2.4,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "django__django-11019",
+      "kind": "timeout",
+      "wall": 1803.4,
+      "agent_s": null,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "django__django-11797",
+      "kind": "NO_PATCH",
+      "wall": 254.7,
+      "agent_s": 251.3,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "django__django-11910",
+      "kind": "timeout",
+      "wall": 1803.5,
+      "agent_s": null,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "django__django-15213",
+      "kind": "NO_PATCH",
+      "wall": 363.3,
+      "agent_s": 356.9,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "django__django-15781",
+      "kind": "early_fail(<30s)",
+      "wall": 10.2,
+      "agent_s": 4.3,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-25570",
+      "kind": "timeout",
+      "wall": 1802.5,
+      "agent_s": null,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "sympy__sympy-13647",
+      "kind": "early_fail(<30s)",
+      "wall": 17.5,
+      "agent_s": 15.2,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    },
+    {
+      "id": "sympy__sympy-15678",
+      "kind": "timeout",
+      "wall": 1803.2,
+      "agent_s": null,
+      "solved_int": false,
+      "verdict": "NO_PATCH",
+      "note": "no agent patch to grade"
+    }
+  ]
+}
