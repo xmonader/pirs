@@ -12,14 +12,14 @@ pub(crate) const STARTER_PROMPTS: &[&str] = &[
 ];
 
 pub(crate) const SESSION_TIPS: &[&str] = &[
-    "Type a goal in plain English — Enter sends, alt+enter is newline",
+    "Type a goal in plain English, then Enter",
     "While the agent works, type to steer · esc cancels",
-    "Tab expands tools · t or ctrl-o expands thoughts",
-    "/plan is read-only explore · /act enables writes",
-    "Approvals: y = once · a = always this session · n = deny",
-    "!cargo test runs a local shell command (records in context)",
-    "/strategy plan-exec uses a planner then an executor",
-    "Type / for slash commands — Tab completes, ↑↓ pick",
+    "Tab expands tools · t expands thoughts",
+    "/plan is read-only · /act enables writes",
+    "Approvals: y once · a always · n deny",
+    "!cargo test runs a local shell command",
+    "/strategy plan-exec for plan → exec",
+    "Type / then Tab for slash commands",
 ];
 
 pub(crate) fn tip_for_session() -> &'static str {
@@ -148,11 +148,12 @@ pub(crate) fn render_welcome(
         )));
     } else {
         out.push(Line::from(Span::styled(
-            format!("  tip: {}", tip_for_session()),
+            format!("    tip: {}", tip_for_session()),
             theme.placeholder,
         )));
+        // Keep this short — do not repeat "enter send · ? help" (status used to).
         out.push(Line::from(Span::styled(
-            "  starters 1–3 · /tour tour · ? help · type / for commands",
+            "    1–3 starters · /model · /tour",
             theme.placeholder,
         )));
     }

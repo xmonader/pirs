@@ -2943,14 +2943,11 @@ fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Th
     } else {
         left.push(Span::styled("  ○  ", theme.dim));
         left.push(Span::styled("ready", theme.status));
+        // Transient status only — never re-print "enter send · ? help" here.
+        // That string was also in the welcome banner and looked duplicated
+        // right above the composer.
         if !app.status_msg.is_empty() {
             left.push(Span::styled(format!("  ·  {}", app.status_msg), theme.dim));
-        } else {
-            // Single place for idle hints (compose box stays clean).
-            left.push(Span::styled(
-                "  ·  enter send  ·  ? help  ·  /model",
-                theme.dim,
-            ));
         }
     }
 
@@ -3012,7 +3009,8 @@ fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &The
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Empty compose: leave blank so the terminal cursor is the only cue.
+    // Empty compose: blank. Do not put "enter send · ? help" here — it fought
+    // the status/welcome lines and looked duplicated above the cursor.
     let (display, style) = if app.input.is_empty() && !pending {
         (String::new(), theme.input)
     } else {
