@@ -17,7 +17,7 @@ Status: **alpha**. The core is ported and tested (150+ tests); Google provider a
 
 Providers: **OpenAI-compatible** (`--provider openai`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`) and **Anthropic** (`--provider anthropic`, `ANTHROPIC_API_KEY`) — both with streaming, tool calling, retries, and thinking-block support.
 
-UI: `--mode tui` (ratatui agent console: first-run tour, slash completion, tool groups, mode-colored composer, approvals, steer-by-typing — see [docs/TUI-JOURNEY.md](docs/TUI-JOURNEY.md)) alongside the plain REPL (default), `--mode rpc` (headless JSONL), and `--mode acp` (Agent Client Protocol, for editors that embed agents directly).
+UI: `--mode tui` (ratatui agent console: first-run tour, slash completion, tool groups, mode-colored composer, approvals, steer-by-typing — see [docs/TUI-JOURNEY.md](docs/TUI-JOURNEY.md)) alongside the plain REPL (default), `--mode web` / `--serve` (browser UI on localhost — full tools/packs/MCP), `--mode rpc` (headless JSONL), and `--mode acp` (Agent Client Protocol, for editors that embed agents directly).
 
 Runtime features: auto-compaction with `/compact`, approval modes (`--approval auto|ask|yolo`, `/approval`), background jobs (`bash`/`delegate` with `background: true`, managed via `jobs`/`job_output`/`job_kill`/`job_steer`), goal support (`goal.rhai` pack), multi-model delegation (`delegate` with `model` override), token+cache accounting (`/usage`), flight recorder (`--trace` / `--trace=PATH` → JSONL under `~/.pirs/traces/` with agent events + strategy phase boundaries; same schema as `pirs-bench --trace`).
 
@@ -29,6 +29,7 @@ export OPENAI_API_KEY=...            # or --api-key; OPENAI_BASE_URL for compati
 
 ./target/release/pirs                          # interactive REPL
 ./target/release/pirs --mode tui               # polished agent console (recommended)
+./target/release/pirs --mode web               # browser UI (full tools/packs; or --serve)
 ./target/release/pirs "fix the failing test"   # one-shot
 
 # multi-repo work context (one agent, several roots)
@@ -94,7 +95,7 @@ pirs --model openrouter-work/deepseek/deepseek-v4-flash "…"
 Optional `[[models]]` overrides/adds **portable** names (ordered `serve` lists).
 Project `.pirs/config.toml` backends load only if trusted (`pirs trust`).
 
-Hardening flags: `--tool-diet`, `--sequential`, `--no-compaction` / `--context-window N`, `--max-retries N`. **`--weak`**: tool-diet + sequential + retries≥3 + default strategy `plan-exec` (one-shot) + bundled packs (`weak-model` → `context-janitor` → `env-doctor` → `goal`) + larger **repo_map** + **auto-verify** when a test ecosystem is detected. Pair with `--plan-model` for multi-model. **`edit_block`** accepts SEARCH/REPLACE. `delegate` supports a per-subagent `model` override. Auto-compaction summarizes old history. `extensions/weak-model.rhai` adds loop/thrash/stop-gate/plan pins; the host restores protected control pins if a context rewrite drops them.
+Hardening flags: `--tool-diet`, `--sequential`, `--no-compaction` / `--context-window N`, `--max-retries N`. **Profiles** select extension packs: built-in `default` (`packs: "*"`) loads the full catalog; custom profiles live in `.pirs/profiles/<name>.rhai` (see `extensions/README.md`). Opt out with `--no-extensions`. **`--weak`**: tool-diet + sequential + retries≥3 + default strategy `plan-exec` (one-shot) + larger **repo_map** + **auto-verify** when a test ecosystem is detected (packs stay on `default`). Pair with `--plan-model` for multi-model. **`edit_block`** accepts SEARCH/REPLACE. `delegate` supports a per-subagent `model` override. Auto-compaction summarizes old history. `extensions/weak-model.rhai` adds loop/thrash/stop-gate/plan pins; the host restores protected control pins if a context rewrite drops them.
 
 ## Extensions (rhai)
 
@@ -288,7 +289,7 @@ pirs-orchestrator stop <id>
 | `pirs-agent` | agent loop, tool execution, hooks, events, steering/follow-up queues |
 | `pirs-tools` | `bash`, `read`, `edit`, `write`, `grep`, `find`, `ls` |
 | `pirs-rhai` | rhai extension host: script tools, tool policy, loop hooks |
-| `pirs` | CLI (`--mode repl\|tui\|rpc\|acp`) |
+| `pirs` | CLI (`--mode repl\|tui\|web\|rpc\|acp`) |
 | `pirs-mcp` | MCP stdio client: JSON-RPC lifecycle, `mcp_*` tool adapter |
 | `pirs-orchestrator` | daemon + CLI for spawning/managing headless instances |
 

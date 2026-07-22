@@ -4,9 +4,8 @@
 //! interactive surface. CLI wiring in `main` only maps flags into
 //! [`WeakComposeInput`] and applies [`WeakComposeResult`].
 
-/// Pack names loaded by the bundled weak stack, in load order.
-/// First loaded registers first; later registrations win on tool name collisions.
-/// Project/user extensions load *after* this list (see main).
+/// Pack names from the built-in `weak` profile (`packs` field).
+/// Full catalog: profile `default` with `packs: "*"`.
 pub const WEAK_BUNDLED_PACKS: &[&str] = &[
     "weak-model",
     "context-janitor",

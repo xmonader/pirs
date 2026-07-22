@@ -6,7 +6,8 @@
 //! discovered ([`crate::ExtensionHost::load_default_dirs_with_trust`]): project
 //! `.pirs/` first, then home `~/.pirs/`, under a `strategies/` or `profiles/`
 //! subdirectory as `<name>.rhai`. Strategies additionally fall back to the
-//! built-ins ([`Strategy::builtin`]); profiles have no built-ins.
+//! built-ins ([`Strategy::builtin`]); profiles fall back to built-ins
+//! (`default`, `weak`).
 //!
 //! Resolution is a pure function of `(argument, search roots)` — the roots are
 //! computed once from cwd + `$HOME`, so the core lookup is testable with
@@ -76,7 +77,7 @@ pub fn resolve_strategy_in(arg: &str, roots: &[PathBuf]) -> Result<Strategy> {
 
 /// Resolve a profile from a path or a name, searching the given roots.
 /// Name resolution order: `<root>/profiles/<name>.rhai` (each root) →
-/// built-in profile of that name (currently: `weak`).
+/// built-in profile of that name (`default`, `weak`).
 pub fn resolve_profile_in(arg: &str, roots: &[PathBuf]) -> Result<Profile> {
     if looks_like_path(arg) {
         let path = Path::new(arg);
@@ -100,16 +101,36 @@ pub fn resolve_profile_in(arg: &str, roots: &[PathBuf]) -> Result<Profile> {
 
 /// Built-in profile names (also documented on `--profile`).
 pub fn builtin_profile_names() -> Vec<&'static str> {
-    vec!["weak"]
+    vec!["default", "weak"]
 }
 
 /// Look up a built-in profile by name.
 pub fn builtin_profile(name: &str) -> Option<Profile> {
     match name {
+        "default" => crate::profile_script::load_profile_str(
+            crate::weak_packs::DEFAULT_PROFILE,
+            "default",
+        )
+        .ok(),
         "weak" => crate::profile_script::load_profile_str(crate::weak_packs::WEAK_PROFILE, "weak")
             .ok(),
         _ => None,
     }
+}
+
+/// Profile used to select catalog packs for a session.
+///
+/// - explicit `--profile` → that profile's `packs`
+/// - else → built-in `default` (`packs: "*"`)
+///
+/// `--weak` does **not** change pack selection (it only composes CLI flags);
+/// the default catalog already includes the weak-stack packs. Use
+/// `--profile weak` only if you want that role's smaller pack set + persona.
+///
+/// Does **not** force strategy mode; callers only use the returned `packs`
+/// field when loading extensions.
+pub fn resolve_pack_profile(profile_arg: Option<&str>, cwd: &Path) -> Result<Profile> {
+    resolve_profile(profile_arg.unwrap_or("default"), cwd)
 }
 
 /// Resolve a strategy against the default roots derived from `cwd` + `$HOME`.
@@ -253,6 +274,18 @@ mod tests {
     }
 
     #[test]
+    fn falls_back_to_builtin_default_and_weak_profiles() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join(".pirs");
+        let d = resolve_profile_in("default", &[root.clone()]).unwrap();
+        assert_eq!(d.name, "default");
+        assert_eq!(d.packs, vec!["*".to_string()]);
+        let w = resolve_profile_in("weak", &[root]).unwrap();
+        assert_eq!(w.name, "weak");
+        assert_eq!(w.packs.len(), 4);
+    }
+
+    #[test]
     fn unknown_profile_name_errors() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join(".pirs");
@@ -260,6 +293,19 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("unknown profile"), "{err}");
+        assert!(err.contains("default"), "should list built-ins: {err}");
+    }
+
+    #[test]
+    fn resolve_pack_profile_defaults_unless_explicit() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path();
+        let d = resolve_pack_profile(None, cwd).unwrap();
+        assert_eq!(d.name, "default");
+        assert_eq!(d.packs, vec!["*".to_string()]);
+        let explicit = resolve_pack_profile(Some("weak"), cwd).unwrap();
+        assert_eq!(explicit.name, "weak");
+        assert_eq!(explicit.packs.len(), 4);
     }
 
     #[test]

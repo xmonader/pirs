@@ -530,6 +530,9 @@ struct App {
     thinking_expanded: bool,
     /// Selected row in the slash completion popup (0-based into filtered list).
     slash_sel: usize,
+    /// Extension slash commands `(name, description)` without leading `/`
+    /// (from `ExtensionHost::commands`). Merged into the Tab-complete list.
+    ext_slash: Vec<(String, String)>,
     /// Session started as first-run onboarding (for /tour re-show).
     first_run_session: bool,
     should_quit: bool,
@@ -1089,6 +1092,11 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         // Show reasoning live + in history by default; user can hide with t.
         thinking_expanded: true,
         slash_sel: 0,
+        ext_slash: opts
+            .host
+            .as_ref()
+            .map(|h| h.commands())
+            .unwrap_or_default(),
         first_run_session: is_first_tui_run(),
         should_quit: false,
         item_caches: Vec::new(),
@@ -1279,6 +1287,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
                     &shell_tx,
                     &agent_for_cmds,
                     &controls_for_cmds,
+                    opts.host.as_ref(),
                 ) || app.should_quit
                 {
                     break;
@@ -1395,6 +1404,7 @@ fn handle_key(
     shell_tx: &tokio::sync::mpsc::UnboundedSender<(String, String, bool)>,
     agent: &Arc<tokio::sync::Mutex<Agent>>,
     controls: &Arc<Mutex<SessionControls>>,
+    host: Option<&Arc<pirs_rhai::ExtensionHost>>,
 ) -> bool {
     // Fuzzy model picker takes over the keyboard while open.
     if app.model_picker.is_some() {
@@ -1528,7 +1538,7 @@ fn handle_key(
         (KeyCode::Enter, _) => {
             // If slash popup is open and prefix is incomplete, complete first.
             if slash_completing(&app.input) {
-                let matches = slash_filter(app.input.trim());
+                let matches = slash_filter(app.input.trim(), &app.ext_slash);
                 if matches.len() == 1
                     || (matches.len() > 1
                         && matches
@@ -1540,7 +1550,7 @@ fn handle_key(
                     if matches.len() == 1
                         || matches
                             .get(app.slash_sel)
-                            .is_some_and(|c| !app.input.trim().eq_ignore_ascii_case(c.name))
+                            .is_some_and(|c| !app.input.trim().eq_ignore_ascii_case(&c.name))
                     {
                         apply_slash_completion(app);
                         // Only auto-submit bare commands that take no args.
@@ -1559,13 +1569,13 @@ fn handle_key(
                                 | "/plan"
                                 | "/act"
                         ) {
-                            submit_input(app, prompt_tx, shell_tx, agent, controls);
+                            submit_input(app, prompt_tx, shell_tx, agent, controls, host);
                         }
                         return false;
                     }
                 }
             }
-            submit_input(app, prompt_tx, shell_tx, agent, controls);
+            submit_input(app, prompt_tx, shell_tx, agent, controls, host);
         }
         (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
             app.input.clear();
@@ -1598,13 +1608,13 @@ fn handle_key(
             app.cursor = app.input.len();
         }
         (KeyCode::Up, _) if slash_completing(&app.input) => {
-            let n = slash_filter(app.input.trim()).len();
+            let n = slash_filter(app.input.trim(), &app.ext_slash).len();
             if n > 0 {
                 app.slash_sel = app.slash_sel.saturating_add(n - 1) % n;
             }
         }
         (KeyCode::Down, _) if slash_completing(&app.input) => {
-            let n = slash_filter(app.input.trim()).len();
+            let n = slash_filter(app.input.trim(), &app.ext_slash).len();
             if n > 0 {
                 app.slash_sel = (app.slash_sel + 1) % n;
             }
@@ -1624,12 +1634,12 @@ fn handle_key(
 }
 
 fn apply_slash_completion(app: &mut App) {
-    let matches = slash_filter(app.input.trim());
+    let matches = slash_filter(app.input.trim(), &app.ext_slash);
     if matches.is_empty() {
         return;
     }
     let idx = app.slash_sel.min(matches.len() - 1);
-    let name = matches[idx].name;
+    let name = matches[idx].name.clone();
     app.input = format!("{name} ");
     app.cursor = app.input.len();
     app.slash_sel = 0;
@@ -1889,6 +1899,7 @@ fn submit_input(
     shell_tx: &tokio::sync::mpsc::UnboundedSender<(String, String, bool)>,
     agent: &Arc<tokio::sync::Mutex<Agent>>,
     controls: &Arc<Mutex<SessionControls>>,
+    host: Option<&Arc<pirs_rhai::ExtensionHost>>,
 ) {
     let text = app.input.trim().to_string();
     if text.is_empty() {
@@ -1926,9 +1937,9 @@ fn submit_input(
         return;
     }
 
-    // Slash commands: model / plan-model / strategy (do not send to the agent).
+    // Slash commands: model / plan-model / strategy / extension cmds (e.g. /goal).
     if text.starts_with('/') {
-        handle_slash_command(app, agent, controls, &text);
+        handle_slash_command(app, agent, controls, &text, host);
         return;
     }
 
@@ -2037,6 +2048,7 @@ fn handle_slash_command(
     agent: &Arc<tokio::sync::Mutex<Agent>>,
     controls: &Arc<Mutex<SessionControls>>,
     text: &str,
+    host: Option<&Arc<pirs_rhai::ExtensionHost>>,
 ) {
     let (cmd, arg) = match text.split_once(char::is_whitespace) {
         Some((c, a)) => (c, a.trim()),
@@ -2046,7 +2058,7 @@ fn handle_slash_command(
         "/help" | "/?" => {
             app.show_help = true;
             app.notice(
-                "slash: /tour /model /plan-model /strategy /stats /undo /doctor /audit \
+                "slash: /tour /model /plan-model /strategy /goal /stats /undo /doctor /audit \
                  /profile /image /compact /plan /act /clear /quit  ·  type / + Tab",
             );
         }
@@ -2439,6 +2451,21 @@ fn handle_slash_command(
             }
         }
         other => {
+            // Extension slash commands (e.g. /goal from goal.rhai).
+            let cmd_name = other.trim_start_matches('/');
+            if let Some(h) = host {
+                if h.commands().iter().any(|(n, _)| n == cmd_name) {
+                    match h.run_command(cmd_name, arg) {
+                        Ok(out) if !out.is_empty() => {
+                            app.push(ChatItem::System(out));
+                            app.notice(format!("/{cmd_name}"));
+                        }
+                        Ok(_) => app.notice(format!("/{cmd_name} done")),
+                        Err(e) => app.notice(format!("/{cmd_name}: {e}")),
+                    }
+                    return;
+                }
+            }
             app.notice(format!(
                 "unknown command {other} — /help for slash list"
             ));
@@ -2617,7 +2644,7 @@ fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
 }
 
 fn draw_slash_popup(frame: &mut ratatui::Frame, input_area: Rect, app: &App, theme: &Theme) {
-    let matches = slash_filter(app.input.trim());
+    let matches = slash_filter(app.input.trim(), &app.ext_slash);
     if matches.is_empty() {
         return;
     }
@@ -3190,7 +3217,7 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  /tour /plan-model /strategy /stats",
+            "  /tour /plan-model /strategy /goal /stats",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
@@ -3936,11 +3963,21 @@ mod tests {
 
     #[test]
     fn slash_filter_matches_prefix() {
-        let m = slash_filter("/mo");
+        let ext = vec![
+            ("goal".into(), "show or set session goal".into()),
+            ("btw".into(), "side question".into()),
+        ];
+        let m = slash_filter("/mo", &ext);
         assert!(m.iter().any(|c| c.name == "/model"), "{m:?}");
         assert!(!m.iter().any(|c| c.name == "/quit"));
-        let all = slash_filter("/");
+        let goal = slash_filter("/go", &ext);
+        assert!(goal.iter().any(|c| c.name == "/goal"), "{goal:?}");
+        let btw = slash_filter("/bt", &ext);
+        assert!(btw.iter().any(|c| c.name == "/btw"), "{btw:?}");
+        let all = slash_filter("/", &ext);
         assert!(all.len() >= 10);
+        assert!(all.iter().any(|c| c.name == "/goal"), "{all:?}");
+        assert!(all.iter().any(|c| c.name == "/btw"), "{all:?}");
     }
 
     #[test]
@@ -4173,8 +4210,9 @@ mod tests {
             last_activity: String::new(),
             turn_started_at: None,
             // Show reasoning live + in history by default; user can hide with t.
-        thinking_expanded: true,
+            thinking_expanded: true,
             slash_sel: 0,
+            ext_slash: Vec::new(),
             first_run_session: false,
             should_quit: false,
             item_caches: Vec::new(),

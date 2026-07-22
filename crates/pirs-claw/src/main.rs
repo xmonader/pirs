@@ -995,6 +995,11 @@ fn load_claw_extensions(cwd: &Path, enabled: bool) -> Option<Arc<pirs_rhai::Exte
     }
     pirs_rhai::register_core_host_apis();
     let mut host = pirs_rhai::ExtensionHost::new();
+    if let Ok(p) = pirs_rhai::discover::resolve_pack_profile(None, cwd) {
+        pirs_rhai::weak_packs::load_profile_packs(&mut host, &p.packs);
+    } else {
+        pirs_rhai::weak_packs::load_into(&mut host);
+    }
     host.load_default_dirs(cwd);
     if !host.load_errors.is_empty() {
         for e in &host.load_errors {

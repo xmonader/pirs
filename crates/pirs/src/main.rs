@@ -43,9 +43,9 @@ struct Cli {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     prompt: Vec<String>,
 
-    /// Run mode: interactive REPL, TUI, headless JSONL-over-stdio RPC, or
-    /// ACP (Agent Client Protocol, JSON-RPC 2.0 over stdio — for editors
-    /// like Zed that embed agents directly)
+    /// Run mode: `repl` (default), `tui` (ratatui console), `web` (browser UI
+    /// on localhost — full tools/packs/MCP, same agent as TUI), `rpc`
+    /// (JSONL over stdio), or `acp` (Agent Client Protocol for editors).
     #[arg(long, default_value = "repl")]
     mode: String,
 
@@ -84,10 +84,13 @@ struct Cli {
     #[arg(long)]
     plan_model: Option<String>,
 
-    /// Run under a profile (a role: persona + model + strategy + tool policy).
-    /// Accepts a name resolved from .pirs/profiles/<name>.rhai (project then
-    /// ~/.pirs), a built-in name (`weak`), or a path to a .rhai script. Implies
-    /// its strategy; --strategy overrides which strategy the profile runs.
+    /// Run under a profile (a role: persona + model + strategy + tool policy +
+    /// extension packs). Accepts a name resolved from .pirs/profiles/<name>.rhai
+    /// (project then ~/.pirs), a built-in (`default`, `weak`), or a path to a
+    /// .rhai script. Implies its strategy when used with strategy mode;
+    /// --strategy overrides which strategy the profile runs.
+    /// Pack selection: without this flag, built-in `default` (`packs: "*"`)
+    /// loads the full catalog. Pass a custom profile to curate packs.
     #[arg(long)]
     profile: Option<String>,
 
@@ -210,11 +213,11 @@ struct Cli {
     #[arg(long)]
     sequential: bool,
 
-    /// Weak-model hardening preset: enables --tool-diet, --sequential,
+    /// Weak-model hardening preset (CLI only): --tool-diet, --sequential,
     /// --max-retries at least 3, defaults --strategy to plan-exec when
-    /// neither --strategy nor --profile is set, loads bundled packs
-    /// (weak-model, context-janitor, env-doctor, goal), and auto-sets
-    /// --verify from the project test ecosystem when possible. Multi-model:
+    /// neither --strategy nor --profile is set, and auto-sets --verify from
+    /// the project test ecosystem when possible. Does not change extension
+    /// packs — those come from profile `default` (`packs: "*"`). Multi-model:
     /// pair with `--plan-model <strong>` so planning stays strong while this
     /// run's `--model` is the weak executor; or use phase `model:` / `--cascade`.
     #[arg(long)]
@@ -242,7 +245,8 @@ struct Cli {
     #[arg(long)]
     max_tool_calls: Option<usize>,
 
-    /// Run the local web app (pirs serve): browser UI on localhost
+    /// Run the local web app (browser UI on localhost). Equivalent to
+    /// `--mode web`. Full agent stack (tools, default profile packs, MCP).
     #[arg(long)]
     serve: bool,
 
@@ -962,8 +966,8 @@ async fn main() -> anyhow::Result<()> {
         })
         .await;
     }
-    if cli.mode != "repl" && cli.mode != "tui" {
-        bail!("unknown mode: {} (expected repl|rpc|tui|acp)", cli.mode);
+    if !matches!(cli.mode.as_str(), "repl" | "tui" | "web") {
+        bail!("unknown mode: {} (expected repl|tui|web|rpc|acp)", cli.mode);
     }
 
     let default_provider: Arc<dyn pirs_ai::LlmProvider> = if cli.provider == "anthropic" {
@@ -1254,10 +1258,27 @@ async fn main() -> anyhow::Result<()> {
             std::sync::Arc::clone(&policy_slot),
             std::sync::Arc::clone(&usage_slot),
         ));
-        // Bundled weak packs load first; project/user extensions load after so
-        // a local weak-model.rhai (or other pack) overrides by last-wins.
-        if cli.weak {
-            pirs_rhai::weak_packs::load_into(&mut h);
+        // Catalog packs come from the pack profile (`default` or `--profile`).
+        // Project/user dirs load after so last-wins overrides.
+        match pirs_rhai::discover::resolve_pack_profile(cli.profile.as_deref(), &cwd) {
+            Ok(pack_profile) => {
+                pirs_rhai::weak_packs::load_profile_packs(&mut h, &pack_profile.packs);
+                if !pack_profile.packs.is_empty() {
+                    eprintln!(
+                        "[profile packs: {} · {}]",
+                        pack_profile.name,
+                        if pack_profile.packs.iter().any(|p| p == "*" || p == "all") {
+                            format!("* ({} packs)", pirs_rhai::weak_packs::BUNDLED_ORDER.len())
+                        } else {
+                            pack_profile.packs.join(", ")
+                        }
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("[profile packs: failed to resolve ({e:#}); loading full catalog]");
+                pirs_rhai::weak_packs::load_into(&mut h);
+            }
         }
         h.load_default_dirs(&cwd);
         for err in &h.load_errors {
@@ -1716,7 +1737,9 @@ async fn main() -> anyhow::Result<()> {
         }));
     }
 
-    if cli.serve {
+    // Browser UI: `--mode web` or legacy `--serve`. Same full agent as TUI/REPL
+    // (tools, profile packs, MCP, graph, …) — not the thin rpc/acp bootstrap.
+    if cli.serve || cli.mode == "web" {
         let loopback = matches!(cli.bind.as_str(), "127.0.0.1" | "localhost" | "::1");
         let token = match cli.serve_token.clone() {
             Some(t) => t,

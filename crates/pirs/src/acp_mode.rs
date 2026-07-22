@@ -161,6 +161,12 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
         Arc::clone(&policy_slot),
         Arc::new(Mutex::new(pirs_ai::Usage::default())),
     ));
+    // Pack set from built-in `default` profile (`packs: "*"`).
+    if let Ok(p) = pirs_rhai::discover::resolve_pack_profile(None, &cwd) {
+        pirs_rhai::weak_packs::load_profile_packs(&mut host, &p.packs);
+    } else {
+        pirs_rhai::weak_packs::load_into(&mut host);
+    }
     host.load_default_dirs(&cwd);
     for err in &host.load_errors {
         eprintln!("[extension error] {err}");

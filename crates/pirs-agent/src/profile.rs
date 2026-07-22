@@ -50,8 +50,8 @@ impl ToolPolicy {
     }
 }
 
-/// A named role: a strategy plus the persona, model, and tool policy that turn it
-/// into a virtual employee.
+/// A named role: a strategy plus the persona, model, tool policy, and extension
+/// packs that turn it into a virtual employee.
 #[derive(Debug, Clone)]
 pub struct Profile {
     pub name: String,
@@ -62,11 +62,15 @@ pub struct Profile {
     pub model: Option<String>,
     pub strategy: Strategy,
     pub tools: ToolPolicy,
+    /// Bundled extension pack stems to load (`"goal"`, `"btw"`, …).
+    /// A single entry `"*"` (or `"all"`) means the full catalog in default order.
+    /// Empty means no catalog packs (project/user dirs may still load).
+    pub packs: Vec<String>,
 }
 
 impl Profile {
-    /// A profile that just names a strategy, with no persona, model, or tool
-    /// restriction — the identity wrapper.
+    /// A profile that just names a strategy, with no persona, model, tool
+    /// restriction, or catalog packs — the identity wrapper.
     pub fn from_strategy(name: impl Into<String>, strategy: Strategy) -> Self {
         Profile {
             name: name.into(),
@@ -74,6 +78,7 @@ impl Profile {
             model: None,
             strategy,
             tools: ToolPolicy::allow_all(),
+            packs: Vec::new(),
         }
     }
 
@@ -207,6 +212,7 @@ mod tests {
             model: None,
             strategy: plan_exec(),
             tools: ToolPolicy::allow_all(),
+            packs: Vec::new(),
         };
         let resolved = profile.resolved_strategy();
         for step in &resolved.steps {
@@ -231,6 +237,7 @@ mod tests {
             model: Some("cheap-model".into()),
             strategy: plan_oracle_exec("strong-oracle"),
             tools: ToolPolicy::allow_all(),
+            packs: Vec::new(),
         };
         let resolved = profile.resolved_strategy();
         let models: Vec<Option<String>> = resolved
@@ -254,6 +261,7 @@ mod tests {
             model: Some("m".into()),
             strategy: wide_plan_exec(3),
             tools: ToolPolicy::allow_all(),
+            packs: Vec::new(),
         };
         let resolved = profile.resolved_strategy();
         match &resolved.steps[0] {

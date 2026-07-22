@@ -12,6 +12,7 @@
 //!     model: "deepseek-v4-pro",
 //!     strategy: "plan-critic-exec",          // a built-in by name…
 //!     tools: #{ deny: ["bash"] },            // …minus the shell
+//!     packs: ["goal", "guardrails", "btw"],  // bundled extension stems
 //! }
 //! ```
 //!
@@ -24,6 +25,14 @@
 //!     tools: #{ allow: ["read", "edit", "run_tests"] },
 //! }
 //! ```
+//!
+//! `packs` selects which embedded catalog extensions load for the session:
+//! - `"*"` / `"all"` — full catalog (see `weak_packs::BUNDLED_ORDER`)
+//! - `["goal", "btw", …]` — named stems in that order
+//! - omit or `[]` — no catalog packs (project/user dirs may still load)
+//!
+//! `strategy` is optional and defaults to the built-in `monolithic` strategy
+//! so pack-only profiles (roles that only curate extensions) stay concise.
 
 use std::path::Path;
 
@@ -63,12 +72,13 @@ fn get_str(map: &Map, key: &str) -> Option<String> {
     map.get(key).and_then(|v| v.clone().into_string().ok())
 }
 
-/// Parse the `strategy` field: a string names a built-in, a map is inline.
+/// Parse the optional `strategy` field: a string names a built-in, a map is
+/// inline. Omitted → built-in `monolithic` (pack-only / persona-only profiles).
 fn strategy_field(map: &Map, default_name: &str) -> anyhow::Result<Strategy> {
-    let dyn_val = map
-        .get("strategy")
-        .cloned()
-        .ok_or_else(|| anyhow!("profile is missing a `strategy` (a built-in name or a map)"))?;
+    let Some(dyn_val) = map.get("strategy").cloned() else {
+        return crate::builtins::builtin("monolithic")
+            .ok_or_else(|| anyhow!("built-in strategy monolithic missing"));
+    };
 
     if let Some(name) = dyn_val.clone().into_string().ok().filter(|s| !s.is_empty()) {
         return crate::builtins::builtin(&name)
@@ -78,6 +88,29 @@ fn strategy_field(map: &Map, default_name: &str) -> anyhow::Result<Strategy> {
         .try_cast::<Map>()
         .ok_or_else(|| anyhow!("`strategy` must be a built-in name (string) or a strategy map"))?;
     strategy_from_map(sm, default_name)
+}
+
+/// Parse optional `packs`: `"*"` / `"all"`, or an array of pack stems.
+fn packs_field(map: &Map) -> anyhow::Result<Vec<String>> {
+    let Some(dyn_val) = map.get("packs").cloned() else {
+        return Ok(Vec::new());
+    };
+    if let Ok(s) = dyn_val.clone().into_string() {
+        let t = s.trim();
+        if t.is_empty() {
+            return Ok(Vec::new());
+        }
+        return Ok(vec![t.to_string()]);
+    }
+    let arr = dyn_val
+        .try_cast::<Array>()
+        .ok_or_else(|| anyhow!("`packs` must be \"*\" or an array of pack stem strings"))?;
+    arr.into_iter()
+        .map(|d| {
+            d.into_string()
+                .map_err(|_| anyhow!("`packs` entries must be strings"))
+        })
+        .collect()
 }
 
 /// Parse the optional `tools` policy: `#{ allow: [...], deny: [...] }`.
@@ -118,12 +151,14 @@ fn profile_from_map(map: Map, default_name: &str) -> anyhow::Result<Profile> {
     let model = get_str(&map, "model");
     let strategy = strategy_field(&map, &name)?;
     let tools = tool_policy(&map)?;
+    let packs = packs_field(&map)?;
     Ok(Profile {
         name,
         persona,
         model,
         strategy,
         tools,
+        packs,
     })
 }
 
@@ -188,11 +223,10 @@ mod tests {
     }
 
     #[test]
-    fn missing_strategy_is_rejected() {
-        let err = load_profile_str(r#"#{ name: "x" }"#, "x")
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("strategy"), "{err}");
+    fn missing_strategy_defaults_to_monolithic() {
+        let p = load_profile_str(r#"#{ name: "x", packs: ["goal"] }"#, "x").unwrap();
+        assert_eq!(p.strategy.name, "monolithic");
+        assert_eq!(p.packs, vec!["goal".to_string()]);
     }
 
     #[test]
@@ -208,5 +242,26 @@ mod tests {
         let p = load_profile_str(r#"#{ strategy: "monolithic" }"#, "x").unwrap();
         assert!(p.tools.permits("bash"));
         assert!(p.tools.permits("edit"));
+    }
+
+    #[test]
+    fn packs_star_and_array_parse() {
+        let star = load_profile_str(r#"#{ packs: "*" }"#, "d").unwrap();
+        assert_eq!(star.packs, vec!["*".to_string()]);
+        let list = load_profile_str(
+            r#"#{ packs: ["goal", "btw", "guardrails"] }"#,
+            "m",
+        )
+        .unwrap();
+        assert_eq!(
+            list.packs,
+            vec![
+                "goal".to_string(),
+                "btw".to_string(),
+                "guardrails".to_string()
+            ]
+        );
+        let none = load_profile_str(r#"#{ strategy: "monolithic" }"#, "n").unwrap();
+        assert!(none.packs.is_empty());
     }
 }
