@@ -1,10 +1,12 @@
 //! Interactive terminal UI for pirs (`--mode tui`).
 //!
-//! Layout (top → bottom):
-//!   header  — brand · model · approval · cwd · usage
-//!   chat    — structured messages, tools, system notes
-//!   status  — spinner / hints / scroll position
-//!   input   — multi-line composer with history
+//! Layout (top → bottom), polished against grok-build / mistral-vibe / qwen-code:
+//!   header      — brand · model · plan/strat · approval · cwd
+//!   chat        — role accents, collapsible tools/thinking, markdown
+//!   turn-status — activity spinner · elapsed · usage · cancel/help
+//!   input       — mode-colored composer (plan / yolo / steer / approval)
+//!
+//! Theme: `PIRS_TUI_THEME=mono` for dim/bold-only terminals.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -25,7 +27,7 @@ use ratatui::Terminal;
 use crate::approval::ApprovalMode;
 use crate::session_stats::{self, SessionClock};
 
-// ── Theme ───────────────────────────────────────────────────────────────────
+// ── Theme (semantic roles; keep slate/cyan/violet DNA) ──────────────────────
 
 struct Theme {
     brand: Style,
@@ -39,23 +41,37 @@ struct Theme {
     tool_args: Style,
     tool_ok: Style,
     tool_err: Style,
+    path: Style,
+    command: Style,
+    success: Style,
+    warning: Style,
     system: Style,
     error: Style,
     dim: Style,
     accent: Style,
     border: Style,
+    border_focus: Style,
     input: Style,
     input_border: Style,
     approval: Style,
+    plan: Style,
+    yolo: Style,
     status: Style,
     code: Style,
     code_block: Style,
     bold: Style,
     heading: Style,
+    placeholder: Style,
 }
 
 impl Theme {
     fn default_dark() -> Self {
+        if std::env::var("PIRS_TUI_THEME")
+            .map(|v| v.eq_ignore_ascii_case("mono"))
+            .unwrap_or(false)
+        {
+            return Self::mono();
+        }
         Self {
             brand: Style::default()
                 .fg(Color::Rgb(125, 211, 252))
@@ -78,6 +94,10 @@ impl Theme {
             tool_args: Style::default().fg(Color::Rgb(148, 163, 184)),
             tool_ok: Style::default().fg(Color::Rgb(100, 116, 139)),
             tool_err: Style::default().fg(Color::Rgb(248, 113, 113)),
+            path: Style::default().fg(Color::Rgb(251, 146, 60)),
+            command: Style::default().fg(Color::Rgb(250, 204, 21)),
+            success: Style::default().fg(Color::Rgb(74, 222, 128)),
+            warning: Style::default().fg(Color::Rgb(251, 191, 36)),
             system: Style::default().fg(Color::Rgb(100, 116, 139)),
             error: Style::default()
                 .fg(Color::Rgb(248, 113, 113))
@@ -85,10 +105,15 @@ impl Theme {
             dim: Style::default().fg(Color::Rgb(71, 85, 105)),
             accent: Style::default().fg(Color::Rgb(56, 189, 248)),
             border: Style::default().fg(Color::Rgb(51, 65, 85)),
+            border_focus: Style::default().fg(Color::Rgb(56, 189, 248)),
             input: Style::default().fg(Color::Rgb(241, 245, 249)),
             input_border: Style::default().fg(Color::Rgb(56, 189, 248)),
             approval: Style::default()
                 .fg(Color::Rgb(251, 113, 133))
+                .add_modifier(Modifier::BOLD),
+            plan: Style::default().fg(Color::Rgb(74, 222, 128)),
+            yolo: Style::default()
+                .fg(Color::Rgb(248, 113, 113))
                 .add_modifier(Modifier::BOLD),
             status: Style::default().fg(Color::Rgb(148, 163, 184)),
             code: Style::default().fg(Color::Rgb(125, 211, 252)),
@@ -99,6 +124,48 @@ impl Theme {
             heading: Style::default()
                 .fg(Color::Rgb(165, 243, 252))
                 .add_modifier(Modifier::BOLD),
+            placeholder: Style::default().fg(Color::Rgb(71, 85, 105)),
+        }
+    }
+
+    fn mono() -> Self {
+        let base = Style::default();
+        let bold = Style::default().add_modifier(Modifier::BOLD);
+        let dim = Style::default().add_modifier(Modifier::DIM);
+        let italic = Style::default().add_modifier(Modifier::ITALIC);
+        Self {
+            brand: bold,
+            header_bg: dim,
+            user_label: bold,
+            user_text: base,
+            assistant_label: bold,
+            assistant_text: base,
+            thinking: italic,
+            tool_name: bold,
+            tool_args: dim,
+            tool_ok: dim,
+            tool_err: bold,
+            path: base,
+            command: base,
+            success: base,
+            warning: bold,
+            system: dim,
+            error: bold,
+            dim,
+            accent: bold,
+            border: dim,
+            border_focus: bold,
+            input: base,
+            input_border: bold,
+            approval: bold,
+            plan: base,
+            yolo: bold,
+            status: dim,
+            code: base,
+            code_block: base,
+            bold,
+            heading: bold,
+            placeholder: dim,
         }
     }
 }
@@ -108,37 +175,61 @@ impl Theme {
 #[derive(Debug, Clone)]
 enum ChatItem {
     System(String),
+    /// Rich welcome empty-state (rendered specially; one-shot at session start).
+    Welcome {
+        model: String,
+        plan_model: Option<String>,
+        strategy: Option<String>,
+        approval: String,
+        cwd: String,
+    },
     User(String),
     Assistant {
         thinking: String,
         text: String,
         error: Option<String>,
     },
-    ToolStart {
+    /// Unified tool call card (running → done). Prefer updating in place on end.
+    ToolCall {
         name: String,
         summary: String,
-    },
-    ToolEnd {
         preview: String,
         is_error: bool,
+        done: bool,
+        expanded: bool,
     },
     Notice(String),
 }
 
+/// Max preview lines kept in memory for a tool body.
+const TOOL_PREVIEW_CAP: usize = 200;
+/// Lines shown when a tool body is expanded (mutations / errors).
+const TOOL_BODY_SHOW: usize = 12;
+
 impl ChatItem {
-    fn render(&self, theme: &Theme, width: usize) -> Vec<Line<'static>> {
+    fn render(&self, theme: &Theme, width: usize, thinking_expanded: bool) -> Vec<Line<'static>> {
         match self {
             ChatItem::System(text) => text
                 .lines()
                 .map(|l| Line::from(Span::styled(l.to_string(), theme.system)))
                 .collect(),
+            ChatItem::Welcome {
+                model,
+                plan_model,
+                strategy,
+                approval,
+                cwd,
+            } => render_welcome(theme, model, plan_model.as_deref(), strategy.as_deref(), approval, cwd),
             ChatItem::User(text) => {
                 let mut out = vec![Line::from(vec![
-                    Span::styled("● ", theme.user_label),
+                    Span::styled("│ ", theme.user_label),
                     Span::styled("you", theme.user_label),
                 ])];
                 for l in text.lines() {
-                    out.push(Line::from(Span::styled(format!("  {l}"), theme.user_text)));
+                    out.push(Line::from(vec![
+                        Span::styled("│ ", theme.user_label),
+                        Span::styled(l.to_string(), theme.user_text),
+                    ]));
                 }
                 out.push(Line::from(""));
                 out
@@ -149,14 +240,17 @@ impl ChatItem {
                 error,
             } => {
                 let mut out = vec![Line::from(vec![
-                    Span::styled("✦ ", theme.assistant_label),
+                    Span::styled("│ ", theme.assistant_label),
                     Span::styled("assistant", theme.assistant_label),
                 ])];
                 if !thinking.trim().is_empty() {
-                    out.extend(render_thinking(thinking, theme));
+                    out.extend(render_thinking(thinking, theme, thinking_expanded));
                 }
                 if !text.trim().is_empty() {
-                    out.extend(render_markdown(text, theme, width.saturating_sub(2)));
+                    for line in render_markdown(text, theme, width.saturating_sub(2)) {
+                        // Prefix accent on plain content lines that already have "  " indent.
+                        out.push(line);
+                    }
                 }
                 if let Some(err) = error {
                     out.push(Line::from(Span::styled(format!("  ⚠ {err}"), theme.error)));
@@ -164,46 +258,14 @@ impl ChatItem {
                 out.push(Line::from(""));
                 out
             }
-            ChatItem::ToolStart { name, summary } => {
-                let icon = tool_icon(name);
-                let mut spans = vec![
-                    Span::styled(format!("  {icon} "), theme.tool_name),
-                    Span::styled(name.clone(), theme.tool_name),
-                ];
-                if !summary.is_empty() {
-                    spans.push(Span::styled("  ", theme.dim));
-                    spans.push(Span::styled(truncate_chars(summary, 100), theme.tool_args));
-                }
-                vec![Line::from(spans)]
-            }
-            ChatItem::ToolEnd { preview, is_error } => {
-                if preview.is_empty() {
-                    return Vec::new();
-                }
-                let style = if *is_error {
-                    theme.tool_err
-                } else {
-                    theme.tool_ok
-                };
-                let marker = if *is_error { "✗" } else { "·" };
-                let mut out = Vec::new();
-                for (i, l) in preview.lines().take(8).enumerate() {
-                    let prefix = if i == 0 {
-                        format!("    {marker} ")
-                    } else {
-                        "      ".into()
-                    };
-                    out.push(Line::from(Span::styled(format!("{prefix}{l}"), style)));
-                }
-                let extra = preview.lines().count().saturating_sub(8);
-                if extra > 0 {
-                    out.push(Line::from(Span::styled(
-                        format!("      … +{extra} lines"),
-                        theme.dim,
-                    )));
-                }
-                out
-            }
+            ChatItem::ToolCall {
+                name,
+                summary,
+                preview,
+                is_error,
+                done,
+                expanded,
+            } => render_tool_call(theme, name, summary, preview, *is_error, *done, *expanded),
             ChatItem::Notice(text) => vec![Line::from(Span::styled(
                 format!("  · {text}"),
                 theme.system,
@@ -212,16 +274,181 @@ impl ChatItem {
     }
 }
 
-fn tool_icon(name: &str) -> &'static str {
-    match name {
-        "bash" => "▸",
-        "read" => "◉",
-        "write" | "edit" => "✎",
-        "grep" | "find" => "⌕",
-        "ls" => "☰",
-        "delegate" | "run_subagent" => "⧉",
-        _ => "○",
+fn render_welcome(
+    theme: &Theme,
+    model: &str,
+    plan_model: Option<&str>,
+    strategy: Option<&str>,
+    approval: &str,
+    cwd: &str,
+) -> Vec<Line<'static>> {
+    let mut meta = vec![
+        Span::styled(model.to_string(), theme.accent),
+        Span::styled("  ·  ", theme.dim),
+        Span::styled(format!("● {approval}"), composer_mode_style(theme, approval, false, false)),
+        Span::styled("  ·  ", theme.dim),
+        Span::styled(format!("~/{cwd}"), theme.header_bg),
+    ];
+    if let Some(p) = plan_model {
+        meta.push(Span::styled("  ·  plan:", theme.dim));
+        meta.push(Span::styled(p.to_string(), theme.plan));
     }
+    if let Some(s) = strategy {
+        meta.push(Span::styled("  ·  ", theme.dim));
+        meta.push(Span::styled(s.to_string(), theme.accent));
+    }
+    vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  pirs", theme.brand),
+            Span::styled("  ·  agent console", theme.dim),
+        ]),
+        Line::from({
+            let mut spans = vec![Span::styled("  ", theme.dim)];
+            spans.extend(meta);
+            spans
+        }),
+        Line::from(Span::styled(
+            "  tip: /strategy plan-exec  ·  !cargo test  ·  ? help  ·  /plan then /act",
+            theme.placeholder,
+        )),
+        Line::from(""),
+    ]
+}
+
+/// Status glyph column (fixed width) — qwen-style state machine.
+fn tool_status_glyph(done: bool, is_error: bool, tick: u64) -> (&'static str, Style) {
+    // tick unused for static done glyphs; live spinner uses draw path.
+    let _ = tick;
+    if !done {
+        ("○", Style::default().fg(Color::Rgb(56, 189, 248)))
+    } else if is_error {
+        ("✗", Style::default().fg(Color::Rgb(248, 113, 113)))
+    } else {
+        ("✓", Style::default().fg(Color::Rgb(74, 222, 128)))
+    }
+}
+
+fn tool_verb(name: &str, done: bool) -> &'static str {
+    match (name, done) {
+        ("bash", false) => "Running",
+        ("bash", true) => "Ran",
+        ("read", _) => "Read",
+        ("write", false) => "Writing",
+        ("write", true) => "Wrote",
+        ("edit" | "edit_block", false) => "Editing",
+        ("edit" | "edit_block", true) => "Edited",
+        ("grep" | "find", _) => "Searched",
+        ("ls", _) => "Listed",
+        ("run_tests", false) => "Testing",
+        ("run_tests", true) => "Tested",
+        ("delegate" | "run_subagent", false) => "Delegating",
+        ("delegate" | "run_subagent", true) => "Delegated",
+        ("web" | "web_fetch" | "web_search", _) => "Fetched",
+        ("project", false) => "Project",
+        ("project", true) => "Project",
+        (_, false) => "Calling",
+        (_, true) => "Called",
+    }
+}
+
+/// Quiet tools collapse to a single header line on success.
+fn tool_is_quiet(name: &str) -> bool {
+    matches!(
+        name,
+        "read" | "grep" | "find" | "ls" | "recall" | "todo" | "audit"
+    )
+}
+
+fn tool_default_expanded(name: &str, is_error: bool) -> bool {
+    is_error || !tool_is_quiet(name)
+}
+
+fn tool_operand_style<'a>(theme: &'a Theme, name: &str) -> Style {
+    match name {
+        "bash" | "run_tests" | "project" => theme.command,
+        "read" | "write" | "edit" | "edit_block" | "ls" | "grep" | "find" => theme.path,
+        _ => theme.tool_args,
+    }
+}
+
+fn render_tool_call(
+    theme: &Theme,
+    name: &str,
+    summary: &str,
+    preview: &str,
+    is_error: bool,
+    done: bool,
+    expanded: bool,
+) -> Vec<Line<'static>> {
+    let (glyph, gstyle) = tool_status_glyph(done, is_error, 0);
+    let verb = tool_verb(name, done);
+    let mut spans = vec![
+        Span::styled(format!("  {glyph} "), gstyle),
+        Span::styled(format!("{verb} "), theme.tool_name),
+        Span::styled(name.to_string(), theme.tool_name),
+    ];
+    if !summary.is_empty() {
+        spans.push(Span::styled("  ", theme.dim));
+        spans.push(Span::styled(
+            truncate_chars(summary, 90),
+            tool_operand_style(theme, name),
+        ));
+    }
+    let mut out = vec![Line::from(spans)];
+
+    let show_body = expanded && !preview.is_empty();
+    if !show_body {
+        if done && !preview.is_empty() && tool_is_quiet(name) && !is_error {
+            // collapsed quiet tool — header only
+            return out;
+        }
+        if !done {
+            return out;
+        }
+        if preview.is_empty() {
+            return out;
+        }
+        // Not expanded but has preview (shouldn't happen often): show overflow hint.
+        let n = preview.lines().count();
+        if n > 0 && !expanded {
+            out.push(Line::from(Span::styled(
+                format!("    ▶ +{n} lines  (tab expand)"),
+                theme.dim,
+            )));
+            return out;
+        }
+    }
+
+    if show_body {
+        let style = if is_error {
+            theme.tool_err
+        } else {
+            theme.tool_ok
+        };
+        let lines: Vec<&str> = preview.lines().collect();
+        let total = lines.len();
+        let show = lines.iter().take(TOOL_BODY_SHOW);
+        let count = total.min(TOOL_BODY_SHOW);
+        for (i, l) in show.enumerate() {
+            let border = if i + 1 == count && total <= TOOL_BODY_SHOW {
+                "⎣"
+            } else {
+                "⎢"
+            };
+            out.push(Line::from(Span::styled(
+                format!("  {border} {l}"),
+                style,
+            )));
+        }
+        if total > TOOL_BODY_SHOW {
+            out.push(Line::from(Span::styled(
+                format!("  ⎣ ▶ +{} lines", total - TOOL_BODY_SHOW),
+                theme.dim,
+            )));
+        }
+    }
+    out
 }
 
 fn truncate_chars(s: &str, max: usize) -> String {
@@ -236,25 +463,67 @@ fn truncate_chars(s: &str, max: usize) -> String {
     }
 }
 
-fn render_thinking(thinking: &str, theme: &Theme) -> Vec<Line<'static>> {
-    const MAX: usize = 6;
+fn render_thinking(thinking: &str, theme: &Theme, expanded: bool) -> Vec<Line<'static>> {
+    const MAX: usize = 8;
     let lines: Vec<&str> = thinking.lines().filter(|l| !l.trim().is_empty()).collect();
     let total = lines.len();
-    let skip = total.saturating_sub(MAX);
-    let mut out = Vec::new();
-    if skip > 0 {
-        out.push(Line::from(Span::styled(
-            format!("  ⋯ thinking ({total} lines)"),
-            theme.thinking,
-        )));
+    if total == 0 {
+        return Vec::new();
     }
+    if !expanded {
+        return vec![Line::from(Span::styled(
+            format!("  ▶ thought · {total} line{}", if total == 1 { "" } else { "s" }),
+            theme.thinking,
+        ))];
+    }
+    let skip = total.saturating_sub(MAX);
+    let mut out = vec![Line::from(Span::styled(
+        format!("  ▼ thought · {total} lines  (ctrl-o collapse)"),
+        theme.thinking,
+    ))];
     for l in lines.into_iter().skip(skip) {
         out.push(Line::from(Span::styled(
-            format!("  💭 {l}"),
+            format!("    {l}"),
             theme.thinking,
         )));
     }
     out
+}
+
+/// Composer border color by approval mode + session state (qwen/vibe pattern).
+fn composer_mode_style(theme: &Theme, approval_mode: &str, running: bool, pending_approval: bool) -> Style {
+    if pending_approval {
+        return theme.approval;
+    }
+    if running {
+        return theme.warning;
+    }
+    let m = approval_mode.to_ascii_lowercase();
+    if m.contains("yolo") || m == "auto" || m.contains("auto-approve") {
+        return theme.yolo;
+    }
+    if m.contains("plan") {
+        return theme.plan;
+    }
+    if m.contains("ask") {
+        return theme.warning;
+    }
+    theme.input_border
+}
+
+fn format_elapsed(secs: u64) -> String {
+    if secs < 60 {
+        format!("{secs}s")
+    } else {
+        format!("{}m{:02}s", secs / 60, secs % 60)
+    }
+}
+
+fn approval_grace_elapsed(opened: Option<std::time::Instant>) -> bool {
+    match opened {
+        None => true,
+        Some(t) => t.elapsed() >= std::time::Duration::from_millis(400),
+    }
 }
 
 /// Lightweight markdown → ratatui lines. Handles headings, fenced code,
@@ -512,9 +781,15 @@ struct App {
     usage_summary: String,
     pending_approval: Arc<Mutex<Option<String>>>,
     approval_answer: Arc<std::sync::mpsc::Sender<String>>,
+    /// When the current approval prompt was shown (grace period for Enter).
+    approval_opened_at: Option<std::time::Instant>,
     cancel: pirs_agent::agent::CancelSlot,
     show_help: bool,
     status_msg: String,
+    /// Human activity label for turn-status ("thinking", "bash", …).
+    last_activity: String,
+    turn_started_at: Option<std::time::Instant>,
+    thinking_expanded: bool,
     should_quit: bool,
     /// One entry per `items[i]`: wrapped physical rows for that item, when
     /// known — virtualized so a long conversation with large tool outputs
@@ -561,6 +836,108 @@ impl App {
     fn set_status(&mut self, msg: impl Into<String>) {
         self.status_msg = msg.into();
         self.dirty = true;
+    }
+
+    /// Clear transcript + caches (Ctrl-L / `/clear`). Keeps length invariant.
+    fn clear_chat(&mut self) {
+        self.items.clear();
+        self.item_caches.clear();
+        self.live = None;
+        self.scroll = 0;
+        self.total_rows = 0;
+        self.cache_width = 0;
+        self.notice("screen cleared");
+    }
+
+    fn invalidate_item(&mut self, idx: usize) {
+        if let Some(c) = self.item_caches.get_mut(idx) {
+            c.rows = None;
+            c.row_count = 1;
+        }
+        self.dirty = true;
+    }
+
+    fn start_tool(&mut self, name: String, summary: String) {
+        self.last_activity = name.clone();
+        self.push(ChatItem::ToolCall {
+            name,
+            summary,
+            preview: String::new(),
+            is_error: false,
+            done: false,
+            expanded: false,
+        });
+    }
+
+    fn finish_tool(&mut self, name: &str, preview: String, is_error: bool) {
+        let expanded = tool_default_expanded(name, is_error);
+        for i in (0..self.items.len()).rev() {
+            if let ChatItem::ToolCall {
+                name: n,
+                done,
+                preview: p,
+                is_error: err,
+                expanded: exp,
+                ..
+            } = &mut self.items[i]
+            {
+                if !*done && (n == name || name.is_empty()) {
+                    *done = true;
+                    *p = preview;
+                    *err = is_error;
+                    *exp = expanded;
+                    self.invalidate_item(i);
+                    return;
+                }
+            }
+        }
+        // No open card (e.g. shell) — push a finished one.
+        self.push(ChatItem::ToolCall {
+            name: if name.is_empty() {
+                "bash".into()
+            } else {
+                name.into()
+            },
+            summary: String::new(),
+            preview,
+            is_error,
+            done: true,
+            expanded,
+        });
+    }
+
+    fn toggle_last_tool_expand(&mut self) {
+        for i in (0..self.items.len()).rev() {
+            if let ChatItem::ToolCall {
+                expanded,
+                preview,
+                done,
+                ..
+            } = &mut self.items[i]
+            {
+                if *done && !preview.is_empty() {
+                    *expanded = !*expanded;
+                    self.invalidate_item(i);
+                    return;
+                }
+            }
+        }
+    }
+
+    fn mark_running(&mut self, activity: impl Into<String>) {
+        self.running = true;
+        if self.turn_started_at.is_none() {
+            self.turn_started_at = Some(std::time::Instant::now());
+        }
+        self.last_activity = activity.into();
+        self.dirty = true;
+    }
+
+    fn mark_idle(&mut self) {
+        self.running = false;
+        self.turn_started_at = None;
+        self.last_activity.clear();
+        self.set_status(String::new());
     }
 }
 
@@ -790,9 +1167,13 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         usage_summary: String::new(),
         pending_approval,
         approval_answer: approval_answer_rx,
+        approval_opened_at: None,
         cancel,
         show_help: false,
         status_msg: String::new(),
+        last_activity: String::new(),
+        turn_started_at: None,
+        thinking_expanded: false,
         should_quit: false,
         item_caches: Vec::new(),
         cache_width: 0,
@@ -802,13 +1183,13 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         clock: SessionClock::new(),
     };
 
-    app.push(ChatItem::System(welcome_banner(
-        &app.model,
-        app.plan_model.as_deref(),
-        app.strategy.as_deref(),
-        &app.approval_mode,
-        &app.cwd_label,
-    )));
+    app.push(ChatItem::Welcome {
+        model: app.model.clone(),
+        plan_model: app.plan_model.clone(),
+        strategy: app.strategy.clone(),
+        approval: app.approval_mode.clone(),
+        cwd: app.cwd_label.clone(),
+    });
 
     let (prompt_tx, prompt_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let (done_tx, mut done_rx) = tokio::sync::mpsc::unbounded_channel::<bool>();
@@ -883,8 +1264,19 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         while let Ok(event) = event_rx.try_recv() {
             apply_agent_event(&mut app, event);
         }
+        // Detect approval gate open for grace period + overlay (prompter is
+        // off-thread; it only sets pending_approval).
+        {
+            let pending = app.pending_approval.lock().unwrap().is_some();
+            if pending && app.approval_opened_at.is_none() {
+                app.approval_opened_at = Some(std::time::Instant::now());
+                app.dirty = true;
+            } else if !pending && app.approval_opened_at.is_some() {
+                app.approval_opened_at = None;
+            }
+        }
         while let Ok(ok) = done_rx.try_recv() {
-            app.running = false;
+            app.mark_idle();
             app.clock.agent_end();
             app.dirty = true;
             let report = {
@@ -905,18 +1297,37 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         }
         while let Ok((cmd, output, record)) = shell_rx.try_recv() {
             app.dirty = true;
-            app.running = false;
-            app.set_status(String::new());
-            let preview: String = output.lines().take(40).collect::<Vec<_>>().join("\n");
+            app.mark_idle();
+            let preview: String = output
+                .lines()
+                .take(TOOL_PREVIEW_CAP)
+                .collect::<Vec<_>>()
+                .join("\n");
             let is_error = output.starts_with("error:") || output.contains("\nexit:");
-            app.push(ChatItem::ToolEnd {
-                preview: if preview.is_empty() {
+            app.finish_tool(
+                "bash",
+                if preview.is_empty() {
                     "(no output)".into()
                 } else {
                     preview
                 },
                 is_error,
-            });
+            );
+            // Ensure the finished card has the command as summary if we only
+            // pushed a generic finish — re-open last bash card summary.
+            if let Some(ChatItem::ToolCall {
+                name,
+                summary,
+                done: true,
+                ..
+            }) = app.items.last_mut()
+            {
+                if name == "bash" && summary.is_empty() {
+                    *summary = cmd.clone();
+                    let i = app.items.len() - 1;
+                    app.invalidate_item(i);
+                }
+            }
             if record {
                 if let Ok(mut a) = agent.try_lock() {
                     a.messages.push(Message::user(format!(
@@ -1027,24 +1438,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn welcome_banner(
-    model: &str,
-    plan_model: Option<&str>,
-    strategy: Option<&str>,
-    approval: &str,
-    cwd: &str,
-) -> String {
-    let plan = plan_model
-        .map(|p| format!("  ·  plan:{p}"))
-        .unwrap_or_default();
-    let strat = strategy
-        .map(|s| format!("  ·  strategy:{s}"))
-        .unwrap_or_default();
-    format!(
-        "pirs  ·  {model}{plan}{strat}  ·  approval:{approval}  ·  {cwd}\n\
-         /model  /plan-model  /strategy  ·  !cmd shell  ·  enter send · ? help"
-    )
-}
+// welcome is ChatItem::Welcome (see render_welcome)
 
 fn format_tokens(input: u64, output: u64, hit_pct: f64) -> String {
     format!(
@@ -1078,21 +1472,33 @@ fn handle_key(
 ) -> bool {
     // Single-key approval answers when a gate is waiting.
     if app.pending_approval.lock().unwrap().is_some() {
+        let grace_ok = approval_grace_elapsed(app.approval_opened_at);
         match (key.code, key.modifiers) {
             (KeyCode::Char('y') | KeyCode::Char('Y'), KeyModifiers::NONE)
             | (KeyCode::Char('n') | KeyCode::Char('N'), KeyModifiers::NONE)
             | (KeyCode::Char('a') | KeyCode::Char('A'), KeyModifiers::NONE) => {
+                if !grace_ok {
+                    return false;
+                }
                 let ch = match key.code {
                     KeyCode::Char(c) => c.to_ascii_lowercase().to_string(),
                     _ => "n".into(),
                 };
                 *app.pending_approval.lock().unwrap() = None;
+                app.approval_opened_at = None;
                 let _ = app.approval_answer.send(ch);
                 app.set_status(String::new());
                 return false;
             }
+            (KeyCode::Enter, _) => {
+                // Enter must not auto-confirm during grace (vibe pattern).
+                if !grace_ok {
+                    return false;
+                }
+            }
             (KeyCode::Esc, _) => {
                 *app.pending_approval.lock().unwrap() = None;
+                app.approval_opened_at = None;
                 let _ = app.approval_answer.send("n".into());
                 app.set_status(String::new());
                 return false;
@@ -1133,13 +1539,41 @@ fn handle_key(
             }
         }
         (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
-            app.items.clear();
-            app.live = None;
-            app.scroll = 0;
-            app.notice("screen cleared");
+            app.clear_chat();
+        }
+        (KeyCode::Char('o'), KeyModifiers::CONTROL) => {
+            app.thinking_expanded = !app.thinking_expanded;
+            // Invalidate assistant rows so thinking re-renders.
+            for i in 0..app.items.len() {
+                if matches!(app.items[i], ChatItem::Assistant { .. }) {
+                    app.invalidate_item(i);
+                }
+            }
+            app.dirty = true;
+        }
+        (KeyCode::Char('w'), KeyModifiers::CONTROL) => {
+            delete_word_before_cursor(app);
+        }
+        (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
+            app.cursor = 0;
+        }
+        (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+            app.cursor = app.input.len();
+        }
+        (KeyCode::Tab, KeyModifiers::NONE) if app.input.is_empty() => {
+            app.toggle_last_tool_expand();
         }
         (KeyCode::Char('?'), KeyModifiers::NONE) if app.input.is_empty() => {
             app.show_help = true;
+        }
+        (KeyCode::Char('g'), KeyModifiers::NONE) if app.input.is_empty() => {
+            // Scroll to top of chat (gg-style single g).
+            app.scroll = max_scroll(app);
+            app.dirty = true;
+        }
+        (KeyCode::Char('G'), KeyModifiers::SHIFT) if app.input.is_empty() => {
+            app.scroll = 0;
+            app.dirty = true;
         }
         // Newline: alt/shift+enter, or ctrl-j (terminals vary).
         (KeyCode::Enter, KeyModifiers::ALT)
@@ -1189,6 +1623,27 @@ fn handle_key(
         _ => {}
     }
     false
+}
+
+fn delete_word_before_cursor(app: &mut App) {
+    if app.cursor == 0 {
+        return;
+    }
+    let chars: Vec<(usize, char)> = app.input[..app.cursor].char_indices().collect();
+    if chars.is_empty() {
+        return;
+    }
+    let mut idx = chars.len();
+    while idx > 0 && chars[idx - 1].1.is_whitespace() {
+        idx -= 1;
+    }
+    while idx > 0 && !chars[idx - 1].1.is_whitespace() {
+        idx -= 1;
+    }
+    let i = if idx == 0 { 0 } else { chars[idx].0 };
+    app.input.replace_range(i..app.cursor, "");
+    app.cursor = i;
+    app.history_idx = None;
 }
 
 fn handle_mouse(app: &mut App, mouse: MouseEvent) {
@@ -1324,7 +1779,14 @@ fn submit_input(
 
     // Approval path (typed full answer).
     if app.pending_approval.lock().unwrap().is_some() {
+        if !approval_grace_elapsed(app.approval_opened_at) {
+            // Restore input so the user doesn't lose their typed answer.
+            app.input = text;
+            app.cursor = app.input.len();
+            return;
+        }
         *app.pending_approval.lock().unwrap() = None;
+        app.approval_opened_at = None;
         let _ = app.approval_answer.send(text);
         return;
     }
@@ -1338,10 +1800,7 @@ fn submit_input(
         return;
     }
     if text == "/clear" {
-        app.items.clear();
-        app.live = None;
-        app.scroll = 0;
-        app.notice("screen cleared");
+        app.clear_chat();
         return;
     }
 
@@ -1370,12 +1829,8 @@ fn submit_input(
             app.history.push(text.clone());
         }
         app.push(ChatItem::User(format!("$ {cmd}")));
-        app.push(ChatItem::ToolStart {
-            name: "bash".into(),
-            summary: cmd.to_string(),
-        });
-        app.running = true;
-        app.set_status(format!("shell: {cmd}"));
+        app.start_tool("bash".into(), cmd.to_string());
+        app.mark_running(format!("shell · {cmd}"));
         let cwd = app.cwd.clone();
         let cmd_owned = cmd.to_string();
         let shell_tx = shell_tx.clone();
@@ -1394,9 +1849,14 @@ fn submit_input(
     app.scroll = 0; // jump to the bottom to follow the new turn
     if app.running {
         app.steer_queue.lock().unwrap().push(text);
+        app.last_activity = "steering".into();
         app.set_status("steering…");
     } else {
-        app.running = true;
+        app.mark_running(if app.strategy.is_some() {
+            format!("strategy · {}", app.strategy.as_deref().unwrap_or("?"))
+        } else {
+            "thinking".into()
+        });
         app.clock.mark_user_turn();
         app.clock.agent_start();
         // Snapshot conversation before this turn for /undo.
@@ -1406,20 +1866,6 @@ fn submit_input(
                 &a.messages,
             );
         }
-        let status = if app.strategy.is_some() {
-            format!(
-                "strategy:{} · model:{}{}",
-                app.strategy.as_deref().unwrap_or("?"),
-                app.model,
-                app.plan_model
-                    .as_ref()
-                    .map(|p| format!(" · plan:{p}"))
-                    .unwrap_or_default()
-            )
-        } else {
-            "running".into()
-        };
-        app.set_status(status);
         let _ = prompt_tx.send(text);
     }
 }
@@ -1844,13 +2290,16 @@ fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
 
     let input_lines = app.input.lines().count().clamp(1, 6) as u16;
     let input_h = input_lines + 2; // borders
+    let pending = app.pending_approval.lock().unwrap().is_some();
+    // Approval modal needs a taller status strip for the overlay cue.
+    let status_h: u16 = if pending { 1 } else { 1 };
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),       // header
             Constraint::Min(3),          // chat
-            Constraint::Length(1),       // status
+            Constraint::Length(status_h), // turn-status
             Constraint::Length(input_h), // input
         ])
         .split(area);
@@ -1860,22 +2309,17 @@ fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
     draw_status(frame, chunks[2], app, &theme);
     draw_input(frame, chunks[3], app, &theme);
 
+    if pending {
+        draw_approval_overlay(frame, area, app, &theme);
+    }
     if app.show_help {
         draw_help_overlay(frame, area, &theme);
     }
 }
 
 fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme) {
-    let usage = if app.usage_summary.is_empty() {
-        String::new()
-    } else {
-        format!(" {} ", app.usage_summary)
-    };
-    let usage_w = unicode_width::UnicodeWidthStr::width(usage.as_str()) as u16;
-    let parts = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(20), Constraint::Length(usage_w.max(1))])
-        .split(area);
+    // Thin identity chrome; token usage lives on the turn-status row (qwen footer pattern).
+    let mode_style = composer_mode_style(theme, &app.approval_mode, false, false);
     let mut left = vec![
         Span::styled(" pirs ", theme.brand),
         Span::styled("│ ", theme.dim),
@@ -1883,7 +2327,7 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme)
     ];
     if let Some(p) = &app.plan_model {
         left.push(Span::styled(" plan:", theme.dim));
-        left.push(Span::styled(p.clone(), theme.accent));
+        left.push(Span::styled(p.clone(), theme.plan));
     }
     if let Some(s) = &app.strategy {
         left.push(Span::styled(" strat:", theme.dim));
@@ -1892,20 +2336,15 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme)
     left.push(Span::styled("  ", theme.dim));
     left.push(Span::styled(
         format!("● {}", app.approval_mode),
-        theme.accent,
+        mode_style,
     ));
     left.push(Span::styled("  ", theme.dim));
     left.push(Span::styled(
         format!("~/{}", app.cwd_label),
         theme.header_bg,
     ));
-    frame.render_widget(Paragraph::new(Line::from(left)), parts[0]);
-    if !usage.is_empty() {
-        frame.render_widget(
-            Paragraph::new(Span::styled(usage, theme.dim)).alignment(Alignment::Right),
-            parts[1],
-        );
-    }
+    let clipped = clip_spans(left, area.width as usize);
+    frame.render_widget(Paragraph::new(Line::from(clipped)), area);
 }
 
 /// Slack (in wrapped rows, not items) kept exactly measured on each side of
@@ -1950,12 +2389,13 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
     let mut live_rows: Vec<Line<'static>> = Vec::new();
     if let Some((thinking, text)) = &app.live {
         let mut logical: Vec<Line<'static>> = vec![Line::from(vec![
-            Span::styled("✦ ", theme.assistant_label),
+            Span::styled("│ ", theme.assistant_label),
             Span::styled("assistant", theme.assistant_label),
             Span::styled("  streaming", theme.dim),
         ])];
         if !thinking.trim().is_empty() {
-            logical.extend(render_thinking(thinking, theme));
+            // While streaming, show thinking expanded lightly (last lines).
+            logical.extend(render_thinking(thinking, theme, true));
         }
         if !text.trim().is_empty() {
             logical.extend(render_markdown(text, theme, width.saturating_sub(2)));
@@ -1996,7 +2436,7 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
                 && item_start < end_est + VIRTUALIZE_MARGIN_ROWS;
             if near {
                 if app.item_caches[i].rows.is_none() {
-                    let logical = app.items[i].render(theme, width);
+                    let logical = app.items[i].render(theme, width, app.thinking_expanded);
                     let rows = flatten_rows(&logical, width);
                     app.item_caches[i].row_count = rows.len();
                     app.item_caches[i].rows = Some(rows);
@@ -2044,7 +2484,7 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
             continue;
         }
         if app.item_caches[i].rows.is_none() {
-            let logical = app.items[i].render(theme, width);
+            let logical = app.items[i].render(theme, width, app.thinking_expanded);
             let rows = flatten_rows(&logical, width);
             app.item_caches[i].row_count = rows.len();
             app.item_caches[i].rows = Some(rows);
@@ -2088,54 +2528,97 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
 }
 
 fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Theme) {
+    // ~7.5–10 fps spinner (tick advances every dirty frame while running).
     const FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
     app.tick = app.tick.wrapping_add(1);
 
-    let mut parts: Vec<Span<'static>> = Vec::new();
+    let mut left: Vec<Span<'static>> = Vec::new();
+    let mut right: Vec<Span<'static>> = Vec::new();
 
     let approval_q = app.pending_approval.lock().unwrap().clone();
     if let Some(q) = approval_q {
-        parts.push(Span::styled(" ⚠ approval ", theme.approval));
-        parts.push(Span::styled(truncate_chars(&q, 60), theme.approval));
-        parts.push(Span::styled("  [y]es [n]o [a]ll  esc=deny", theme.dim));
+        left.push(Span::styled(" ◆ ", theme.approval));
+        left.push(Span::styled("waiting for approval", theme.approval));
+        left.push(Span::styled(
+            format!(" · {}", truncate_chars(&q, 48)),
+            theme.dim,
+        ));
+        right.push(Span::styled(" y / a / n · esc ", theme.dim));
     } else if app.running {
         let spin = FRAMES[(app.tick / 2 % 10) as usize];
-        parts.push(Span::styled(format!(" {spin} "), theme.accent));
-        let label = if app.status_msg.is_empty() {
-            "working"
-        } else {
+        left.push(Span::styled(format!(" {spin} "), theme.accent));
+        let activity = if !app.last_activity.is_empty() {
+            app.last_activity.as_str()
+        } else if !app.status_msg.is_empty() {
             app.status_msg.as_str()
+        } else {
+            "working"
         };
-        parts.push(Span::styled(label.to_string(), theme.status));
-        parts.push(Span::styled("  ·  type to steer  ·  esc cancel", theme.dim));
-    } else {
-        parts.push(Span::styled(" ○ ", theme.dim));
-        parts.push(Span::styled("ready", theme.status));
-        if !app.status_msg.is_empty() {
-            parts.push(Span::styled(format!("  ·  {}", app.status_msg), theme.dim));
+        left.push(Span::styled(activity.to_string(), theme.status));
+        if let Some(start) = app.turn_started_at {
+            left.push(Span::styled(
+                format!(" · {}", format_elapsed(start.elapsed().as_secs())),
+                theme.dim,
+            ));
         }
-        parts.push(Span::styled("  ·  ? help", theme.dim));
+        left.push(Span::styled("  ·  type to steer", theme.dim));
+        right.push(Span::styled(" esc cancel ", theme.dim));
+    } else {
+        left.push(Span::styled(" ○ ", theme.dim));
+        left.push(Span::styled("ready", theme.status));
+        if !app.status_msg.is_empty() {
+            left.push(Span::styled(format!("  ·  {}", app.status_msg), theme.dim));
+        }
+        left.push(Span::styled("  ·  ? help  ·  tab expand tool", theme.dim));
     }
 
     if app.scroll > 0 {
-        parts.push(Span::styled(format!("  ·  ↑{} ", app.scroll), theme.accent));
+        right.insert(
+            0,
+            Span::styled(format!(" ↑{} ", app.scroll), theme.accent),
+        );
+    }
+    if !app.usage_summary.is_empty() && !app.running {
+        right.insert(
+            0,
+            Span::styled(format!(" {} ", app.usage_summary), theme.dim),
+        );
     }
 
-    let clipped = clip_spans(parts, area.width as usize);
-    frame.render_widget(Paragraph::new(Line::from(clipped)), area);
+    // Paint left, then right-align remainder.
+    let right_w: usize = right
+        .iter()
+        .map(|s| unicode_width::UnicodeWidthStr::width(s.content.as_ref()))
+        .sum();
+    let left_budget = (area.width as usize).saturating_sub(right_w);
+    let left_clipped = clip_spans(left, left_budget);
+    let left_w: usize = left_clipped
+        .iter()
+        .map(|s| unicode_width::UnicodeWidthStr::width(s.content.as_ref()))
+        .sum();
+    let pad = (area.width as usize).saturating_sub(left_w + right_w);
+    let mut line = left_clipped;
+    if pad > 0 {
+        line.push(Span::raw(" ".repeat(pad)));
+    }
+    line.extend(right);
+    frame.render_widget(Paragraph::new(Line::from(line)), area);
 }
 
 fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Theme) {
     let pending = app.pending_approval.lock().unwrap().is_some();
-    let (title, border_style) = if pending {
-        (" approval · y / n / a ", theme.approval)
+    let border_style = composer_mode_style(theme, &app.approval_mode, app.running, pending);
+    let title = if pending {
+        " approval · [y]es  [a]lways session  [n]o  esc "
     } else if app.running {
-        (" message · steers the running turn ", theme.input_border)
+        " ❯ steer · enter queue · esc cancel "
     } else {
-        (
-            " message · enter send · alt+enter newline ",
-            theme.input_border,
-        )
+        match app.approval_mode.to_ascii_lowercase().as_str() {
+            m if m.contains("yolo") || m == "auto" => " ❯ yolo · enter send · ? help ",
+            m if m.contains("plan") => " ❯ plan · enter send · /act to write ",
+            m if m.contains("ask") => " ❯ ask · enter send · approvals on ",
+            _ => " ❯ message · enter send · alt+enter newline ",
+        }
     };
 
     let block = Block::default()
@@ -2145,27 +2628,95 @@ fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &The
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Show a subtle prompt glyph on the first line.
-    let display = if app.input.is_empty() && !pending {
-        String::new()
+    let (display, style) = if app.input.is_empty() && !pending {
+        (
+            "message · enter send · ? help".to_string(),
+            theme.placeholder,
+        )
     } else {
-        app.input.clone()
+        (
+            app.input.clone(),
+            if pending { theme.approval } else { theme.input },
+        )
     };
     let para = Paragraph::new(display.as_str())
-        .style(if pending { theme.approval } else { theme.input })
+        .style(style)
         .wrap(Wrap { trim: false });
     frame.render_widget(para, inner);
 
     // Cursor position accounting for multi-line wrap.
-    let cursor_text = &app.input[..app.cursor.min(app.input.len())];
+    let cursor_text = if app.input.is_empty() && !pending {
+        // Keep cursor at start over placeholder.
+        ""
+    } else {
+        &app.input[..app.cursor.min(app.input.len())]
+    };
     let (cx, cy) = cursor_pos(cursor_text, inner.width.max(1) as usize);
     let cursor_x = (inner.x + cx as u16).min(inner.x + inner.width.saturating_sub(1));
     let cursor_y = (inner.y + cy as u16).min(inner.y + inner.height.saturating_sub(1));
-    // Stashed on App rather than `frame.set_cursor_position` — the custom
-    // draw wrapper (`draw_dedup_cursor`) reads this to decide whether the
-    // cursor escape actually needs re-emitting this frame. See the
-    // `desired_cursor` field doc comment for why.
     app.desired_cursor = Some((cursor_x, cursor_y));
+}
+
+fn draw_approval_overlay(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme) {
+    let question = app
+        .pending_approval
+        .lock()
+        .unwrap()
+        .clone()
+        .unwrap_or_default();
+    let w = area.width.clamp(48, 72);
+    let h = area.height.clamp(10, 14);
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let rect = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(theme.approval)
+        .title(Span::styled(" approval required ", theme.approval));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let grace = if approval_grace_elapsed(app.approval_opened_at) {
+        ""
+    } else {
+        "  (wait…)"
+    };
+    let lines = vec![
+        Line::from(Span::styled(
+            "  The agent wants to run a sensitive tool.",
+            theme.assistant_text,
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("  {}", truncate_chars(&question, (w as usize).saturating_sub(4))),
+            theme.command,
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  [y] ", theme.success),
+            Span::styled("Yes once", theme.assistant_text),
+        ]),
+        Line::from(vec![
+            Span::styled("  [a] ", theme.warning),
+            Span::styled("Always this session", theme.assistant_text),
+        ]),
+        Line::from(vec![
+            Span::styled("  [n] ", theme.error),
+            Span::styled("No / deny", theme.assistant_text),
+        ]),
+        Line::from(Span::styled(
+            format!("  esc = deny{grace}"),
+            theme.dim,
+        )),
+    ];
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn cursor_pos(text_before_cursor: &str, width: usize) -> (usize, usize) {
@@ -2192,8 +2743,8 @@ fn cursor_pos(text_before_cursor: &str, width: usize) -> (usize, usize) {
 }
 
 fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
-    let w = area.width.clamp(40, 64);
-    let h = area.height.clamp(14, 20);
+    let w = area.width.clamp(48, 72);
+    let h = area.height.clamp(18, 28);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let rect = Rect {
@@ -2206,7 +2757,7 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
     frame.render_widget(Clear, rect);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(theme.input_border)
+        .border_style(theme.border_focus)
         .title(Span::styled(" help ", theme.brand));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
@@ -2214,73 +2765,57 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
     let lines = vec![
         Line::from(Span::styled("Keys", theme.heading)),
         Line::from(Span::styled(
-            "  enter            send message",
+            "  enter / alt+enter   send / newline (ctrl-j)",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  shift/alt+enter  newline (or ctrl-j)",
+            "  ↑↓ pgup/pgdn wheel  history / scroll chat",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  ↑ / ↓            input history",
+            "  g / G (empty)       scroll top / bottom",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  pgup / pgdn      scroll chat",
+            "  tab (empty)         expand/collapse last tool",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  mouse wheel      scroll chat",
+            "  ctrl-o              expand/collapse thoughts",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  esc              cancel run / clear input",
+            "  ctrl-w / ctrl-u     delete word / clear input",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  ctrl-c           cancel (or quit if idle)",
+            "  ctrl-a / ctrl-e     line start / end",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  ctrl-d           quit",
+            "  esc / ctrl-c        cancel run · ctrl-d quit",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  ctrl-l           clear screen",
-            theme.assistant_text,
-        )),
-        Line::from(Span::styled(
-            "  ctrl-u           clear input",
-            theme.assistant_text,
-        )),
-        Line::from(Span::styled(
-            "  ?                this help",
+            "  ctrl-l              clear screen  ·  ? help",
             theme.assistant_text,
         )),
         Line::from(""),
         Line::from(Span::styled("Commands", theme.heading)),
         Line::from(Span::styled(
-            "  /model [id]       show/set exec model (aliases ok)",
+            "  /model /plan-model /strategy /stats /usage",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  /plan-model [id]  strong planner model (none to clear)",
+            "  /plan /act /permission /profile /checkpoint",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  /strategy [name]  plan-exec | plan-critic-exec | monolithic | none",
+            "  /undo /compact /doctor /audit /image",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  /stats  /usage  /help  /clear  /quit",
-            theme.assistant_text,
-        )),
-        Line::from(Span::styled(
-            "  !cmd              run shell (record in context)",
-            theme.assistant_text,
-        )),
-        Line::from(Span::styled(
-            "  !!cmd             run shell (do not record)",
+            "  /clear /quit  ·  !cmd  !!cmd (shell)",
             theme.assistant_text,
         )),
         Line::from(""),
@@ -2418,6 +2953,7 @@ fn apply_agent_event(app: &mut App, event: AgentEvent) {
         AgentEvent::MessageStart { message } => {
             if message.is_assistant() {
                 app.live = Some((String::new(), String::new()));
+                app.last_activity = "streaming".into();
                 app.dirty = true;
             }
         }
@@ -2425,16 +2961,19 @@ fn apply_agent_event(app: &mut App, event: AgentEvent) {
             if app.live.is_none() {
                 return;
             }
+            let thinking = extract_thinking(&message);
+            let text = message.text();
+            if !thinking.is_empty() && text.trim().is_empty() {
+                app.last_activity = "thinking".into();
+            } else {
+                app.last_activity = "streaming".into();
+            }
             if app.last_live_refresh.elapsed() < std::time::Duration::from_millis(80) {
                 // Always keep latest content even if we skip a paint.
-                let thinking = extract_thinking(&message);
-                let text = message.text();
                 app.live = Some((thinking, text));
                 return;
             }
             app.last_live_refresh = std::time::Instant::now();
-            let thinking = extract_thinking(&message);
-            let text = message.text();
             app.live = Some((thinking, text));
             app.dirty = true;
         }
@@ -2461,28 +3000,31 @@ fn apply_agent_event(app: &mut App, event: AgentEvent) {
             tool_name, args, ..
         } => {
             let summary = crate::summarize_args(&tool_name, &args);
-            app.push(ChatItem::ToolStart {
-                name: tool_name,
-                summary,
-            });
+            app.start_tool(tool_name, summary);
         }
-        AgentEvent::ToolExecutionEnd { result, .. } => {
+        AgentEvent::ToolExecutionEnd { result, tool_name, .. } => {
             app.clock.mark_tool(result.is_error);
             // Prefer details.uiText (full) over model-capped content for display.
             let text = result.display_text();
-            let preview: String = text.lines().take(8).collect::<Vec<_>>().join("\n");
-            if !preview.is_empty() || result.is_error {
-                app.push(ChatItem::ToolEnd {
-                    preview: if preview.is_empty() {
-                        "(error)".into()
-                    } else {
-                        preview
-                    },
-                    is_error: result.is_error,
-                });
+            let preview: String = text
+                .lines()
+                .take(TOOL_PREVIEW_CAP)
+                .collect::<Vec<_>>()
+                .join("\n");
+            let body = if preview.is_empty() && result.is_error {
+                "(error)".into()
+            } else {
+                preview
+            };
+            if !body.is_empty() || result.is_error {
+                app.finish_tool(&tool_name, body, result.is_error);
+            } else {
+                // Success with empty body — still mark done.
+                app.finish_tool(&tool_name, String::new(), false);
             }
         }
         AgentEvent::CompactionStart { .. } => {
+            app.last_activity = "compacting".into();
             app.notice("compacting context…");
         }
         AgentEvent::CompactionEnd { aborted, .. } => {
@@ -2493,12 +3035,18 @@ fn apply_agent_event(app: &mut App, event: AgentEvent) {
             }
         }
         AgentEvent::TurnStart => {
+            app.last_activity = "thinking".into();
             app.set_status("thinking");
         }
         AgentEvent::TurnEnd { .. } => {
+            app.last_activity = "running".into();
             app.set_status("running");
         }
         AgentEvent::AgentStart => {
+            if app.turn_started_at.is_none() {
+                app.turn_started_at = Some(std::time::Instant::now());
+            }
+            app.last_activity = "running".into();
             app.set_status("running");
         }
         AgentEvent::AgentEnd { .. } => {
@@ -2733,7 +3281,7 @@ mod tests {
     #[test]
     fn chat_item_user_renders_label() {
         let theme = Theme::default_dark();
-        let lines = ChatItem::User("hello".into()).render(&theme, 80);
+        let lines = ChatItem::User("hello".into()).render(&theme, 80, false);
         let flat: String = lines
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
@@ -2741,6 +3289,143 @@ mod tests {
             .join("|");
         assert!(flat.contains("you"));
         assert!(flat.contains("hello"));
+    }
+
+    #[test]
+    fn clear_chat_keeps_items_and_caches_in_sync() {
+        let mut app = test_app();
+        for i in 0..5 {
+            app.push(ChatItem::Notice(format!("n{i}")));
+        }
+        assert_eq!(app.items.len(), 5);
+        assert_eq!(app.item_caches.len(), 5);
+        app.clear_chat();
+        assert_eq!(app.items.len(), 1, "notice after clear");
+        assert_eq!(
+            app.item_caches.len(),
+            app.items.len(),
+            "caches must stay length-aligned with items"
+        );
+        assert!(matches!(app.items[0], ChatItem::Notice(_)));
+    }
+
+    #[test]
+    fn tool_quiet_read_collapses_on_success() {
+        let theme = Theme::default_dark();
+        let item = ChatItem::ToolCall {
+            name: "read".into(),
+            summary: "src/main.rs".into(),
+            preview: "fn main() {}\n// more\n// lines".into(),
+            is_error: false,
+            done: true,
+            expanded: false,
+        };
+        let lines = item.render(&theme, 80, false);
+        assert_eq!(lines.len(), 1, "collapsed read is header-only: {lines:?}");
+        let flat: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(flat.contains("Read"), "{flat}");
+        assert!(flat.contains("src/main.rs"), "{flat}");
+    }
+
+    #[test]
+    fn tool_bash_expanded_shows_l_border_body() {
+        let theme = Theme::default_dark();
+        let item = ChatItem::ToolCall {
+            name: "bash".into(),
+            summary: "cargo test".into(),
+            preview: "ok\npassed".into(),
+            is_error: false,
+            done: true,
+            expanded: true,
+        };
+        let lines = item.render(&theme, 80, false);
+        assert!(lines.len() > 1, "bash body should expand: {lines:?}");
+        let flat: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(flat.contains("Ran") || flat.contains("bash"), "{flat}");
+        assert!(flat.contains("⎢") || flat.contains("⎣"), "{flat}");
+    }
+
+    #[test]
+    fn thinking_collapsed_by_default() {
+        let theme = Theme::default_dark();
+        let item = ChatItem::Assistant {
+            thinking: "line1\nline2\nline3".into(),
+            text: "hi".into(),
+            error: None,
+        };
+        let collapsed = item.render(&theme, 80, false);
+        let flat: String = collapsed
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(flat.contains("▶ thought"), "{flat}");
+        assert!(!flat.contains("line1"), "body hidden when collapsed: {flat}");
+
+        let expanded = item.render(&theme, 80, true);
+        let flat_e: String = expanded
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(flat_e.contains("line1"), "{flat_e}");
+    }
+
+    #[test]
+    fn tool_verb_and_default_expand_policy() {
+        assert_eq!(tool_verb("bash", false), "Running");
+        assert_eq!(tool_verb("bash", true), "Ran");
+        assert_eq!(tool_verb("read", true), "Read");
+        assert!(!tool_default_expanded("read", false));
+        assert!(tool_default_expanded("bash", false));
+        assert!(tool_default_expanded("read", true)); // errors expand
+    }
+
+    #[test]
+    fn approval_grace_blocks_until_elapsed() {
+        assert!(approval_grace_elapsed(None));
+        let recent = Some(std::time::Instant::now());
+        assert!(!approval_grace_elapsed(recent));
+        let old = Some(std::time::Instant::now() - std::time::Duration::from_millis(500));
+        assert!(approval_grace_elapsed(old));
+    }
+
+    #[test]
+    fn composer_mode_styles_differ_for_yolo_and_plan() {
+        let theme = Theme::default_dark();
+        let idle = composer_mode_style(&theme, "ask", false, false);
+        let yolo = composer_mode_style(&theme, "yolo", false, false);
+        let plan = composer_mode_style(&theme, "plan", false, false);
+        let pending = composer_mode_style(&theme, "ask", false, true);
+        assert_ne!(yolo.fg, idle.fg);
+        assert_ne!(plan.fg, yolo.fg);
+        assert_eq!(pending.fg, theme.approval.fg);
+    }
+
+    #[test]
+    fn finish_tool_updates_open_card_in_place() {
+        let mut app = test_app();
+        app.start_tool("read".into(), "a.rs".into());
+        assert_eq!(app.items.len(), 1);
+        app.finish_tool("read", "contents".into(), false);
+        assert_eq!(app.items.len(), 1, "must not push a second card");
+        match &app.items[0] {
+            ChatItem::ToolCall {
+                done,
+                expanded,
+                preview,
+                ..
+            } => {
+                assert!(*done);
+                assert!(!*expanded, "quiet read stays collapsed");
+                assert_eq!(preview, "contents");
+            }
+            other => panic!("expected ToolCall, got {other:?}"),
+        }
     }
 
     #[test]
@@ -2821,10 +3506,10 @@ mod tests {
     }
 
     #[test]
-    fn tool_icon_known() {
-        assert_eq!(tool_icon("bash"), "▸");
-        assert_eq!(tool_icon("read"), "◉");
-        assert_eq!(tool_icon("mystery"), "○");
+    fn tool_status_glyphs() {
+        assert_eq!(tool_status_glyph(false, false, 0).0, "○");
+        assert_eq!(tool_status_glyph(true, false, 0).0, "✓");
+        assert_eq!(tool_status_glyph(true, true, 0).0, "✗");
     }
 
     #[test]
@@ -2926,9 +3611,13 @@ mod tests {
             usage_summary: String::new(),
             pending_approval: Arc::new(Mutex::new(None)),
             approval_answer: Arc::new(std::sync::mpsc::channel().0),
+            approval_opened_at: None,
             cancel: Arc::new(Mutex::new(tokio_util::sync::CancellationToken::new())),
             show_help: false,
             status_msg: String::new(),
+            last_activity: String::new(),
+            turn_started_at: None,
+            thinking_expanded: false,
             should_quit: false,
             item_caches: Vec::new(),
             cache_width: 0,
