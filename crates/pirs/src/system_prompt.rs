@@ -76,7 +76,13 @@ pub fn build_system_prompt_with_map(
         );
     }
 
-    prompt.push_str(&format!("\nCurrent working directory: {}\n", cwd.display()));
+    // Multi-root work context (or single cwd) — paths may use //name/rel.
+    let ctx = pirs_tools::current_work_context();
+    if ctx.roots.len() > 1 {
+        prompt.push_str(&ctx.prompt_section());
+    } else {
+        prompt.push_str(&format!("\nCurrent working directory: {}\n", cwd.display()));
+    }
 
     // Durable user identity (same soul.md as pirs-claw) — keep harness/claw consistent.
     prompt.push_str(&pirs_skills::soul_prompt_section());

@@ -2117,6 +2117,27 @@ fn handle_slash_command(
         "/thoughts" | "/think" | "/thinking" => {
             app.toggle_thoughts();
         }
+        "/context" | "/roots" => {
+            let ctx = pirs_tools::current_work_context();
+            let mut s = format!("{}\n", ctx.summary_line());
+            for r in &ctx.roots {
+                s.push_str(&format!("  //{} → {}\n", r.name, r.path.display()));
+            }
+            if ctx.roots.len() > 1 {
+                s.push_str(
+                    "address: //name/rel/path  or  @name/rel  or  name:rel\n\
+                     launch: pirs --cwd A --also B --also C\n\
+                     or:     pirs --context NAME  (~/.pirs/contexts.toml)",
+                );
+            } else {
+                s.push_str(
+                    "single root. multi-repo: pirs --cwd A --also B\n\
+                     or define [[context]] in ~/.pirs/contexts.toml",
+                );
+            }
+            app.push(ChatItem::System(s));
+            app.notice("work context (see chat)");
+        }
         "/models" => {
             // /models [plan] [query…]  |  /models refresh
             let mut rest = arg.trim();
@@ -2619,6 +2640,15 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme)
         mode_style,
     ));
     left.push(Span::styled("  ", theme.dim));
+    let ctx = pirs_tools::current_work_context();
+    if ctx.roots.len() > 1 {
+        let names: Vec<&str> = ctx.names();
+        left.push(Span::styled(
+            format!("ctx:{}", names.join("+")),
+            theme.accent,
+        ));
+        left.push(Span::styled("  ", theme.dim));
+    }
     left.push(Span::styled(
         format!("~/{}", app.cwd_label),
         theme.header_bg,

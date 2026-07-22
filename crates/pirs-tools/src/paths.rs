@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::bail;
 
+use crate::work_context::{current_work_context, parse_named_path};
+
 /// Lexically resolve `input` against `cwd` (expanding a leading `~/`).
 ///
 /// This does NOT enforce containment or resolve symlinks — callers that expose
@@ -17,37 +19,113 @@ pub fn resolve(cwd: &Path, input: &str) -> PathBuf {
     }
 }
 
-/// Resolve `input` against `cwd` and confirm it stays within the allowed root.
+/// Resolve `input` against the session work context (multi-root) with
+/// fallback to `cwd` as the primary root.
 ///
 /// The agent runs LLM-chosen paths through the file tools; without this a
 /// prompt-injected model reads `~/.pirs/auth.json` or writes
 /// `~/.ssh/authorized_keys` on the host. Containment is enforced against the
 /// *canonicalized* nearest-existing ancestor, so a `..`-escape or an in-repo
-/// symlink pointing outside the root (`notes -> /etc/passwd`) is rejected, not
-/// just lexical escapes.
+/// symlink pointing outside the roots is rejected.
 ///
-/// Escape hatch: set `PIRS_ALLOW_OUTSIDE_CWD=1` to disable confinement (for the
-/// rare legitimate cross-root workflow). The root defaults to `cwd`.
+/// Escape hatch: set `PIRS_ALLOW_OUTSIDE_CWD=1` to disable confinement.
+///
+/// **Multi-root addressing:**
+/// - `//name/rel` or `@name/rel` or `name:rel` — pin to a named work root
+/// - relative path — try each root (primary first); prefer existing paths
+/// - absolute path — allowed only if under some work root
 pub fn resolve_contained(cwd: &Path, input: &str) -> anyhow::Result<PathBuf> {
-    let lexical = resolve(cwd, input);
     if allow_outside_cwd() {
-        // Still prefer the resolved form when the path exists so callers open
-        // the same inode we inspected.
+        let lexical = resolve(cwd, input);
         return Ok(canonicalize_existing_prefix(&lexical));
     }
-    let root = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+
+    let ctx = current_work_context();
+    // Prefer installed multi-root context; if empty (tests / early init), use cwd.
+    let roots: Vec<PathBuf> = if ctx.roots.is_empty() {
+        vec![std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf())]
+    } else {
+        ctx.root_paths()
+    };
+
+    // Named root: //backend/src/foo
+    if let Some((name, rel)) = parse_named_path(input) {
+        let root = ctx.find_by_name(name).ok_or_else(|| {
+            let known = ctx.names().join(", ");
+            anyhow::anyhow!(
+                "unknown work root {name:?} (known: {known}). Use //name/path or @name/path"
+            )
+        })?;
+        return resolve_under_root(&root.path, rel);
+    }
+
+    let expanded = expand_tilde(input);
+    let p = Path::new(&expanded);
+
+    // Absolute: must land under some root.
+    if p.is_absolute() {
+        let resolved = canonicalize_existing_prefix(p);
+        for root in &roots {
+            let root_c = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
+            if resolved.starts_with(&root_c) {
+                return Ok(resolved);
+            }
+        }
+        bail!(
+            "path {} is outside the work context roots [{}] (set PIRS_ALLOW_OUTSIDE_CWD=1 to permit)",
+            input,
+            roots
+                .iter()
+                .map(|r| r.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    // Relative: try each root. Prefer a path that already exists; else first root
+    // (for writes of new files under primary).
+    let mut first_ok: Option<PathBuf> = None;
+    let mut last_err: Option<anyhow::Error> = None;
+    for root in &roots {
+        match resolve_under_root(root, &expanded) {
+            Ok(path) => {
+                if path.exists() || path.parent().map(|p| p.exists()).unwrap_or(false) {
+                    // Prefer existing file or existing parent (new file in known dir).
+                    if path.exists() {
+                        return Ok(path);
+                    }
+                    if first_ok.is_none() {
+                        first_ok = Some(path);
+                    }
+                } else if first_ok.is_none() {
+                    first_ok = Some(path);
+                }
+            }
+            Err(e) => last_err = Some(e),
+        }
+    }
+    if let Some(p) = first_ok {
+        return Ok(p);
+    }
+    Err(last_err.unwrap_or_else(|| {
+        anyhow::anyhow!(
+            "path {} not found under any work root",
+            input
+        )
+    }))
+}
+
+fn resolve_under_root(root: &Path, rel: &str) -> anyhow::Result<PathBuf> {
+    let lexical = resolve(root, rel);
+    let root_c = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     let resolved = canonicalize_existing_prefix(&lexical);
-    if resolved.starts_with(&root) {
-        // Return the *canonicalized* path (or longest-existing-prefix form),
-        // not the lexical one — otherwise a symlink swap between check and
-        // open, or an unresolved `notes -> /etc/passwd` style link that only
-        // materializes later, can bypass the containment check.
+    if resolved.starts_with(&root_c) {
         Ok(resolved)
     } else {
         bail!(
             "path {} escapes the allowed root {} (set PIRS_ALLOW_OUTSIDE_CWD=1 to permit)",
-            input,
-            root.display()
+            rel,
+            root_c.display()
         );
     }
 }
@@ -94,6 +172,7 @@ fn expand_tilde(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::work_context::{install_work_context, WorkContext};
 
     #[test]
     fn relative_resolves_against_cwd() {
@@ -116,6 +195,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir(root.join("src")).unwrap();
+        install_work_context(WorkContext::single(root.to_path_buf()));
         assert!(resolve_contained(root, "src/main.rs").is_ok());
         assert!(resolve_contained(root, "./a/b/c.txt").is_ok());
     }
@@ -126,6 +206,7 @@ mod tests {
         let root = dir.path();
         let f = root.join("file.txt");
         std::fs::write(&f, b"hi").unwrap();
+        install_work_context(WorkContext::single(root.to_path_buf()));
         let out = resolve_contained(root, "file.txt").unwrap();
         let expect = std::fs::canonicalize(&f).unwrap();
         assert_eq!(out, expect, "must return canonical path, not lexical");
@@ -134,6 +215,7 @@ mod tests {
     #[test]
     fn contained_rejects_absolute_escape() {
         let dir = tempfile::tempdir().unwrap();
+        install_work_context(WorkContext::single(dir.path().to_path_buf()));
         assert!(resolve_contained(dir.path(), "/etc/passwd").is_err());
     }
 
@@ -143,6 +225,7 @@ mod tests {
         let root = dir.path().join("root");
         std::fs::create_dir(&root).unwrap();
         std::fs::write(dir.path().join("secret"), b"x").unwrap();
+        install_work_context(WorkContext::single(root.clone()));
         assert!(resolve_contained(&root, "../secret").is_err());
     }
 
@@ -154,7 +237,37 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         std::fs::write(dir.path().join("outside.txt"), b"secret").unwrap();
         std::os::unix::fs::symlink(dir.path().join("outside.txt"), root.join("link")).unwrap();
-        // The symlink target is outside the root -> rejected.
+        install_work_context(WorkContext::single(root.clone()));
         assert!(resolve_contained(&root, "link").is_err());
+    }
+
+    #[test]
+    fn multi_root_named_path() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        std::fs::write(b.path().join("only-b.txt"), b"hi").unwrap();
+        let ctx = WorkContext::from_paths(
+            a.path().to_path_buf(),
+            [b.path().to_path_buf()],
+        )
+        .unwrap();
+        let b_name = ctx.roots[1].name.clone();
+        install_work_context(ctx);
+        let p = resolve_contained(a.path(), &format!("//{b_name}/only-b.txt")).unwrap();
+        assert!(p.ends_with("only-b.txt"));
+        assert!(p.starts_with(std::fs::canonicalize(b.path()).unwrap()));
+    }
+
+    #[test]
+    fn multi_root_relative_finds_secondary() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        std::fs::write(b.path().join("secret-in-b.txt"), b"x").unwrap();
+        let ctx =
+            WorkContext::from_paths(a.path().to_path_buf(), [b.path().to_path_buf()]).unwrap();
+        install_work_context(ctx);
+        // File only exists in secondary root — relative lookup should find it.
+        let p = resolve_contained(a.path(), "secret-in-b.txt").unwrap();
+        assert!(p.ends_with("secret-in-b.txt"));
     }
 }

@@ -30,6 +30,11 @@ export OPENAI_API_KEY=...            # or --api-key; OPENAI_BASE_URL for compati
 ./target/release/pirs                          # interactive REPL
 ./target/release/pirs --mode tui               # polished agent console (recommended)
 ./target/release/pirs "fix the failing test"   # one-shot
+
+# multi-repo work context (one agent, several roots)
+./target/release/pirs --cwd ~/code/frontend --also ~/code/backend --mode tui
+# paths: //backend/src/…  or relative (tries each root)
+# see docs/WORK-CONTEXT.md
 ```
 
 ### First-time TUI (≈ 60s)

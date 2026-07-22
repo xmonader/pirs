@@ -44,6 +44,10 @@ pub(crate) const SLASH_CMDS: &[SlashCmd] = &[
         desc: "expand/collapse model thinking",
     },
     SlashCmd {
+        name: "/context",
+        desc: "show multi-root work context",
+    },
+    SlashCmd {
         name: "/plan-model",
         desc: "planner fuzzy picker or set",
     },

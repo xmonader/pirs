@@ -131,6 +131,17 @@ struct Cli {
     #[arg(long, env = "PIRS_CWD", value_name = "DIR")]
     cwd: Option<PathBuf>,
 
+    /// Extra work-context roots (multi-repo). Repeatable. Paths resolve relative
+    /// to the process cwd before `--cwd` chdir. Use `//name/path` in tools to
+    /// pin a root by directory basename.
+    #[arg(long = "also", value_name = "DIR", action = clap::ArgAction::Append)]
+    also: Vec<PathBuf>,
+
+    /// Named multi-root context from `~/.pirs/contexts.toml` (`[[context]]`).
+    /// Combined with `--cwd` / `--also` if both are set (named context first).
+    #[arg(long = "context", value_name = "NAME", env = "PIRS_CONTEXT")]
+    context: Option<String>,
+
     /// Run this session inside a git worktree for the named branch (create or reuse
     /// under `.pirs/worktrees/<name>`). Session cwd becomes that worktree.
     #[arg(long, env = "PIRS_WORKTREE")]
@@ -466,6 +477,18 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let mut cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    // Capture --also paths before chdir (they may be relative to launch dir).
+    let also_dirs: Vec<PathBuf> = cli
+        .also
+        .iter()
+        .map(|d| {
+            if d.is_absolute() {
+                d.clone()
+            } else {
+                cwd.join(d)
+            }
+        })
+        .collect();
     // Optional project directory (before config/tools resolve).
     if let Some(ref dir) = cli.cwd.clone() {
         let abs = if dir.is_absolute() {
@@ -503,6 +526,55 @@ async fn main() -> anyhow::Result<()> {
             Err(e) => {
                 anyhow::bail!("--worktree {wt:?}: {e}");
             }
+        }
+    }
+
+    // Multi-root work context: primary = cwd, plus --also / --context roots.
+    {
+        let mut ctx = if let Some(ref name) = cli.context {
+            pirs_tools::load_named_context(name)
+                .with_context(|| format!("--context {name}"))?
+        } else {
+            pirs_tools::WorkContext::single(cwd.clone())
+        };
+        if !also_dirs.is_empty() {
+            // Merge --also into context (primary stays first from context or cwd).
+            let primary = ctx.primary.clone();
+            let mut extra: Vec<PathBuf> = ctx
+                .roots
+                .iter()
+                .skip(1)
+                .map(|r| r.path.clone())
+                .collect();
+            extra.extend(also_dirs);
+            ctx = pirs_tools::WorkContext::from_paths(primary, extra)?;
+        } else if cli.context.is_some() {
+            // Named context may point primary elsewhere — chdir to it.
+            if ctx.primary != cwd {
+                if let Err(e) = std::env::set_current_dir(&ctx.primary) {
+                    eprintln!("[context: set_current_dir {}: {e}]", ctx.primary.display());
+                } else {
+                    cwd = ctx.primary.clone();
+                }
+            }
+        }
+        // Ensure primary matches process cwd after all chdirs.
+        if ctx.primary != cwd {
+            ctx.primary = cwd.clone();
+            if let Some(r) = ctx.roots.first_mut() {
+                r.path = cwd.clone();
+                if r.name.is_empty() {
+                    r.name = cwd
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("root")
+                        .into();
+                }
+            }
+        }
+        pirs_tools::install_work_context(ctx.clone());
+        if ctx.roots.len() > 1 {
+            eprintln!("[{}]", ctx.summary_line());
         }
     }
     let (project_cfg, user_cfg) = config_file::load_layers(&cwd);

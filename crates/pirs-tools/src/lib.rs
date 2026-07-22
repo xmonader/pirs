@@ -39,6 +39,7 @@ pub fn scratch_dir() -> &'static Path {
 pub mod ask_user;
 pub mod audit_tool;
 pub mod bash;
+pub mod work_context;
 pub mod browser;
 #[cfg(feature = "cdp")]
 pub mod browser_cdp;
@@ -119,6 +120,10 @@ pub use worktree::{
     worktree_path_for, WorktreeSession,
 };
 pub use write::WriteTool;
+pub use work_context::{
+    current_work_context, install_work_context, load_named_context, work_context_summary,
+    WorkContext, WorkRoot,
+};
 
 /// Session-aware tools (ask_user, todo) plus coding defaults.
 ///

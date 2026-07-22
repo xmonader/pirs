@@ -24,6 +24,7 @@ base64 = "0.22"
 similar = "2"
 globset = "0.4"
 tempfile = "3"
+toml = { workspace = true }
 reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 futures = { workspace = true }
 # Pure-Rust Chrome DevTools Protocol client (no Node/Playwright runtime).
