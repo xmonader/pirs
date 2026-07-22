@@ -18,8 +18,8 @@ use crossterm::event::{
 use crossterm::ExecutableCommand;
 use pirs_agent::{Agent, AgentEvent, AgentTool};
 use pirs_ai::Message;
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Terminal;
@@ -27,148 +27,15 @@ use ratatui::Terminal;
 use crate::approval::ApprovalMode;
 use crate::session_stats::{self, SessionClock};
 
-// ── Theme (semantic roles; keep slate/cyan/violet DNA) ──────────────────────
+mod journey;
+mod slash;
+mod theme;
+mod tools;
 
-struct Theme {
-    brand: Style,
-    header_bg: Style,
-    user_label: Style,
-    user_text: Style,
-    assistant_label: Style,
-    assistant_text: Style,
-    thinking: Style,
-    tool_name: Style,
-    tool_args: Style,
-    tool_ok: Style,
-    tool_err: Style,
-    path: Style,
-    command: Style,
-    success: Style,
-    warning: Style,
-    system: Style,
-    error: Style,
-    dim: Style,
-    accent: Style,
-    border: Style,
-    border_focus: Style,
-    input: Style,
-    input_border: Style,
-    approval: Style,
-    plan: Style,
-    yolo: Style,
-    status: Style,
-    code: Style,
-    code_block: Style,
-    bold: Style,
-    heading: Style,
-    placeholder: Style,
-}
-
-impl Theme {
-    fn default_dark() -> Self {
-        if std::env::var("PIRS_TUI_THEME")
-            .map(|v| v.eq_ignore_ascii_case("mono"))
-            .unwrap_or(false)
-        {
-            return Self::mono();
-        }
-        Self {
-            brand: Style::default()
-                .fg(Color::Rgb(125, 211, 252))
-                .add_modifier(Modifier::BOLD),
-            header_bg: Style::default().fg(Color::Rgb(148, 163, 184)),
-            user_label: Style::default()
-                .fg(Color::Rgb(52, 211, 153))
-                .add_modifier(Modifier::BOLD),
-            user_text: Style::default().fg(Color::Rgb(209, 250, 229)),
-            assistant_label: Style::default()
-                .fg(Color::Rgb(167, 139, 250))
-                .add_modifier(Modifier::BOLD),
-            assistant_text: Style::default().fg(Color::Rgb(226, 232, 240)),
-            thinking: Style::default()
-                .fg(Color::Rgb(100, 116, 139))
-                .add_modifier(Modifier::ITALIC),
-            tool_name: Style::default()
-                .fg(Color::Rgb(251, 191, 36))
-                .add_modifier(Modifier::BOLD),
-            tool_args: Style::default().fg(Color::Rgb(148, 163, 184)),
-            tool_ok: Style::default().fg(Color::Rgb(100, 116, 139)),
-            tool_err: Style::default().fg(Color::Rgb(248, 113, 113)),
-            path: Style::default().fg(Color::Rgb(251, 146, 60)),
-            command: Style::default().fg(Color::Rgb(250, 204, 21)),
-            success: Style::default().fg(Color::Rgb(74, 222, 128)),
-            warning: Style::default().fg(Color::Rgb(251, 191, 36)),
-            system: Style::default().fg(Color::Rgb(100, 116, 139)),
-            error: Style::default()
-                .fg(Color::Rgb(248, 113, 113))
-                .add_modifier(Modifier::BOLD),
-            dim: Style::default().fg(Color::Rgb(71, 85, 105)),
-            accent: Style::default().fg(Color::Rgb(56, 189, 248)),
-            border: Style::default().fg(Color::Rgb(51, 65, 85)),
-            border_focus: Style::default().fg(Color::Rgb(56, 189, 248)),
-            input: Style::default().fg(Color::Rgb(241, 245, 249)),
-            input_border: Style::default().fg(Color::Rgb(56, 189, 248)),
-            approval: Style::default()
-                .fg(Color::Rgb(251, 113, 133))
-                .add_modifier(Modifier::BOLD),
-            plan: Style::default().fg(Color::Rgb(74, 222, 128)),
-            yolo: Style::default()
-                .fg(Color::Rgb(248, 113, 113))
-                .add_modifier(Modifier::BOLD),
-            status: Style::default().fg(Color::Rgb(148, 163, 184)),
-            code: Style::default().fg(Color::Rgb(125, 211, 252)),
-            code_block: Style::default().fg(Color::Rgb(186, 230, 253)),
-            bold: Style::default()
-                .fg(Color::Rgb(248, 250, 252))
-                .add_modifier(Modifier::BOLD),
-            heading: Style::default()
-                .fg(Color::Rgb(165, 243, 252))
-                .add_modifier(Modifier::BOLD),
-            placeholder: Style::default().fg(Color::Rgb(71, 85, 105)),
-        }
-    }
-
-    fn mono() -> Self {
-        let base = Style::default();
-        let bold = Style::default().add_modifier(Modifier::BOLD);
-        let dim = Style::default().add_modifier(Modifier::DIM);
-        let italic = Style::default().add_modifier(Modifier::ITALIC);
-        Self {
-            brand: bold,
-            header_bg: dim,
-            user_label: bold,
-            user_text: base,
-            assistant_label: bold,
-            assistant_text: base,
-            thinking: italic,
-            tool_name: bold,
-            tool_args: dim,
-            tool_ok: dim,
-            tool_err: bold,
-            path: base,
-            command: base,
-            success: base,
-            warning: bold,
-            system: dim,
-            error: bold,
-            dim,
-            accent: bold,
-            border: dim,
-            border_focus: bold,
-            input: base,
-            input_border: bold,
-            approval: bold,
-            plan: base,
-            yolo: bold,
-            status: dim,
-            code: base,
-            code_block: base,
-            bold,
-            heading: bold,
-            placeholder: dim,
-        }
-    }
-}
+use journey::*;
+use slash::*;
+use theme::*;
+use tools::*;
 
 // ── Structured chat ─────────────────────────────────────────────────────────
 
@@ -182,6 +49,7 @@ enum ChatItem {
         strategy: Option<String>,
         approval: String,
         cwd: String,
+        first_run: bool,
     },
     User(String),
     Assistant {
@@ -198,13 +66,15 @@ enum ChatItem {
         done: bool,
         expanded: bool,
     },
+    /// Collapsed run of quiet tools (e.g. "Read 3 files") — grok verb-group pattern.
+    ToolGroup {
+        name: String,
+        /// (summary/operand, is_error)
+        members: Vec<(String, bool)>,
+        expanded: bool,
+    },
     Notice(String),
 }
-
-/// Max preview lines kept in memory for a tool body.
-const TOOL_PREVIEW_CAP: usize = 200;
-/// Lines shown when a tool body is expanded (mutations / errors).
-const TOOL_BODY_SHOW: usize = 12;
 
 impl ChatItem {
     fn render(&self, theme: &Theme, width: usize, thinking_expanded: bool) -> Vec<Line<'static>> {
@@ -219,7 +89,16 @@ impl ChatItem {
                 strategy,
                 approval,
                 cwd,
-            } => render_welcome(theme, model, plan_model.as_deref(), strategy.as_deref(), approval, cwd),
+                first_run,
+            } => render_welcome(
+                theme,
+                model,
+                plan_model.as_deref(),
+                strategy.as_deref(),
+                approval,
+                cwd,
+                *first_run,
+            ),
             ChatItem::User(text) => {
                 let mut out = vec![Line::from(vec![
                     Span::styled("│ ", theme.user_label),
@@ -266,200 +145,16 @@ impl ChatItem {
                 done,
                 expanded,
             } => render_tool_call(theme, name, summary, preview, *is_error, *done, *expanded),
+            ChatItem::ToolGroup {
+                name,
+                members,
+                expanded,
+            } => render_tool_group(theme, name, members, *expanded),
             ChatItem::Notice(text) => vec![Line::from(Span::styled(
                 format!("  · {text}"),
                 theme.system,
             ))],
         }
-    }
-}
-
-fn render_welcome(
-    theme: &Theme,
-    model: &str,
-    plan_model: Option<&str>,
-    strategy: Option<&str>,
-    approval: &str,
-    cwd: &str,
-) -> Vec<Line<'static>> {
-    let mut meta = vec![
-        Span::styled(model.to_string(), theme.accent),
-        Span::styled("  ·  ", theme.dim),
-        Span::styled(format!("● {approval}"), composer_mode_style(theme, approval, false, false)),
-        Span::styled("  ·  ", theme.dim),
-        Span::styled(format!("~/{cwd}"), theme.header_bg),
-    ];
-    if let Some(p) = plan_model {
-        meta.push(Span::styled("  ·  plan:", theme.dim));
-        meta.push(Span::styled(p.to_string(), theme.plan));
-    }
-    if let Some(s) = strategy {
-        meta.push(Span::styled("  ·  ", theme.dim));
-        meta.push(Span::styled(s.to_string(), theme.accent));
-    }
-    vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  pirs", theme.brand),
-            Span::styled("  ·  agent console", theme.dim),
-        ]),
-        Line::from({
-            let mut spans = vec![Span::styled("  ", theme.dim)];
-            spans.extend(meta);
-            spans
-        }),
-        Line::from(Span::styled(
-            "  tip: /strategy plan-exec  ·  !cargo test  ·  ? help  ·  /plan then /act",
-            theme.placeholder,
-        )),
-        Line::from(""),
-    ]
-}
-
-/// Status glyph column (fixed width) — qwen-style state machine.
-fn tool_status_glyph(done: bool, is_error: bool, tick: u64) -> (&'static str, Style) {
-    // tick unused for static done glyphs; live spinner uses draw path.
-    let _ = tick;
-    if !done {
-        ("○", Style::default().fg(Color::Rgb(56, 189, 248)))
-    } else if is_error {
-        ("✗", Style::default().fg(Color::Rgb(248, 113, 113)))
-    } else {
-        ("✓", Style::default().fg(Color::Rgb(74, 222, 128)))
-    }
-}
-
-fn tool_verb(name: &str, done: bool) -> &'static str {
-    match (name, done) {
-        ("bash", false) => "Running",
-        ("bash", true) => "Ran",
-        ("read", _) => "Read",
-        ("write", false) => "Writing",
-        ("write", true) => "Wrote",
-        ("edit" | "edit_block", false) => "Editing",
-        ("edit" | "edit_block", true) => "Edited",
-        ("grep" | "find", _) => "Searched",
-        ("ls", _) => "Listed",
-        ("run_tests", false) => "Testing",
-        ("run_tests", true) => "Tested",
-        ("delegate" | "run_subagent", false) => "Delegating",
-        ("delegate" | "run_subagent", true) => "Delegated",
-        ("web" | "web_fetch" | "web_search", _) => "Fetched",
-        ("project", false) => "Project",
-        ("project", true) => "Project",
-        (_, false) => "Calling",
-        (_, true) => "Called",
-    }
-}
-
-/// Quiet tools collapse to a single header line on success.
-fn tool_is_quiet(name: &str) -> bool {
-    matches!(
-        name,
-        "read" | "grep" | "find" | "ls" | "recall" | "todo" | "audit"
-    )
-}
-
-fn tool_default_expanded(name: &str, is_error: bool) -> bool {
-    is_error || !tool_is_quiet(name)
-}
-
-fn tool_operand_style<'a>(theme: &'a Theme, name: &str) -> Style {
-    match name {
-        "bash" | "run_tests" | "project" => theme.command,
-        "read" | "write" | "edit" | "edit_block" | "ls" | "grep" | "find" => theme.path,
-        _ => theme.tool_args,
-    }
-}
-
-fn render_tool_call(
-    theme: &Theme,
-    name: &str,
-    summary: &str,
-    preview: &str,
-    is_error: bool,
-    done: bool,
-    expanded: bool,
-) -> Vec<Line<'static>> {
-    let (glyph, gstyle) = tool_status_glyph(done, is_error, 0);
-    let verb = tool_verb(name, done);
-    let mut spans = vec![
-        Span::styled(format!("  {glyph} "), gstyle),
-        Span::styled(format!("{verb} "), theme.tool_name),
-        Span::styled(name.to_string(), theme.tool_name),
-    ];
-    if !summary.is_empty() {
-        spans.push(Span::styled("  ", theme.dim));
-        spans.push(Span::styled(
-            truncate_chars(summary, 90),
-            tool_operand_style(theme, name),
-        ));
-    }
-    let mut out = vec![Line::from(spans)];
-
-    let show_body = expanded && !preview.is_empty();
-    if !show_body {
-        if done && !preview.is_empty() && tool_is_quiet(name) && !is_error {
-            // collapsed quiet tool — header only
-            return out;
-        }
-        if !done {
-            return out;
-        }
-        if preview.is_empty() {
-            return out;
-        }
-        // Not expanded but has preview (shouldn't happen often): show overflow hint.
-        let n = preview.lines().count();
-        if n > 0 && !expanded {
-            out.push(Line::from(Span::styled(
-                format!("    ▶ +{n} lines  (tab expand)"),
-                theme.dim,
-            )));
-            return out;
-        }
-    }
-
-    if show_body {
-        let style = if is_error {
-            theme.tool_err
-        } else {
-            theme.tool_ok
-        };
-        let lines: Vec<&str> = preview.lines().collect();
-        let total = lines.len();
-        let show = lines.iter().take(TOOL_BODY_SHOW);
-        let count = total.min(TOOL_BODY_SHOW);
-        for (i, l) in show.enumerate() {
-            let border = if i + 1 == count && total <= TOOL_BODY_SHOW {
-                "⎣"
-            } else {
-                "⎢"
-            };
-            out.push(Line::from(Span::styled(
-                format!("  {border} {l}"),
-                style,
-            )));
-        }
-        if total > TOOL_BODY_SHOW {
-            out.push(Line::from(Span::styled(
-                format!("  ⎣ ▶ +{} lines", total - TOOL_BODY_SHOW),
-                theme.dim,
-            )));
-        }
-    }
-    out
-}
-
-fn truncate_chars(s: &str, max: usize) -> String {
-    let s = s.replace('\n', " ");
-    if s.chars().count() > max {
-        format!(
-            "{}…",
-            s.chars().take(max.saturating_sub(1)).collect::<String>()
-        )
-    } else {
-        s
     }
 }
 
@@ -488,42 +183,6 @@ fn render_thinking(thinking: &str, theme: &Theme, expanded: bool) -> Vec<Line<'s
         )));
     }
     out
-}
-
-/// Composer border color by approval mode + session state (qwen/vibe pattern).
-fn composer_mode_style(theme: &Theme, approval_mode: &str, running: bool, pending_approval: bool) -> Style {
-    if pending_approval {
-        return theme.approval;
-    }
-    if running {
-        return theme.warning;
-    }
-    let m = approval_mode.to_ascii_lowercase();
-    if m.contains("yolo") || m == "auto" || m.contains("auto-approve") {
-        return theme.yolo;
-    }
-    if m.contains("plan") {
-        return theme.plan;
-    }
-    if m.contains("ask") {
-        return theme.warning;
-    }
-    theme.input_border
-}
-
-fn format_elapsed(secs: u64) -> String {
-    if secs < 60 {
-        format!("{secs}s")
-    } else {
-        format!("{}m{:02}s", secs / 60, secs % 60)
-    }
-}
-
-fn approval_grace_elapsed(opened: Option<std::time::Instant>) -> bool {
-    match opened {
-        None => true,
-        Some(t) => t.elapsed() >= std::time::Duration::from_millis(400),
-    }
 }
 
 /// Lightweight markdown → ratatui lines. Handles headings, fenced code,
@@ -790,6 +449,10 @@ struct App {
     last_activity: String,
     turn_started_at: Option<std::time::Instant>,
     thinking_expanded: bool,
+    /// Selected row in the slash completion popup (0-based into filtered list).
+    slash_sel: usize,
+    /// Session started as first-run onboarding (for /tour re-show).
+    first_run_session: bool,
     should_quit: bool,
     /// One entry per `items[i]`: wrapped physical rows for that item, when
     /// known — virtualized so a long conversation with large tool outputs
@@ -871,6 +534,7 @@ impl App {
 
     fn finish_tool(&mut self, name: &str, preview: String, is_error: bool) {
         let expanded = tool_default_expanded(name, is_error);
+        let mut finished = false;
         for i in (0..self.items.len()).rev() {
             if let ChatItem::ToolCall {
                 name: n,
@@ -883,45 +547,174 @@ impl App {
             {
                 if !*done && (n == name || name.is_empty()) {
                     *done = true;
-                    *p = preview;
+                    *p = preview.clone();
                     *err = is_error;
                     *exp = expanded;
                     self.invalidate_item(i);
-                    return;
+                    finished = true;
+                    break;
                 }
             }
         }
-        // No open card (e.g. shell) — push a finished one.
-        self.push(ChatItem::ToolCall {
-            name: if name.is_empty() {
-                "bash".into()
-            } else {
-                name.into()
+        if !finished {
+            // No open card (e.g. shell) — push a finished one.
+            self.push(ChatItem::ToolCall {
+                name: if name.is_empty() {
+                    "bash".into()
+                } else {
+                    name.into()
+                },
+                summary: String::new(),
+                preview,
+                is_error,
+                done: true,
+                expanded,
+            });
+        }
+        self.collapse_trailing_quiet_tools();
+    }
+
+    /// Fold consecutive quiet success tools into a ToolGroup (Read 3 files).
+    /// Also merges a new quiet tool into an immediately preceding same-name group.
+    fn collapse_trailing_quiet_tools(&mut self) {
+        let end = self.items.len();
+        if end == 0 {
+            return;
+        }
+        // Don't fold while a tool is still running at the end.
+        if let Some(ChatItem::ToolCall { done: false, .. }) = self.items.last() {
+            return;
+        }
+
+        // Collect trailing finished quiet success ToolCalls of one name.
+        let mut start = end;
+        let mut group_name: Option<String> = None;
+        while start > 0 {
+            match &self.items[start - 1] {
+                ChatItem::ToolCall {
+                    name,
+                    done: true,
+                    is_error: false,
+                    ..
+                } if tool_is_quiet(name) => {
+                    if let Some(ref g) = group_name {
+                        if g != name {
+                            break;
+                        }
+                    } else {
+                        group_name = Some(name.clone());
+                    }
+                    start -= 1;
+                }
+                _ => break,
+            }
+        }
+        let call_count = end - start;
+        if call_count == 0 {
+            return;
+        }
+        let name = group_name.unwrap();
+
+        // If the item before the run is already a same-name group, merge into it.
+        if start > 0 {
+            let can_merge = matches!(
+                &self.items[start - 1],
+                ChatItem::ToolGroup { name: gname, .. } if gname == &name
+            );
+            if can_merge {
+                let mut extra = Vec::new();
+                for item in &self.items[start..end] {
+                    if let ChatItem::ToolCall {
+                        summary, is_error, ..
+                    } = item
+                    {
+                        extra.push((summary.clone(), *is_error));
+                    }
+                }
+                if let ChatItem::ToolGroup { members, .. } = &mut self.items[start - 1] {
+                    members.extend(extra);
+                }
+                self.items.drain(start..end);
+                self.item_caches.drain(start..end);
+                self.invalidate_item(start - 1);
+                return;
+            }
+        }
+
+        if call_count < 2 {
+            return;
+        }
+        let mut members = Vec::with_capacity(call_count);
+        for item in &self.items[start..end] {
+            if let ChatItem::ToolCall {
+                summary, is_error, ..
+            } = item
+            {
+                members.push((summary.clone(), *is_error));
+            }
+        }
+        self.items.drain(start..end);
+        self.item_caches.drain(start..end);
+        self.items.insert(
+            start,
+            ChatItem::ToolGroup {
+                name,
+                members,
+                expanded: false,
             },
-            summary: String::new(),
-            preview,
-            is_error,
-            done: true,
-            expanded,
-        });
+        );
+        self.item_caches.insert(
+            start,
+            ItemCache {
+                rows: None,
+                row_count: 1,
+            },
+        );
+        self.dirty = true;
     }
 
     fn toggle_last_tool_expand(&mut self) {
         for i in (0..self.items.len()).rev() {
-            if let ChatItem::ToolCall {
-                expanded,
-                preview,
-                done,
-                ..
-            } = &mut self.items[i]
-            {
-                if *done && !preview.is_empty() {
+            match &mut self.items[i] {
+                ChatItem::ToolGroup { expanded, .. } => {
                     *expanded = !*expanded;
                     self.invalidate_item(i);
                     return;
                 }
+                ChatItem::ToolCall {
+                    expanded,
+                    preview,
+                    done,
+                    ..
+                } if *done && !preview.is_empty() => {
+                    *expanded = !*expanded;
+                    self.invalidate_item(i);
+                    return;
+                }
+                _ => {}
             }
         }
+    }
+
+    fn apply_starter(&mut self, idx: usize) {
+        if let Some(p) = STARTER_PROMPTS.get(idx) {
+            self.input = (*p).to_string();
+            self.cursor = self.input.len();
+            self.history_idx = None;
+            self.dirty = true;
+            self.set_status(format!("starter {} — press Enter to send", idx + 1));
+        }
+    }
+
+    fn push_tour_welcome(&mut self) {
+        self.push(ChatItem::Welcome {
+            model: self.model.clone(),
+            plan_model: self.plan_model.clone(),
+            strategy: self.strategy.clone(),
+            approval: self.approval_mode.clone(),
+            cwd: self.cwd_label.clone(),
+            first_run: true,
+        });
     }
 
     fn mark_running(&mut self, activity: impl Into<String>) {
@@ -1174,6 +967,8 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         last_activity: String::new(),
         turn_started_at: None,
         thinking_expanded: false,
+        slash_sel: 0,
+        first_run_session: is_first_tui_run(),
         should_quit: false,
         item_caches: Vec::new(),
         cache_width: 0,
@@ -1183,13 +978,18 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         clock: SessionClock::new(),
     };
 
+    let first = app.first_run_session;
     app.push(ChatItem::Welcome {
         model: app.model.clone(),
         plan_model: app.plan_model.clone(),
         strategy: app.strategy.clone(),
         approval: app.approval_mode.clone(),
         cwd: app.cwd_label.clone(),
+        first_run: first,
     });
+    if first {
+        mark_tui_onboarded();
+    }
 
     let (prompt_tx, prompt_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let (done_tx, mut done_rx) = tokio::sync::mpsc::unbounded_channel::<bool>();
@@ -1563,8 +1363,20 @@ fn handle_key(
         (KeyCode::Tab, KeyModifiers::NONE) if app.input.is_empty() => {
             app.toggle_last_tool_expand();
         }
+        (KeyCode::Tab, KeyModifiers::NONE) if slash_completing(&app.input) => {
+            apply_slash_completion(app);
+        }
         (KeyCode::Char('?'), KeyModifiers::NONE) if app.input.is_empty() => {
             app.show_help = true;
+        }
+        (KeyCode::Char('1'), KeyModifiers::NONE) if app.input.is_empty() => {
+            app.apply_starter(0);
+        }
+        (KeyCode::Char('2'), KeyModifiers::NONE) if app.input.is_empty() => {
+            app.apply_starter(1);
+        }
+        (KeyCode::Char('3'), KeyModifiers::NONE) if app.input.is_empty() => {
+            app.apply_starter(2);
         }
         (KeyCode::Char('g'), KeyModifiers::NONE) if app.input.is_empty() => {
             // Scroll to top of chat (gg-style single g).
@@ -1583,15 +1395,58 @@ fn handle_key(
             insert_at_cursor(app, '\n');
         }
         (KeyCode::Enter, _) => {
+            // If slash popup is open and prefix is incomplete, complete first.
+            if slash_completing(&app.input) {
+                let matches = slash_filter(app.input.trim());
+                if matches.len() == 1
+                    || (matches.len() > 1
+                        && matches
+                            .get(app.slash_sel)
+                            .map(|c| c.name != app.input.trim())
+                            .unwrap_or(false))
+                {
+                    // Complete when unique, or when selection differs from typed prefix.
+                    if matches.len() == 1
+                        || matches
+                            .get(app.slash_sel)
+                            .is_some_and(|c| !app.input.trim().eq_ignore_ascii_case(c.name))
+                    {
+                        apply_slash_completion(app);
+                        // Only auto-submit bare commands that take no args.
+                        let cmd = app.input.trim().to_string();
+                        if matches!(
+                            cmd.as_str(),
+                            "/help"
+                                | "/tour"
+                                | "/stats"
+                                | "/usage"
+                                | "/clear"
+                                | "/quit"
+                                | "/doctor"
+                                | "/undo"
+                                | "/compact"
+                                | "/plan"
+                                | "/act"
+                        ) {
+                            submit_input(app, prompt_tx, shell_tx, agent, controls);
+                        }
+                        return false;
+                    }
+                }
+            }
             submit_input(app, prompt_tx, shell_tx, agent, controls);
         }
         (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
             app.input.clear();
             app.cursor = 0;
             app.history_idx = None;
+            app.slash_sel = 0;
         }
         (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
             insert_at_cursor(app, c);
+            if slash_completing(&app.input) {
+                app.slash_sel = 0;
+            }
         }
         (KeyCode::Backspace, _) => {
             delete_before_cursor(app);
@@ -1611,6 +1466,18 @@ fn handle_key(
         (KeyCode::End, _) => {
             app.cursor = app.input.len();
         }
+        (KeyCode::Up, _) if slash_completing(&app.input) => {
+            let n = slash_filter(app.input.trim()).len();
+            if n > 0 {
+                app.slash_sel = app.slash_sel.saturating_add(n - 1) % n;
+            }
+        }
+        (KeyCode::Down, _) if slash_completing(&app.input) => {
+            let n = slash_filter(app.input.trim()).len();
+            if n > 0 {
+                app.slash_sel = (app.slash_sel + 1) % n;
+            }
+        }
         (KeyCode::Up, _) => history_up(app),
         (KeyCode::Down, _) => history_down(app),
         (KeyCode::PageUp, _) => {
@@ -1623,6 +1490,20 @@ fn handle_key(
         _ => {}
     }
     false
+}
+
+fn apply_slash_completion(app: &mut App) {
+    let matches = slash_filter(app.input.trim());
+    if matches.is_empty() {
+        return;
+    }
+    let idx = app.slash_sel.min(matches.len() - 1);
+    let name = matches[idx].name;
+    app.input = format!("{name} ");
+    app.cursor = app.input.len();
+    app.slash_sel = 0;
+    app.history_idx = None;
+    app.dirty = true;
 }
 
 fn delete_word_before_cursor(app: &mut App) {
@@ -1924,9 +1805,13 @@ fn handle_slash_command(
         "/help" | "/?" => {
             app.show_help = true;
             app.notice(
-                "slash: /model /plan-model /strategy /stats /undo /doctor /audit /profile \
-                 /image /compact /clear /quit  ·  !cmd shell  ·  Esc cancel",
+                "slash: /tour /model /plan-model /strategy /stats /undo /doctor /audit \
+                 /profile /image /compact /plan /act /clear /quit  ·  type / + Tab",
             );
+        }
+        "/tour" | "/start" | "/onboard" => {
+            app.push_tour_welcome();
+            app.notice("tour restored — press 1–3 for starters, or type a goal");
         }
         "/model" => {
             if arg.is_empty() {
@@ -2309,12 +2194,70 @@ fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
     draw_status(frame, chunks[2], app, &theme);
     draw_input(frame, chunks[3], app, &theme);
 
+    if slash_completing(&app.input) && !pending {
+        draw_slash_popup(frame, chunks[3], app, &theme);
+    }
     if pending {
         draw_approval_overlay(frame, area, app, &theme);
     }
     if app.show_help {
         draw_help_overlay(frame, area, &theme);
     }
+}
+
+fn draw_slash_popup(frame: &mut ratatui::Frame, input_area: Rect, app: &App, theme: &Theme) {
+    let matches = slash_filter(app.input.trim());
+    if matches.is_empty() {
+        return;
+    }
+    let show_n = matches.len().min(8) as u16;
+    let h = show_n + 2; // borders
+    let w = input_area.width.min(56).max(28);
+    let y = input_area.y.saturating_sub(h);
+    let rect = Rect {
+        x: input_area.x,
+        y,
+        width: w,
+        height: h.min(input_area.y + input_area.height), // stay on screen
+    };
+    if rect.height < 3 {
+        return;
+    }
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(theme.border_focus)
+        .title(Span::styled(" commands · tab complete · ↑↓ ", theme.dim));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let sel = app.slash_sel.min(matches.len().saturating_sub(1));
+    // Window so selection stays visible.
+    let max_rows = inner.height as usize;
+    let start = if sel >= max_rows {
+        sel + 1 - max_rows
+    } else {
+        0
+    };
+    let mut lines = Vec::new();
+    for (i, cmd) in matches.iter().enumerate().skip(start).take(max_rows) {
+        let selected = i == sel;
+        let style = if selected {
+            theme.brand.add_modifier(Modifier::REVERSED)
+        } else {
+            theme.assistant_text
+        };
+        let desc_style = if selected {
+            theme.brand.add_modifier(Modifier::REVERSED)
+        } else {
+            theme.dim
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!(" {:<14}", cmd.name), style),
+            Span::styled(cmd.desc.to_string(), desc_style),
+        ]));
+    }
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme) {
@@ -2803,7 +2746,7 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
         Line::from(""),
         Line::from(Span::styled("Commands", theme.heading)),
         Line::from(Span::styled(
-            "  /model /plan-model /strategy /stats /usage",
+            "  /tour /model /plan-model /strategy /stats",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
@@ -2817,6 +2760,10 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
         Line::from(Span::styled(
             "  /clear /quit  ·  !cmd  !!cmd (shell)",
             theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  type / then Tab · 1–3 starters when empty",
+            theme.dim,
         )),
         Line::from(""),
         Line::from(Span::styled("  esc / q / ? to close", theme.dim)),
@@ -3429,6 +3376,113 @@ mod tests {
     }
 
     #[test]
+    fn quiet_tools_collapse_into_verb_group() {
+        let mut app = test_app();
+        for path in ["a.rs", "b.rs", "c.rs"] {
+            app.start_tool("read".into(), path.into());
+            app.finish_tool("read", format!("// {path}"), false);
+        }
+        assert_eq!(app.items.len(), 1, "three reads → one group: {:?}", app.items);
+        match &app.items[0] {
+            ChatItem::ToolGroup {
+                name,
+                members,
+                expanded,
+            } => {
+                assert_eq!(name, "read");
+                assert_eq!(members.len(), 3);
+                assert!(!*expanded);
+            }
+            other => panic!("expected ToolGroup, got {other:?}"),
+        }
+        let theme = Theme::default_dark();
+        let lines = app.items[0].render(&theme, 80, false);
+        let flat: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(flat.contains("Read 3 files"), "{flat}");
+    }
+
+    #[test]
+    fn edit_preview_uses_diff_colors() {
+        let theme = Theme::default_dark();
+        let item = ChatItem::ToolCall {
+            name: "edit".into(),
+            summary: "x.rs".into(),
+            preview: " context\n-old\n+new\n".into(),
+            is_error: false,
+            done: true,
+            expanded: true,
+        };
+        let lines = item.render(&theme, 80, false);
+        // Find styled + / - lines
+        let mut saw_plus = false;
+        let mut saw_minus = false;
+        for line in &lines {
+            for span in &line.spans {
+                if span.content.contains("+new") {
+                    saw_plus = true;
+                    assert_eq!(span.style.fg, theme.success.fg);
+                }
+                if span.content.contains("-old") {
+                    saw_minus = true;
+                    assert_eq!(span.style.fg, theme.tool_err.fg);
+                }
+            }
+        }
+        assert!(saw_plus && saw_minus, "diff lines should be present: {lines:?}");
+    }
+
+    #[test]
+    fn slash_filter_matches_prefix() {
+        let m = slash_filter("/mo");
+        assert!(m.iter().any(|c| c.name == "/model"), "{m:?}");
+        assert!(!m.iter().any(|c| c.name == "/quit"));
+        let all = slash_filter("/");
+        assert!(all.len() >= 10);
+    }
+
+    #[test]
+    fn slash_completion_applies_selected() {
+        let mut app = test_app();
+        app.input = "/mo".into();
+        app.cursor = 3;
+        app.slash_sel = 0;
+        apply_slash_completion(&mut app);
+        assert!(app.input.starts_with("/model"), "{}", app.input);
+        assert!(app.input.ends_with(' '));
+    }
+
+    #[test]
+    fn starter_fills_input() {
+        let mut app = test_app();
+        app.apply_starter(0);
+        assert!(app.input.contains("repository"));
+        assert_eq!(app.cursor, app.input.len());
+    }
+
+    #[test]
+    fn welcome_first_run_mentions_starters() {
+        let theme = Theme::default_dark();
+        let item = ChatItem::Welcome {
+            model: "m".into(),
+            plan_model: None,
+            strategy: None,
+            approval: "ask".into(),
+            cwd: "proj".into(),
+            first_run: true,
+        };
+        let lines = item.render(&theme, 80, false);
+        let flat: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(flat.contains("Getting started"), "{flat}");
+        assert!(flat.contains("Explain this repo"), "{flat}");
+    }
+
+    #[test]
     fn wrap_line_to_rows_wraps_long_line() {
         let theme = Theme::default_dark();
         let long = "word ".repeat(40); // ~200 cols with spaces
@@ -3618,6 +3672,8 @@ mod tests {
             last_activity: String::new(),
             turn_started_at: None,
             thinking_expanded: false,
+            slash_sel: 0,
+            first_run_session: false,
             should_quit: false,
             item_caches: Vec::new(),
             cache_width: 0,

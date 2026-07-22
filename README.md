@@ -9,7 +9,7 @@
 
 Power tools (not separate products): `pirs-bench`, `pirs-orchestrator`.
 
-Also: [docs/PRODUCTS.md](docs/PRODUCTS.md) · [docs/pirs-claw.md](docs/pirs-claw.md) · [docs/shrimp-transfer.md](docs/shrimp-transfer.md)
+Also: [docs/PRODUCTS.md](docs/PRODUCTS.md) · [docs/pirs-claw.md](docs/pirs-claw.md) · [docs/TUI-JOURNEY.md](docs/TUI-JOURNEY.md) · [docs/shrimp-transfer.md](docs/shrimp-transfer.md)
 
 A Rust port of the [pi agent harness](https://github.com/earendil-works/pi): an OpenAI-compatible coding agent with a streaming agent loop, built-in coding tools, [rhai](https://rhai.rs)-script extensibility, a headless RPC mode, and a multi-instance orchestrator.
 
@@ -17,7 +17,7 @@ Status: **alpha**. The core is ported and tested (150+ tests); Google provider a
 
 Providers: **OpenAI-compatible** (`--provider openai`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`) and **Anthropic** (`--provider anthropic`, `ANTHROPIC_API_KEY`) — both with streaming, tool calling, retries, and thinking-block support.
 
-UI: `--mode tui` (ratatui: streaming conversation, status line with model/approval/usage, steer-by-typing, inline approvals, PgUp/PgDn scroll) alongside the plain REPL (default), `--mode rpc` (headless JSONL), and `--mode acp` (Agent Client Protocol, for editors that embed agents directly).
+UI: `--mode tui` (ratatui agent console: first-run tour, slash completion, tool groups, mode-colored composer, approvals, steer-by-typing — see [docs/TUI-JOURNEY.md](docs/TUI-JOURNEY.md)) alongside the plain REPL (default), `--mode rpc` (headless JSONL), and `--mode acp` (Agent Client Protocol, for editors that embed agents directly).
 
 Runtime features: auto-compaction with `/compact`, approval modes (`--approval auto|ask|yolo`, `/approval`), background jobs (`bash`/`delegate` with `background: true`, managed via `jobs`/`job_output`/`job_kill`/`job_steer`), goal support (`goal.rhai` pack), multi-model delegation (`delegate` with `model` override), token+cache accounting (`/usage`), flight recorder (`--trace` / `--trace=PATH` → JSONL under `~/.pirs/traces/` with agent events + strategy phase boundaries; same schema as `pirs-bench --trace`).
 
@@ -28,10 +28,22 @@ cargo build --release
 export OPENAI_API_KEY=...            # or --api-key; OPENAI_BASE_URL for compatible endpoints
 
 ./target/release/pirs                          # interactive REPL
+./target/release/pirs --mode tui               # polished agent console (recommended)
 ./target/release/pirs "fix the failing test"   # one-shot
 ```
 
-REPL / TUI slash: `/model`, `/undo`, `/doctor`, `/audit`, `/image <path>`, `/profile`, `/export`, `/compact`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`). Runtime diagnostics: `pirs --doctor`. Action audit: `~/.pirs/audit.jsonl` (disable with `PIRS_AUDIT=0`).
+### First-time TUI (≈ 60s)
+
+Full walkthrough: **[docs/TUI-JOURNEY.md](docs/TUI-JOURNEY.md)**.
+
+```bash
+cd your-repo
+pirs --mode tui          # first launch shows Getting started
+# empty input: press 1 / 2 / 3 for starters, then Enter
+# type / then Tab for commands · ? for keys · /tour to re-show the tour
+```
+
+REPL / TUI slash: `/tour`, `/model`, `/plan`, `/act`, `/undo`, `/doctor`, `/audit`, `/image <path>`, `/profile`, `/compact`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`). Runtime diagnostics: `pirs --doctor`. Action audit: `~/.pirs/audit.jsonl` (disable with `PIRS_AUDIT=0`).
 
 **Strategies (product set):** `monolithic` (one growing loop on `--model`), `plan-exec` (read-only plan → fresh exec), `plan-critic-exec` / alias `plan-exec-critic` (plan → critic → exec). **Strong plan / weak exec:** `--model <cheap> --plan-model <strong> --strategy plan-exec` (or `plan-critic-exec`) — planning (and critique) run on `--plan-model`, the executor keeps `--model`.
 
