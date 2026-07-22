@@ -17,11 +17,15 @@ pub(crate) const SLASH_CMDS: &[SlashCmd] = &[
     },
     SlashCmd {
         name: "/model",
-        desc: "pin backend/id or portable name",
+        desc: "fuzzy picker · or set backend/id",
+    },
+    SlashCmd {
+        name: "/models",
+        desc: "fuzzy search models · refresh catalogs",
     },
     SlashCmd {
         name: "/plan-model",
-        desc: "planner model (pin or portable)",
+        desc: "planner fuzzy picker or set",
     },
     SlashCmd {
         name: "/strategy",

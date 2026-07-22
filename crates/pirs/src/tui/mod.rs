@@ -28,11 +28,13 @@ use crate::approval::ApprovalMode;
 use crate::session_stats::{self, SessionClock};
 
 mod journey;
+mod model_picker;
 mod slash;
 mod theme;
 mod tools;
 
 use journey::*;
+use model_picker::{draw_model_picker, ModelPicker, ModelPickerTarget};
 use slash::*;
 use theme::*;
 use tools::*;
@@ -444,6 +446,8 @@ struct App {
     approval_opened_at: Option<std::time::Instant>,
     cancel: pirs_agent::agent::CancelSlot,
     show_help: bool,
+    /// Fuzzy model picker overlay (`/models`, `/model` empty).
+    model_picker: Option<ModelPicker>,
     status_msg: String,
     /// Human activity label for turn-status ("thinking", "bash", …).
     last_activity: String,
@@ -963,6 +967,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         approval_opened_at: None,
         cancel,
         show_help: false,
+        model_picker: None,
         status_msg: String::new(),
         last_activity: String::new(),
         turn_started_at: None,
@@ -1270,6 +1275,11 @@ fn handle_key(
     agent: &Arc<tokio::sync::Mutex<Agent>>,
     controls: &Arc<Mutex<SessionControls>>,
 ) -> bool {
+    // Fuzzy model picker takes over the keyboard while open.
+    if app.model_picker.is_some() {
+        return handle_model_picker_key(app, key, agent, controls);
+    }
+
     // Single-key approval answers when a gate is waiting.
     if app.pending_approval.lock().unwrap().is_some() {
         let grace_ok = approval_grace_elapsed(app.approval_opened_at);
@@ -1504,6 +1514,116 @@ fn apply_slash_completion(app: &mut App) {
     app.slash_sel = 0;
     app.history_idx = None;
     app.dirty = true;
+}
+
+fn handle_model_picker_key(
+    app: &mut App,
+    key: KeyEvent,
+    agent: &Arc<tokio::sync::Mutex<Agent>>,
+    controls: &Arc<Mutex<SessionControls>>,
+) -> bool {
+    let Some(picker) = app.model_picker.as_mut() else {
+        return false;
+    };
+    match (key.code, key.modifiers) {
+        (KeyCode::Esc, _) => {
+            app.model_picker = None;
+            app.dirty = true;
+        }
+        (KeyCode::Char('d'), KeyModifiers::CONTROL) => return true,
+        (KeyCode::Up, _) | (KeyCode::Char('k'), KeyModifiers::CONTROL) => {
+            if picker.sel > 0 {
+                picker.sel -= 1;
+            }
+            app.dirty = true;
+        }
+        (KeyCode::Down, _) | (KeyCode::Char('j'), KeyModifiers::CONTROL) => {
+            if picker.sel + 1 < picker.hits.len() {
+                picker.sel += 1;
+            }
+            app.dirty = true;
+        }
+        (KeyCode::PageUp, _) => {
+            picker.sel = picker.sel.saturating_sub(8);
+            app.dirty = true;
+        }
+        (KeyCode::PageDown, _) => {
+            picker.sel = (picker.sel + 8).min(picker.hits.len().saturating_sub(1));
+            app.dirty = true;
+        }
+        (KeyCode::Enter, _) => {
+            if let Some(hit) = picker.selected().cloned() {
+                let target = picker.target;
+                app.model_picker = None;
+                apply_model_choice(app, agent, controls, target, &hit.id);
+            }
+        }
+        (KeyCode::Backspace, _) => {
+            picker.query.pop();
+            picker.refilter();
+            app.dirty = true;
+        }
+        (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
+            picker.query.clear();
+            picker.refilter();
+            app.dirty = true;
+        }
+        (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
+            if !c.is_control() {
+                picker.query.push(c);
+                picker.refilter();
+                app.dirty = true;
+            }
+        }
+        _ => {}
+    }
+    false
+}
+
+fn apply_model_choice(
+    app: &mut App,
+    agent: &Arc<tokio::sync::Mutex<Agent>>,
+    controls: &Arc<Mutex<SessionControls>>,
+    target: ModelPickerTarget,
+    id: &str,
+) {
+    match target {
+        ModelPickerTarget::Exec => match agent.try_lock() {
+            Ok(mut a) => {
+                a.model = id.to_string();
+                app.model = id.to_string();
+                let kind = if pirs_ai::ModelSpec::parse(id).is_pin() {
+                    "pin"
+                } else {
+                    "portable"
+                };
+                app.notice(format!("model → {id} ({kind})"));
+            }
+            Err(_) => app.notice("busy — wait for the run, then pick a model again"),
+        },
+        ModelPickerTarget::Plan => {
+            app.plan_model = Some(id.to_string());
+            controls.lock().unwrap().plan_model = Some(id.to_string());
+            let kind = if pirs_ai::ModelSpec::parse(id).is_pin() {
+                "pin"
+            } else {
+                "portable"
+            };
+            app.notice(format!("plan-model → {id} ({kind})"));
+        }
+    }
+}
+
+fn open_model_picker(app: &mut App, target: ModelPickerTarget, query: &str) {
+    app.show_help = false;
+    app.model_picker = Some(ModelPicker::open(target, query));
+    app.dirty = true;
+    let n = app
+        .model_picker
+        .as_ref()
+        .map(|p| p.universe.len())
+        .unwrap_or(0);
+    app.set_status(format!("model picker · {n} candidates · type to fuzzy filter"));
 }
 
 fn delete_word_before_cursor(app: &mut App) {
@@ -1815,22 +1935,11 @@ fn handle_slash_command(
         }
         "/model" => {
             if arg.is_empty() {
-                let aliases = if app.model_aliases.is_empty() {
-                    String::new()
-                } else {
-                    format!("\nportable: {}", app.model_aliases.join(", "))
-                };
-                let spec = pirs_ai::ModelSpec::parse(&app.model);
-                let kind = if spec.is_pin() { "pin" } else { "portable" };
-                app.notice(format!(
-                    "model: {} ({kind}){aliases}\n\
-                     pin: backend/remote  e.g. dashscope/qwen3.5-plus · openrouter/deepseek/…\n\
-                     portable: bare name e.g. qwen-plus (failover across keys)\n\
-                     CLI: pirs backends · pirs models · pirs models refresh",
-                    app.model
-                ));
+                open_model_picker(app, ModelPickerTarget::Exec, "");
+            } else if arg == "?" || arg == "pick" || arg == "search" {
+                open_model_picker(app, ModelPickerTarget::Exec, "");
             } else {
-                // Try_lock: agent worker may hold the lock while a turn runs.
+                // Direct set (pin or portable).
                 match agent.try_lock() {
                     Ok(mut a) => {
                         a.model = arg.to_string();
@@ -1840,7 +1949,7 @@ fn handle_slash_command(
                         } else {
                             "portable"
                         };
-                        app.notice(format!("model → {arg} ({kind})"));
+                        app.notice(format!("model → {arg} ({kind}) · /model for fuzzy picker"));
                     }
                     Err(_) => {
                         app.notice("busy — wait for the current run to finish, then /model");
@@ -1848,12 +1957,53 @@ fn handle_slash_command(
                 }
             }
         }
+        "/models" => {
+            // /models [plan] [query…]  |  /models refresh
+            let mut rest = arg.trim();
+            if rest == "refresh" || rest.starts_with("refresh ") {
+                let which = rest.strip_prefix("refresh").unwrap_or("").trim();
+                app.notice("refreshing model catalogs…");
+                let cwd = app.cwd.clone();
+                let msg = tokio::task::block_in_place(|| {
+                    crate::registry::load_secrets_env();
+                    let reg = crate::registry::load_registry_layers(&cwd);
+                    if which.is_empty() {
+                        let results = pirs_ai::refresh_active(&reg);
+                        if results.is_empty() {
+                            return "no backends with keys — set OPENROUTER_API_KEY / DASHSCOPE_API_KEY in secrets.env".to_string();
+                        }
+                        let mut ok = 0usize;
+                        let mut err = 0usize;
+                        for (_n, r) in &results {
+                            match r {
+                                Ok(_) => ok += 1,
+                                Err(_) => err += 1,
+                            }
+                        }
+                        format!("catalogs: {ok} ok, {err} failed — /model to search")
+                    } else {
+                        match pirs_ai::refresh_backend(&reg, which) {
+                            Ok((c, _)) => format!(
+                                "refreshed {which}: {} models — /model to fuzzy search",
+                                c.models.len()
+                            ),
+                            Err(e) => format!("refresh {which}: {e}"),
+                        }
+                    }
+                });
+                app.notice(msg);
+                return;
+            }
+            let mut target = ModelPickerTarget::Exec;
+            if let Some(r) = rest.strip_prefix("plan") {
+                target = ModelPickerTarget::Plan;
+                rest = r.trim();
+            }
+            open_model_picker(app, target, rest);
+        }
         "/plan-model" => {
-            if arg.is_empty() {
-                app.notice(format!(
-                    "plan-model: {}",
-                    app.plan_model.as_deref().unwrap_or("(none — phases use --model)")
-                ));
+            if arg.is_empty() || arg == "?" || arg == "pick" || arg == "search" {
+                open_model_picker(app, ModelPickerTarget::Plan, "");
             } else if arg == "none" || arg == "off" || arg == "clear" {
                 app.plan_model = None;
                 controls.lock().unwrap().plan_model = None;
@@ -1861,7 +2011,12 @@ fn handle_slash_command(
             } else {
                 app.plan_model = Some(arg.to_string());
                 controls.lock().unwrap().plan_model = Some(arg.to_string());
-                app.notice(format!("plan-model → {arg}"));
+                let kind = if pirs_ai::ModelSpec::parse(arg).is_pin() {
+                    "pin"
+                } else {
+                    "portable"
+                };
+                app.notice(format!("plan-model → {arg} ({kind}) · /plan-model for picker"));
             }
         }
         "/strategy" => {
@@ -2207,7 +2362,7 @@ fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
     draw_status(frame, chunks[2], app, &theme);
     draw_input(frame, chunks[3], app, &theme);
 
-    if slash_completing(&app.input) && !pending {
+    if slash_completing(&app.input) && !pending && app.model_picker.is_none() {
         draw_slash_popup(frame, chunks[3], app, &theme);
     }
     if pending {
@@ -2215,6 +2370,9 @@ fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
     }
     if app.show_help {
         draw_help_overlay(frame, area, &theme);
+    }
+    if let Some(picker) = &app.model_picker {
+        draw_model_picker(frame, area, picker, &theme);
     }
 }
 
@@ -2759,7 +2917,11 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
         Line::from(""),
         Line::from(Span::styled("Commands", theme.heading)),
         Line::from(Span::styled(
-            "  /tour /model /plan-model /strategy /stats",
+            "  /model /models  fuzzy pick · /models refresh",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  /tour /plan-model /strategy /stats",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
@@ -3681,6 +3843,7 @@ mod tests {
             approval_opened_at: None,
             cancel: Arc::new(Mutex::new(tokio_util::sync::CancellationToken::new())),
             show_help: false,
+            model_picker: None,
             status_msg: String::new(),
             last_activity: String::new(),
             turn_started_at: None,

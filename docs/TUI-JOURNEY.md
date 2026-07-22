@@ -101,7 +101,8 @@ Useful slash commands:
 | `/tour` | Show the first-run panel again |
 | `/plan` | Read-only explore (safe) |
 | `/act` | Allow writes + full tools |
-| `/model` | Show or change model |
+| `/model` | **Fuzzy model picker** (or `/model backend/id`) |
+| `/models refresh` | Pull provider catalogs into the picker |
 | `/stats` | Tokens + timing |
 | `/undo` | Rewind last user turn |
 | `/clear` | Clear the screen |

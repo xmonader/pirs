@@ -74,6 +74,16 @@ serve = [
 
 ## TUI
 
-`/model` — show current (pin vs portable)  
-`/model dashscope/qwen3.5-plus` — pin  
-`/model qwen-plus` — portable  
+| Command | Action |
+|---------|--------|
+| `/model` | Open **fuzzy model picker** (type to filter, ↑↓, Enter) |
+| `/models deepseek` | Picker pre-filtered with query |
+| `/models plan` | Fuzzy picker for **plan-model** |
+| `/models refresh` | Refresh catalogs for backends with keys |
+| `/models refresh openrouter` | One backend |
+| `/model dashscope/qwen3.5-plus` | Set pin directly (no picker) |
+| `/model qwen-plus` | Set portable directly |
+| `/plan-model` | Fuzzy picker for planner |
+
+Picker sources: portable index + cached catalogs (`~/.pirs/cache/catalogs/`).  
+If the list is thin, run `/models refresh` (or `pirs models refresh`) once.
