@@ -55,6 +55,11 @@ pub struct AcpOptions {
     pub base_url: Option<String>,
     pub api_key: String,
     pub max_retries: u32,
+    /// Resolved CLI provider (`openai` | `anthropic`) — not re-read from env alone.
+    pub provider: String,
+    pub approval: String,
+    pub agent_profile: String,
+    pub permission_mode: Option<String>,
 }
 
 const PROTOCOL_VERSION: u64 = 1;
@@ -91,17 +96,18 @@ struct SessionState {
 
 pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
     let cwd = opts.cwd.clone();
-    let provider: Arc<dyn pirs_ai::LlmProvider> = if std::env::var("PIRS_PROVIDER").as_deref()
-        == Ok("anthropic")
-    {
-        Arc::new(
-            pirs_ai::AnthropicClient::new(opts.base_url.clone()).with_max_retries(opts.max_retries),
-        )
-    } else {
-        Arc::new(
-            pirs_ai::OpenAiCompat::new(opts.base_url.clone()).with_max_retries(opts.max_retries),
-        )
-    };
+    let provider: Arc<dyn pirs_ai::LlmProvider> =
+        if crate::runtime_safety::provider_is_anthropic(&opts.provider) {
+            Arc::new(
+                pirs_ai::AnthropicClient::new(opts.base_url.clone())
+                    .with_max_retries(opts.max_retries),
+            )
+        } else {
+            Arc::new(
+                pirs_ai::OpenAiCompat::new(opts.base_url.clone())
+                    .with_max_retries(opts.max_retries),
+            )
+        };
 
     let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
     tokio::spawn(async move {
@@ -120,20 +126,20 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
     let session_id_slot: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
-    // Live permission ladder (same as interactive modes) + ACP client gate.
-    let mut gate_hook: Option<pirs_agent::events::BeforeToolCallHook> =
-        Some(pirs_tools::live_permission_hook());
+    let safety_cfg = crate::runtime_safety::SafetyConfig::from_resolved(
+        cwd.clone(),
+        &opts.approval,
+        &opts.agent_profile,
+        opts.permission_mode.as_deref(),
+        &opts.provider,
+    );
+
     let acp_perm = acp_permission_hook(
         Arc::clone(&pending),
         out_tx.clone(),
         Arc::clone(&next_out_id),
         Arc::clone(&session_id_slot),
     );
-    gate_hook = pirs_agent::Hooks::chain_before(gate_hook, Some(acp_perm));
-    let mut hooks = Hooks {
-        before_tool_call: gate_hook,
-        ..Default::default()
-    };
 
     let mut host = pirs_rhai::ExtensionHost::new();
     let policy_slot: std::sync::Arc<
@@ -163,21 +169,6 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
     tools.extend(host.tools());
     let ext_hooks = host.hooks();
 
-    if let (Some(b), Some(a)) = (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
-        if let Some(chained) =
-            pirs_agent::Hooks::chain_before(hooks.before_tool_call.clone(), Some(b.clone()))
-        {
-            *policy_slot.lock().unwrap() = Some((chained, a.clone()));
-        }
-    }
-    hooks.before_tool_call =
-        pirs_agent::Hooks::chain_before(hooks.before_tool_call.clone(), ext_hooks.before_tool_call);
-    hooks.after_tool_call = ext_hooks.after_tool_call;
-    hooks.transform_context = ext_hooks.transform_context;
-    hooks.should_stop_after_turn = ext_hooks.should_stop_after_turn;
-    hooks.get_steering_messages = ext_hooks.get_steering_messages;
-    hooks.get_follow_up_messages = ext_hooks.get_follow_up_messages;
-
     let mut system = system_prompt::build_system_prompt(&cwd, &tools);
     if let Some(ctx) = system_prompt::read_project_context(&cwd) {
         system.push_str(&ctx);
@@ -192,8 +183,49 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
         .with_system_prompt(system)
         .with_tools(tools)
         .with_completion(completion)
-        .with_hooks(hooks)
         .with_compaction(Some(pirs_agent::compaction::CompactionConfig::default()));
+
+    // Shared safety floor + ACP client permission + extension hooks.
+    let mut ext_for_install = Hooks::default();
+    ext_for_install.after_tool_call = ext_hooks.after_tool_call.clone();
+    ext_for_install.transform_context = ext_hooks.transform_context.clone();
+    ext_for_install.should_stop_after_turn = ext_hooks.should_stop_after_turn.clone();
+    ext_for_install.get_steering_messages = ext_hooks.get_steering_messages.clone();
+    ext_for_install.get_follow_up_messages = ext_hooks.get_follow_up_messages.clone();
+    // Chain: safety gate → ACP permission → extension before hooks
+    let before_ext = pirs_agent::Hooks::chain_before(
+        Some(acp_perm),
+        ext_hooks.before_tool_call.clone(),
+    );
+    agent = crate::runtime_safety::install_safety_floor(
+        agent,
+        &safety_cfg,
+        before_ext,
+        ext_for_install,
+    );
+
+    // Sub-agent policy chain (profile + permission + pack before/after).
+    {
+        let gate = crate::approval::ApprovalGate::with_profile(
+            safety_cfg.approval,
+            cwd.clone(),
+            safety_cfg.profile,
+        );
+        let mut gh = if safety_cfg.approval == crate::approval::ApprovalMode::Ask
+            || safety_cfg.profile != pirs_tools::SafetyProfile::Default
+        {
+            Some(gate.hook())
+        } else {
+            None
+        };
+        gh = pirs_agent::Hooks::chain_before(gh, Some(pirs_tools::live_permission_hook()));
+        if let (Some(b), Some(a)) = (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
+            if let Some(chained) = pirs_agent::Hooks::chain_before(gh, Some(b.clone())) {
+                *policy_slot.lock().unwrap() = Some((chained, a.clone()));
+            }
+        }
+        std::mem::forget(gate);
+    }
 
     let session_path = session::session_path(&cwd)?;
     let session_id = session_path

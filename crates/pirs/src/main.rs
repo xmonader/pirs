@@ -11,6 +11,7 @@ use rustyline::DefaultEditor;
 
 mod acp_mode;
 mod approval;
+mod runtime_safety;
 mod auth;
 mod blame;
 mod config_file;
@@ -836,6 +837,10 @@ async fn main() -> anyhow::Result<()> {
             base_url: cli.base_url.clone(),
             api_key,
             max_retries: cli.max_retries,
+            provider: cli.provider.clone(),
+            approval: cli.approval.clone(),
+            agent_profile: cli.agent_profile.clone(),
+            permission_mode: cli.permission_mode.clone(),
         })
         .await;
     }
@@ -846,6 +851,10 @@ async fn main() -> anyhow::Result<()> {
             base_url: cli.base_url.clone(),
             api_key,
             max_retries: cli.max_retries,
+            provider: cli.provider.clone(),
+            approval: cli.approval.clone(),
+            agent_profile: cli.agent_profile.clone(),
+            permission_mode: cli.permission_mode.clone(),
         })
         .await;
     }

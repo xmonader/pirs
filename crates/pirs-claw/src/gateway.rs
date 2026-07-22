@@ -1741,25 +1741,43 @@ mod tests {
         assert_eq!(d.caption.as_deref(), Some("my file"));
     }
 
+    /// Serialize env mutations for bind-host tests (parallel cargo test races).
+    fn bind_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn webhook_bind_defaults_to_localhost() {
+        let _g = bind_env_lock();
         std::env::remove_var(PUBLIC_BIND_ENV);
         std::env::remove_var(BIND_ENV);
-        assert_eq!(webhook_bind_host(), "127.0.0.1");
+        assert_eq!(
+            webhook_bind_host(),
+            "127.0.0.1",
+            "default bind must be localhost when no env set"
+        );
         let addr = webhook_socket_addr(8741);
         assert_eq!(addr.ip().to_string(), "127.0.0.1");
         assert_eq!(addr.port(), 8741);
+        std::env::remove_var(PUBLIC_BIND_ENV);
+        std::env::remove_var(BIND_ENV);
     }
 
     #[test]
     fn webhook_bind_public_opt_in() {
+        let _g = bind_env_lock();
         std::env::remove_var(BIND_ENV);
+        std::env::remove_var(PUBLIC_BIND_ENV);
         std::env::set_var(PUBLIC_BIND_ENV, "1");
         assert_eq!(webhook_bind_host(), "0.0.0.0");
         std::env::remove_var(PUBLIC_BIND_ENV);
         std::env::set_var(BIND_ENV, "0.0.0.0");
         assert_eq!(webhook_bind_host(), "0.0.0.0");
         std::env::remove_var(BIND_ENV);
+        std::env::remove_var(PUBLIC_BIND_ENV);
     }
 
     #[test]

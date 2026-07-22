@@ -108,6 +108,7 @@ impl Agent {
     /// full wiring (approval hooks, streaming/printing listeners, session
     /// persistence, usage accounting) without the caller re-threading each piece.
     /// A fresh cancel/running slot keeps each phase independently cancellable.
+    /// Thrash/loop detection is **not** shared — each branch gets its own guard.
     pub fn fork_for_phase(
         &self,
         system_prompt: impl Into<String>,
@@ -136,8 +137,30 @@ impl Agent {
             follow_up_mode: self.follow_up_mode,
             running: Arc::new(AtomicBool::new(false)),
             cancel: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
-            thrash: self.thrash.clone(),
+            // Fresh thrash guard per branch — sharing the parent's Arc would
+            // let N parallel planners each calling the same `read` trip the
+            // default max_repeats=3 loop detector spuriously.
+            thrash: crate::thrash::ThrashGuard::new(),
         }
+    }
+
+    /// Test/diagnostics: whether thrash state is shared with another agent.
+    pub fn thrash_is_same_instance(&self, other: &Agent) -> bool {
+        self.thrash.is_same_instance(&other.thrash)
+    }
+
+    /// Test/diagnostics: record a tool start on this agent's thrash guard.
+    pub fn thrash_observe_start(
+        &self,
+        name: &str,
+        args: &serde_json::Value,
+    ) -> Option<String> {
+        self.thrash.observe_tool_start(name, args)
+    }
+
+    /// Test/diagnostics: peek thrash stop message.
+    pub fn thrash_peek_stop(&self) -> Option<String> {
+        self.thrash.peek_stop()
     }
 
     pub fn with_tools(mut self, tools: Vec<Arc<dyn AgentTool>>) -> Self {
@@ -397,5 +420,56 @@ fn drain_queue(queue: &Arc<Mutex<VecDeque<Message>>>, mode: QueueMode) -> Vec<Me
     match mode {
         QueueMode::All => q.drain(..).collect(),
         QueueMode::OneAtATime => q.pop_front().into_iter().collect(),
+    }
+}
+
+
+#[cfg(test)]
+mod fork_tests {
+    use super::*;
+    use async_trait::async_trait;
+    use pirs_ai::{
+        AssistantMessage, ContentBlock, Context, LlmProvider, StopReason, StreamEvent,
+    };
+    use serde_json::json;
+
+    struct Mock;
+    #[async_trait]
+    impl LlmProvider for Mock {
+        async fn stream(
+            &self,
+            _model: &str,
+            _context: &Context,
+            _options: &CompletionOptions,
+            _cancel: CancellationToken,
+        ) -> futures::stream::BoxStream<'static, StreamEvent> {
+            Box::pin(futures::stream::iter(vec![StreamEvent::Done(Box::new(
+                AssistantMessage {
+                    content: vec![ContentBlock::text("ok")],
+                    stop_reason: StopReason::Stop,
+                    ..Default::default()
+                },
+            ))]))
+        }
+    }
+
+    #[test]
+    fn fork_for_phase_uses_independent_thrash_guard() {
+        let parent = Agent::new(Arc::new(Mock), "m");
+        let a = parent.fork_for_phase("sys", "m", vec![]);
+        let b = parent.fork_for_phase("sys", "m", vec![]);
+        let c = parent.fork_for_phase("sys", "m", vec![]);
+        assert!(
+            !parent.thrash_is_same_instance(&a),
+            "child must not share parent thrash Arc"
+        );
+        assert!(!a.thrash_is_same_instance(&b));
+        assert!(!b.thrash_is_same_instance(&c));
+        // Drive the real thrash API on each branch independently.
+        let args = json!({"path": "x.rs"});
+        assert!(a.thrash_observe_start("read", &args).is_none());
+        assert!(b.thrash_observe_start("read", &args).is_none());
+        assert!(c.thrash_observe_start("read", &args).is_none());
+        assert!(a.thrash_peek_stop().is_none());
     }
 }

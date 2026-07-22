@@ -179,6 +179,12 @@ impl ThrashGuard {
     pub fn peek_stop(&self) -> Option<String> {
         self.inner.lock().unwrap().stop_message.clone()
     }
+
+    /// True when two guards share the same Arc state (must be false across
+    /// strategy branches after fork_for_phase).
+    pub fn is_same_instance(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
 }
 
 #[cfg(test)]
@@ -239,5 +245,21 @@ mod tests {
         assert!(g.observe_tool_start("bash", &args).is_none());
         assert!(g.observe_tool_start("bash", &args).unwrap().contains("loop"));
         assert!(g.peek_stop().is_some());
+    }
+
+    #[test]
+    fn independent_guards_do_not_share_loop_counts() {
+        // Three strategy branches each reading the same path once must not trip
+        // loop detection (would if they shared one Arc<Mutex> thrash state).
+        let a = ThrashGuard::with_limits(3, 5);
+        let b = ThrashGuard::with_limits(3, 5);
+        let c = ThrashGuard::with_limits(3, 5);
+        let args = json!({"path": "src/main.rs"});
+        assert!(a.observe_tool_start("read", &args).is_none());
+        assert!(b.observe_tool_start("read", &args).is_none());
+        assert!(c.observe_tool_start("read", &args).is_none());
+        assert!(a.peek_stop().is_none());
+        assert!(b.peek_stop().is_none());
+        assert!(c.peek_stop().is_none());
     }
 }

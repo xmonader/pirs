@@ -15,6 +15,11 @@ pub struct RpcOptions {
     pub base_url: Option<String>,
     pub api_key: String,
     pub max_retries: u32,
+    /// Resolved CLI provider (`openai` | `anthropic`) — not re-read from env alone.
+    pub provider: String,
+    pub approval: String,
+    pub agent_profile: String,
+    pub permission_mode: Option<String>,
 }
 
 type RunOutput = (
@@ -46,44 +51,29 @@ enum Cmd {
 
 pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     let cwd = &opts.cwd;
-    let provider: std::sync::Arc<dyn pirs_ai::LlmProvider> = if std::env::var("PIRS_PROVIDER")
-        .as_deref()
-        == Ok("anthropic")
-    {
-        std::sync::Arc::new(
-            pirs_ai::AnthropicClient::new(opts.base_url.clone()).with_max_retries(opts.max_retries),
-        )
-    } else {
-        std::sync::Arc::new(
-            pirs_ai::OpenAiCompat::new(opts.base_url.clone()).with_max_retries(opts.max_retries),
-        )
-    };
+    // Use resolved CLI provider (not env-only) so `pirs --mode rpc --provider anthropic` works.
+    let provider: std::sync::Arc<dyn pirs_ai::LlmProvider> =
+        if crate::runtime_safety::provider_is_anthropic(&opts.provider) {
+            std::sync::Arc::new(
+                pirs_ai::AnthropicClient::new(opts.base_url.clone())
+                    .with_max_retries(opts.max_retries),
+            )
+        } else {
+            std::sync::Arc::new(
+                pirs_ai::OpenAiCompat::new(opts.base_url.clone())
+                    .with_max_retries(opts.max_retries),
+            )
+        };
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
-    let mut hooks = Hooks::default();
-    let approval_mode = std::env::var("PIRS_APPROVAL")
-        .ok()
-        .and_then(|m| crate::approval::ApprovalMode::parse(&m))
-        .unwrap_or(crate::approval::ApprovalMode::Auto);
-    let safety = std::env::var("PIRS_AGENT_PROFILE")
-        .ok()
-        .and_then(|s| pirs_tools::SafetyProfile::parse(&s))
-        .unwrap_or(pirs_tools::SafetyProfile::Default);
-    let perm_mode = std::env::var("PIRS_PERMISSION_MODE")
-        .ok()
-        .and_then(|s| pirs_tools::PermissionMode::parse(&s))
-        .unwrap_or_else(pirs_tools::PermissionMode::from_env);
-    pirs_tools::init_live_permission_mode(perm_mode);
-    let gate = crate::approval::ApprovalGate::with_profile(approval_mode, cwd.clone(), safety);
-    let mut gate_hook = if approval_mode == crate::approval::ApprovalMode::Ask
-        || safety != pirs_tools::SafetyProfile::Default
-    {
-        Some(gate.hook())
-    } else {
-        None
-    };
-    // Same live permission ladder as interactive / serve modes.
-    gate_hook = pirs_agent::Hooks::chain_before(gate_hook, Some(pirs_tools::live_permission_hook()));
+    let safety_cfg = crate::runtime_safety::SafetyConfig::from_resolved(
+        cwd.clone(),
+        &opts.approval,
+        &opts.agent_profile,
+        opts.permission_mode.as_deref(),
+        &opts.provider,
+    );
+
     let mut host = pirs_rhai::ExtensionHost::new();
     let policy_slot: std::sync::Arc<
         std::sync::Mutex<
@@ -113,22 +103,6 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
     tools.extend(host.tools());
     let ext_hooks = host.hooks();
 
-    // Give sub-agents the same policy chain as the main agent (gate + before,
-    // after). Previously this slot was declared but never populated, so RPC
-    // sub-agents ran with no policy hooks at all.
-    if let (Some(b), Some(a)) = (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
-        if let Some(chained) = pirs_agent::Hooks::chain_before(gate_hook.clone(), Some(b.clone())) {
-            *policy_slot.lock().unwrap() = Some((chained, a.clone()));
-        }
-    }
-
-    hooks.before_tool_call = pirs_agent::Hooks::chain_before(gate_hook, ext_hooks.before_tool_call);
-    hooks.after_tool_call = ext_hooks.after_tool_call;
-    hooks.transform_context = ext_hooks.transform_context;
-    hooks.should_stop_after_turn = ext_hooks.should_stop_after_turn;
-    hooks.get_steering_messages = ext_hooks.get_steering_messages;
-    hooks.get_follow_up_messages = ext_hooks.get_follow_up_messages;
-
     let mut system = system_prompt::build_system_prompt(cwd, &tools);
     if let Some(ctx) = system_prompt::read_project_context(cwd) {
         system.push_str(&ctx);
@@ -138,14 +112,51 @@ pub async fn run(opts: RpcOptions) -> anyhow::Result<()> {
         api_key: Some(opts.api_key.clone()),
         ..Default::default()
     };
-    let _ = &opts;
 
     let mut agent = Agent::new(provider, &opts.model)
         .with_system_prompt(system)
         .with_tools(tools)
         .with_completion(completion)
-        .with_hooks(hooks)
         .with_compaction(Some(pirs_agent::compaction::CompactionConfig::default()));
+
+    // Shared safety floor: profile + approval + permission ladder + audit.
+    // Extension hooks are chained inside install_safety_floor.
+    let mut ext_for_install = Hooks::default();
+    ext_for_install.after_tool_call = ext_hooks.after_tool_call.clone();
+    ext_for_install.transform_context = ext_hooks.transform_context.clone();
+    ext_for_install.should_stop_after_turn = ext_hooks.should_stop_after_turn.clone();
+    ext_for_install.get_steering_messages = ext_hooks.get_steering_messages.clone();
+    ext_for_install.get_follow_up_messages = ext_hooks.get_follow_up_messages.clone();
+    agent = crate::runtime_safety::install_safety_floor(
+        agent,
+        &safety_cfg,
+        ext_hooks.before_tool_call.clone(),
+        ext_for_install,
+    );
+
+    // Sub-agents get the same before/after policy chain as the parent.
+    // Re-read is not possible after install; build a profile+perm gate for them.
+    {
+        let gate = crate::approval::ApprovalGate::with_profile(
+            safety_cfg.approval,
+            cwd.clone(),
+            safety_cfg.profile,
+        );
+        let mut gh = if safety_cfg.approval == crate::approval::ApprovalMode::Ask
+            || safety_cfg.profile != pirs_tools::SafetyProfile::Default
+        {
+            Some(gate.hook())
+        } else {
+            None
+        };
+        gh = pirs_agent::Hooks::chain_before(gh, Some(pirs_tools::live_permission_hook()));
+        if let (Some(b), Some(a)) = (&ext_hooks.before_tool_call, &ext_hooks.after_tool_call) {
+            if let Some(chained) = pirs_agent::Hooks::chain_before(gh, Some(b.clone())) {
+                *policy_slot.lock().unwrap() = Some((chained, a.clone()));
+            }
+        }
+        std::mem::forget(gate);
+    }
 
     let session_path = session::session_path(cwd)?;
     let session_id = session_path
