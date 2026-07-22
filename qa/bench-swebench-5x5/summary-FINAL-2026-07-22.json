@@ -1,0 +1,48 @@
+{
+  "title": "pirs SWE-bench Lite fifty FINAL",
+  "model": "qwen3.5-plus",
+  "label": "pirs-qwen35",
+  "run3_resolved": 46,
+  "run3_n": 50,
+  "run3_pct": 92.0,
+  "run2_resolved": 40,
+  "run1_resolved": 41,
+  "hero_shrimp": 32,
+  "gained_run2_to_run3": [
+    "scikit-learn__scikit-learn-25570",
+    "django__django-10914",
+    "sympy__sympy-15678",
+    "django__django-15781",
+    "astropy__astropy-7746",
+    "sympy__sympy-13647"
+  ],
+  "lost_run2_to_run3": [],
+  "still_miss": [
+    "django__django-11019",
+    "django__django-11797",
+    "django__django-15213",
+    "django__django-11910"
+  ],
+  "misses_run3": [
+    {
+      "id": "django__django-11019",
+      "wall": 1804.4,
+      "kind": "timeout"
+    },
+    {
+      "id": "django__django-11797",
+      "wall": 330.3,
+      "kind": "agent_no_patch"
+    },
+    {
+      "id": "django__django-11910",
+      "wall": 1804.8,
+      "kind": "timeout"
+    },
+    {
+      "id": "django__django-15213",
+      "wall": 804.1,
+      "kind": "agent_no_patch"
+    }
+  ]
+}
