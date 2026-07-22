@@ -117,9 +117,50 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
                 f"keep_green {n_kg}->{len(keep_green)}"
             )
         if not targets:
-            # fall back to original if filter was too aggressive
-            targets = as_list(inst["FAIL_TO_PASS"])
-            logline("WARNING: test-id filter removed all targets; using original FAIL_TO_PASS")
+            # FAIL_TO_PASS is sometimes a unittest *docstring* title (django-15781:
+            # "BaseCommand.create_parser() passes kwargs...") not a runnable id.
+            # Recover real test_* names from the test_patch instead of re-injecting
+            # the docstring (which always ReproFailed with turns=0).
+            def targets_from_test_patch(diff: str) -> list[str]:
+                out: list[str] = []
+                cur_file = ""
+                for line in diff.splitlines():
+                    if line.startswith("+++ b/"):
+                        cur_file = line[6:].strip()
+                    # Newly added or context def lines in the patched file.
+                    m = re.match(r"^[+ ]def (test_\w+)\s*\(", line)
+                    if not m:
+                        continue
+                    name = m.group(1)
+                    if cur_file.endswith(".py"):
+                        # Prefer pytest-style path::name; django runner also accepts
+                        # short names via fuzzy match / module discovery.
+                        out.append(f"{cur_file}::{name}")
+                    else:
+                        out.append(name)
+                # de-dupe preserve order
+                seen: set[str] = set()
+                uniq = []
+                for t in out:
+                    if t not in seen:
+                        seen.add(t)
+                        uniq.append(t)
+                return uniq
+
+            tp = inst.get("test_patch") or ""
+            recovered = targets_from_test_patch(tp)
+            if recovered:
+                targets = recovered
+                logline(
+                    f"WARNING: FAIL_TO_PASS had no runnable ids; "
+                    f"recovered {len(targets)} from test_patch: {targets[:5]}"
+                )
+            else:
+                targets = as_list(inst["FAIL_TO_PASS"])
+                logline(
+                    "WARNING: test-id filter removed all targets and test_patch "
+                    "had no def test_*; using original FAIL_TO_PASS"
+                )
 
         # Cap keep-green size. Huge PASS_TO_PASS lists (django-11019: 16 targets
         # + large media suite) burned the full 1800s agent timeout before a
