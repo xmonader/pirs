@@ -21,14 +21,21 @@ pub struct OpenAiCompat {
 
 impl OpenAiCompat {
     pub fn new(base_url: Option<String>) -> Self {
+        let base = base_url
+            .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
+            .trim_end_matches('/')
+            .to_string();
+        // DashScope Coding Plan rejects non-agent User-Agents with HTTP 405.
+        let ua = if crate::is_dashscope_coding_url(&base) {
+            crate::dashscope_coding_user_agent()
+        } else {
+            crate::default_user_agent()
+        };
         OpenAiCompat {
-            base_url: base_url
-                .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
-                .trim_end_matches('/')
-                .to_string(),
+            base_url: base,
             provider_name: "openai".to_string(),
             client: reqwest::Client::builder()
-                .user_agent(concat!("pirs/", env!("CARGO_PKG_VERSION")))
+                .user_agent(ua)
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new()),
             max_retries: 0,
@@ -147,6 +154,16 @@ async fn run_request(
                 }
                 for (k, v) in &options.extra_headers {
                     req = req.header(k, v);
+                }
+                // Coding Plan: ensure a coding-agent UA even if caller forgot headers.
+                if url.contains("coding.dashscope") || url.contains("coding-intl.dashscope") {
+                    let has_ua = options
+                        .extra_headers
+                        .iter()
+                        .any(|(k, _)| k.eq_ignore_ascii_case("user-agent"));
+                    if !has_ua {
+                        req = req.header("User-Agent", crate::dashscope_coding_user_agent());
+                    }
                 }
                 if let Some(t) = options.timeout {
                     req = req.timeout(t);

@@ -24,6 +24,22 @@ pub(crate) const SLASH_CMDS: &[SlashCmd] = &[
         desc: "fuzzy search models · refresh catalogs",
     },
     SlashCmd {
+        name: "/backends",
+        desc: "list backends and key status",
+    },
+    SlashCmd {
+        name: "/backend",
+        desc: "add name url env  — new subscription",
+    },
+    SlashCmd {
+        name: "/key",
+        desc: "set SECRET=value in secrets.env",
+    },
+    SlashCmd {
+        name: "/setup",
+        desc: "keys + backend setup status",
+    },
+    SlashCmd {
         name: "/plan-model",
         desc: "planner fuzzy picker or set",
     },

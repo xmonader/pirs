@@ -22,8 +22,77 @@ pub fn try_run(cwd: &Path, prompt: &str) -> anyhow::Result<bool> {
             cmd_models(cwd, &parts[1..])?;
             Ok(true)
         }
+        "setup" => {
+            cmd_setup()?;
+            Ok(true)
+        }
+        "key" => {
+            cmd_key(&parts[1..])?;
+            Ok(true)
+        }
+        "backend" if parts.get(1) == Some(&"add") => {
+            cmd_backend_add(&parts[2..])?;
+            Ok(true)
+        }
         _ => Ok(false),
     }
+}
+
+fn cmd_setup() -> anyhow::Result<()> {
+    crate::secrets_edit::ensure_pirs_dir()?;
+    println!("pirs setup — keys & backends\n");
+    println!("well-known API keys (env / ~/.pirs/secrets.env):");
+    for line in crate::secrets_edit::setup_status_lines() {
+        println!("{line}");
+    }
+    println!(
+        "\nset a key:\n  pirs key OPENROUTER_API_KEY=sk-…\n  pirs key DASHSCOPE_API_KEY sk-…\n"
+    );
+    println!(
+        "add a second OpenRouter (or any) backend:\n  \
+         pirs backend add openrouter-work https://openrouter.ai/api/v1 OPENROUTER_WORK_API_KEY\n  \
+         pirs key OPENROUTER_WORK_API_KEY=sk-…\n"
+    );
+    println!("then: pirs models refresh · pirs --mode tui · /model");
+    println!(
+        "\nDashScope Coding Plan uses User-Agent override (PIRS_DASHSCOPE_UA / PIRS_USER_AGENT)."
+    );
+    Ok(())
+}
+
+fn cmd_key(args: &[&str]) -> anyhow::Result<()> {
+    if args.is_empty() {
+        bail!("usage: pirs key NAME=value   or   pirs key NAME value");
+    }
+    let (name, value) = if let Some((n, v)) = args[0].split_once('=') {
+        (n, v.to_string())
+    } else if args.len() >= 2 {
+        (args[0], args[1..].join(" "))
+    } else {
+        bail!("usage: pirs key NAME=value   or   pirs key NAME value");
+    };
+    let path = crate::secrets_edit::set_secret_env(name, &value)?;
+    println!("wrote {name} → {} (mode 600); process env updated", path.display());
+    Ok(())
+}
+
+fn cmd_backend_add(args: &[&str]) -> anyhow::Result<()> {
+    // pirs backend add <name> <base_url> <api_key_env> [kind]
+    if args.len() < 3 {
+        bail!(
+            "usage: pirs backend add <name> <base_url> <api_key_env> [kind]\n  \
+             e.g. pirs backend add openrouter-work https://openrouter.ai/api/v1 OPENROUTER_WORK_API_KEY"
+        );
+    }
+    let name = args[0];
+    let url = args[1];
+    let env = args[2];
+    let kind = args.get(3).copied().unwrap_or("openai_compatible");
+    let path = crate::secrets_edit::append_backend(name, url, env, kind)?;
+    println!("appended [[backends]] {name} → {}", path.display());
+    println!("set the key: pirs key {env}=…");
+    println!("then: pirs backends · pirs models refresh {name}");
+    Ok(())
 }
 
 fn load_reg(cwd: &Path) -> pirs_ai::RegistryFile {
@@ -228,7 +297,10 @@ fn help_text() -> &'static str {
      pirs models\n  \
      pirs models refresh [backend]\n  \
      pirs models search <query>\n  \
-     pirs models list <backend> [filter]"
+     pirs models list <backend> [filter]\n  \
+     pirs setup\n  \
+     pirs key NAME=value\n  \
+     pirs backend add <name> <url> <API_KEY_ENV> [kind]"
 }
 
 fn print_help() {

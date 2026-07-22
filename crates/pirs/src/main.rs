@@ -27,6 +27,7 @@ mod tui;
 mod observability;
 mod models_cmd;
 mod registry;
+mod secrets_edit;
 mod session_stats;
 mod weak_compose;
 

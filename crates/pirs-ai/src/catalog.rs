@@ -121,10 +121,18 @@ fn fetch_openai_compatible_models(
     backend: &BackendEntry,
     api_key: Option<&str>,
 ) -> anyhow::Result<Vec<CatalogModel>> {
+    use crate::backends_builtin::{
+        dashscope_coding_plan_models, dashscope_coding_user_agent, default_user_agent,
+        is_dashscope_coding_url,
+    };
+
     let base = backend.base_url.trim_end_matches('/');
     let url = format!("{base}/models");
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(60))
+        // Default UA for the HTTP client itself (reqwest overwrites if we only set on request
+        // inconsistently); request-level headers still win for User-Agent.
+        .user_agent(default_user_agent())
         .build()
         .context("http client")?;
     let mut req = client.get(&url);
@@ -132,13 +140,50 @@ fn fetch_openai_compatible_models(
         req = req.bearer_auth(key);
     }
     for (k, v) in &backend.headers {
+        // Apply configured headers first; coding UA is forced last.
+        if k.eq_ignore_ascii_case("user-agent") && is_dashscope_coding_url(&backend.base_url) {
+            continue;
+        }
         req = req.header(k, v);
     }
-    // OpenRouter sometimes wants Authorization only; fine.
+    // Coding Plan: force coding-agent User-Agent last (wins over client default).
+    if is_dashscope_coding_url(&backend.base_url) {
+        req = req.header("User-Agent", dashscope_coding_user_agent());
+    } else if !backend
+        .headers
+        .keys()
+        .any(|k| k.eq_ignore_ascii_case("user-agent"))
+    {
+        req = req.header("User-Agent", default_user_agent());
+    }
     let resp = req.send().with_context(|| format!("GET {url}"))?;
     let status = resp.status();
     let body = resp.text().unwrap_or_default();
     if !status.is_success() {
+        // DashScope Coding Plan often returns 405 for /models (or any non-agent UA);
+        // fall back to the published allowlist so the picker still works.
+        let looks_coding_plan = is_dashscope_coding_url(&backend.base_url)
+            || body.to_ascii_lowercase().contains("coding agent")
+            || body.to_ascii_lowercase().contains("coding plan");
+        if looks_coding_plan
+            && (status.as_u16() == 405
+                || status.as_u16() == 403
+                || body.to_ascii_lowercase().contains("coding agent"))
+        {
+            eprintln!(
+                "[catalog: {} /models HTTP {status}; using Coding Plan static allowlist ({} models)]",
+                backend.name,
+                dashscope_coding_plan_models().len()
+            );
+            return Ok(dashscope_coding_plan_models()
+                .iter()
+                .map(|id| CatalogModel {
+                    id: (*id).into(),
+                    name: Some((*id).into()),
+                    ctx: None,
+                })
+                .collect());
+        }
         bail!(
             "catalog {} HTTP {status}: {}",
             backend.name,

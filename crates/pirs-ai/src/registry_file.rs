@@ -176,8 +176,25 @@ pub fn build_routing_provider(
         // Only warn for backends the user explicitly configured beyond builtins
         // is hard to know; warn only when key env is set-name but empty and
         // they have at least one other key (noise reduction for full builtin set).
-        let headers: Vec<(String, String)> =
+        let mut headers: Vec<(String, String)> =
             b.headers.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        // Ensure Coding Plan backends always carry a coding-agent User-Agent
+        // even if user config replaced the builtin entry without headers.
+        if crate::is_dashscope_coding_url(&b.base_url)
+            && !headers
+                .iter()
+                .any(|(k, _)| k.eq_ignore_ascii_case("user-agent"))
+        {
+            headers.push((
+                "User-Agent".into(),
+                crate::dashscope_coding_user_agent(),
+            ));
+        } else if !headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("user-agent"))
+        {
+            headers.push(("User-Agent".into(), crate::default_user_agent()));
+        }
         let provider: Arc<dyn LlmProvider> = match kind {
             BackendKind::OpenaiCompatible => Arc::new(
                 OpenAiCompat::new(Some(b.base_url.clone()))

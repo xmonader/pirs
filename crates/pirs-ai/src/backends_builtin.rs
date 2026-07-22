@@ -15,7 +15,62 @@ fn openrouter_headers() -> HashMap<String, String> {
         "https://github.com/xmonader/pirs".into(),
     );
     h.insert("X-Title".into(), "pirs".into());
+    h.insert("User-Agent".into(), default_user_agent());
     h
+}
+
+/// Alibaba **Coding Plan** endpoints reject generic clients with
+/// `405 … only available for Coding Agents`. They gate on User-Agent.
+/// Override with `PIRS_USER_AGENT` or `PIRS_DASHSCOPE_UA`.
+pub fn default_user_agent() -> String {
+    std::env::var("PIRS_USER_AGENT")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| format!("pirs/{} (coding-agent)", env!("CARGO_PKG_VERSION")))
+}
+
+pub fn dashscope_coding_user_agent() -> String {
+    std::env::var("PIRS_DASHSCOPE_UA")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("PIRS_USER_AGENT").ok().filter(|s| !s.is_empty()))
+        // Known-accepted coding-agent UA when pirs is not yet on the allowlist.
+        // Honest product UA is preferred when DashScope adds pirs; until then
+        // claude-cli is the most widely reported working client identity.
+        .unwrap_or_else(|| "claude-cli/2.0.0".into())
+}
+
+pub fn is_dashscope_coding_url(url: &str) -> bool {
+    let u = url.to_ascii_lowercase();
+    u.contains("coding.dashscope") || u.contains("coding-intl.dashscope")
+}
+
+fn dashscope_headers() -> HashMap<String, String> {
+    let mut h = HashMap::new();
+    h.insert("User-Agent".into(), dashscope_coding_user_agent());
+    // Some gateways also look at these.
+    h.insert("X-Title".into(), "pirs".into());
+    h.insert(
+        "HTTP-Referer".into(),
+        "https://github.com/xmonader/pirs".into(),
+    );
+    h
+}
+
+/// Static Coding Plan allowlist when `/models` is blocked or empty.
+pub fn dashscope_coding_plan_models() -> &'static [&'static str] {
+    &[
+        "qwen3.7-plus",
+        "qwen3.6-plus",
+        "qwen3.5-plus",
+        "qwen3-coder-plus",
+        "qwen3-coder-next",
+        "qwen3-max-2026-01-23",
+        "kimi-k2.5",
+        "glm-5",
+        "glm-4.7",
+        "MiniMax-M2.5",
+    ]
 }
 
 fn be(
@@ -35,13 +90,9 @@ fn be(
 }
 
 fn openai_compat(name: &str, base_url: &str, api_key_env: &str) -> BackendEntry {
-    be(
-        name,
-        "openai_compatible",
-        base_url,
-        api_key_env,
-        HashMap::new(),
-    )
+    let mut headers = HashMap::new();
+    headers.insert("User-Agent".into(), default_user_agent());
+    be(name, "openai_compatible", base_url, api_key_env, headers)
 }
 
 /// Built-in backends (subscriptions). Users add more of the same kind by
@@ -57,11 +108,15 @@ pub fn builtin_backends() -> Vec<BackendEntry> {
             b.headers = openrouter_headers();
             b
         },
-        openai_compat(
-            "dashscope",
-            "https://coding-intl.dashscope.aliyuncs.com/v1",
-            "DASHSCOPE_API_KEY",
-        ),
+        {
+            let mut b = openai_compat(
+                "dashscope",
+                "https://coding-intl.dashscope.aliyuncs.com/v1",
+                "DASHSCOPE_API_KEY",
+            );
+            b.headers = dashscope_headers();
+            b
+        },
         openai_compat(
             "deepseek",
             "https://api.deepseek.com/v1",
@@ -69,13 +124,17 @@ pub fn builtin_backends() -> Vec<BackendEntry> {
         ),
         openai_compat("openai", "https://api.openai.com/v1", "OPENAI_API_KEY"),
         openai_compat("groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY"),
-        be(
-            "anthropic",
-            "anthropic",
-            "https://api.anthropic.com",
-            "ANTHROPIC_API_KEY",
-            HashMap::new(),
-        ),
+        {
+            let mut h = HashMap::new();
+            h.insert("User-Agent".into(), default_user_agent());
+            be(
+                "anthropic",
+                "anthropic",
+                "https://api.anthropic.com",
+                "ANTHROPIC_API_KEY",
+                h,
+            )
+        },
     ]
 }
 

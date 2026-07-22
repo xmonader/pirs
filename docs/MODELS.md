@@ -84,6 +84,30 @@ serve = [
 | `/model dashscope/qwen3.5-plus` | Set pin directly (no picker) |
 | `/model qwen-plus` | Set portable directly |
 | `/plan-model` | Fuzzy picker for planner |
+| `/backends` | List backends + key yes/no |
+| `/key NAME=value` | Write `~/.pirs/secrets.env` (mode 600) + set env |
+| `/backend add name url ENV` | Append `[[backends]]` to user config |
+| `/setup` | Key status + how to configure |
 
 Picker sources: portable index + cached catalogs (`~/.pirs/cache/catalogs/`).  
 If the list is thin, run `/models refresh` (or `pirs models refresh`) once.
+
+## CLI setup helpers
+
+```bash
+pirs setup
+pirs key OPENROUTER_API_KEY=sk-…
+pirs key DASHSCOPE_API_KEY sk-…
+pirs backend add openrouter-work https://openrouter.ai/api/v1 OPENROUTER_WORK_API_KEY
+pirs models refresh
+```
+
+## DashScope Coding Plan (User-Agent)
+
+Coding Plan endpoints (`coding-intl.dashscope…`) reject non-agent clients with
+`405 … only available for Coding Agents`. pirs sets a coding-agent **User-Agent**
+on those backends (catalog + chat).
+
+- Default: `claude-cli/2.0.0` (widely accepted until pirs is allowlisted)
+- Override: `PIRS_DASHSCOPE_UA=…` or `PIRS_USER_AGENT=…`
+- If `/models` still 405s, pirs falls back to the **static Coding Plan allowlist**

@@ -15,6 +15,7 @@ pub mod sse;
 pub use anthropic::AnthropicClient;
 pub use backends_builtin::{
     active_backends, active_portable_models, backend_key_present, builtin_registry,
+    dashscope_coding_user_agent, default_user_agent, is_dashscope_coding_url,
 };
 pub use catalog::{
     catalog_status, load_catalog, refresh_active, refresh_backend, search_catalogs, CatalogFile,

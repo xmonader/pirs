@@ -1957,6 +1957,95 @@ fn handle_slash_command(
                 }
             }
         }
+        "/backends" => {
+            crate::registry::load_secrets_env();
+            let reg = crate::registry::load_registry_layers(&app.cwd);
+            let mut lines = String::from("backends:\n");
+            for b in &reg.backends {
+                let has = pirs_ai::backend_key_present(b);
+                let env = b.api_key_env.as_deref().unwrap_or("-");
+                lines.push_str(&format!(
+                    "  {:<18} key={}  env={env}\n",
+                    b.name,
+                    if has { "yes" } else { "no" }
+                ));
+            }
+            lines.push_str(
+                "add: /backend add <name> <url> <KEY_ENV>\nkey: /key KEY_ENV=sk-…\nmodel: /model",
+            );
+            app.push(ChatItem::System(lines));
+            app.notice("backends listed (see chat)");
+        }
+        "/backend" => {
+            // /backend add name url env [kind]
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            if parts.first().copied() != Some("add") || parts.len() < 4 {
+                app.notice(
+                    "usage: /backend add <name> <base_url> <API_KEY_ENV> [kind]\n  \
+                     e.g. /backend add openrouter-work https://openrouter.ai/api/v1 OPENROUTER_WORK_API_KEY",
+                );
+                return;
+            }
+            let name = parts[1];
+            let url = parts[2];
+            let env = parts[3];
+            let kind = parts.get(4).copied().unwrap_or("openai_compatible");
+            match crate::secrets_edit::append_backend(name, url, env, kind) {
+                Ok(path) => {
+                    app.notice(format!(
+                        "backend {name} → {} · set key: /key {env}=… · then /models refresh",
+                        path.display()
+                    ));
+                }
+                Err(e) => app.notice(format!("backend add: {e}")),
+            }
+        }
+        "/key" => {
+            let (name, value) = if let Some((n, v)) = arg.split_once('=') {
+                (n.trim(), v.trim().to_string())
+            } else {
+                let mut sp = arg.split_whitespace();
+                match (sp.next(), sp.collect::<Vec<_>>().join(" ")) {
+                    (Some(n), v) if !v.is_empty() => (n, v),
+                    _ => {
+                        app.notice("usage: /key NAME=value  or  /key NAME value");
+                        return;
+                    }
+                }
+            };
+            match crate::secrets_edit::set_secret_env(name, &value) {
+                Ok(path) => {
+                    // Mask value in chat.
+                    let masked = if value.len() > 8 {
+                        format!("{}…{}", &value[..4], &value[value.len() - 2..])
+                    } else {
+                        "***".into()
+                    };
+                    app.notice(format!(
+                        "key {name}={masked} → {} (600) · live env updated",
+                        path.display()
+                    ));
+                }
+                Err(e) => app.notice(format!("key: {e}")),
+            }
+        }
+        "/setup" => {
+            crate::registry::load_secrets_env();
+            let mut s = String::from("setup status\n");
+            for line in crate::secrets_edit::setup_status_lines() {
+                s.push_str(&line);
+                s.push('\n');
+            }
+            s.push_str(
+                "\n/key NAME=value          store in ~/.pirs/secrets.env\n\
+                 /backend add n url ENV   append [[backends]]\n\
+                 /models refresh          pull catalogs\n\
+                 /model                   fuzzy pick model\n\
+                 DashScope Coding Plan: User-Agent set automatically (PIRS_DASHSCOPE_UA)",
+            );
+            app.push(ChatItem::System(s));
+            app.notice("setup status (see chat)");
+        }
         "/models" => {
             // /models [plan] [query…]  |  /models refresh
             let mut rest = arg.trim();
@@ -2918,6 +3007,10 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
         Line::from(Span::styled("Commands", theme.heading)),
         Line::from(Span::styled(
             "  /model /models  fuzzy pick · /models refresh",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  /backends /key /backend add /setup",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
