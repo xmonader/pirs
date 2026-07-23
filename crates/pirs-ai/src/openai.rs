@@ -592,15 +592,71 @@ pub fn build_request_body(model: &str, ctx: &Context, options: &CompletionOption
 }
 
 fn tool_to_openai(tool: &crate::ToolDef) -> Value {
+    // Moonshot / Kimi Coding reject `$ref` inside tool parameters
+    // ("moonshot flavored json schema"). Inline `$defs` / `definitions` so
+    // schemars output works on those gateways without per-tool rewrites.
+    let parameters = inline_json_schema_refs(tool.parameters.clone());
     json!({
         "type": "function",
         "function": {
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.parameters,
+            "parameters": parameters,
             "strict": false,
         }
     })
+}
+
+/// Expand local `#/$defs/…` and `#/definitions/…` refs so the schema is a
+/// single tree. Unknown / remote refs are left as-is.
+fn inline_json_schema_refs(mut schema: Value) -> Value {
+    let defs = schema
+        .as_object()
+        .and_then(|o| {
+            o.get("$defs")
+                .or_else(|| o.get("definitions"))
+                .cloned()
+        })
+        .unwrap_or(Value::Object(Default::default()));
+    inline_refs_in_value(&mut schema, &defs);
+    if let Some(obj) = schema.as_object_mut() {
+        obj.remove("$defs");
+        obj.remove("definitions");
+        // Some gateways also reject meta keywords.
+        obj.remove("$schema");
+    }
+    schema
+}
+
+fn inline_refs_in_value(v: &mut Value, defs: &Value) {
+    match v {
+        Value::Object(map) => {
+            if let Some(Value::String(r)) = map.get("$ref").cloned() {
+                if let Some(name) = r
+                    .strip_prefix("#/$defs/")
+                    .or_else(|| r.strip_prefix("#/definitions/"))
+                {
+                    if let Some(def) = defs.get(name).cloned() {
+                        *v = def;
+                        inline_refs_in_value(v, defs);
+                        return;
+                    }
+                }
+            }
+            for (k, child) in map.iter_mut() {
+                if k == "$ref" {
+                    continue;
+                }
+                inline_refs_in_value(child, defs);
+            }
+        }
+        Value::Array(arr) => {
+            for child in arr.iter_mut() {
+                inline_refs_in_value(child, defs);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn echo_reasoning_to_provider(provider: &str) -> bool {
@@ -862,5 +918,39 @@ mod tests {
             ContentBlock::ToolCall { arguments, .. } => assert_eq!(*arguments, json!({})),
             _ => panic!(),
         }
+    }
+
+    #[test]
+    fn inline_json_schema_refs_expands_defs() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "edits": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/Edit" }
+                }
+            },
+            "$defs": {
+                "Edit": {
+                    "type": "object",
+                    "properties": {
+                        "oldText": { "type": "string" },
+                        "newText": { "type": "string" }
+                    },
+                    "required": ["oldText", "newText"]
+                }
+            }
+        });
+        let out = inline_json_schema_refs(schema);
+        assert!(out.get("$defs").is_none());
+        assert_eq!(
+            out["properties"]["edits"]["items"]["type"],
+            "object"
+        );
+        assert!(out["properties"]["edits"]["items"].get("$ref").is_none());
+        assert_eq!(
+            out["properties"]["edits"]["items"]["properties"]["oldText"]["type"],
+            "string"
+        );
     }
 }
