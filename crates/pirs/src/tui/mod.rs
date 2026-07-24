@@ -828,6 +828,14 @@ impl App {
         }
     }
 
+
+    /// Live hybrid pin snapshot for session-end reporting (plan-model + strategy).
+    /// Built from app state so `/plan-model` / `/strategy` updates stay on the
+    /// same path as CLI-seeded pins — never hardcode empty at print sites.
+    fn report_pins(&self) -> session_stats::ReportPins {
+        session_stats::ReportPins::new(self.plan_model.clone(), self.strategy.clone())
+    }
+
     fn push_tour_welcome(&mut self) {
         self.push(ChatItem::Welcome {
             model: self.model.clone(),
@@ -1395,12 +1403,12 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
             let a = agent.lock().await;
             a.usage_report()
         };
-        session_stats::print_session_stats(
+        let pins = app.report_pins();
+        session_stats::print_session_stats_pins(
             &app.clock,
             &report,
             &app.model,
-            app.plan_model.as_deref(),
-            app.strategy.as_deref(),
+            &pins,
         );
     }
 
@@ -2336,12 +2344,12 @@ fn handle_slash_command(
             match agent.try_lock() {
                 Ok(a) => {
                     let r = a.usage_report();
-                    let text = session_stats::format_session_stats(
+                    let pins = app.report_pins();
+                    let text = session_stats::format_session_stats_pins(
                         &app.clock,
                         &r,
                         &app.model,
-                        app.plan_model.as_deref(),
-                        app.strategy.as_deref(),
+                        &pins,
                     );
                     app.notice(text);
                 }
@@ -4231,6 +4239,104 @@ mod tests {
         writer.push(b"hello".to_vec());
         writer.push(b"world".to_vec());
         writer.shutdown();
+    }
+
+    /// TUI session-end and `/stats` must consume `report_pins()` via the shared
+    /// session_stats pin APIs (same contract as one-shot/REPL).
+    #[test]
+    fn tui_production_exits_use_report_pins_api() {
+        let src = include_str!("mod.rs");
+        // Prefer the real tests module boundary (earlier `#[cfg(test)]` may mark
+        // helper methods inside production types).
+        let prod = src
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("production half of tui/mod.rs");
+        assert!(
+            prod.contains("fn report_pins"),
+            "App must expose report_pins snapshot"
+        );
+        assert!(
+            prod.contains("print_session_stats_pins"),
+            "TUI session-end must call print_session_stats_pins"
+        );
+        assert!(
+            prod.contains("format_session_stats_pins"),
+            "TUI /stats must call format_session_stats_pins"
+        );
+        assert!(
+            prod.contains("app.report_pins()"),
+            "TUI exits must build pins from app.report_pins()"
+        );
+        // Must not pass plan/strategy as raw ad-hoc Nones at print sites.
+        assert!(
+            !prod.contains("app.plan_model.as_deref(),\n            app.strategy.as_deref()"),
+            "TUI must not pass raw plan_model/strategy at print_session_stats"
+        );
+        assert!(
+            !prod.contains("app.plan_model.as_deref(),\n                        app.strategy.as_deref()"),
+            "TUI /stats must not pass raw plan_model/strategy into format_session_stats"
+        );
+    }
+
+    /// Live app pin snapshot drives the shipped session-stats hybrid formatter.
+    #[test]
+    fn tui_report_pins_drive_hybrid_session_stats() {
+        use pirs_ai::Usage;
+        let mut app = test_app();
+        app.model = "weak-executor".into();
+        app.plan_model = Some("strong-planner".into());
+        app.strategy = Some("plan-exec".into());
+        let pins = app.report_pins();
+        assert_eq!(pins.plan_model(), Some("strong-planner"));
+        assert_eq!(pins.strategy(), Some("plan-exec"));
+
+        let mut report = pirs_agent::usage::UsageReport::default();
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "strong-planner".into(),
+            usage: Usage {
+                input: 800,
+                output: 100,
+                total_tokens: 900,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 0,
+        });
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "weak-executor".into(),
+            usage: Usage {
+                input: 400,
+                output: 50,
+                total_tokens: 450,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 1,
+        });
+        *report.by_model.entry("strong-planner".into()).or_default() = Usage {
+            input: 800,
+            output: 100,
+            total_tokens: 900,
+            ..Default::default()
+        };
+        *report.by_model.entry("weak-executor".into()).or_default() = Usage {
+            input: 400,
+            output: 50,
+            total_tokens: 450,
+            ..Default::default()
+        };
+
+        let text = session_stats::format_session_stats_pins(
+            &app.clock,
+            &report,
+            &app.model,
+            &pins,
+        );
+        assert!(text.contains("by role"), "TUI hybrid stats must include by role:\n{text}");
+        assert!(text.contains("planner") && text.contains("executor"), "{text}");
+        assert!(text.contains("strong-planner") && text.contains("weak-executor"), "{text}");
+        assert!(text.contains("plan-exec"), "{text}");
     }
 
     /// A minimal but fully valid `App`, for tests that need to drive

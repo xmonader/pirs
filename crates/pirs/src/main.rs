@@ -2979,4 +2979,32 @@ mod tests {
             "/usage must not hardcode empty pins"
         );
     }
+
+    /// All three surfaces (one-shot, REPL, TUI) share pin + role-split APIs.
+    #[test]
+    fn all_exit_surfaces_use_shared_report_apis() {
+        let main_src = include_str!("main.rs");
+        let tui_src = include_str!("tui/mod.rs");
+        let main_prod = main_src
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .unwrap();
+        let tui_prod = tui_src
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .unwrap();
+        assert!(main_prod.contains("print_usage_end") && main_prod.contains("report_pins"));
+        assert!(main_prod.contains("print_session_stats_pins"));
+        assert!(tui_prod.contains("print_session_stats_pins"));
+        assert!(tui_prod.contains("format_session_stats_pins"));
+        assert!(tui_prod.contains("app.report_pins()"));
+        // Shared role-split lives only in session_stats (single template).
+        let stats = include_str!("session_stats.rs");
+        let stats_prod = stats.split("#[cfg(test)]\nmod tests {").next().unwrap();
+        assert_eq!(
+            stats_prod.matches("\"  by role\"").count(),
+            1,
+            "single by-role template"
+        );
+    }
 }

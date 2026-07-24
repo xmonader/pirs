@@ -347,7 +347,18 @@ pub fn format_session_stats(
     lines.join("\n")
 }
 
-/// Print session stats to stderr (safe after TUI restores the terminal).
+/// Session stats text using resolved [`ReportPins`] (REPL / TUI /stats path).
+pub fn format_session_stats_pins(
+    clock: &SessionClock,
+    report: &UsageReport,
+    model: &str,
+    pins: &ReportPins,
+) -> String {
+    format_session_stats(clock, report, model, pins.plan_model(), pins.strategy())
+}
+
+/// Print session stats to stderr (raw plan/strategy args).
+/// Prefer [`print_session_stats_pins`] at product exit sites.
 pub fn print_session_stats(
     clock: &SessionClock,
     report: &UsageReport,
@@ -359,7 +370,8 @@ pub fn print_session_stats(
     eprintln!("\n{text}");
 }
 
-/// Convenience: session stats using resolved [`ReportPins`] (no pin drop).
+/// Print session stats to stderr using resolved [`ReportPins`] (no pin drop).
+/// Preferred exit API for REPL session-end, TUI session-end, and `/stats`.
 pub fn print_session_stats_pins(
     clock: &SessionClock,
     report: &UsageReport,
@@ -645,12 +657,11 @@ mod tests {
             Some("plan-exec".into()),
         );
         let footer = format_usage_end_pins(&report, "weak-executor", &pins);
-        let session = format_session_stats(
+        let session = format_session_stats_pins(
             &SessionClock::new(),
             &report,
             "weak-executor",
-            pins.plan_model(),
-            pins.strategy(),
+            &pins,
         );
         let shared = format_role_split_lines(&report, "weak-executor", "strong-planner");
         let shared_text = shared.join("\n");
