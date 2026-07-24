@@ -22,7 +22,8 @@ Research note on strong-plan / weak-exec cost and quality (measured matrices, to
 ### Hybrid economics flags (quick)
 
 ```bash
-# Role-split usage (planner vs executor) appears in session stats when plan-model ≠ model
+# Role-split usage (planner vs executor) appears at session end when plan-model ≠ model
+# (one-shot compact footer + REPL/TUI session stats share format_role_split_lines)
 pirs --model cheap --plan-model strong --strategy plan-exec --verify "pytest -q" "…"
 
 # Hold tools fixed across experiments

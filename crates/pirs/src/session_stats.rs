@@ -156,10 +156,51 @@ fn usage_for_model(report: &UsageReport, model: &str) -> (u64, u64, u64, usize) 
     (input, output, total, calls)
 }
 
+/// Hybrid plan/strategy pins for every session-end report builder.
+///
+/// Resolve once from CLI (or TUI state) and pass through to print sites so
+/// one-shot / REPL / TUI cannot hardcode empty plan-model or strategy.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ReportPins {
+    pub plan_model: Option<String>,
+    pub strategy: Option<String>,
+}
+
+impl ReportPins {
+    pub fn new(plan_model: Option<String>, strategy: Option<String>) -> Self {
+        Self {
+            plan_model,
+            strategy,
+        }
+    }
+
+    /// CLI: `--strategy` wins; otherwise the profile name labels the strategy.
+    pub fn from_cli(
+        plan_model: Option<String>,
+        strategy: Option<String>,
+        profile: Option<String>,
+    ) -> Self {
+        Self {
+            plan_model,
+            strategy: strategy.or(profile),
+        }
+    }
+
+    pub fn plan_model(&self) -> Option<&str> {
+        self.plan_model.as_deref()
+    }
+
+    pub fn strategy(&self) -> Option<&str> {
+        self.strategy.as_deref()
+    }
+}
+
 /// Format plan-vs-exec role split lines for hybrid economics reporting.
 ///
 /// When `plan_model` differs from the executor model, emit a `by role` section
 /// with token totals (and dollars when the builtin price table knows the rates).
+/// **Single source** for by-role strings — one-shot and session-stats builders
+/// must call this rather than inventing their own planner/executor templates.
 pub fn format_role_split_lines(
     report: &UsageReport,
     exec_model: &str,
@@ -318,6 +359,77 @@ pub fn print_session_stats(
     eprintln!("\n{text}");
 }
 
+/// Convenience: session stats using resolved [`ReportPins`] (no pin drop).
+pub fn print_session_stats_pins(
+    clock: &SessionClock,
+    report: &UsageReport,
+    model: &str,
+    pins: &ReportPins,
+) {
+    print_session_stats(clock, report, model, pins.plan_model(), pins.strategy());
+}
+
+/// One-shot / compact usage footer (strategy and mono one-shot exits).
+///
+/// When `pins.plan_model` differs from `model`, appends the shared
+/// [`format_role_split_lines`] plan-vs-exec **by role** block.
+pub fn format_usage_end(
+    report: &UsageReport,
+    model: &str,
+    plan_model: Option<&str>,
+    strategy: Option<&str>,
+) -> String {
+    let total = report.grand_total();
+    let hit_rate = if total.input + total.cache_read > 0 {
+        100.0 * total.cache_read as f64 / (total.input + total.cache_read) as f64
+    } else {
+        0.0
+    };
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "[usage: {} api calls + {} delegate sub-agents | input {} (cached {}, {:.0}%) | output {} | reasoning {} | total {}]",
+        report.calls.len() - report.delegate_calls(),
+        report.delegate_calls(),
+        total.input,
+        total.cache_read,
+        hit_rate,
+        total.output,
+        total.reasoning,
+        total.total_tokens,
+    ));
+    if let Some(s) = strategy {
+        lines.push(format!("  strategy       {s}"));
+    }
+    if let Some(pm) = plan_model {
+        lines.push(format!("  model          {model}"));
+        lines.push(format!("  plan-model     {pm}"));
+        lines.extend(format_role_split_lines(report, model, pm));
+    }
+    // Per-model lines make strong-plan / weak-exec splits visible at a glance.
+    for (m, u) in &report.by_model {
+        let calls = report.calls.iter().filter(|c| c.model == *m).count();
+        lines.push(format!(
+            "  {m} ({calls} call{}): input {} (cached {}) output {} total {}",
+            if calls == 1 { "" } else { "s" },
+            u.input,
+            u.cache_read,
+            u.output,
+            u.total_tokens
+        ));
+    }
+    lines.join("\n")
+}
+
+/// Compact footer using resolved [`ReportPins`].
+pub fn format_usage_end_pins(report: &UsageReport, model: &str, pins: &ReportPins) -> String {
+    format_usage_end(report, model, pins.plan_model(), pins.strategy())
+}
+
+/// Print the one-shot usage footer to stderr.
+pub fn print_usage_end(report: &UsageReport, model: &str, pins: &ReportPins) {
+    eprintln!("{}", format_usage_end_pins(report, model, pins));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,6 +548,178 @@ mod tests {
             Some("plan-exec"),
         );
         assert!(full.contains("by role") && full.contains("planner") && full.contains("executor"));
+    }
+
+    fn hybrid_multi_model_report() -> UsageReport {
+        let mut report = UsageReport::default();
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "strong-planner".into(),
+            usage: Usage {
+                input: 1000,
+                output: 200,
+                total_tokens: 1200,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 0,
+        });
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "weak-executor".into(),
+            usage: Usage {
+                input: 500,
+                output: 100,
+                total_tokens: 600,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 1,
+        });
+        *report.by_model.entry("strong-planner".into()).or_default() = Usage {
+            input: 1000,
+            output: 200,
+            total_tokens: 1200,
+            ..Default::default()
+        };
+        *report.by_model.entry("weak-executor".into()).or_default() = Usage {
+            input: 500,
+            output: 100,
+            total_tokens: 600,
+            ..Default::default()
+        };
+        report
+    }
+
+    /// Shipped one-shot footer builder — same function `print_usage_end` uses.
+    #[test]
+    fn format_usage_end_hybrid_includes_by_role() {
+        let report = hybrid_multi_model_report();
+        let pins = ReportPins::from_cli(
+            Some("strong-planner".into()),
+            Some("plan-exec".into()),
+            None,
+        );
+        let text = format_usage_end_pins(&report, "weak-executor", &pins);
+        assert!(
+            text.contains("by role"),
+            "one-shot hybrid footer must include by role:\n{text}"
+        );
+        assert!(text.contains("planner"), "{text}");
+        assert!(text.contains("executor"), "{text}");
+        assert!(text.contains("strong-planner"), "{text}");
+        assert!(text.contains("weak-executor"), "{text}");
+        assert!(text.contains("plan-exec"), "{text}");
+        assert!(text.contains("plan-model"), "{text}");
+    }
+
+    #[test]
+    fn format_usage_end_without_plan_model_skips_role_split() {
+        let mut report = UsageReport::default();
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "only-model".into(),
+            usage: Usage {
+                input: 10,
+                output: 5,
+                total_tokens: 15,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 0,
+        });
+        *report.by_model.entry("only-model".into()).or_default() = Usage {
+            input: 10,
+            output: 5,
+            total_tokens: 15,
+            ..Default::default()
+        };
+        let text = format_usage_end(&report, "only-model", None, None);
+        assert!(!text.contains("by role"), "{text}");
+        assert!(!text.contains("plan-model"), "{text}");
+    }
+
+    /// Session-stats builder (REPL/TUI) and one-shot footer share role-split output.
+    #[test]
+    fn one_shot_and_session_stats_share_role_split_lines() {
+        let report = hybrid_multi_model_report();
+        let pins = ReportPins::new(
+            Some("strong-planner".into()),
+            Some("plan-exec".into()),
+        );
+        let footer = format_usage_end_pins(&report, "weak-executor", &pins);
+        let session = format_session_stats(
+            &SessionClock::new(),
+            &report,
+            "weak-executor",
+            pins.plan_model(),
+            pins.strategy(),
+        );
+        let shared = format_role_split_lines(&report, "weak-executor", "strong-planner");
+        let shared_text = shared.join("\n");
+        assert!(shared_text.contains("by role") && shared_text.contains("planner"));
+        for line in &shared {
+            assert!(
+                footer.contains(line.as_str()),
+                "footer missing shared role line {line:?}:\n{footer}"
+            );
+            assert!(
+                session.contains(line.as_str()),
+                "session stats missing shared role line {line:?}:\n{session}"
+            );
+        }
+    }
+
+    /// Only format_role_split_lines owns the by-role planner/executor templates.
+    #[test]
+    fn by_role_templates_single_source() {
+        let src = include_str!("session_stats.rs");
+        // Production half: strip tests module.
+        let prod = src
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("production session_stats");
+        // Emitted line template (docs may mention "by role" in prose).
+        let template_hits: Vec<_> = prod.match_indices("\"  by role\"").collect();
+        assert_eq!(
+            template_hits.len(),
+            1,
+            "exactly one emitted 'by role' line template in production session_stats (got {})",
+            template_hits.len()
+        );
+        assert!(
+            prod.contains("format_role_split_lines"),
+            "role-split helper must exist"
+        );
+        // Both report builders must call the helper (not re-implement).
+        let usage_fn = prod
+            .split("pub fn format_usage_end")
+            .nth(1)
+            .expect("format_usage_end");
+        let usage_body = usage_fn.split("pub fn ").next().unwrap_or(usage_fn);
+        assert!(
+            usage_body.contains("format_role_split_lines"),
+            "format_usage_end must call format_role_split_lines"
+        );
+        let stats_fn = prod
+            .split("pub fn format_session_stats")
+            .nth(1)
+            .expect("format_session_stats");
+        let stats_body = stats_fn.split("pub fn ").next().unwrap_or(stats_fn);
+        assert!(
+            stats_body.contains("format_role_split_lines"),
+            "format_session_stats must call format_role_split_lines"
+        );
+    }
+
+    #[test]
+    fn report_pins_from_cli_prefers_strategy_over_profile() {
+        let p = ReportPins::from_cli(
+            Some("strong".into()),
+            Some("plan-exec".into()),
+            Some("weak".into()),
+        );
+        assert_eq!(p.plan_model(), Some("strong"));
+        assert_eq!(p.strategy(), Some("plan-exec"));
+        let p2 = ReportPins::from_cli(Some("s".into()), None, Some("profile-x".into()));
+        assert_eq!(p2.strategy(), Some("profile-x"));
     }
 
     #[test]
