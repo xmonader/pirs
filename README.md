@@ -51,7 +51,7 @@ pirs --mode tui          # first launch shows Getting started
 
 REPL / TUI slash: `/tour`, `/model`, `/plan`, `/act`, `/undo`, `/doctor`, `/audit`, `/image <path>`, `/profile`, `/compact`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`). Runtime diagnostics: `pirs --doctor`. Action audit: `~/.pirs/audit.jsonl` (disable with `PIRS_AUDIT=0`).
 
-**Strategies (product set):** `monolithic` (one growing loop on `--model`), `plan-exec` (read-only plan → fresh exec), `plan-critic-exec` / alias `plan-exec-critic` (plan → critic → exec). **Strong plan / weak exec:** `--model <cheap> --plan-model <strong> --strategy plan-exec` (or `plan-critic-exec`) — planning (and critique) run on `--plan-model`, the executor keeps `--model`.
+**Strategies (product set):** `monolithic` (one growing loop on `--model`), `plan-exec` (read-only plan → fresh exec), `plan-critic-exec` / alias `plan-exec-critic` (plan → critic → exec). **Strong plan / weak exec:** `--model <cheap> --plan-model <strong> --strategy plan-exec` (or `plan-critic-exec`) — planning (and critique) run on `--plan-model`, the executor keeps `--model`. Measured results and caveats: [docs/hybrid-model-economics.md](docs/hybrid-model-economics.md).
 
 ### Multi-backend models (pin + portable)
 

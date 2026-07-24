@@ -61,9 +61,15 @@ enum ProviderKind {
 /// Knobs shared by all modes.
 #[derive(Args, Debug, Clone)]
 struct Common {
-    /// Model id to drive the agent with.
+    /// Model id to drive the agent with (executor / default).
     #[arg(long, default_value = "claude-opus-4-8", global = true)]
     model: String,
+    /// Model for read-only planning (and critique) phases only. Executor phases
+    /// keep `--model`. Enables strong-plan / weak-exec hybrid economics, e.g.:
+    /// `--model qwen3.5-plus --plan-model kimi-k2.5 --strategy plan-exec`.
+    /// Both ids must be served by the same `--provider` / `--base-url`.
+    #[arg(long, global = true)]
+    plan_model: Option<String>,
     /// LLM backend.
     #[arg(long, value_enum, default_value_t = ProviderKind::Anthropic, global = true)]
     provider: ProviderKind,
@@ -141,6 +147,7 @@ impl Common {
 
     /// The loop strategy to run. A `--profile` wins (its resolved strategy bakes in
     /// persona + model), then `--strategy-script`, then the selected built-in.
+    /// When `--plan-model` is set, read-only phases are pinned to that model.
     fn strategy(&self) -> anyhow::Result<Strategy> {
         if self.no_strategy {
             // No phases at all: AgentConfig.naive (set from this same flag) makes
@@ -152,13 +159,22 @@ impl Common {
                 persist_across_attempts: true,
             });
         }
-        if let Some(profile) = self.profile()? {
-            return Ok(profile.resolved_strategy());
+        let mut strategy = if let Some(profile) = self.profile()? {
+            profile.resolved_strategy()
+        } else {
+            match &self.strategy_script {
+                Some(path) => pirs_rhai::strategy_script::load_strategy_file(path)?,
+                None => self.strategy.into(),
+            }
+        };
+        if let Some(pm) = &self.plan_model {
+            pirs_agent::strategy::pin_plan_model(&mut strategy, pm);
+            eprintln!(
+                "plan-model: {pm} (read-only phases) · exec-model: {}",
+                self.model
+            );
         }
-        match &self.strategy_script {
-            Some(path) => pirs_rhai::strategy_script::load_strategy_file(path),
-            None => Ok(self.strategy.into()),
-        }
+        Ok(strategy)
     }
 
     /// The tool policy for this run: a profile's `tools` policy, or allow-all.
@@ -614,6 +630,7 @@ mod tests {
     fn common(no_strategy: bool) -> Common {
         Common {
             model: "m".into(),
+            plan_model: None,
             provider: ProviderKind::Anthropic,
             base_url: None,
             max_attempts: 3,

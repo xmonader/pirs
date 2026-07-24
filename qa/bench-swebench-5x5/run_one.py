@@ -40,14 +40,23 @@ def sh(cmd, **kw):
 def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, out_dir: Path,
                   strategy_script: str | None = None, label: str | None = None,
                   no_strategy: bool = False, provider: str = "deepseek",
-                  base_url: str | None = None):
+                  base_url: str | None = None, plan_model: str | None = None,
+                  strategy: str | None = None):
     inst = json.loads((BENCH_DIR / "instances" / f"{instance_id}.json").read_text())
     image = image_for(instance_id)
     tag = label or model
     cname = f"pirsbench-{instance_id.replace('/', '_')}-{tag}".replace("_", "-").lower()
     log_path = out_dir / f"{instance_id}.{tag}.log"
     patch_out = out_dir / f"{instance_id}.{tag}.patch"
-    result = {"id": instance_id, "model": model, "label": tag, "image": image, "container": cname}
+    result = {
+        "id": instance_id,
+        "model": model,
+        "plan_model": plan_model,
+        "label": tag,
+        "image": image,
+        "container": cname,
+        "strategy": strategy,
+    }
 
     log = open(log_path, "w")
 
@@ -234,10 +243,14 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             if not base_url:
                 raise ValueError("base_url is required when provider='openai-compat'")
             cmd.append(f"--base-url={base_url}")
+        if plan_model:
+            cmd.append(f"--plan-model={plan_model}")
         if no_strategy:
             cmd += ["--no-strategy"]
         elif strategy_script:
             cmd.append("--strategy-script=/tmp/strategy.rhai")
+        elif strategy:
+            cmd.append(f"--strategy={strategy}")
         logline("cmd: " + " ".join(cmd))
 
         env_key_name = {

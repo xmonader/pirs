@@ -17,6 +17,8 @@ pirs --model qwen-plus "…"
 pirs --model qwen-plus --plan-model openrouter/anthropic/claude-sonnet-4 --strategy plan-exec "…"
 ```
 
+Research note on strong-plan / weak-exec cost and quality (measured matrices, tool ablations): [hybrid-model-economics.md](./hybrid-model-economics.md).
+
 ## Built-in backends
 
 `openrouter`, `dashscope`, `deepseek`, `openai`, `anthropic`, `groq`.
