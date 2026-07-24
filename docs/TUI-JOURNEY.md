@@ -104,9 +104,16 @@ Useful slash commands:
 | `/model` | **Fuzzy model picker** (or `/model backend/id`) |
 | `/models refresh` | Pull provider catalogs into the picker |
 | `/stats` | Tokens + timing |
+| `/copy` | Copy last assistant reply to the system clipboard |
 | `/undo` | Rewind last user turn |
 | `/clear` | Clear the screen |
 | `/quit` | Exit |
+
+**Select & copy:** mouse capture is **off by default**, so you can drag-select
+chat text and copy with your terminal shortcut (usually Ctrl/Cmd+Shift+C or
+right-click). Wheel scroll needs `PIRS_TUI_MOUSE=1` (then use Shift+drag to
+select in most terminals). `/copy` yanks the last assistant message without
+selecting.
 
 Shell without the agent: `!cargo test` (records in context) or `!!cargo test`
 (no record).

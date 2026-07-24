@@ -876,17 +876,29 @@ impl Drop for TerminalGuard {
     }
 }
 
-/// Puts the real terminal into raw/alt-screen/mouse-capture mode, but the
-/// returned `Terminal` renders into an in-memory buffer, not real stdout —
-/// see `TuiWriter` for why. Terminal-size and cursor-position queries still
-/// hit the real tty regardless of what the backend's writer is: crossterm's
-/// `size()`/`cursor::position()` are separate ioctls, not routed through the
-/// `Write` the backend wraps.
+/// Whether to capture the mouse (scroll wheel). Default **off** so the
+/// terminal emulator keeps native text selection + copy (click-drag / shift).
+/// Set `PIRS_TUI_MOUSE=1` to re-enable wheel scroll via the app.
+fn mouse_capture_enabled() -> bool {
+    matches!(
+        std::env::var("PIRS_TUI_MOUSE").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes") | Ok("on")
+    )
+}
+
+/// Puts the real terminal into raw/alt-screen mode (optional mouse capture),
+/// but the returned `Terminal` renders into an in-memory buffer, not real
+/// stdout — see `TuiWriter` for why. Terminal-size and cursor-position queries
+/// still hit the real tty regardless of what the backend's writer is.
 fn setup_terminal() -> anyhow::Result<Terminal<ratatui::backend::CrosstermBackend<Vec<u8>>>> {
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     stdout.execute(crossterm::terminal::EnterAlternateScreen)?;
-    stdout.execute(EnableMouseCapture)?;
+    // Default: leave mouse free so users can select + copy from chat output.
+    // Wheel scroll still works via keyboard (g/G, etc.) when capture is off.
+    if mouse_capture_enabled() {
+        stdout.execute(EnableMouseCapture)?;
+    }
     let backend = ratatui::backend::CrosstermBackend::new(Vec::new());
     Ok(Terminal::new(backend)?)
 }
@@ -1050,10 +1062,76 @@ impl Drop for TuiWriter {
 }
 
 fn restore_terminal() -> anyhow::Result<()> {
+    // Safe even if mouse was never captured.
     let _ = std::io::stdout().execute(DisableMouseCapture);
     let _ = std::io::stdout().execute(crossterm::terminal::LeaveAlternateScreen);
     crossterm::terminal::disable_raw_mode()?;
     Ok(())
+}
+
+/// Last assistant reply text from chat history (for `/copy`).
+fn last_assistant_text(items: &[ChatItem]) -> Option<String> {
+    items.iter().rev().find_map(|it| match it {
+        ChatItem::Assistant { text, error, .. } => {
+            let mut s = text.trim().to_string();
+            if let Some(e) = error {
+                if !e.trim().is_empty() {
+                    if !s.is_empty() {
+                        s.push('\n');
+                    }
+                    s.push_str(e.trim());
+                }
+            }
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        }
+        _ => None,
+    })
+}
+
+/// Copy text to the system clipboard via common CLI tools (no extra crate).
+/// Tries: `wl-copy`, `xclip`, `xsel`, `pbcopy` (macOS), `clip.exe` (WSL).
+fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let candidates: &[(&str, &[&str])] = &[
+        ("wl-copy", &[]),
+        ("xclip", &["-selection", "clipboard"]),
+        ("xsel", &["--clipboard", "--input"]),
+        ("pbcopy", &[]),
+        ("clip.exe", &[]),
+    ];
+    let mut last_err = String::from("no clipboard helper found");
+    for (bin, args) in candidates {
+        let Ok(mut child) = Command::new(bin)
+            .args(*args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            continue;
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            if stdin.write_all(text.as_bytes()).is_err() {
+                last_err = format!("{bin}: failed to write stdin");
+                let _ = child.kill();
+                continue;
+            }
+        }
+        match child.wait() {
+            Ok(st) if st.success() => return Ok(()),
+            Ok(st) => last_err = format!("{bin}: exit {st}"),
+            Err(e) => last_err = format!("{bin}: {e}"),
+        }
+    }
+    Err(format!(
+        "{last_err} (install wl-copy, xclip, xsel, or pbcopy)"
+    ))
 }
 
 fn install_panic_hook() {
@@ -2118,8 +2196,9 @@ fn handle_slash_command(
         "/help" | "/?" => {
             app.show_help = true;
             app.notice(
-                "slash: /tour /model /plan-model /strategy /goal /stats /undo /doctor /audit \
-                 /profile /image /compact /plan /act /clear /quit  ·  type / + Tab",
+                "slash: /tour /model /plan-model /strategy /goal /stats /copy /undo /doctor \
+                 /audit /profile /image /compact /plan /act /clear /quit  ·  type / + Tab \
+                 ·  drag to select/copy (mouse off by default; PIRS_TUI_MOUSE=1 for wheel)",
             );
         }
         "/tour" | "/start" | "/onboard" => {
@@ -2367,6 +2446,24 @@ fn handle_slash_command(
                     app.notice(text);
                 }
                 Err(_) => app.notice("busy — try /stats after the run finishes"),
+            }
+        }
+        "/copy" | "/yank" => {
+            // Prefer explicit arg, else last assistant bubble.
+            let text = if !arg.is_empty() {
+                Some(arg.to_string())
+            } else {
+                last_assistant_text(&app.items)
+            };
+            match text {
+                None => app.notice("nothing to copy — no assistant reply yet"),
+                Some(body) => match copy_to_clipboard(&body) {
+                    Ok(()) => {
+                        let n = body.chars().count();
+                        app.notice(format!("copied {n} chars to clipboard"));
+                    }
+                    Err(e) => app.notice(format!("copy failed: {e}")),
+                },
             }
         }
         "/undo" => match agent.try_lock() {
@@ -3282,7 +3379,7 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  /tour /plan-model /strategy /goal /stats",
+            "  /tour /plan-model /strategy /goal /stats /copy",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
@@ -3296,6 +3393,14 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
         Line::from(Span::styled(
             "  /clear /quit  ·  !cmd  !!cmd (shell)",
             theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  select+copy: drag in terminal (mouse free by default)",
+            theme.dim,
+        )),
+        Line::from(Span::styled(
+            "  /copy last reply · PIRS_TUI_MOUSE=1 for wheel scroll",
+            theme.dim,
         )),
         Line::from(Span::styled(
             "  type / then Tab · 1–3 starters when empty",
@@ -4257,6 +4362,47 @@ mod tests {
         writer.push(b"hello".to_vec());
         writer.push(b"world".to_vec());
         writer.shutdown();
+    }
+
+    #[test]
+    fn last_assistant_text_finds_newest_reply() {
+        let items = vec![
+            ChatItem::User("hi".into()),
+            ChatItem::Assistant {
+                thinking: String::new(),
+                text: "first".into(),
+                error: None,
+            },
+            ChatItem::User("again".into()),
+            ChatItem::Assistant {
+                thinking: "t".into(),
+                text: "  second reply  \n".into(),
+                error: None,
+            },
+            ChatItem::Notice("n".into()),
+        ];
+        assert_eq!(
+            last_assistant_text(&items).as_deref(),
+            Some("second reply")
+        );
+        assert_eq!(last_assistant_text(&[]), None);
+        assert_eq!(
+            last_assistant_text(&[ChatItem::User("only".into())]),
+            None
+        );
+    }
+
+    #[test]
+    fn mouse_capture_off_by_default_for_native_select() {
+        // Production default must leave mouse free so terminal select/copy works.
+        std::env::remove_var("PIRS_TUI_MOUSE");
+        assert!(
+            !mouse_capture_enabled(),
+            "default must not capture mouse (blocks native selection)"
+        );
+        std::env::set_var("PIRS_TUI_MOUSE", "1");
+        assert!(mouse_capture_enabled());
+        std::env::remove_var("PIRS_TUI_MOUSE");
     }
 
     /// TUI session-end and `/stats` must consume `report_pins()` via the shared
