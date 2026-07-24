@@ -78,10 +78,11 @@ impl Autonomy {
 /// Resolve the single autonomy level from the old stacked flags.
 ///
 /// Precedence (highest first):
-/// 1. Explicit product dial / autonomy name (`plan` | `edit`/`act` | `full`/`yolo`)
-/// 2. Tool preset mapping (read-only → plan, edit-test → edit, full → full)
-/// 3. Explicit permission mode
-/// 4. Approval yolo → full (when permission not pinned lower)
+/// 1. Explicit `--autonomy` / product dial (`plan` | `edit` | `full`)
+/// 2. **Yolo commitment** (`--yolo` or `--approval yolo`) → **full**
+///    (beats env `PIRS_PERMISSION_MODE` / tool-preset so bash is not left blocked)
+/// 3. Tool preset mapping
+/// 4. Explicit permission mode
 /// 5. Agent profile plan → plan
 /// 6. Default → edit (workspace-write; safe coding default)
 pub fn resolve_autonomy(
@@ -97,6 +98,12 @@ pub fn resolve_autonomy(
     }
     if let Some(d) = mode_dial.and_then(Autonomy::parse) {
         return d;
+    }
+    // YOLO is a product commitment to full tools — not merely "no prompts".
+    // Must beat permission env / tool-preset or users keep seeing bash blocked
+    // while the UI says yolo.
+    if approval.eq_ignore_ascii_case("yolo") {
+        return Autonomy::Full;
     }
     if let Some(p) = tool_preset.and_then(crate::tool_preset::ToolPreset::parse) {
         return match p {
@@ -114,12 +121,7 @@ pub fn resolve_autonomy(
             PermissionMode::DangerFullAccess => Autonomy::Full,
         };
     }
-    let approval_yolo = approval.eq_ignore_ascii_case("yolo");
-    let profile_plan = agent_profile.eq_ignore_ascii_case("plan");
-    if approval_yolo && !profile_plan {
-        return Autonomy::Full;
-    }
-    if profile_plan {
+    if agent_profile.eq_ignore_ascii_case("plan") {
         return Autonomy::Plan;
     }
     Autonomy::Edit
@@ -180,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_permission_pins_autonomy() {
+    fn explicit_permission_pins_when_not_yolo() {
         assert_eq!(
             resolve_autonomy(
                 None,
@@ -193,13 +195,33 @@ mod tests {
             Autonomy::Full
         );
         assert_eq!(
-            resolve_autonomy(None, None, None, Some("read-only"), "yolo", "default"),
+            resolve_autonomy(None, None, None, Some("read-only"), "auto", "default"),
             Autonomy::Plan
         );
     }
 
     #[test]
+    fn yolo_beats_permission_env_and_tool_preset() {
+        // The bug: PIRS_PERMISSION_MODE=workspace-write + --approval yolo
+        // used to stay on edit and block bash.
+        assert_eq!(
+            resolve_autonomy(None, None, None, Some("workspace-write"), "yolo", "default"),
+            Autonomy::Full
+        );
+        assert_eq!(
+            resolve_autonomy(None, None, Some("edit-test"), None, "yolo", "default"),
+            Autonomy::Full
+        );
+        assert_eq!(
+            resolve_autonomy(None, None, Some("read-only"), None, "yolo", "default"),
+            Autonomy::Full
+        );
+        assert!(permission_deny_reason(Autonomy::Full.permission(), "bash").is_none());
+    }
+
+    #[test]
     fn autonomy_flag_wins_over_yolo_and_permission() {
+        // Explicit --autonomy plan still wins (user asked for read-only).
         assert_eq!(
             resolve_autonomy(None, Some("plan"), None, Some("danger-full-access"), "yolo", "default"),
             Autonomy::Plan
@@ -221,7 +243,7 @@ mod tests {
             Autonomy::Edit
         );
         assert_eq!(
-            resolve_autonomy(None, None, Some("read-only"), None, "yolo", "default"),
+            resolve_autonomy(None, None, Some("read-only"), None, "auto", "default"),
             Autonomy::Plan
         );
     }

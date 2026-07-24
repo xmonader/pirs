@@ -119,8 +119,15 @@ struct Cli {
     #[arg(long)]
     no_mcp: bool,
 
-    /// Approval prompts only: auto | ask | yolo. Prefer `--autonomy full` instead
-    /// of bare `--approval yolo` (yolo alone used to leave shell blocked).
+    /// Shortcut for full autonomy: all tools + no approval prompts.
+    /// Equivalent to `--autonomy full` (and sets approval=yolo).
+    /// Without this flag, bare `--yolo` was previously ignored as an unknown
+    /// trailing token and tools stayed on the default `edit` ladder.
+    #[arg(long)]
+    yolo: bool,
+
+    /// Approval prompts only: auto | ask | yolo.
+    /// Prefer `--yolo` or `--autonomy full` so the tool ladder is raised too.
     #[arg(long, env = "PIRS_APPROVAL", default_value = "auto")]
     approval: String,
 
@@ -486,7 +493,7 @@ async fn main() -> anyhow::Result<()> {
     let mut cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
     // Flatten trailing args into the single prompt string the rest of main
     // (and the pseudo-subcommands) expect.
-    let cli = Cli {
+    let mut cli = Cli {
         prompt: {
             let parts = std::mem::take(&mut cli.prompt);
             if parts.is_empty() {
@@ -497,6 +504,14 @@ async fn main() -> anyhow::Result<()> {
         },
         ..cli
     };
+    // --yolo is a first-class full-autonomy switch (must run before show-config
+    // and before config layering so approval is not left at default "auto").
+    if cli.yolo {
+        cli.approval = "yolo".into();
+        if cli.autonomy.is_none() {
+            cli.autonomy = Some("full".into());
+        }
+    }
 
     let mut cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Capture --also paths before chdir (they may be relative to launch dir).
@@ -633,14 +648,26 @@ async fn main() -> anyhow::Result<()> {
         project_cfg.base_url.as_deref(),
         user_cfg.base_url.as_deref(),
     );
-    let (approval, approval_src) = config_file::resolve_str(
+    let (mut approval, mut approval_src) = config_file::resolve_str(
         &matches,
         "approval",
         &cli.approval,
         project_cfg.approval.as_deref(),
         user_cfg.approval.as_deref(),
     );
+    if cli.yolo {
+        approval = "yolo".into();
+        approval_src = config_file::ConfigSource::Cli;
+    }
     if cli.show_config {
+        let autonomy = pirs_tools::resolve_autonomy(
+            cli.mode_dial.as_deref(),
+            cli.autonomy.as_deref(),
+            cli.tool_preset.as_deref(),
+            cli.permission_mode.as_deref(),
+            &approval,
+            &cli.agent_profile,
+        );
         println!("model:      {model:<24} ({})", model_src.label());
         println!("provider:   {provider:<24} ({})", provider_src.label());
         println!(
@@ -649,6 +676,7 @@ async fn main() -> anyhow::Result<()> {
             base_url_src.label()
         );
         println!("approval:   {approval:<24} ({})", approval_src.label());
+        println!("{}", pirs_tools::autonomy_status_line(autonomy));
         return Ok(());
     }
     if cli.doctor {
@@ -1062,8 +1090,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // ── One autonomy ladder (plan | edit | full) ───────────────────────────
-    // Collapses --autonomy / --mode-dial / --tool-preset / --permission-mode /
-    // --approval yolo / --agent-profile into a single product level.
+    // Collapses --yolo / --autonomy / --mode-dial / --tool-preset /
+    // --permission-mode / --approval / --agent-profile into one product level.
+    // (--yolo already applied at parse time → approval=yolo, autonomy=full.)
     if let Some(d) = cli.mode_dial.as_deref() {
         let norm = d.trim().to_ascii_lowercase();
         if !matches!(norm.as_str(), "plan" | "act" | "edit" | "full" | "yolo") {
