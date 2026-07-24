@@ -37,7 +37,7 @@ mod tools;
 use journey::*;
 use model_picker::{draw_model_picker, ModelPicker, ModelPickerTarget};
 use slash::*;
-use theme::*;
+use theme::{composer_mode_style, composer_title, *};
 use tools::*;
 
 // ── Structured chat ─────────────────────────────────────────────────────────
@@ -176,20 +176,57 @@ impl ChatItem {
     }
 }
 
-/// Live stream: always show the tail of reasoning so it is visible while
-/// generating (history collapse does not apply here).
-fn render_thinking_live(thinking: &str, theme: &Theme) -> Vec<Line<'static>> {
-    const TAIL: usize = 24;
+/// Live thinking while the model is generating.
+///
+/// Collapsed (default): one quiet status line — no raw CoT flood above the
+/// composer. Expanded (`t` / ctrl-o): last few lines of reasoning.
+fn render_thinking_live(
+    thinking: &str,
+    theme: &Theme,
+    expanded: bool,
+) -> Vec<Line<'static>> {
     let lines: Vec<&str> = thinking.lines().filter(|l| !l.trim().is_empty()).collect();
     let total = lines.len();
     if total == 0 {
         return Vec::new();
     }
+    if !expanded {
+        let hint = lines
+            .last()
+            .map(|l| {
+                let t = l.trim();
+                let max = 56usize;
+                if t.chars().count() > max {
+                    let head: String = t.chars().take(max.saturating_sub(1)).collect();
+                    format!("{head}…")
+                } else {
+                    t.to_string()
+                }
+            })
+            .unwrap_or_default();
+        return vec![Line::from(vec![
+            Span::styled("    · ", theme.accent),
+            Span::styled("thinking", theme.thinking),
+            Span::styled(
+                format!(
+                    " · {total} line{} · t expand",
+                    if total == 1 { "" } else { "s" }
+                ),
+                theme.dim,
+            ),
+            if hint.is_empty() {
+                Span::raw("")
+            } else {
+                Span::styled(format!(" · {hint}"), theme.dim)
+            },
+        ])];
+    }
+    const TAIL: usize = 8;
     let skip = total.saturating_sub(TAIL);
     let mut out = vec![Line::from(vec![
         Span::styled("    · ", theme.accent),
         Span::styled(
-            format!("thinking… ({total} line{})", if total == 1 { "" } else { "s" }),
+            format!("thinking · {total} lines · t collapse"),
             theme.thinking,
         ),
     ])];
@@ -1222,8 +1259,9 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         status_msg: String::new(),
         last_activity: String::new(),
         turn_started_at: None,
-        // Show reasoning live + in history by default; user can hide with t.
-        thinking_expanded: true,
+        // Collapsed by default — raw CoT flood next to the composer felt like junk.
+        // Expand with `t` / ctrl-o.
+        thinking_expanded: false,
         slash_sel: 0,
         ext_slash: opts
             .host
@@ -2989,11 +3027,11 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
     let mut live_rows: Vec<Line<'static>> = Vec::new();
     if let Some((thinking, text)) = &app.live {
         let phase = if !thinking.trim().is_empty() && text.trim().is_empty() {
-            "  thinking"
+            "  · thinking"
         } else if !thinking.trim().is_empty() {
-            "  streaming (+thoughts)"
+            "  · answering"
         } else {
-            "  streaming"
+            "  · streaming"
         };
         let mut logical: Vec<Line<'static>> = vec![
             Line::from(""),
@@ -3004,9 +3042,11 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
             ]),
         ];
         if !thinking.trim().is_empty() {
-            // Live reasoning always paints content (tail), even if history is collapsed —
-            // otherwise users never see thinking "while it's happening".
-            logical.extend(render_thinking_live(thinking, theme));
+            logical.extend(render_thinking_live(
+                thinking,
+                theme,
+                app.thinking_expanded,
+            ));
         }
         if !text.trim().is_empty() {
             logical.extend(render_markdown(text, theme, width.saturating_sub(4)));
@@ -3159,30 +3199,28 @@ fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Th
         // (and the compose cursor) every timeout tick.
         let spin = FRAMES[((app.tick / 4) % 10) as usize];
         left.push(Span::styled(format!(" {spin} "), theme.accent));
-        let activity = if !app.last_activity.is_empty() {
-            app.last_activity.as_str()
-        } else if !app.status_msg.is_empty() {
-            app.status_msg.as_str()
-        } else {
-            "working"
-        };
-        left.push(Span::styled(activity.to_string(), theme.status));
+        // Prefer a clean activity label; map internal noise to short verbs.
+        let activity = clean_activity_label(app);
+        left.push(Span::styled(activity, theme.status));
         if let Some(start) = app.turn_started_at {
             left.push(Span::styled(
                 format!(" · {}", format_elapsed(start.elapsed().as_secs())),
                 theme.dim,
             ));
         }
-        left.push(Span::styled("  ·  type to steer", theme.dim));
-        right.push(Span::styled(" esc cancel ", theme.dim));
+        right.push(Span::styled(" esc cancel · type to steer ", theme.dim));
     } else {
         left.push(Span::styled("  ○  ", theme.dim));
         left.push(Span::styled("ready", theme.status));
-        // Transient status only — never re-print "enter send · ? help" here.
-        // That string was also in the welcome banner and looked duplicated
-        // right above the composer.
+        // Show autonomy badge so the bar matches the composer title.
+        let auto = match pirs_tools::live_permission_mode() {
+            pirs_tools::PermissionMode::ReadOnly => "plan",
+            pirs_tools::PermissionMode::WorkspaceWrite => "edit",
+            pirs_tools::PermissionMode::DangerFullAccess => "full",
+        };
+        left.push(Span::styled(format!(" · {auto}"), theme.dim));
         if !app.status_msg.is_empty() {
-            left.push(Span::styled(format!("  ·  {}", app.status_msg), theme.dim));
+            left.push(Span::styled(format!(" · {}", app.status_msg), theme.dim));
         }
     }
 
@@ -3219,22 +3257,52 @@ fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Th
     frame.render_widget(Paragraph::new(Line::from(line)), area);
 }
 
+/// Map noisy internal activity strings to short status-bar verbs.
+fn clean_activity_label(app: &App) -> String {
+    if let Some((thinking, text)) = &app.live {
+        if !thinking.trim().is_empty() && text.trim().is_empty() {
+            return "thinking".into();
+        }
+        if !text.trim().is_empty() {
+            return "writing".into();
+        }
+    }
+    let raw = if !app.last_activity.is_empty() {
+        app.last_activity.as_str()
+    } else if !app.status_msg.is_empty() {
+        app.status_msg.as_str()
+    } else {
+        "working"
+    };
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("bash") || lower.contains("shell") {
+        return "running shell".into();
+    }
+    if lower.contains("read") {
+        return "reading".into();
+    }
+    if lower.contains("edit") || lower.contains("write") {
+        return "editing".into();
+    }
+    if lower.contains("think") {
+        return "thinking".into();
+    }
+    if lower.contains("steer") {
+        return "steering".into();
+    }
+    // Keep short; strip tool-call spam.
+    if raw.chars().count() > 28 {
+        let head: String = raw.chars().take(27).collect();
+        return format!("{head}…");
+    }
+    raw.to_string()
+}
+
 fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Theme) {
     let pending = app.pending_approval.lock().unwrap().is_some();
     let border_style = composer_mode_style(theme, &app.approval_mode, app.running, pending);
-    // Title = mode badge only (hints live in status bar / ? help — not duplicated here).
-    let title = if pending {
-        " approval "
-    } else if app.running {
-        " steer "
-    } else {
-        match app.approval_mode.to_ascii_lowercase().as_str() {
-            m if m.contains("yolo") || m == "auto" => " yolo ",
-            m if m.contains("plan") => " plan ",
-            m if m.contains("ask") => " ask ",
-            _ => " message ",
-        }
-    };
+    // Title = short mode badge (never mislabel default auto as "yolo").
+    let title = composer_title(&app.approval_mode, app.running, pending);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -3244,8 +3312,7 @@ fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &The
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Empty compose: blank. Do not put "enter send · ? help" here — it fought
-    // the status/welcome lines and looked duplicated above the cursor.
+    // Empty compose: blank. Hints live in the status bar, not inside the box.
     let (display, style) = if app.input.is_empty() && !pending {
         (String::new(), theme.input)
     } else {
@@ -4051,16 +4118,48 @@ mod tests {
     }
 
     #[test]
-    fn thinking_live_always_shows_tail() {
+    fn thinking_live_collapsed_is_one_line() {
         let theme = Theme::default_dark();
         let body = (0..30).map(|i| format!("step {i}")).collect::<Vec<_>>().join("\n");
-        let lines = render_thinking_live(&body, &theme);
+        let lines = render_thinking_live(&body, &theme, false);
+        assert_eq!(lines.len(), 1, "collapsed live thinking is a single status line");
         let flat: String = lines
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
             .collect();
-        assert!(flat.contains("thinking…"), "{flat}");
-        assert!(flat.contains("step 29"), "must show latest: {flat}");
+        assert!(flat.contains("thinking"), "{flat}");
+        assert!(flat.contains("30 line"), "{flat}");
+        assert!(flat.contains("t expand"), "{flat}");
+        // Hint may include last step, but not dump all 30 full lines as separate rows.
+        assert!(!flat.contains("step 0"), "must not dump early CoT when collapsed: {flat}");
+    }
+
+    #[test]
+    fn thinking_live_expanded_shows_tail() {
+        let theme = Theme::default_dark();
+        let body = (0..30).map(|i| format!("step {i}")).collect::<Vec<_>>().join("\n");
+        let lines = render_thinking_live(&body, &theme, true);
+        let flat: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(flat.contains("thinking"), "{flat}");
+        assert!(flat.contains("step 29"), "must show latest when expanded: {flat}");
+        assert!(flat.contains("t collapse"), "{flat}");
+    }
+
+    #[test]
+    fn composer_title_does_not_call_default_auto_yolo() {
+        // Default approval "auto" must not paint as the yolo badge.
+        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::WorkspaceWrite);
+        assert_eq!(composer_title("auto", false, false), " edit ");
+        assert_ne!(composer_title("auto", false, false), " yolo ");
+        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::DangerFullAccess);
+        assert_eq!(composer_title("yolo", false, false), " full ");
+        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::ReadOnly);
+        assert_eq!(composer_title("auto", false, false), " plan ");
+        assert_eq!(composer_title("auto", true, false), " running ");
+        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::WorkspaceWrite);
     }
 
     #[test]
@@ -4595,7 +4694,7 @@ mod tests {
             last_activity: String::new(),
             turn_started_at: None,
             // Show reasoning live + in history by default; user can hide with t.
-            thinking_expanded: true,
+            thinking_expanded: false,
             slash_sel: 0,
             ext_slash: Vec::new(),
             first_run_session: false,

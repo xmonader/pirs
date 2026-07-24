@@ -144,7 +144,10 @@ impl Theme {
 }
 
 
-/// Composer border color by approval mode + session state (qwen/vibe pattern).
+/// Composer border color by mode + session state.
+///
+/// Uses live permission (autonomy ladder) first so we don't paint default
+/// `approval=auto` as yolo-green (that mislabel was pure noise in the input box).
 pub(crate) fn composer_mode_style(
     theme: &Theme,
     approval_mode: &str,
@@ -155,10 +158,16 @@ pub(crate) fn composer_mode_style(
         return theme.approval;
     }
     if running {
-        return theme.warning;
+        return theme.accent;
+    }
+    // Prefer autonomy ladder for chrome color.
+    match pirs_tools::live_permission_mode() {
+        pirs_tools::PermissionMode::ReadOnly => return theme.plan,
+        pirs_tools::PermissionMode::DangerFullAccess => return theme.yolo,
+        pirs_tools::PermissionMode::WorkspaceWrite => {}
     }
     let m = approval_mode.to_ascii_lowercase();
-    if m.contains("yolo") || m == "auto" || m.contains("auto-approve") {
+    if m.contains("yolo") || m.contains("auto-approve") {
         return theme.yolo;
     }
     if m.contains("plan") {
@@ -167,7 +176,35 @@ pub(crate) fn composer_mode_style(
     if m.contains("ask") {
         return theme.warning;
     }
+    // Default `auto` + edit autonomy → neutral border (not yolo).
     theme.input_border
+}
+
+/// Short composer title badge (never confuses default auto with yolo).
+pub(crate) fn composer_title(
+    approval_mode: &str,
+    running: bool,
+    pending_approval: bool,
+) -> &'static str {
+    if pending_approval {
+        return " approval ";
+    }
+    if running {
+        return " running ";
+    }
+    match pirs_tools::live_permission_mode() {
+        pirs_tools::PermissionMode::ReadOnly => return " plan ",
+        pirs_tools::PermissionMode::DangerFullAccess => return " full ",
+        pirs_tools::PermissionMode::WorkspaceWrite => {}
+    }
+    let m = approval_mode.to_ascii_lowercase();
+    if m.contains("yolo") {
+        return " full ";
+    }
+    if m.contains("ask") {
+        return " ask ";
+    }
+    " edit "
 }
 
 pub(crate) fn format_elapsed(secs: u64) -> String {
