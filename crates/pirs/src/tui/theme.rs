@@ -207,11 +207,20 @@ pub(crate) fn composer_title(
     " edit "
 }
 
+/// Elapsed time for UI chrome. Fixed width under 60s so the status bar
+/// doesn't jitter as seconds tick (` 5s` / `59s` / `1m05s`).
 pub(crate) fn format_elapsed(secs: u64) -> String {
+    format_elapsed_fixed(secs)
+}
+
+/// Fixed-width elapsed for the status bar (avoids label jitter as seconds tick).
+pub(crate) fn format_elapsed_fixed(secs: u64) -> String {
     if secs < 60 {
-        format!("{secs}s")
-    } else {
+        format!("{secs:>3}s")
+    } else if secs < 3600 {
         format!("{}m{:02}s", secs / 60, secs % 60)
+    } else {
+        format!("{}h{:02}m", secs / 3600, (secs % 3600) / 60)
     }
 }
 

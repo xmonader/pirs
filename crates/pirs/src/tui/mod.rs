@@ -2792,15 +2792,23 @@ where
     };
     terminal.flush()?;
 
-    if desired != *last_cursor {
-        match desired {
-            None => terminal.hide_cursor()?,
-            Some(pos) => {
-                terminal.show_cursor()?;
-                terminal.set_cursor_position(pos)?;
-            }
+    // When the cursor is hidden, re-emit Hide on *every* frame. Ratatui
+    // paints cell diffs with absolute MoveTo; the physical caret then sits
+    // on the last painted cell (often the status-bar spinner, right before
+    // "thinking") until the next Show/Hide. Deduping Hide left it visible
+    // and "flickering" on the status line as that row redrew.
+    // When shown, still only MoveTo on change so idle blink isn't reset.
+    match desired {
+        None => {
+            terminal.hide_cursor()?;
+            *last_cursor = None;
         }
-        *last_cursor = desired;
+        Some(pos) if desired != *last_cursor => {
+            terminal.show_cursor()?;
+            terminal.set_cursor_position(pos)?;
+            *last_cursor = desired;
+        }
+        Some(_) => {}
     }
 
     terminal.swap_buffers();
@@ -3175,7 +3183,8 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
 }
 
 fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Theme) {
-    // Spinner frames; `app.tick` advances on the event-loop throttle while busy.
+    // Spinner only for tool work — pure "thinking" uses a static glyph so the
+    // cell before the label doesn't thrash every tick (looked like a caret).
     const FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
     let mut left: Vec<Span<'static>> = Vec::new();
@@ -3191,22 +3200,27 @@ fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Th
         ));
         right.push(Span::styled(" y / a / n · esc ", theme.dim));
     } else if app.running {
-        // ~5 spinner frames/sec at 50ms loop — avoids thrashing the full frame
-        // (and the compose cursor) every timeout tick.
-        let spin = FRAMES[((app.tick / 4) % 10) as usize];
-        left.push(Span::styled(format!(" {spin} "), theme.accent));
-        // Prefer a clean activity label; map internal noise to short verbs.
         let activity = clean_activity_label(app);
-        left.push(Span::styled(activity, theme.status));
-        if let Some(start) = app.turn_started_at {
-            left.push(Span::styled(
-                format!(" · {}", format_elapsed(start.elapsed().as_secs())),
-                theme.dim,
-            ));
+        let is_thinking = activity == "thinking" || activity == "writing";
+        // Fixed-width prefix (3 cols) so label never shifts.
+        if is_thinking {
+            left.push(Span::styled("  · ", theme.accent));
+        } else {
+            let spin = FRAMES[((app.tick / 4) % 10) as usize];
+            left.push(Span::styled(format!(" {spin} "), theme.accent));
         }
-        right.push(Span::styled(" esc cancel · type to steer ", theme.dim));
+        // Pad activity to fixed width so "thinking"/"writing"/"running shell"
+        // don't shove the elapsed time (and look like end-of-label flicker).
+        let label = format!("{activity:<14}");
+        left.push(Span::styled(label, theme.status));
+        if let Some(start) = app.turn_started_at {
+            // Fixed-width elapsed (e.g. "  5s" / "1m05s") so the right side stays put.
+            let elapsed = format_elapsed(start.elapsed().as_secs());
+            left.push(Span::styled(format!(" · {elapsed}"), theme.dim));
+        }
+        right.push(Span::styled(" esc cancel ", theme.dim));
     } else {
-        left.push(Span::styled("  ○  ", theme.dim));
+        left.push(Span::styled("  · ", theme.dim));
         left.push(Span::styled("ready", theme.status));
         // Show autonomy badge so the bar matches the composer title.
         let auto = match pirs_tools::live_permission_mode() {
