@@ -119,16 +119,13 @@ struct Cli {
     #[arg(long)]
     no_mcp: bool,
 
-    /// Approval mode: auto (no prompts), ask (inline y/n for sensitive ops),
-    /// yolo (no prompts; also raises permission to danger-full-access when
-    /// `--permission-mode` is unset so bash/shell work — still respects
-    /// explicit `--permission-mode` and `--agent-profile plan`).
+    /// Approval prompts only: auto | ask | yolo. Prefer `--autonomy full` instead
+    /// of bare `--approval yolo` (yolo alone used to leave shell blocked).
     #[arg(long, env = "PIRS_APPROVAL", default_value = "auto")]
     approval: String,
 
-    /// Safety profile (Vibe-class): default | plan | accept-edits | auto-approve
-    /// Enforced on every tool call (plan = read-only; accept-edits auto-allows file tools;
-    /// auto-approve skips approval prompts for all tools).
+    /// Low-level safety profile (prefer `--autonomy`): default | plan |
+    /// accept-edits | auto-approve.
     #[arg(long = "agent-profile", env = "PIRS_AGENT_PROFILE", default_value = "default")]
     agent_profile: String,
 
@@ -279,21 +276,28 @@ struct Cli {
     #[arg(long)]
     doctor: bool,
 
-    /// Permission ladder: read-only | workspace-write | danger-full-access
-    /// (composes with --agent-profile). Env: PIRS_PERMISSION_MODE.
+    /// **Primary tool autonomy** (streamlined): `plan` | `edit` | `full`.
+    /// - plan  — read-only (no writes/shell)
+    /// - edit  — workspace edits; shell blocked
+    /// - full  — all tools + no approval prompts (true yolo)
+    /// Prefer this over stacking --permission-mode / --agent-profile / --approval.
+    /// Env: `PIRS_AUTONOMY`. Aliases: yolo→full, act→edit, read-only→plan.
+    #[arg(long = "autonomy", env = "PIRS_AUTONOMY")]
+    autonomy: Option<String>,
+
+    /// Permission ladder (low-level; prefer `--autonomy`):
+    /// read-only | workspace-write | danger-full-access.
+    /// Env: PIRS_PERMISSION_MODE.
     #[arg(long = "permission-mode", env = "PIRS_PERMISSION_MODE")]
     permission_mode: Option<String>,
 
-    /// Product dial: plan (read-only tools) or act (full tools). Sets
-    /// permission mode + agent-profile when those flags are left default.
+    /// Alias for `--autonomy plan|edit|full` (legacy: plan|act).
     #[arg(long = "mode-dial", env = "PIRS_MODE_DIAL")]
     mode_dial: Option<String>,
 
-    /// Named tool-policy preset for hybrid / weak-exec experiments:
+    /// Named tool-policy preset for hybrid experiments:
     /// `full` | `edit-test` | `read-only` | `no-tools`.
-    /// Maps onto permission mode, agent-profile, tool-diet, sequential, and
-    /// optional max-tool-calls. Explicit `--permission-mode` / `--agent-profile`
-    /// / `--tool-diet` / `--max-tool-calls` win over the preset.
+    /// Maps into the same autonomy ladder (+ tool-diet / sequential for experiments).
     #[arg(long = "tool-preset", env = "PIRS_TOOL_PRESET")]
     tool_preset: Option<String>,
 }
@@ -1032,9 +1036,9 @@ async fn main() -> anyhow::Result<()> {
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
     let mut hooks = Hooks::default();
-    let approval_mode =
-        approval::ApprovalMode::parse(&cli.approval).unwrap_or(approval::ApprovalMode::Auto);
-    // Named tool-policy presets (hybrid economics / weak-exec experiments).
+
+    // Named tool-policy presets only apply experiment knobs (diet/sequential/budget).
+    // Autonomy (tool access) is resolved next as a single ladder.
     if let Some(raw) = cli.tool_preset.as_deref() {
         let preset = pirs_tools::ToolPreset::parse(raw).ok_or_else(|| {
             anyhow::anyhow!(
@@ -1056,66 +1060,44 @@ async fn main() -> anyhow::Result<()> {
             preset.allows_edit_and_test_loop()
         );
     }
-    // Plan/Act product dial maps onto profile + permission ladder.
-    let mut dial_plan = false;
+
+    // ── One autonomy ladder (plan | edit | full) ───────────────────────────
+    // Collapses --autonomy / --mode-dial / --tool-preset / --permission-mode /
+    // --approval yolo / --agent-profile into a single product level.
     if let Some(d) = cli.mode_dial.as_deref() {
-        match d.trim().to_ascii_lowercase().as_str() {
-            "plan" => {
-                dial_plan = true;
-                if cli.agent_profile == "default" {
-                    cli.agent_profile = "plan".into();
-                }
-                if cli.permission_mode.is_none() {
-                    cli.permission_mode = Some("read-only".into());
-                }
-                eprintln!("[mode-dial: plan — read-only tools]");
-            }
-            "act" => {
-                if cli.permission_mode.is_none() {
-                    cli.permission_mode = Some("danger-full-access".into());
-                }
-                eprintln!("[mode-dial: act — full tools]");
-            }
-            other => bail!("unknown --mode-dial {other:?}; expected plan|act"),
+        let norm = d.trim().to_ascii_lowercase();
+        if !matches!(norm.as_str(), "plan" | "act" | "edit" | "full" | "yolo") {
+            bail!("unknown --mode-dial {d:?}; expected plan|act|edit|full");
         }
     }
-    let safety = pirs_tools::SafetyProfile::parse(&cli.agent_profile).ok_or_else(|| {
-        anyhow::anyhow!(
-            "unknown --agent-profile {:?}; expected default|plan|accept-edits|auto-approve",
-            cli.agent_profile
-        )
-    })?;
-    if safety != pirs_tools::SafetyProfile::Default {
-        eprintln!("[agent-profile: {}]", safety.name());
-    }
-    // So Rhai packs (strict-plan, etc.) can read the active profile via agent_profile("").
-    std::env::set_var("PIRS_AGENT_PROFILE", safety.name());
-    let explicit_perm = cli
-        .permission_mode
-        .as_deref()
-        .and_then(pirs_tools::PermissionMode::parse);
-    let before_yolo =
-        explicit_perm.unwrap_or_else(pirs_tools::PermissionMode::from_env);
-    let perm_mode = pirs_tools::apply_yolo_permission_default(
-        approval_mode == approval::ApprovalMode::Yolo,
-        explicit_perm,
-        dial_plan,
-        safety == pirs_tools::SafetyProfile::Plan,
-        before_yolo,
+    let autonomy = pirs_tools::resolve_autonomy(
+        cli.mode_dial.as_deref(),
+        cli.autonomy.as_deref(),
+        cli.tool_preset.as_deref(),
+        cli.permission_mode.as_deref(),
+        &cli.approval,
+        &cli.agent_profile,
     );
-    if perm_mode != before_yolo {
-        eprintln!(
-            "[yolo: permission-mode {} → {} (bash/shell; pin with --permission-mode)]",
-            before_yolo.name(),
-            perm_mode.name()
-        );
-    }
-    pirs_tools::init_live_permission_mode(perm_mode);
-    if perm_mode != pirs_tools::PermissionMode::WorkspaceWrite || dial_plan {
-        eprintln!("[permission-mode: {}]", perm_mode.name());
-    }
+    // Expand autonomy → permission + profile + approval (single write path).
+    pirs_tools::apply_autonomy(autonomy);
+    let safety = autonomy.profile();
+    let perm_mode = autonomy.permission();
+    // Approval: explicit CLI wins if parseable; else autonomy default (full→yolo).
+    let approval_mode = approval::ApprovalMode::parse(&cli.approval)
+        .or_else(|| approval::ApprovalMode::parse(autonomy.approval_name()))
+        .unwrap_or(approval::ApprovalMode::Auto);
+    // If user said --approval yolo but autonomy resolved lower via explicit pin,
+    // keep their approval for prompts while permission stays pinned.
+    let approval_mode = if cli.approval.eq_ignore_ascii_case("yolo") {
+        approval::ApprovalMode::Yolo
+    } else if autonomy.is_yolo() && cli.approval.eq_ignore_ascii_case("auto") {
+        approval::ApprovalMode::Yolo
+    } else {
+        approval_mode
+    };
+    eprintln!("[{}]", pirs_tools::autonomy_status_line(autonomy));
     // Always install gate when a non-default safety profile is set (hard denials),
-    // or when approval is Ask. Auto+default stays open; yolo still skips rhai policy.
+    // or when approval is Ask. Auto+default stays open.
     let gate = std::sync::Arc::new(approval::ApprovalGate::with_profile(
         approval_mode,
         cwd.clone(),
@@ -1128,13 +1110,12 @@ async fn main() -> anyhow::Result<()> {
     } else {
         None
     };
-    // Always install live permission ladder so /plan|/act can tighten mid-session
-    // even if we started on danger-full-access (hook re-reads live mode each call).
+    // Permission ladder always installed; re-reads live mode for /plan|/act|/yolo.
     {
         let ph = pirs_tools::live_permission_hook();
         gate_hook = pirs_agent::Hooks::chain_before(gate_hook, Some(ph));
     }
-    let _ = dial_plan;
+    let _ = perm_mode;
 
     // Semantic search needs the vector store, so it implies the persistent graph.
     let graph_db = cwd.join(".pirs").join("graph.db");
@@ -1631,14 +1612,10 @@ async fn main() -> anyhow::Result<()> {
         pirs_agent::ExecutionMode::Parallel
     };
 
-    let approval_mode = approval::ApprovalMode::parse(&cli.approval).unwrap_or_else(|| {
-        eprintln!("[unknown approval mode '{}', using auto]", cli.approval);
-        approval::ApprovalMode::Auto
-    });
+    // approval_mode already resolved with autonomy above.
     if approval_mode == approval::ApprovalMode::Yolo {
         eprintln!(
-            "[WARNING: yolo — no approval prompts; permission ladder still applies \
-             (raised to danger-full-access unless --permission-mode / plan profile pins it)]"
+            "[WARNING: autonomy full / yolo — no approval prompts; tools follow autonomy ladder]"
         );
     }
 
@@ -2513,9 +2490,11 @@ async fn handle_command(
                  /profile [p]    show or set agent safety profile\n\
                  /image <path>   attach image to next prompt (vision)\n\
                  /plan | /act    product dial (read-only vs full tools)\n\
-                 /permission [m] read-only|workspace-write|danger-full-access\n\
+                 /autonomy [m]   plan|edit|full  (one tool-access knob)\n\
+                 /plan | /act    shortcuts for autonomy plan / full\n\
+                 /permission [m] legacy alias for autonomy\n\
                  /checkpoint     list|create|restore [id]\n\
-                 /approval       auto|ask|yolo\n\
+                 /approval       auto|ask|yolo (prompts; yolo→full autonomy)\n\
                  /fork [n]       fork session at entry\n\
                  /tree           session lineage\n\
                  /quit           exit (prints session stats)\n\
@@ -2643,37 +2622,49 @@ async fn handle_command(
                 report_pins,
             );
         }
-        "/approval" => {
+        "/approval" | "/autonomy" => {
             if arg.is_empty() {
+                let a = match pirs_tools::live_permission_mode() {
+                    pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
+                    pirs_tools::PermissionMode::WorkspaceWrite => pirs_tools::Autonomy::Edit,
+                    pirs_tools::PermissionMode::DangerFullAccess => pirs_tools::Autonomy::Full,
+                };
                 println!(
-                    "approval mode: {}  (permission: {})",
-                    approval_shared.lock().unwrap().name(),
-                    pirs_tools::live_permission_mode().name()
+                    "{}  ·  approval prompts: {}",
+                    pirs_tools::autonomy_status_line(a),
+                    approval_shared.lock().unwrap().name()
                 );
+            } else if let Some(a) = pirs_tools::Autonomy::parse(arg) {
+                pirs_tools::apply_autonomy(a);
+                if a.is_yolo() {
+                    *approval_shared.lock().unwrap() = approval::ApprovalMode::Yolo;
+                }
+                println!("{}", pirs_tools::autonomy_status_line(a));
             } else if let Some(m) = approval::ApprovalMode::parse(arg) {
+                // Legacy: /approval yolo → full autonomy
                 *approval_shared.lock().unwrap() = m;
-                // Match CLI: yolo lifts the ladder so bash works unless user
-                // already pinned a tighter mode via /permission or /plan.
-                if m == approval::ApprovalMode::Yolo
-                    && pirs_tools::live_permission_mode()
-                        != pirs_tools::PermissionMode::DangerFullAccess
-                    && pirs_tools::live_permission_mode() != pirs_tools::PermissionMode::ReadOnly
-                {
-                    pirs_tools::set_live_permission_mode(
-                        pirs_tools::PermissionMode::DangerFullAccess,
-                    );
-                    println!(
-                        "approval mode set to yolo · permission → danger-full-access"
-                    );
+                if m == approval::ApprovalMode::Yolo {
+                    pirs_tools::apply_autonomy(pirs_tools::Autonomy::Full);
+                    println!("{}", pirs_tools::autonomy_status_line(pirs_tools::Autonomy::Full));
                 } else {
                     println!(
-                        "approval mode set to {}  (permission: {})",
+                        "approval prompts → {}  ({})",
                         m.name(),
-                        pirs_tools::live_permission_mode().name()
+                        pirs_tools::autonomy_status_line({
+                            match pirs_tools::live_permission_mode() {
+                                pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
+                                pirs_tools::PermissionMode::WorkspaceWrite => {
+                                    pirs_tools::Autonomy::Edit
+                                }
+                                pirs_tools::PermissionMode::DangerFullAccess => {
+                                    pirs_tools::Autonomy::Full
+                                }
+                            }
+                        })
                     );
                 }
             } else {
-                println!("usage: /approval <auto|ask|yolo>");
+                println!("usage: /autonomy plan|edit|full   or   /approval auto|ask|yolo");
             }
         }
         "/compact" => {

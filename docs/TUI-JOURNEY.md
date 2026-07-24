@@ -99,8 +99,10 @@ Useful slash commands:
 | Command | Why |
 |---------|-----|
 | `/tour` | Show the first-run panel again |
-| `/plan` | Read-only explore (safe) |
-| `/act` | Allow writes + full tools |
+| `/autonomy plan\|edit\|full` | **One** tool-access knob (prefer this) |
+| `/plan` | Autonomy plan — read-only |
+| `/edit` | Autonomy edit — writes, no shell |
+| `/act` / `/yolo` | Autonomy full — all tools + no prompts |
 | `/model` | **Fuzzy model picker** (or `/model backend/id`) |
 | `/models refresh` | Pull provider catalogs into the picker |
 | `/stats` | Tokens + timing |

@@ -54,6 +54,7 @@ pub mod fleet;
 pub mod git_tools;
 pub mod grep;
 pub mod job_tools;
+pub mod autonomy;
 pub mod permission_mode;
 pub mod tool_preset;
 pub mod ls;
@@ -107,6 +108,9 @@ pub use checkpoint::{
 pub use doctor::{doctor_report, DoctorTool};
 pub use fleet::fleet_tools;
 pub use git_tools::git_tools;
+pub use autonomy::{
+    apply_autonomy, autonomy_status_line, resolve_autonomy, Autonomy,
+};
 pub use permission_mode::{
     apply_yolo_permission_default, init_live_permission_mode, live_permission_hook,
     live_permission_mode, permission_deny_reason, permission_deny_reason_with_args, permission_hook,

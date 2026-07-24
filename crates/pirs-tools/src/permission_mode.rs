@@ -183,12 +183,21 @@ pub fn permission_deny_reason_with_args(
     if mode >= need {
         None
     } else {
+        let need_auto = match need {
+            PermissionMode::ReadOnly => "plan",
+            PermissionMode::WorkspaceWrite => "edit",
+            PermissionMode::DangerFullAccess => "full",
+        };
+        let cur_auto = match mode {
+            PermissionMode::ReadOnly => "plan",
+            PermissionMode::WorkspaceWrite => "edit",
+            PermissionMode::DangerFullAccess => "full",
+        };
         Some(format!(
-            "tool `{tool}` requires permission mode `{}` (current: `{}`); \
-             raise with --permission-mode danger-full-access, /act, or /permission \
-             (note: approval yolo alone does not lift a pinned lower mode)",
-            need.name(),
-            mode.name()
+            "tool `{tool}` blocked by autonomy `{cur_auto}` (need `{need_auto}`); \
+             use /act or /yolo or --autonomy full  ·  permission {}→{}",
+            mode.name(),
+            need.name()
         ))
     }
 }

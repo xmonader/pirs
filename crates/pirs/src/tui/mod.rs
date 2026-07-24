@@ -2550,25 +2550,71 @@ fn handle_slash_command(
             );
         }
         "/plan" => {
-            pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::ReadOnly);
-            std::env::set_var("PIRS_AGENT_PROFILE", "plan");
-            app.notice("mode → plan (read-only tools; switch with /act)");
+            pirs_tools::apply_autonomy(pirs_tools::Autonomy::Plan);
+            app.approval_mode = "auto".into();
+            app.notice(pirs_tools::autonomy_status_line(pirs_tools::Autonomy::Plan));
         }
-        "/act" => {
-            pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::DangerFullAccess);
-            app.notice("mode → act (full tools; plan with /plan)");
+        "/act" | "/edit" => {
+            // /act = full tools (historical); /edit = workspace writes only.
+            let a = if cmd == "/edit" {
+                pirs_tools::Autonomy::Edit
+            } else {
+                pirs_tools::Autonomy::Full
+            };
+            pirs_tools::apply_autonomy(a);
+            if a.is_yolo() {
+                app.approval_mode = "yolo".into();
+            }
+            app.notice(pirs_tools::autonomy_status_line(a));
+        }
+        "/yolo" | "/full" => {
+            pirs_tools::apply_autonomy(pirs_tools::Autonomy::Full);
+            app.approval_mode = "yolo".into();
+            app.notice(pirs_tools::autonomy_status_line(pirs_tools::Autonomy::Full));
+        }
+        "/autonomy" => {
+            if arg.is_empty() {
+                let a = match pirs_tools::live_permission_mode() {
+                    pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
+                    pirs_tools::PermissionMode::WorkspaceWrite => pirs_tools::Autonomy::Edit,
+                    pirs_tools::PermissionMode::DangerFullAccess => pirs_tools::Autonomy::Full,
+                };
+                app.notice(pirs_tools::autonomy_status_line(a));
+            } else if let Some(a) = pirs_tools::Autonomy::parse(arg) {
+                pirs_tools::apply_autonomy(a);
+                if a.is_yolo() {
+                    app.approval_mode = "yolo".into();
+                }
+                app.notice(pirs_tools::autonomy_status_line(a));
+            } else {
+                app.notice("usage: /autonomy plan|edit|full");
+            }
         }
         "/permission" => {
+            // Legacy alias → autonomy ladder
             if arg.is_empty() {
-                app.notice(format!(
-                    "permission: {}",
-                    pirs_tools::live_permission_mode().name()
-                ));
-            } else if let Some(m) = pirs_tools::PermissionMode::parse(arg) {
-                pirs_tools::set_live_permission_mode(m);
-                app.notice(format!("permission → {}", m.name()));
+                let a = match pirs_tools::live_permission_mode() {
+                    pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
+                    pirs_tools::PermissionMode::WorkspaceWrite => pirs_tools::Autonomy::Edit,
+                    pirs_tools::PermissionMode::DangerFullAccess => pirs_tools::Autonomy::Full,
+                };
+                app.notice(pirs_tools::autonomy_status_line(a));
+            } else if let Some(a) = pirs_tools::Autonomy::parse(arg)
+                .or_else(|| {
+                    pirs_tools::PermissionMode::parse(arg).map(|m| match m {
+                        pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
+                        pirs_tools::PermissionMode::WorkspaceWrite => pirs_tools::Autonomy::Edit,
+                        pirs_tools::PermissionMode::DangerFullAccess => pirs_tools::Autonomy::Full,
+                    })
+                })
+            {
+                pirs_tools::apply_autonomy(a);
+                if a.is_yolo() {
+                    app.approval_mode = "yolo".into();
+                }
+                app.notice(pirs_tools::autonomy_status_line(a));
             } else {
-                app.notice("usage: /permission read-only|workspace-write|danger-full-access");
+                app.notice("usage: /autonomy plan|edit|full  (or legacy permission names)");
             }
         }
         "/checkpoint" => {
@@ -3383,7 +3429,11 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
             theme.assistant_text,
         )),
         Line::from(Span::styled(
-            "  /plan /act /permission /profile /checkpoint",
+            "  /autonomy plan|edit|full  ·  /plan /edit /act /yolo",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  /permission /profile (legacy) · /checkpoint",
             theme.assistant_text,
         )),
         Line::from(Span::styled(
