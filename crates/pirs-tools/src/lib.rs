@@ -58,6 +58,7 @@ pub mod autonomy;
 pub mod permission_mode;
 pub mod tool_preset;
 pub mod ls;
+pub mod office;
 pub mod paths;
 pub mod pr_tools;
 pub mod project;
@@ -85,6 +86,7 @@ pub use edit_block::EditBlockTool;
 pub use find::FindTool;
 pub use grep::GrepTool;
 pub use ls::LsTool;
+pub use office::{extract_document, is_office_ext};
 pub use read::ReadTool;
 pub use recall::RecallTool;
 pub use project::{

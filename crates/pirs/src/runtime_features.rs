@@ -387,6 +387,11 @@ pub fn collect(
             pirs_tools::current_work_context().roots.len() > 1,
             "//name/path work context",
         ),
+        cap(
+            "office_documents",
+            true,
+            "read extracts docx/pptx/xlsx/pdf/odt text; create/edit via office-documents skill + python-docx/openpyxl/python-pptx",
+        ),
     ];
 
     // Sort available first for LLM scanability.

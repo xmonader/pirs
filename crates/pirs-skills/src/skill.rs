@@ -37,8 +37,30 @@ pub fn skill_roots(cwd: &Path) -> Vec<PathBuf> {
     roots
 }
 
+/// Ensure shipped skills exist under `~/.pirs/skills` (idempotent).
+///
+/// Office-documents skill teaches create/edit workflows; `read` extracts text
+/// natively for docx/pptx/xlsx/pdf so the model never dumps ZIP binary.
+pub fn ensure_bundled_skills() {
+    let root = default_skills_dir();
+    let office = root.join("office-documents");
+    let skill_md = office.join("SKILL.md");
+    if skill_md.is_file() {
+        return;
+    }
+    if let Err(e) = fs::create_dir_all(&office) {
+        eprintln!("[skills] could not create {}: {e}", office.display());
+        return;
+    }
+    const OFFICE: &str = include_str!("../bundled/office-documents/SKILL.md");
+    if let Err(e) = fs::write(&skill_md, OFFICE) {
+        eprintln!("[skills] could not write {}: {e}", skill_md.display());
+    }
+}
+
 /// Discover skills under all roots for `cwd` (dedupe by name; earlier roots win).
 pub fn discover_skills(cwd: &Path) -> Vec<Skill> {
+    ensure_bundled_skills();
     let mut out = Vec::new();
     let mut names = std::collections::HashSet::new();
     for root in skill_roots(cwd) {

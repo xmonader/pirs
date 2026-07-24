@@ -94,7 +94,8 @@ impl AgentTool for ReadTool {
     }
 
     fn description(&self) -> &str {
-        "Read the contents of a file. Supports text files (with optional offset/limit for paging) and images (returned as image content)."
+        "Read a file. Text is paged with offset/limit. Images return image content. \
+         Office documents (.docx/.pptx/.xlsx/.odt/.pdf/…) are text-extracted (not raw binary)."
     }
 
     fn parameters(&self) -> Value {
@@ -102,7 +103,10 @@ impl AgentTool for ReadTool {
     }
 
     fn prompt_snippet(&self) -> Option<&str> {
-        Some("read: read file contents, optionally paged with offset/limit")
+        Some(
+            "read: text/images/office — docx pptx xlsx pdf odt extract to text automatically \
+             (never dumps binary). Create/edit office files via office-documents skill + bash/python.",
+        )
     }
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
@@ -114,6 +118,26 @@ impl AgentTool for ReadTool {
             .and_then(|e| e.to_str())
             .map(|e| e.to_ascii_lowercase())
         {
+            // Office / binary documents → structured text extract (never lossy UTF-8 garbage).
+            if crate::office::is_office_ext(&ext) {
+                let text = crate::office::extract_document(&path)?;
+                // Honor offset/limit as line windows on the extracted text.
+                let offset = args.offset.unwrap_or(1);
+                let total_lines = text.lines().count();
+                let limit = args.limit.unwrap_or(MAX_LINES);
+                let window = truncate::head(&text, offset, limit);
+                let mut out = window.text;
+                if window.truncated {
+                    out.push_str(&format!(
+                        "\n[Showing lines {}-{} of extracted text ({} total). Use offset={} to continue.]",
+                        window.start_line,
+                        window.end_line,
+                        total_lines,
+                        window.end_line + 1
+                    ));
+                }
+                return Ok(ToolOutput::text(out));
+            }
             if let Some((_, mime)) = IMAGE_EXTS.iter().find(|(e, _)| *e == ext) {
                 let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
                 if size > 20 * 1024 * 1024 {

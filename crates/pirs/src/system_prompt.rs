@@ -61,7 +61,10 @@ pub fn build_system_prompt_with_map(
     }
     prompt.push_str(
         "- Prefer the `project` tool for test/lint/typecheck/build/format when available; \
-         use bash for one-off git/ops commands.\n",
+         use bash for one-off git/ops commands.\n\
+        - **Office files** (.docx .pptx .xlsx .pdf .odt …): always use `read` — it extracts \
+         text (never raw ZIP/binary). To create/edit, open skill `office-documents` \
+         (`skill_view`) and use python-docx / openpyxl / python-pptx / pandoc via bash.\n",
     );
 
     if weak {
