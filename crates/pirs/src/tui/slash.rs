@@ -22,6 +22,8 @@ const BUILTIN: &[(&str, &str)] = &[
     ("/strategy", "plan-exec | plan-critic-exec | monolithic | none"),
     ("/stats", "session usage + timing"),
     ("/usage", "alias for /stats"),
+    ("/status", "runtime features, autonomy, packs, caps"),
+    ("/features", "alias for /status"),
     ("/copy", "copy last assistant reply to clipboard"),
     ("/yank", "alias for /copy"),
     ("/autonomy", "plan | edit | full  (one tool-access knob)"),

@@ -2477,6 +2477,20 @@ fn handle_slash_command(
                 Err(_) => app.notice("busy — try /stats after the run finishes"),
             }
         }
+        "/status" | "/features" | "/runtime" => {
+            if let Some(mut snap) = crate::runtime_features::live() {
+                snap.refresh_live_dials();
+                // Keep model in sync with live app state.
+                snap.model = app.model.clone();
+                snap.plan_model = app.plan_model.clone();
+                snap.strategy = app.strategy.clone();
+                crate::runtime_features::publish(snap.clone());
+                app.push(ChatItem::System(snap.format_human()));
+                app.notice("runtime status (see chat)");
+            } else {
+                app.notice("runtime snapshot not ready");
+            }
+        }
         "/copy" | "/yank" => {
             // Prefer explicit arg, else last assistant bubble.
             let text = if !arg.is_empty() {
@@ -2581,6 +2595,10 @@ fn handle_slash_command(
         "/plan" => {
             pirs_tools::apply_autonomy(pirs_tools::Autonomy::Plan);
             app.approval_mode = "auto".into();
+            if let Some(mut s) = crate::runtime_features::live() {
+                s.refresh_live_dials();
+                crate::runtime_features::publish(s);
+            }
             app.notice(pirs_tools::autonomy_status_line(pirs_tools::Autonomy::Plan));
         }
         "/act" | "/edit" => {
@@ -2594,11 +2612,19 @@ fn handle_slash_command(
             if a.is_yolo() {
                 app.approval_mode = "yolo".into();
             }
+            if let Some(mut s) = crate::runtime_features::live() {
+                s.refresh_live_dials();
+                crate::runtime_features::publish(s);
+            }
             app.notice(pirs_tools::autonomy_status_line(a));
         }
         "/yolo" | "/full" => {
             pirs_tools::apply_autonomy(pirs_tools::Autonomy::Full);
             app.approval_mode = "yolo".into();
+            if let Some(mut s) = crate::runtime_features::live() {
+                s.refresh_live_dials();
+                crate::runtime_features::publish(s);
+            }
             app.notice(pirs_tools::autonomy_status_line(pirs_tools::Autonomy::Full));
         }
         "/autonomy" => {
@@ -2613,6 +2639,10 @@ fn handle_slash_command(
                 pirs_tools::apply_autonomy(a);
                 if a.is_yolo() {
                     app.approval_mode = "yolo".into();
+                }
+                if let Some(mut s) = crate::runtime_features::live() {
+                    s.refresh_live_dials();
+                    crate::runtime_features::publish(s);
                 }
                 app.notice(pirs_tools::autonomy_status_line(a));
             } else {
@@ -3511,6 +3541,10 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, area: Rect, theme: &Theme) {
         )),
         Line::from(Span::styled(
             "  /tour /plan-model /strategy /goal /stats /copy",
+            theme.assistant_text,
+        )),
+        Line::from(Span::styled(
+            "  /status /features     runtime + packs + caps",
             theme.assistant_text,
         )),
         Line::from(Span::styled(

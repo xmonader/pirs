@@ -100,6 +100,11 @@ pub fn build_system_prompt_with_map(
         }
     }
 
+    // Live harness features (autonomy, strategy, packs, caps) — not only tools.
+    if let Some(rt) = crate::runtime_features::live() {
+        prompt.push_str(&rt.format_llm());
+    }
+
     prompt
 }
 

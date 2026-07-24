@@ -11,6 +11,7 @@ use rustyline::DefaultEditor;
 
 mod acp_mode;
 mod approval;
+mod runtime_features;
 mod runtime_safety;
 mod auth;
 mod blame;
@@ -1503,6 +1504,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    let mut has_mcp = false;
     if !cli.no_mcp {
         let mcp = pirs_mcp::load_servers(&cwd).await;
         for err in &mcp.errors {
@@ -1511,10 +1513,14 @@ async fn main() -> anyhow::Result<()> {
         if !mcp.handles.is_empty() {
             let names: Vec<String> = mcp.handles.iter().map(|h| h.name.clone()).collect();
             eprintln!("[mcp: {} ({} tools)]", names.join(", "), mcp.tools.len());
+            has_mcp = true;
         }
         let rep = pirs_mcp::McpDegradedReport::from_load(&mcp);
         if !rep.working.is_empty() || !rep.failed.is_empty() {
             std::env::set_var("PIRS_MCP_DOCTOR_LINES", rep.lines().join("\n"));
+        }
+        if !mcp.tools.is_empty() {
+            has_mcp = true;
         }
         tools.extend(mcp.tools);
     }
@@ -1526,6 +1532,8 @@ async fn main() -> anyhow::Result<()> {
         std::sync::Arc::new(skills.clone()),
         true,
     ));
+    // Runtime self-inspection tool (LLM + /status).
+    tools.push(Arc::new(runtime_features::SessionStateTool::new()));
 
     // Inject a PageRank-ranked symbol sketch so the model sees structure
     // without a first tool call (classic repomap idea). Weak mode gets a
@@ -1545,6 +1553,63 @@ async fn main() -> anyhow::Result<()> {
     if let Some(ref m) = repo_map {
         eprintln!("[repo_map: {} chars]", m.len());
     }
+
+    // Publish inspectable runtime snapshot *before* system prompt so the LLM
+    // section includes autonomy, packs, strategy, and non-tool capabilities.
+    let pack_names: Vec<String> = host
+        .as_ref()
+        .map(|h| h.extension_names())
+        .unwrap_or_default();
+    let slash_cmds: Vec<(String, String)> = {
+        let mut v: Vec<(String, String)> = file_commands
+            .iter()
+            .map(|c| (c.name.clone(), c.description.clone()))
+            .collect();
+        if let Some(h) = &host {
+            v.extend(h.commands());
+        }
+        v
+    };
+    let has_lsp = ["rust-analyzer", "typescript-language-server", "pyright-langserver", "gopls"]
+        .iter()
+        .any(|b| {
+            std::process::Command::new("sh")
+                .args(["-c", &format!("command -v {b} >/dev/null 2>&1")])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        });
+    let ui_mode = if cli.mode == "tui" {
+        "tui"
+    } else if cli.prompt.is_empty() {
+        "repl"
+    } else {
+        "one-shot"
+    };
+    let rt = runtime_features::collect(
+        &cwd,
+        ui_mode,
+        &cli.model,
+        cli.plan_model.as_deref(),
+        cli.strategy.as_deref(),
+        cli.profile.as_deref(),
+        &cli.approval,
+        cli.weak,
+        &tools,
+        &pack_names,
+        &slash_cmds,
+        graph.is_some(),
+        has_mcp,
+        has_lsp,
+    );
+    runtime_features::publish(rt);
+    eprintln!(
+        "[runtime: autonomy={} tools={} packs={} — session_state tool + /status]",
+        pirs_tools::live_permission_mode().name(),
+        tools.len(),
+        pack_names.len()
+    );
+
     let mut system =
         system_prompt::build_system_prompt_with_map(&cwd, &tools, repo_map.as_deref(), cli.weak);
     // Progressive agentskills index (shared with pirs-claw) via discovery helper.
@@ -2519,6 +2584,8 @@ async fn handle_command(
                  /profile [p]    show or set agent safety profile\n\
                  /image <path>   attach image to next prompt (vision)\n\
                  /plan | /act    product dial (read-only vs full tools)\n\
+                 /status         runtime features, autonomy, packs, caps\n\
+                 /features       alias for /status\n\
                  /autonomy [m]   plan|edit|full  (one tool-access knob)\n\
                  /plan | /act    shortcuts for autonomy plan / full\n\
                  /permission [m] legacy alias for autonomy\n\
@@ -2539,6 +2606,14 @@ async fn handle_command(
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             for line in pirs_tools::doctor_report(&cwd) {
                 println!("{line}");
+            }
+        }
+        "/status" | "/features" | "/runtime" => {
+            if let Some(mut snap) = runtime_features::live() {
+                snap.refresh_live_dials();
+                println!("{}", snap.format_human());
+            } else {
+                println!("(runtime snapshot not ready)");
             }
         }
         "/audit" => {
