@@ -96,8 +96,16 @@ struct SessionState {
 
 pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
     let cwd = opts.cwd.clone();
+    // Resolve safety snapshot first; LLM client selection reads `safety_cfg.provider`.
+    let safety_cfg = crate::runtime_safety::SafetyConfig::from_resolved(
+        cwd.clone(),
+        &opts.approval,
+        &opts.agent_profile,
+        opts.permission_mode.as_deref(),
+        &opts.provider,
+    );
     let provider: Arc<dyn pirs_ai::LlmProvider> =
-        if crate::runtime_safety::provider_is_anthropic(&opts.provider) {
+        if crate::runtime_safety::provider_is_anthropic(&safety_cfg.provider) {
             Arc::new(
                 pirs_ai::AnthropicClient::new(opts.base_url.clone())
                     .with_max_retries(opts.max_retries),
@@ -126,13 +134,6 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
     let session_id_slot: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
 
     let mut tools: Vec<Arc<dyn AgentTool>> = pirs_tools::default_tools(cwd.clone());
-    let safety_cfg = crate::runtime_safety::SafetyConfig::from_resolved(
-        cwd.clone(),
-        &opts.approval,
-        &opts.agent_profile,
-        opts.permission_mode.as_deref(),
-        &opts.provider,
-    );
 
     let acp_perm = acp_permission_hook(
         Arc::clone(&pending),

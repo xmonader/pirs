@@ -156,6 +156,9 @@ pub fn fill_subagent_policy_slot(
 }
 
 /// Pure: which tools are blocked under plan for process spawning.
+/// Production denials go through the installed before-tool hook; this helper is
+/// the same predicate for tests and external callers without installing hooks.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn plan_blocks_process_tool(tool: &str, args: &serde_json::Value) -> bool {
     pirs_tools::profile_deny_reason_with_args(SafetyProfile::Plan, tool, args).is_some()
 }
@@ -283,6 +286,15 @@ mod tests {
             assert!(
                 prod.contains("provider_is_anthropic"),
                 "{name} production code must select provider from resolved CLI, not env alone"
+            );
+            assert!(
+                prod.contains("safety_cfg.provider"),
+                "{name} must consume SafetyConfig.provider (not leave the pin unread)"
+            );
+            // Must not re-fork opts.provider for anthropic detection after snapshot resolve.
+            assert!(
+                !prod.contains("provider_is_anthropic(&opts.provider)"),
+                "{name} must not bypass safety_cfg.provider for anthropic detection"
             );
         }
     }

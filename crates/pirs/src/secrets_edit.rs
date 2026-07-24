@@ -1,7 +1,7 @@
 //! Append/update entries in `~/.pirs/secrets.env` and optional backend snippets
 //! in `~/.pirs/config.toml` (TUI/CLI setup helpers).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context as _};
 

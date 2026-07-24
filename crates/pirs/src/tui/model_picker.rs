@@ -36,8 +36,14 @@ pub(crate) struct ModelPicker {
 }
 
 impl ModelPicker {
-    pub fn open(target: ModelPickerTarget, initial_query: &str) -> Self {
-        let universe = build_universe();
+    /// Open picker with CLI/session registry aliases preferred in the universe.
+    /// Pass `&[]` when no session aliases are available.
+    pub fn open_with_aliases(
+        target: ModelPickerTarget,
+        initial_query: &str,
+        preferred_aliases: &[String],
+    ) -> Self {
+        let universe = build_universe_with_aliases(preferred_aliases);
         let mut p = Self {
             target,
             query: initial_query.to_string(),
@@ -90,10 +96,25 @@ impl ModelPicker {
     }
 }
 
-/// Build candidate list: portable aliases + cached catalog pins.
-pub(crate) fn build_universe() -> Vec<ModelHit> {
+/// Build candidate list: preferred CLI aliases first, then registry + catalogs.
+/// Prefer CLI-seeded aliases so `App.model_aliases` is not discarded.
+pub(crate) fn build_universe_with_aliases(preferred_aliases: &[String]) -> Vec<ModelHit> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
+
+    // CLI/session aliases first (same list main passed into TUI).
+    for alias in preferred_aliases {
+        let id = alias.trim();
+        if id.is_empty() || !seen.insert(id.to_string()) {
+            continue;
+        }
+        out.push(ModelHit {
+            id: id.to_string(),
+            detail: "cli · registry".into(),
+            kind: "portable",
+            score: 0,
+        });
+    }
 
     // Load registry the same way CLI does (builtins + user + project).
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -363,5 +384,35 @@ mod tests {
     #[test]
     fn fuzzy_tokens() {
         assert!(fuzzy_score("deep flash", "deepseek-v4-flash").is_some());
+    }
+
+    /// CLI-seeded aliases must lead the universe (App.model_aliases is not dead data).
+    #[test]
+    fn preferred_aliases_lead_universe() {
+        let special = "codesweep-test-alias-xyz".to_string();
+        let hits = build_universe_with_aliases(&[special.clone()]);
+        assert!(
+            !hits.is_empty(),
+            "universe must include preferred alias"
+        );
+        assert_eq!(
+            hits[0].id, special,
+            "preferred CLI alias must be first so App.model_aliases is consumed"
+        );
+        assert!(
+            hits[0].detail.contains("cli"),
+            "preferred hit should be labeled as cli: {:?}",
+            hits[0].detail
+        );
+        // open_with_aliases path used by TUI
+        let picker = ModelPicker::open_with_aliases(
+            ModelPickerTarget::Exec,
+            "",
+            &[special.clone()],
+        );
+        assert!(
+            picker.universe.iter().any(|h| h.id == special),
+            "open_with_aliases must include preferred alias in universe"
+        );
     }
 }

@@ -1794,7 +1794,12 @@ fn apply_model_choice(
 
 fn open_model_picker(app: &mut App, target: ModelPickerTarget, query: &str) {
     app.show_help = false;
-    app.model_picker = Some(ModelPicker::open(target, query));
+    // Prefer App.model_aliases (seeded from CLI registry) so they are not dead data.
+    app.model_picker = Some(ModelPicker::open_with_aliases(
+        target,
+        query,
+        &app.model_aliases,
+    ));
     app.dirty = true;
     let n = app
         .model_picker
@@ -4276,6 +4281,11 @@ mod tests {
         assert!(
             !prod.contains("app.plan_model.as_deref(),\n                        app.strategy.as_deref()"),
             "TUI /stats must not pass raw plan_model/strategy into format_session_stats"
+        );
+        // model_aliases must feed the picker (not stored-and-ignored).
+        assert!(
+            prod.contains("open_with_aliases") && prod.contains("&app.model_aliases"),
+            "open_model_picker must pass app.model_aliases into open_with_aliases"
         );
     }
 

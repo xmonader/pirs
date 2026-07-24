@@ -140,6 +140,9 @@ pub struct ApprovalGate {
 }
 
 impl ApprovalGate {
+    /// Convenience constructor (Default safety profile). Used by unit tests and
+    /// any caller that does not need an explicit profile.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new(mode: ApprovalMode, cwd: PathBuf) -> Self {
         Self::with_profile(mode, cwd, pirs_tools::SafetyProfile::Default)
     }
