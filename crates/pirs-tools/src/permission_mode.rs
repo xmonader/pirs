@@ -103,6 +103,32 @@ pub fn required_mode_for_tool(tool: &str) -> PermissionMode {
     PermissionMode::DangerFullAccess
 }
 
+/// Resolve live permission when approval is **yolo**.
+///
+/// Approval yolo only skips interactive prompts; the permission ladder is
+/// separate. Users expect `yolo` to actually run bash, so when permission was
+/// not explicitly set we raise the default `workspace-write` ladder to
+/// `danger-full-access`. Explicit `--permission-mode` / plan dial / plan
+/// profile still win.
+pub fn apply_yolo_permission_default(
+    approval_is_yolo: bool,
+    explicit_permission: Option<PermissionMode>,
+    dial_plan: bool,
+    profile_is_plan: bool,
+    current: PermissionMode,
+) -> PermissionMode {
+    if approval_is_yolo
+        && explicit_permission.is_none()
+        && !dial_plan
+        && !profile_is_plan
+        && current != PermissionMode::DangerFullAccess
+    {
+        PermissionMode::DangerFullAccess
+    } else {
+        current
+    }
+}
+
 /// Deny reason if current mode is below the tool's requirement.
 pub fn permission_deny_reason(mode: PermissionMode, tool: &str) -> Option<String> {
     permission_deny_reason_with_args(mode, tool, &serde_json::Value::Null)
@@ -159,7 +185,8 @@ pub fn permission_deny_reason_with_args(
     } else {
         Some(format!(
             "tool `{tool}` requires permission mode `{}` (current: `{}`); \
-             raise with --permission-mode / PIRS_PERMISSION_MODE or use plan→act",
+             raise with --permission-mode danger-full-access, /act, or /permission \
+             (note: approval yolo alone does not lift a pinned lower mode)",
             need.name(),
             mode.name()
         ))
@@ -184,6 +211,80 @@ pub fn live_permission_hook() -> BeforeToolCallHook {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn yolo_lifts_default_workspace_write_to_full_access() {
+        let lifted = apply_yolo_permission_default(
+            true,
+            None,
+            false,
+            false,
+            PermissionMode::WorkspaceWrite,
+        );
+        assert_eq!(lifted, PermissionMode::DangerFullAccess);
+        // Explicit pin wins.
+        assert_eq!(
+            apply_yolo_permission_default(
+                true,
+                Some(PermissionMode::WorkspaceWrite),
+                false,
+                false,
+                PermissionMode::WorkspaceWrite,
+            ),
+            PermissionMode::WorkspaceWrite
+        );
+        // Plan dial / plan profile stay restricted.
+        assert_eq!(
+            apply_yolo_permission_default(
+                true,
+                None,
+                true,
+                false,
+                PermissionMode::ReadOnly,
+            ),
+            PermissionMode::ReadOnly
+        );
+        assert_eq!(
+            apply_yolo_permission_default(
+                true,
+                None,
+                false,
+                true,
+                PermissionMode::WorkspaceWrite,
+            ),
+            PermissionMode::WorkspaceWrite
+        );
+        // Non-yolo unchanged.
+        assert_eq!(
+            apply_yolo_permission_default(
+                false,
+                None,
+                false,
+                false,
+                PermissionMode::WorkspaceWrite,
+            ),
+            PermissionMode::WorkspaceWrite
+        );
+    }
+
+    #[test]
+    fn yolo_allows_bash_under_lifted_mode() {
+        let mode = apply_yolo_permission_default(
+            true,
+            None,
+            false,
+            false,
+            PermissionMode::WorkspaceWrite,
+        );
+        assert!(
+            permission_deny_reason(mode, "bash").is_none(),
+            "yolo default must not block bash"
+        );
+        assert!(
+            permission_deny_reason(PermissionMode::WorkspaceWrite, "bash").is_some(),
+            "precondition: workspace-write still blocks bash"
+        );
+    }
 
     #[test]
     fn ladder_ordering() {

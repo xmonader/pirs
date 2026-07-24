@@ -119,7 +119,10 @@ struct Cli {
     #[arg(long)]
     no_mcp: bool,
 
-    /// Approval mode: auto (no prompts), ask (inline y/n for sensitive ops), yolo (no prompts, no policy hooks — dangerous)
+    /// Approval mode: auto (no prompts), ask (inline y/n for sensitive ops),
+    /// yolo (no prompts; also raises permission to danger-full-access when
+    /// `--permission-mode` is unset so bash/shell work — still respects
+    /// explicit `--permission-mode` and `--agent-profile plan`).
     #[arg(long, env = "PIRS_APPROVAL", default_value = "auto")]
     approval: String,
 
@@ -1087,11 +1090,26 @@ async fn main() -> anyhow::Result<()> {
     }
     // So Rhai packs (strict-plan, etc.) can read the active profile via agent_profile("").
     std::env::set_var("PIRS_AGENT_PROFILE", safety.name());
-    let perm_mode = cli
+    let explicit_perm = cli
         .permission_mode
         .as_deref()
-        .and_then(pirs_tools::PermissionMode::parse)
-        .unwrap_or_else(pirs_tools::PermissionMode::from_env);
+        .and_then(pirs_tools::PermissionMode::parse);
+    let before_yolo =
+        explicit_perm.unwrap_or_else(pirs_tools::PermissionMode::from_env);
+    let perm_mode = pirs_tools::apply_yolo_permission_default(
+        approval_mode == approval::ApprovalMode::Yolo,
+        explicit_perm,
+        dial_plan,
+        safety == pirs_tools::SafetyProfile::Plan,
+        before_yolo,
+    );
+    if perm_mode != before_yolo {
+        eprintln!(
+            "[yolo: permission-mode {} → {} (bash/shell; pin with --permission-mode)]",
+            before_yolo.name(),
+            perm_mode.name()
+        );
+    }
     pirs_tools::init_live_permission_mode(perm_mode);
     if perm_mode != pirs_tools::PermissionMode::WorkspaceWrite || dial_plan {
         eprintln!("[permission-mode: {}]", perm_mode.name());
@@ -1618,7 +1636,10 @@ async fn main() -> anyhow::Result<()> {
         approval::ApprovalMode::Auto
     });
     if approval_mode == approval::ApprovalMode::Yolo {
-        eprintln!("[WARNING: yolo mode — no approvals, no policy hooks. All tool calls execute.]");
+        eprintln!(
+            "[WARNING: yolo — no approval prompts; permission ladder still applies \
+             (raised to danger-full-access unless --permission-mode / plan profile pins it)]"
+        );
     }
 
     let cascade_cfg =
@@ -2624,10 +2645,33 @@ async fn handle_command(
         }
         "/approval" => {
             if arg.is_empty() {
-                println!("approval mode: {}", approval_shared.lock().unwrap().name());
+                println!(
+                    "approval mode: {}  (permission: {})",
+                    approval_shared.lock().unwrap().name(),
+                    pirs_tools::live_permission_mode().name()
+                );
             } else if let Some(m) = approval::ApprovalMode::parse(arg) {
                 *approval_shared.lock().unwrap() = m;
-                println!("approval mode set to {}", m.name());
+                // Match CLI: yolo lifts the ladder so bash works unless user
+                // already pinned a tighter mode via /permission or /plan.
+                if m == approval::ApprovalMode::Yolo
+                    && pirs_tools::live_permission_mode()
+                        != pirs_tools::PermissionMode::DangerFullAccess
+                    && pirs_tools::live_permission_mode() != pirs_tools::PermissionMode::ReadOnly
+                {
+                    pirs_tools::set_live_permission_mode(
+                        pirs_tools::PermissionMode::DangerFullAccess,
+                    );
+                    println!(
+                        "approval mode set to yolo · permission → danger-full-access"
+                    );
+                } else {
+                    println!(
+                        "approval mode set to {}  (permission: {})",
+                        m.name(),
+                        pirs_tools::live_permission_mode().name()
+                    );
+                }
             } else {
                 println!("usage: /approval <auto|ask|yolo>");
             }
