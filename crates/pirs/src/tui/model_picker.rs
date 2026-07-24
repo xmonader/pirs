@@ -96,44 +96,81 @@ impl ModelPicker {
     }
 }
 
-/// Build candidate list: preferred CLI aliases first, then registry + catalogs.
-/// Prefer CLI-seeded aliases so `App.model_aliases` is not discarded.
-pub(crate) fn build_universe_with_aliases(preferred_aliases: &[String]) -> Vec<ModelHit> {
+/// Order portable model hits: preferred aliases first **without** shadowing
+/// registry tier/backend metadata. Unknown preferred IDs get a session label.
+///
+/// This is the pure merge used by the TUI production path when main seeds
+/// `model_aliases` from the full registry (preferred ⊆ registry is the common case).
+pub(crate) fn order_portable_hits(
+    preferred_aliases: &[String],
+    registry_models: &[(String, String)],
+) -> Vec<ModelHit> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
+    let reg_detail: std::collections::HashMap<&str, &str> = registry_models
+        .iter()
+        .map(|(alias, detail)| (alias.as_str(), detail.as_str()))
+        .collect();
 
-    // CLI/session aliases first (same list main passed into TUI).
     for alias in preferred_aliases {
         let id = alias.trim();
         if id.is_empty() || !seen.insert(id.to_string()) {
             continue;
         }
+        if let Some(detail) = reg_detail.get(id) {
+            out.push(ModelHit {
+                id: id.to_string(),
+                detail: (*detail).to_string(),
+                kind: "portable",
+                score: 0,
+            });
+        } else {
+            // Session-only pin / alias not present in the registry layer.
+            out.push(ModelHit {
+                id: id.to_string(),
+                detail: "cli · session".into(),
+                kind: "portable",
+                score: 0,
+            });
+        }
+    }
+
+    for (alias, detail) in registry_models {
+        if !seen.insert(alias.clone()) {
+            continue;
+        }
         out.push(ModelHit {
-            id: id.to_string(),
-            detail: "cli · registry".into(),
+            id: alias.clone(),
+            detail: detail.clone(),
             kind: "portable",
             score: 0,
         });
     }
+    out
+}
 
+/// Build candidate list: preferred CLI aliases first, then registry + catalogs.
+/// Prefer CLI-seeded aliases so `App.model_aliases` is not discarded, while
+/// keeping registry tier/backend labels when the alias is known.
+pub(crate) fn build_universe_with_aliases(preferred_aliases: &[String]) -> Vec<ModelHit> {
     // Load registry the same way CLI does (builtins + user + project).
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     crate::registry::load_secrets_env();
     let reg = crate::registry::load_registry_layers(&cwd);
 
-    for m in &reg.models {
-        if !seen.insert(m.alias.clone()) {
-            continue;
-        }
-        let backends: Vec<&str> = m.serve.iter().map(|s| s.backend.as_str()).collect();
-        let tier = m.tier.as_deref().unwrap_or("portable");
-        out.push(ModelHit {
-            id: m.alias.clone(),
-            detail: format!("{tier} · {}", backends.join(",")),
-            kind: "portable",
-            score: 0,
-        });
-    }
+    let registry_models: Vec<(String, String)> = reg
+        .models
+        .iter()
+        .map(|m| {
+            let backends: Vec<&str> = m.serve.iter().map(|s| s.backend.as_str()).collect();
+            let tier = m.tier.as_deref().unwrap_or("portable");
+            (m.alias.clone(), format!("{tier} · {}", backends.join(",")))
+        })
+        .collect();
+
+    let mut out = order_portable_hits(preferred_aliases, &registry_models);
+    let mut seen: std::collections::HashSet<String> =
+        out.iter().map(|h| h.id.clone()).collect();
 
     // Cached catalogs → pin strings (backend/id).
     for b in &reg.backends {
@@ -386,25 +423,17 @@ mod tests {
         assert!(fuzzy_score("deep flash", "deepseek-v4-flash").is_some());
     }
 
-    /// CLI-seeded aliases must lead the universe (App.model_aliases is not dead data).
+    /// Unknown session-only preferred aliases lead the list with a session label.
     #[test]
-    fn preferred_aliases_lead_universe() {
+    fn preferred_unknown_aliases_lead_with_session_label() {
         let special = "codesweep-test-alias-xyz".to_string();
-        let hits = build_universe_with_aliases(&[special.clone()]);
+        let hits = order_portable_hits(&[special.clone()], &[]);
+        assert_eq!(hits[0].id, special);
         assert!(
-            !hits.is_empty(),
-            "universe must include preferred alias"
-        );
-        assert_eq!(
-            hits[0].id, special,
-            "preferred CLI alias must be first so App.model_aliases is consumed"
-        );
-        assert!(
-            hits[0].detail.contains("cli"),
-            "preferred hit should be labeled as cli: {:?}",
+            hits[0].detail.contains("session"),
+            "unknown preferred should be session-labeled, not fake registry: {:?}",
             hits[0].detail
         );
-        // open_with_aliases path used by TUI
         let picker = ModelPicker::open_with_aliases(
             ModelPickerTarget::Exec,
             "",
@@ -414,5 +443,63 @@ mod tests {
             picker.universe.iter().any(|h| h.id == special),
             "open_with_aliases must include preferred alias in universe"
         );
+    }
+
+    /// Production path: main seeds model_aliases from the full registry, so
+    /// preferred ⊆ registry. Those hits must keep tier/backend detail, not
+    /// a hardcoded "cli · registry" placeholder that shadows metadata.
+    #[test]
+    fn preferred_subset_of_registry_keeps_tier_backend_detail() {
+        let registry: Vec<(String, String)> = vec![
+            ("qwen-plus".into(), "strong · dashscope".into()),
+            ("deepseek-v4-flash".into(), "cheap · openrouter".into()),
+            ("kimi-k2.5".into(), "mid · moonshot".into()),
+        ];
+        // Full-registry preferred list (what main typically passes).
+        let preferred: Vec<String> = registry.iter().map(|(a, _)| a.clone()).collect();
+        let hits = order_portable_hits(&preferred, &registry);
+
+        assert_eq!(hits.len(), 3, "no duplicates when preferred ⊆ registry");
+        // Preferred order preserved.
+        assert_eq!(hits[0].id, "qwen-plus");
+        assert_eq!(hits[1].id, "deepseek-v4-flash");
+        assert_eq!(hits[2].id, "kimi-k2.5");
+        // Registry metadata must survive (not "cli · registry").
+        assert_eq!(hits[0].detail, "strong · dashscope");
+        assert_eq!(hits[1].detail, "cheap · openrouter");
+        assert_eq!(hits[2].detail, "mid · moonshot");
+        for h in &hits {
+            assert!(
+                !h.detail.contains("cli · registry") && !h.detail.eq("cli · session"),
+                "registry preferred must not use placeholder detail: {h:?}"
+            );
+            assert!(
+                h.detail.contains('·'),
+                "expected tier · backend style detail: {h:?}"
+            );
+        }
+
+        // Partial preferred still reorders without metadata loss; rest follow registry order.
+        let partial = vec!["kimi-k2.5".into(), "qwen-plus".into()];
+        let reordered = order_portable_hits(&partial, &registry);
+        assert_eq!(reordered[0].id, "kimi-k2.5");
+        assert_eq!(reordered[0].detail, "mid · moonshot");
+        assert_eq!(reordered[1].id, "qwen-plus");
+        assert_eq!(reordered[1].detail, "strong · dashscope");
+        assert_eq!(reordered[2].id, "deepseek-v4-flash");
+        assert_eq!(reordered[2].detail, "cheap · openrouter");
+    }
+
+    /// Mixed preferred: registry IDs keep metadata; unknown IDs are session-labeled.
+    #[test]
+    fn preferred_mix_registry_and_unknown() {
+        let registry: Vec<(String, String)> =
+            vec![("qwen-plus".into(), "strong · dashscope".into())];
+        let preferred = vec!["custom-pin".into(), "qwen-plus".into()];
+        let hits = order_portable_hits(&preferred, &registry);
+        assert_eq!(hits[0].id, "custom-pin");
+        assert!(hits[0].detail.contains("session"), "{:?}", hits[0]);
+        assert_eq!(hits[1].id, "qwen-plus");
+        assert_eq!(hits[1].detail, "strong · dashscope");
     }
 }
