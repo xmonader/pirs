@@ -19,6 +19,16 @@ pirs --model qwen-plus --plan-model openrouter/anthropic/claude-sonnet-4 --strat
 
 Research note on strong-plan / weak-exec cost and quality (measured matrices, tool ablations): [hybrid-model-economics.md](./hybrid-model-economics.md).
 
+### Hybrid economics flags (quick)
+
+```bash
+# Role-split usage (planner vs executor) appears in session stats when plan-model ≠ model
+pirs --model cheap --plan-model strong --strategy plan-exec --verify "pytest -q" "…"
+
+# Hold tools fixed across experiments
+pirs --tool-preset full|edit-test|read-only|no-tools …
+```
+
 ## Built-in backends
 
 `openrouter`, `dashscope`, `deepseek`, `openai`, `anthropic`, `groq`.

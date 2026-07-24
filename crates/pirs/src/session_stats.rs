@@ -124,6 +124,84 @@ fn format_tokens(n: u64) -> String {
     }
 }
 
+fn model_matches(recorded: &str, want: &str) -> bool {
+    if recorded == want {
+        return true;
+    }
+    let bare = recorded.strip_prefix("delegate:").unwrap_or(recorded);
+    bare == want
+        || bare.ends_with(&format!("/{want}"))
+        || want.ends_with(&format!("/{bare}"))
+}
+
+/// Look up usage + call count for a model pin (exact, backend/id, or delegate:).
+fn usage_for_model(report: &UsageReport, model: &str) -> (u64, u64, u64, usize) {
+    let mut input = 0u64;
+    let mut output = 0u64;
+    let mut total = 0u64;
+    for (m, u) in &report.by_model {
+        if model_matches(m, model) {
+            input += u.input + u.cache_read;
+            output += u.output;
+            total += u
+                .total_tokens
+                .max(u.input + u.output + u.cache_read + u.cache_write);
+        }
+    }
+    let calls = report
+        .calls
+        .iter()
+        .filter(|c| model_matches(&c.model, model))
+        .count();
+    (input, output, total, calls)
+}
+
+/// Format plan-vs-exec role split lines for hybrid economics reporting.
+///
+/// When `plan_model` differs from the executor model, emit a `by role` section
+/// with token totals (and dollars when the builtin price table knows the rates).
+pub fn format_role_split_lines(
+    report: &UsageReport,
+    exec_model: &str,
+    plan_model: &str,
+) -> Vec<String> {
+    if plan_model.is_empty() || exec_model.is_empty() || plan_model == exec_model {
+        return Vec::new();
+    }
+    let prices = PriceTable::builtin();
+    let (p_in, p_out, p_tot, p_calls) = usage_for_model(report, plan_model);
+    let (e_in, e_out, e_tot, e_calls) = usage_for_model(report, exec_model);
+    let p_cost_s = report
+        .by_model
+        .iter()
+        .find(|(m, _)| model_matches(m, plan_model))
+        .and_then(|(m, u)| prices.cost(m, u))
+        .map(|c| format!("  ${c:.4}"))
+        .unwrap_or_default();
+    let e_cost_s = report
+        .by_model
+        .iter()
+        .find(|(m, _)| model_matches(m, exec_model))
+        .and_then(|(m, u)| prices.cost(m, u))
+        .map(|c| format!("  ${c:.4}"))
+        .unwrap_or_default();
+    vec![
+        "  by role".into(),
+        format!(
+            "    planner ({plan_model})  ×{p_calls}  in {}  out {}  total {}{p_cost_s}",
+            format_tokens(p_in),
+            format_tokens(p_out),
+            format_tokens(p_tot),
+        ),
+        format!(
+            "    executor ({exec_model})  ×{e_calls}  in {}  out {}  total {}{e_cost_s}",
+            format_tokens(e_in),
+            format_tokens(e_out),
+            format_tokens(e_tot),
+        ),
+    ]
+}
+
 /// Multi-line session summary for stderr / post-TUI stdout.
 pub fn format_session_stats(
     clock: &SessionClock,
@@ -205,6 +283,9 @@ pub fn format_session_stats(
     }
     if let Some(s) = strategy {
         lines.push(format!("  strategy       {s}"));
+    }
+    if let Some(pm) = plan_model {
+        lines.extend(format_role_split_lines(report, model, pm));
     }
     if !report.by_model.is_empty() {
         lines.push("  by model".into());
@@ -298,6 +379,63 @@ mod tests {
         assert!(s.contains("deepseek-v4-flash"));
         assert!(s.contains("plan-exec"));
         assert!(s.contains("qwen3.5-plus"));
+        assert!(s.contains("by role"), "hybrid report must include by-role split: {s}");
+        assert!(s.contains("planner"), "{s}");
+        assert!(s.contains("executor"), "{s}");
+    }
+
+    #[test]
+    fn role_split_attributes_plan_and_exec_usage() {
+        let mut report = UsageReport::default();
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "strong-planner".into(),
+            usage: Usage {
+                input: 500,
+                output: 100,
+                total_tokens: 600,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 0,
+        });
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "weak-executor".into(),
+            usage: Usage {
+                input: 9000,
+                output: 400,
+                total_tokens: 9400,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 1,
+        });
+        *report.by_model.entry("strong-planner".into()).or_default() = Usage {
+            input: 500,
+            output: 100,
+            total_tokens: 600,
+            ..Default::default()
+        };
+        *report.by_model.entry("weak-executor".into()).or_default() = Usage {
+            input: 9000,
+            output: 400,
+            total_tokens: 9400,
+            ..Default::default()
+        };
+        let lines = format_role_split_lines(&report, "weak-executor", "strong-planner");
+        let text = lines.join("\n");
+        assert!(text.contains("by role"), "{text}");
+        assert!(text.contains("planner (strong-planner)"), "{text}");
+        assert!(text.contains("executor (weak-executor)"), "{text}");
+        // Executor should show the larger token total.
+        assert!(text.contains("9.4k") || text.contains("9400") || text.contains("9.0k"), "{text}");
+        let full = format_session_stats(
+            &SessionClock::new(),
+            &report,
+            "weak-executor",
+            Some("strong-planner"),
+            Some("plan-exec"),
+        );
+        assert!(full.contains("by role") && full.contains("planner") && full.contains("executor"));
     }
 
     #[test]

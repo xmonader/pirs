@@ -30,6 +30,9 @@ pub use control_pins::{
 pub use events::{AgentEvent, Emit, Hooks, ToolResultPatch};
 pub use gate::GreenEvidence;
 pub use strategy::pin_plan_model;
+pub use agent_loop::{
+    looks_like_freeform_tool_text, validate_tool_call_payload, ToolCallData,
+};
 pub use thrash::{
     LoopDetectionTracker, MistakeTracker, ThrashGuard, ToolSignature,
 };

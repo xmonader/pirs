@@ -285,6 +285,14 @@ struct Cli {
     /// permission mode + agent-profile when those flags are left default.
     #[arg(long = "mode-dial", env = "PIRS_MODE_DIAL")]
     mode_dial: Option<String>,
+
+    /// Named tool-policy preset for hybrid / weak-exec experiments:
+    /// `full` | `edit-test` | `read-only` | `no-tools`.
+    /// Maps onto permission mode, agent-profile, tool-diet, sequential, and
+    /// optional max-tool-calls. Explicit `--permission-mode` / `--agent-profile`
+    /// / `--tool-diet` / `--max-tool-calls` win over the preset.
+    #[arg(long = "tool-preset", env = "PIRS_TOOL_PRESET")]
+    tool_preset: Option<String>,
 }
 
 struct Printer {
@@ -1055,6 +1063,28 @@ async fn main() -> anyhow::Result<()> {
     let mut hooks = Hooks::default();
     let approval_mode =
         approval::ApprovalMode::parse(&cli.approval).unwrap_or(approval::ApprovalMode::Auto);
+    // Named tool-policy presets (hybrid economics / weak-exec experiments).
+    if let Some(raw) = cli.tool_preset.as_deref() {
+        let preset = pirs_tools::ToolPreset::parse(raw).ok_or_else(|| {
+            anyhow::anyhow!(
+                "unknown --tool-preset {raw:?}; expected full|edit-test|read-only|no-tools"
+            )
+        })?;
+        pirs_tools::apply_tool_preset(
+            preset,
+            &mut cli.permission_mode,
+            &mut cli.agent_profile,
+            &mut cli.tool_diet,
+            &mut cli.sequential,
+            &mut cli.max_tool_calls,
+        );
+        eprintln!(
+            "[tool-preset: {} — mutation={} edit+test-loop={}]",
+            preset.name(),
+            preset.allows_mutation(),
+            preset.allows_edit_and_test_loop()
+        );
+    }
     // Plan/Act product dial maps onto profile + permission ladder.
     let mut dial_plan = false;
     if let Some(d) = cli.mode_dial.as_deref() {

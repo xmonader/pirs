@@ -55,6 +55,7 @@ pub mod git_tools;
 pub mod grep;
 pub mod job_tools;
 pub mod permission_mode;
+pub mod tool_preset;
 pub mod ls;
 pub mod paths;
 pub mod pr_tools;
@@ -111,6 +112,7 @@ pub use permission_mode::{
     permission_deny_reason_with_args, permission_hook, required_mode_for_tool,
     set_live_permission_mode, PermissionMode,
 };
+pub use tool_preset::{apply_tool_preset, ToolPreset, ToolPresetConfig};
 pub use pr_tools::pr_tools;
 pub use research::research_tools;
 pub use session_rewind::{host_undo, snapshot as rewind_snapshot, RewindTool};

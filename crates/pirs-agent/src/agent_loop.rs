@@ -98,6 +98,7 @@ pub async fn run_agent_loop(
     let mut first_turn = true;
     let mut turn_count = 0usize;
     let mut tool_call_count = 0usize;
+    let mut freeform_tool_nudge_sent = false;
     let started = std::time::Instant::now();
     let mut budget_hit = None;
 
@@ -159,6 +160,38 @@ pub async fn run_agent_loop(
             let calls = extract_tool_calls(&assistant);
             let had_calls = !calls.is_empty();
             let mut results: Vec<ToolResultMessage> = Vec::new();
+            // Weak models sometimes paste pseudo-tool calls as freeform text
+            // (markdown fences / JSON arrays) with no native ToolCall blocks.
+            // That is not successful tool use — re-prompt once for native tools.
+            if !had_calls && !freeform_tool_nudge_sent {
+                if let Some(nudge) = freeform_tool_repair_nudge(&assistant) {
+                    freeform_tool_nudge_sent = true;
+                    let msg = Message::user(nudge);
+                    emit(AgentEvent::MessageStart {
+                        message: Box::new(msg.clone()),
+                    });
+                    context.messages.push(msg.clone());
+                    emit(AgentEvent::MessageEnd {
+                        message: Box::new(msg.clone()),
+                    });
+                    new_messages.push(msg);
+                    // Continue the turn loop so the model can re-issue properly.
+                    turn_count += 1;
+                    if config
+                        .budgets
+                        .max_turns
+                        .map(|m| turn_count >= m)
+                        .unwrap_or(false)
+                    {
+                        budget_hit = Some(BudgetHit::Turns);
+                        emit(AgentEvent::AgentEnd {
+                            messages: new_messages.clone(),
+                        });
+                        return (new_messages, budget_hit);
+                    }
+                    continue;
+                }
+            }
             if had_calls {
                 if assistant.stop_reason == StopReason::Length {
                     for call in &calls {
@@ -348,6 +381,99 @@ fn extract_tool_calls(assistant: &AssistantMessage) -> Vec<ToolCallData> {
             _ => None,
         })
         .collect()
+}
+
+/// Detect freeform / non-native "tool" text that was not emitted as ToolCall blocks.
+///
+/// Used to re-prompt weak models that paste markdown JSON or shell-style
+/// invocations instead of using the provider tool protocol.
+pub fn looks_like_freeform_tool_text(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if t.contains("```")
+        && (t.contains("\"function\"")
+            || t.contains("\"name\"")
+            || t.contains("\"tool\"")
+            || t.contains("\"arguments\""))
+    {
+        return true;
+    }
+    if t.starts_with('[')
+        && t.contains('{')
+        && (t.contains("\"function\"") || t.contains("\"name\""))
+        && (t.contains("\"path\"")
+            || t.contains("\"command\"")
+            || t.contains("\"arguments\"")
+            || t.contains("\"tool\""))
+    {
+        return true;
+    }
+    if t.lines().any(|l| {
+        let s = l.trim_start();
+        s.starts_with("> bash")
+            || s.starts_with("> read")
+            || s.starts_with("> edit")
+            || s.starts_with("> grep")
+    }) {
+        return true;
+    }
+    false
+}
+
+fn freeform_tool_repair_nudge(assistant: &AssistantMessage) -> Option<String> {
+    let text: String = assistant
+        .content
+        .iter()
+        .filter_map(|b| b.as_text())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !looks_like_freeform_tool_text(&text) {
+        return None;
+    }
+    Some(
+        "[system tool protocol] Your previous reply looks like a tool invocation written as \
+         freeform text (markdown/JSON/shell), not as a native tool call. That is not executed. \
+         Re-issue using the provider's native tool/function calling protocol only — \
+         no markdown fences, no pseudo `> bash` lines, no JSON arrays of tools as plain text."
+            .into(),
+    )
+}
+
+/// Validate a single tool call against the registered tools without executing it.
+///
+/// Returns `Ok(())` when the call would be dispatched, or `Err(message)` when it
+/// is rejected (unknown tool, not loaded, invalid args). Invalid payloads are
+/// never treated as successful tool use — callers attach the error as a
+/// `tool_result` so the model can retry.
+pub fn validate_tool_call_payload(
+    name: &str,
+    arguments: &Value,
+    tools: &[Arc<dyn AgentTool>],
+    visible: &Option<VisibleTools>,
+) -> Result<(), String> {
+    let call = ToolCallData {
+        id: "validate".into(),
+        name: name.to_string(),
+        arguments: arguments.clone(),
+    };
+    match prepare_call(0, &call, tools, &Hooks::default(), visible) {
+        Prepared::Ready { .. } => Ok(()),
+        Prepared::Failed { result, .. } => {
+            let msg: String = result
+                .content
+                .iter()
+                .filter_map(|b| b.as_text())
+                .collect::<Vec<_>>()
+                .join("\n");
+            Err(if msg.is_empty() {
+                "tool call rejected".into()
+            } else {
+                msg
+            })
+        }
+    }
 }
 
 async fn stream_assistant(
@@ -1468,5 +1594,100 @@ mod skip_remaining_tests {
             results.iter().map(|r| r.model_text()).collect::<Vec<_>>()
         );
         assert!(hits.load(Ordering::SeqCst) <= 1, "at most first tool runs");
+    }
+}
+
+#[cfg(test)]
+mod tool_dispatch_tests {
+    use super::*;
+    use crate::tool::{AgentTool, ToolExecContext, ToolOutput};
+    use async_trait::async_trait;
+    use serde_json::json;
+    use std::sync::Arc;
+
+    struct EchoTool;
+
+    #[async_trait]
+    impl AgentTool for EchoTool {
+        fn name(&self) -> &str {
+            "echo"
+        }
+        fn description(&self) -> &str {
+            "echo"
+        }
+        fn parameters(&self) -> Value {
+            json!({
+                "type": "object",
+                "properties": { "msg": { "type": "string" } },
+                "required": ["msg"]
+            })
+        }
+        async fn execute(&self, _ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
+            Ok(ToolOutput::text("ok"))
+        }
+    }
+
+    #[test]
+    fn freeform_markdown_tool_text_detected() {
+        let sample = r#"```python
+[{"function": "read", "path": "foo.rs"}]
+```"#;
+        assert!(looks_like_freeform_tool_text(sample));
+        assert!(looks_like_freeform_tool_text("> bash ls -la"));
+        assert!(!looks_like_freeform_tool_text("I'll fix the bug by editing txn.py"));
+    }
+
+    #[test]
+    fn invalid_tool_payload_is_rejected_not_success() {
+        let tools: Vec<Arc<dyn AgentTool>> = vec![Arc::new(EchoTool)];
+        // Unknown tool name
+        let err = validate_tool_call_payload("not_a_tool", &json!({}), &tools, &None)
+            .expect_err("unknown tool must fail");
+        assert!(
+            err.contains("not found") || err.contains("not_a_tool"),
+            "{err}"
+        );
+        // Known tool, invalid args (missing required)
+        let err = validate_tool_call_payload("echo", &json!({}), &tools, &None)
+            .expect_err("missing required arg must fail");
+        assert!(
+            err.contains("Invalid arguments") || err.to_ascii_lowercase().contains("required"),
+            "{err}"
+        );
+        // Valid payload
+        assert!(validate_tool_call_payload("echo", &json!({"msg": "hi"}), &tools, &None).is_ok());
+    }
+
+    #[tokio::test]
+    async fn execute_invalid_payload_returns_error_result_not_success() {
+        let tools: Vec<Arc<dyn AgentTool>> = vec![Arc::new(EchoTool)];
+        let emit: Emit = Arc::new(|_| {});
+        let results = execute_tool_calls_for_test(
+            vec![ToolCallData {
+                id: "1".into(),
+                name: "echo".into(),
+                arguments: json!({"wrong": true}),
+            }],
+            &tools,
+            &Hooks::default(),
+            CancellationToken::new(),
+            &emit,
+            true,
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(results.len(), 1);
+        assert!(
+            results[0].is_error,
+            "invalid args must not count as successful tool use: {}",
+            results[0].model_text()
+        );
+        assert!(
+            results[0].model_text().contains("Invalid arguments")
+                || results[0].model_text().to_ascii_lowercase().contains("required"),
+            "{}",
+            results[0].model_text()
+        );
     }
 }

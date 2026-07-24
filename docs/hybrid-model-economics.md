@@ -178,6 +178,8 @@ pirs --model <cheap> --plan-model <strong> --strategy plan-exec \
   "Fix the failing tests without editing them."
 ```
 
+At session end, hybrid runs print a **by role** split (planner vs executor token totals, and dollars when the builtin price table knows the rates), in addition to the usual per-model lines.
+
 **Weak-model hardening** (tool diet, sequential tools, retries; pairs well with `--plan-model`):
 
 ```bash
@@ -186,12 +188,30 @@ pirs --weak --model <cheap> --plan-model <strong> --strategy plan-exec \
   "…"
 ```
 
+**Named tool-policy presets** (hold tools fixed across A/B/C/D, or ablate them):
+
+| `--tool-preset` | Effect |
+|-----------------|--------|
+| `full` | Full tools (danger-full-access) |
+| `edit-test` | File edits allowed; bash gated; tool-diet + sequential |
+| `read-only` | Observation only (no mutations) |
+| `no-tools` | Read-only + `max_tool_calls=0` (no multi-step tool loop) |
+
+```bash
+pirs --tool-preset edit-test --model <cheap> --plan-model <strong> \
+  --strategy plan-exec --verify "python -m pytest -q" "…"
+```
+
+Explicit `--permission-mode` / `--agent-profile` / `--tool-diet` / `--max-tool-calls` override the preset.
+
+Invalid or freeform “tool” text (markdown JSON, pseudo `> bash` lines) is **not** treated as successful tool use: the harness rejects bad native payloads and re-prompts once for freeform pseudo-tools.
+
 **Notes from the experiments:**
 
 - Prefer weak models that **reliably call tools** if you care about hybrid C.
 - Use `--verify` (or ensure the agent can run tests) so execution is grounded.
 - Judge hybrid success on **pass rate and tokens/latency**, not pass rate alone.
-- For fair model comparisons, hold tools and verify policy fixed across A/B/C/D.
+- For fair model comparisons, hold tools and verify policy fixed across A/B/C/D (use `--tool-preset`).
 
 Docker SWE-bench-style runs can use the same idea when the bench binary supports `--plan-model` (same provider/base URL for both model ids). True dual-backend routing is available on the host CLI via the model registry (`backend/model` pins).
 
