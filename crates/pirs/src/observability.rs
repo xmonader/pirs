@@ -93,7 +93,8 @@ pub fn record_phase_start(rec: &Recorder, req: &PhaseReq) {
 }
 
 /// Record strategy phase end with output length (not content — keep traces lean).
-#[allow(dead_code)] // available for callers that wrap phase drivers
+/// Called from the strategy one-shot path after each attempt (pairs with
+/// [`record_phase_start`]).
 pub fn record_phase_end(rec: &Recorder, phase_id: &str, output_chars: usize, ok: bool) {
     rec.event(
         "phase.end",

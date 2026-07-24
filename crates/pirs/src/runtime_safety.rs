@@ -49,7 +49,7 @@ impl SafetyConfig {
     }
 
     /// Env-only fallback for tests / direct library use of rpc without main.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn from_env(cwd: PathBuf) -> Self {
         let approval = std::env::var("PIRS_APPROVAL")
             .ok()
@@ -157,8 +157,8 @@ pub fn fill_subagent_policy_slot(
 
 /// Pure: which tools are blocked under plan for process spawning.
 /// Production denials go through the installed before-tool hook; this helper is
-/// the same predicate for tests and external callers without installing hooks.
-#[cfg_attr(not(test), allow(dead_code))]
+/// the same predicate for unit tests without installing hooks.
+#[cfg(test)]
 pub fn plan_blocks_process_tool(tool: &str, args: &serde_json::Value) -> bool {
     pirs_tools::profile_deny_reason_with_args(SafetyProfile::Plan, tool, args).is_some()
 }
@@ -189,6 +189,21 @@ mod tests {
         assert_eq!(cfg.approval, ApprovalMode::Ask);
         assert_eq!(cfg.profile, SafetyProfile::Plan);
         std::env::remove_var("PIRS_PROVIDER");
+    }
+
+    #[test]
+    fn from_env_reads_process_env() {
+        std::env::set_var("PIRS_PROVIDER", "anthropic");
+        std::env::set_var("PIRS_APPROVAL", "yolo");
+        std::env::set_var("PIRS_AGENT_PROFILE", "plan");
+        let cfg = SafetyConfig::from_env(PathBuf::from("/tmp/work"));
+        assert_eq!(cfg.provider, "anthropic");
+        assert_eq!(cfg.approval, ApprovalMode::Yolo);
+        assert_eq!(cfg.profile, SafetyProfile::Plan);
+        assert_eq!(cfg.cwd, PathBuf::from("/tmp/work"));
+        std::env::remove_var("PIRS_PROVIDER");
+        std::env::remove_var("PIRS_APPROVAL");
+        std::env::remove_var("PIRS_AGENT_PROFILE");
     }
 
     #[test]

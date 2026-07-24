@@ -219,6 +219,7 @@ impl AgentTool for CassetteTool {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DivergenceKind {
     MessageCount,
     Text,
@@ -226,11 +227,20 @@ pub enum DivergenceKind {
     ToolResult,
 }
 
+impl std::fmt::Display for DivergenceKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DivergenceKind::MessageCount => "message-count",
+            DivergenceKind::Text => "text",
+            DivergenceKind::ToolCall => "tool-call",
+            DivergenceKind::ToolResult => "tool-result",
+        })
+    }
+}
+
 pub struct Divergence {
     pub index: usize,
-    /// What differed (kept for callers that branch on it; the CLI prints
-    /// expected/actual only).
-    #[allow(dead_code)]
+    /// What differed — printed on the CLI replay path as `(kind)`.
     pub kind: DivergenceKind,
     pub expected: String,
     pub actual: String,
@@ -465,6 +475,16 @@ mod tests {
         let d = report.divergence.unwrap();
         assert_eq!(d.index, 2);
         assert!(matches!(d.kind, DivergenceKind::ToolResult));
+        // CLI prints d.kind via Display ("tool-result").
+        assert_eq!(d.kind.to_string(), "tool-result");
+    }
+
+    #[test]
+    fn divergence_kind_display_labels() {
+        assert_eq!(DivergenceKind::MessageCount.to_string(), "message-count");
+        assert_eq!(DivergenceKind::Text.to_string(), "text");
+        assert_eq!(DivergenceKind::ToolCall.to_string(), "tool-call");
+        assert_eq!(DivergenceKind::ToolResult.to_string(), "tool-result");
     }
 
     #[tokio::test]

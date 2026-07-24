@@ -789,8 +789,8 @@ async fn main() -> anyhow::Result<()> {
             }
             Some(d) => {
                 eprintln!(
-                    "replay diverged at message {}: expected {}, got {}",
-                    d.index, d.expected, d.actual
+                    "replay diverged at message {} ({}): expected {}, got {}",
+                    d.index, d.kind, d.expected, d.actual
                 );
                 if let Some(t) = diverged.lock().unwrap().as_ref() {
                     eprintln!("first tool divergence: {t}");
@@ -1491,7 +1491,7 @@ async fn main() -> anyhow::Result<()> {
         tools.extend(mcp.tools);
     }
 
-    let skills = pirs_skills::discover_skills(&cwd);
+    let skills = discovery::discover_skills(&cwd);
     let file_commands = discovery::discover_commands(&cwd);
     // Shared skill tools (same crate as pirs-claw).
     tools.extend(pirs_skills::skill_tools(
@@ -1519,8 +1519,10 @@ async fn main() -> anyhow::Result<()> {
     }
     let mut system =
         system_prompt::build_system_prompt_with_map(&cwd, &tools, repo_map.as_deref(), cli.weak);
-    // Progressive agentskills index (shared with pirs-claw).
-    system.push_str(&pirs_skills::skills_prompt_section(&skills));
+    // Progressive agentskills index (shared with pirs-claw) via discovery helper.
+    if let Some(block) = discovery::skills_prompt_block(&skills) {
+        system.push_str(&block);
+    }
     if let Some(h) = &host {
         let cmds = h.commands();
         if !cmds.is_empty() {
@@ -2182,6 +2184,38 @@ pub(crate) async fn run_strategy_turn(
             };
             let result = run_strategy_async(strategy_ref, &mut driver, &task).await;
             if let Some(rec) = &rec {
+                // Pair phase.start with phase.end (last active phase id + transcript size).
+                let phase_id = phase_slot
+                    .lock()
+                    .map(|g| g.clone())
+                    .unwrap_or_else(|_| "strategy".into());
+                let output_chars: usize = driver
+                    .messages()
+                    .iter()
+                    .map(|m| match m {
+                        Message::Assistant(a) => a.text().len(),
+                        Message::User(u) => match &u.content {
+                            pirs_ai::UserContent::Text(t) => t.len(),
+                            pirs_ai::UserContent::Blocks(bs) => bs
+                                .iter()
+                                .filter_map(|b| b.as_text())
+                                .map(|t| t.len())
+                                .sum(),
+                        },
+                        Message::ToolResult(r) => r
+                            .content
+                            .iter()
+                            .filter_map(|b| b.as_text())
+                            .map(|t| t.len())
+                            .sum(),
+                    })
+                    .sum();
+                observability::record_phase_end(
+                    rec,
+                    &phase_id,
+                    output_chars,
+                    result.is_ok(),
+                );
                 rec.event(
                     "strategy.attempt_end",
                     serde_json::json!({ "ok": result.is_ok() }),
@@ -2439,7 +2473,12 @@ async fn handle_command(
         "/quit" | "/exit" => return Ok(true),
         "/help" => {
             for fc in file_commands {
-                println!("/{:<12} {}", fc.name, fc.description);
+                println!(
+                    "/{:<12} {}  [{}]",
+                    fc.name,
+                    fc.description,
+                    fc.path.display()
+                );
             }
             println!(
                 "/model [id]     show or set model\n\
@@ -2977,6 +3016,37 @@ mod tests {
         assert!(
             !prod.contains("&agent.model,\n                None,\n                None,"),
             "/usage must not hardcode empty pins"
+        );
+    }
+
+    /// Residual: strategy path must emit phase.end (not only phase.start).
+    #[test]
+    fn strategy_path_records_phase_end() {
+        let src = include_str!("main.rs");
+        let prod = src
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("production main");
+        assert!(
+            prod.contains("record_phase_start"),
+            "strategy path must record phase.start"
+        );
+        assert!(
+            prod.contains("record_phase_end"),
+            "strategy path must record phase.end (pair with start)"
+        );
+        assert!(
+            prod.contains("discovery::skills_prompt_block")
+                && prod.contains("discovery::discover_skills"),
+            "main must use discovery skill helpers (not dead re-exports)"
+        );
+        assert!(
+            prod.contains("fc.path.display()"),
+            "/help must surface FileCommand.path"
+        );
+        assert!(
+            prod.contains("d.kind"),
+            "replay CLI must print Divergence.kind"
         );
     }
 

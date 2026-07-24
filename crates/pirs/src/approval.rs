@@ -140,9 +140,8 @@ pub struct ApprovalGate {
 }
 
 impl ApprovalGate {
-    /// Convenience constructor (Default safety profile). Used by unit tests and
-    /// any caller that does not need an explicit profile.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Convenience constructor (Default safety profile). Test helper.
+    #[cfg(test)]
     pub fn new(mode: ApprovalMode, cwd: PathBuf) -> Self {
         Self::with_profile(mode, cwd, pirs_tools::SafetyProfile::Default)
     }
@@ -181,7 +180,7 @@ impl ApprovalGate {
         Arc::clone(&self.mode)
     }
 
-    #[allow(dead_code)]
+    /// Current approval mode (shared with REPL/TUI live toggles).
     pub fn mode(&self) -> ApprovalMode {
         *self.mode.lock().unwrap()
     }
@@ -285,6 +284,7 @@ mod tests {
         let answers2 = Arc::clone(&answers);
         let gate = ApprovalGate::new(ApprovalMode::Ask, PathBuf::from("/work"))
             .with_prompter(move |_| answers2.lock().unwrap().remove(0));
+        assert_eq!(gate.mode(), ApprovalMode::Ask);
         let hook = gate.hook();
         let cmd = json!({"command": "rm -rf x"});
         assert!(hook("1", "bash", &cmd).is_none());

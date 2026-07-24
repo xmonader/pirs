@@ -3,8 +3,7 @@
 use std::path::{Path, PathBuf};
 
 // Skills live in the shared crate so pirs and pirs-claw stay in sync.
-// Re-export for discovery tests and any external callers of this module.
-#[allow(unused_imports)]
+// Re-export for main (system prompt) and discovery tests.
 pub use pirs_skills::{discover_skills, Skill};
 
 #[derive(Debug, Clone)]
@@ -12,7 +11,7 @@ pub struct FileCommand {
     pub name: String,
     pub description: String,
     pub body: String,
-    #[allow(dead_code)]
+    /// Source markdown path (shown in `/help`).
     pub path: PathBuf,
 }
 
@@ -115,8 +114,8 @@ pub fn discover_commands(cwd: &Path) -> Vec<FileCommand> {
     commands
 }
 
-/// Backward-compatible progressive skill block (markdown, shared with claw).
-#[allow(dead_code)]
+/// Progressive skill block for the system prompt (markdown, shared with claw).
+/// Returns `None` when there are no skills so callers can skip empty sections.
 pub fn skills_prompt_block(skills: &[Skill]) -> Option<String> {
     let s = pirs_skills::skills_prompt_section(skills);
     if s.is_empty() {
@@ -184,6 +183,11 @@ mod tests {
         assert!(skills[0].path.ends_with("SKILL.md"));
 
         let commands = discover_commands(dir.path());
+        // path field is product-facing (/help shows it)
+        assert!(
+            commands.iter().all(|c| c.path.extension().and_then(|e| e.to_str()) == Some("md")),
+            "file commands must retain source path"
+        );
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "explain");
         assert_eq!(

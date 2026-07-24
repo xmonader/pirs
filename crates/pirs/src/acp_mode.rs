@@ -591,7 +591,8 @@ fn extract_prompt_message(params: &Value) -> Message {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+/// Test helper: flatten a session/prompt params blob to plain text.
+#[cfg(test)]
 fn extract_prompt_text(params: &Value) -> String {
     match extract_prompt_message(params) {
         Message::User(u) => match u.content {

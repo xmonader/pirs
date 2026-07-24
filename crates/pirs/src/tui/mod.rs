@@ -463,7 +463,7 @@ struct ItemCache {
 pub struct TuiOptions {
     pub agent: Agent,
     pub host: Option<Arc<pirs_rhai::ExtensionHost>>,
-    #[allow(dead_code)]
+    /// Session JSONL path (shown in status / welcome).
     pub session_path: std::path::PathBuf,
     pub approval_mode: ApprovalMode,
     pub approval_gate: Option<Arc<crate::approval::ApprovalGate>>,
@@ -512,6 +512,8 @@ struct App {
     strategy: Option<String>,
     model_aliases: Vec<String>,
     approval_mode: String,
+    /// Live session JSONL path (from CLI session_path).
+    session_path: PathBuf,
     cwd: PathBuf,
     cwd_label: String,
     usage_summary: String,
@@ -1092,7 +1094,12 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     let tui_writer = TuiWriter::spawn();
 
     let model = opts.agent.model.clone();
-    let approval_name = opts.approval_mode.name().to_string();
+    // Prefer live gate mode when present (keeps ApprovalGate::mode on the product path).
+    let approval_name = opts
+        .approval_gate
+        .as_ref()
+        .map(|g| g.mode().name().to_string())
+        .unwrap_or_else(|| opts.approval_mode.name().to_string());
     let cwd_label = opts
         .cwd
         .file_name()
@@ -1124,6 +1131,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         strategy: opts.strategy.clone(),
         model_aliases: opts.model_aliases.clone(),
         approval_mode: approval_name,
+        session_path: opts.session_path.clone(),
         cwd: opts.cwd.clone(),
         cwd_label,
         usage_summary: String::new(),
@@ -2766,6 +2774,11 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme)
         left.push(Span::styled(" strat:", theme.dim));
         left.push(Span::styled(s.clone(), theme.accent));
     }
+    // Session JSONL stem (consumes TuiOptions.session_path / App.session_path).
+    if let Some(stem) = app.session_path.file_stem().and_then(|s| s.to_str()) {
+        left.push(Span::styled(" sess:", theme.dim));
+        left.push(Span::styled(stem.to_string(), theme.dim));
+    }
     left.push(Span::styled("  ", theme.dim));
     left.push(Span::styled(
         format!("● {}", app.approval_mode),
@@ -4372,6 +4385,7 @@ mod tests {
             strategy: None,
             model_aliases: Vec::new(),
             approval_mode: "auto".into(),
+            session_path: PathBuf::from("/tmp/test-session.jsonl"),
             cwd: PathBuf::from("."),
             cwd_label: ".".into(),
             usage_summary: String::new(),
