@@ -5,7 +5,7 @@
 
 **North star (current):** coding harness + personal agent **Yes** on A1–A8 / B1–B7 spines.  
 **Not now:** more messaging channels, Skills Hub, desktop, Modal/Daytona, OpenClaw zoo.  
-**Later integrations:** email, calendar (connectors on top of MCP + life tools).
+**Email/calendar:** via MCP connectors (mock + docs shipped; no in-process OAuth).
 
 ### Capability matrix (harness + shared core)
 
@@ -20,7 +20,7 @@
 | **B1** | Web app | **Yes** | `pirs --serve` polished SPA (SSE chat, auth, drag-drop note) |
 | **B2** | Long-term memory of user | **Strong** | `soul.md` inject + learn durable extract + FTS/semantic recall |
 | **B3** | Background research | **Yes** | `research` multi-page digest → `.pirs/research/` |
-| **B4** | Browse/click + computer use | **Yes** | `browser_cdp` click/type; CUA screenshot/click/type/key/move (`PIRS_COMPUTER_USE=1`) |
+| **B4** | Browse/click + computer use | **Yes** | `browser_cdp` multi-page (open/list/switch) + click/type; CUA (`PIRS_COMPUTER_USE=1`) |
 | **B5** | Improves over time | **Yes** | learn crystallize + improve skill + soul merge |
 | **B6** | Self-write skills from experience | **Yes** | `maybe_crystallize_skill` / skill-crystallizer pack |
 | **B7** | Status / doctor | **Yes** | `pirs --doctor`, tool `doctor`, `pirs-claw status` |
@@ -33,7 +33,9 @@
 | unit libs tools/agent | **109** ok |
 | Capability WIP | audit, diffs, LSP diagnostics, blast 2-hop, doctor, PR, research, fleet, ACP fs/image, TUI slash |
 
-**Still later:** live TUI mic (voice foothold documents claw STT path); email/calendar connectors; CDP multi-tab product polish; publish origin.
+**Still later:** live TUI mic (voice foothold documents claw STT path); live provider OAuth depth for mail/calendar; publish origin.
+
+**Shipped this pass:** `office_document` create/update; MCP email/calendar recipe + mock; schedule fire/fail depth; CDP multi-page.
 
 ---
 

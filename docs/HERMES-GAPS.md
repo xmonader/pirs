@@ -86,13 +86,19 @@ Tool actions (JSON args for the agent tool `browser_cdp`):
 | action | fields |
 |--------|--------|
 | `connect` | optional `url` (CDP HTTP endpoint) |
-| `goto` | `url` |
+| `goto` | `url` (active page) |
 | `content` | optional `max_chars` |
 | `click` | `selector` |
 | `type` | `text`, optional `selector` |
 | `eval` | `expression` (JS) |
 | `screenshot` | optional `path` (default `.pirs/cdp-shot.png`) |
-| `status` / `close` | — |
+| `open_page` | optional `url` (new tab; becomes active) |
+| `list_pages` | — |
+| `switch_page` | `page` = `p1` / index |
+| `status` / `close` | connection + active page honesty |
+
+Office: `read` extracts OOXML/PDF; **`office_document`** creates/updates `.docx`/`.xlsx`/`.pptx`.  
+Email/calendar: MCP connectors — [mcp-email-calendar.md](mcp-email-calendar.md).
 
 Feature: `pirs-tools` / `pirs-claw` default **`cdp`**. Build without: `--no-default-features`.
 

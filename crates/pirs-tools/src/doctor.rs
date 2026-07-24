@@ -74,14 +74,32 @@ pub fn doctor_report(cwd: &Path) -> Vec<String> {
 
     // MCP config + optional degrade snapshot from last load (env-injected by host)
     let mcp = cwd.join(".mcp.json");
+    let user_mcp = std::env::var("HOME")
+        .ok()
+        .map(|h| PathBuf::from(h).join(".pirs").join("mcp.json"));
     lines.push(format!(
         "mcp_config: {}",
         if mcp.is_file() {
             format!("present ({})", mcp.display())
         } else {
-            "absent".into()
+            "absent (cwd .mcp.json)".into()
         }
     ));
+    if let Some(um) = &user_mcp {
+        lines.push(format!(
+            "mcp_user_config: {}",
+            if um.is_file() {
+                format!("present ({})", um.display())
+            } else {
+                "absent (~/.pirs/mcp.json)".into()
+            }
+        ));
+    }
+    lines.push(
+        "mcp_email_calendar: configure stdio/HTTP MCP servers for mail/calendar \
+         (see docs/mcp-email-calendar.md; mock: crates/pirs-mcp/tests/mcp_email_calendar.py)"
+            .into(),
+    );
     if let Ok(report) = std::env::var("PIRS_MCP_DOCTOR_LINES") {
         for line in report.lines().filter(|l| !l.is_empty()) {
             lines.push(format!("  {line}"));

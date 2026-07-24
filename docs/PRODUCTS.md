@@ -55,14 +55,17 @@ Shipped in the capability upgrade pass (beyond Vibe parity):
 | TUI slash parity | `/model` `/undo` `/doctor` `/audit` `/image` `/profile` `/voice`… |
 | Web UI | `pirs --serve` chat SPA |
 | Computer use | key + move + click + type + screenshot |
+| Office documents | `read` extracts docx/pptx/xlsx/pdf; **`office_document`** create/update OOXML |
+| Email/calendar | MCP connectors (`.mcp.json` / `~/.pirs/mcp.json`) — [mcp-email-calendar.md](mcp-email-calendar.md) |
+| CDP multi-page | `browser_cdp` open_page / list_pages / switch_page + status |
 
 Deferred (non-goals / different product class):
 
 - Full Textual-class chrome (path autocomplete widgets as a product)
-- MCP OAuth connector product depth
+- MCP OAuth connector product depth (connectors only)
 - Mistral browser sign-in / Mistral-only model lock-in
 - New messaging channels
-- Email/calendar product (planned later on MCP + life tools)
+- In-process Gmail/Outlook OAuth clients (use **MCP connectors**)
 
 **Rust vs Rhai:** hard profile denials, tools (`ask_user`, `todo`, `browser_cdp`), and gates stay Rust. Team taste lives in optional packs: `strict-plan.rhai` (extra plan denials), `session-discipline.rhai` (todo/ask_user steering), `browser-cdp-workflow.rhai` (CDP recipes). Packs may only **add** denials, never loosen Rust plan.
 

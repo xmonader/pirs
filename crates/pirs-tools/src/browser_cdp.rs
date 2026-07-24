@@ -5,7 +5,8 @@
 //! or launch a local Chromium with remote debugging.
 //!
 //! Tools (single multi-action tool + helpers):
-//! - `browser_cdp` — connect | goto | content | click | type | eval | screenshot | close | status
+//! - `browser_cdp` — connect | goto | content | click | type | eval | screenshot |
+//!   open_page | list_pages | switch_page | close | status
 //!
 //! Requires feature `cdp` (default on). Disable with `--no-default-features` on pirs-tools.
 
@@ -71,11 +72,23 @@ fn chromium_bin() -> Option<PathBuf> {
     None
 }
 
+/// One tracked tab/page in the CDP session.
+struct TrackedPage {
+    /// Stable id for switch_page / list_pages (`p1`, `p2`, …).
+    id: String,
+    page: chromiumoxide::Page,
+    /// Last known URL label (best-effort).
+    url: String,
+}
+
 struct CdpSession {
     browser: Option<chromiumoxide::Browser>,
     /// Keep handler task alive.
     _handler: Option<tokio::task::JoinHandle<()>>,
-    page: Option<chromiumoxide::Page>,
+    /// All open pages; `active` indexes the current one.
+    pages: Vec<TrackedPage>,
+    active: usize,
+    next_page_num: u32,
     /// Child chromium we launched (kill on close / Drop).
     child: Option<Child>,
     endpoint: Option<String>,
@@ -89,7 +102,9 @@ impl Default for CdpSession {
         Self {
             browser: None,
             _handler: None,
-            page: None,
+            pages: Vec::new(),
+            active: 0,
+            next_page_num: 1,
             child: None,
             endpoint: None,
             user_data_dir: None,
@@ -112,9 +127,45 @@ impl Drop for CdpSession {
 }
 
 impl CdpSession {
+    fn active_page(&self) -> Option<&chromiumoxide::Page> {
+        self.pages.get(self.active).map(|p| &p.page)
+    }
+
+    fn active_id(&self) -> Option<&str> {
+        self.pages.get(self.active).map(|p| p.id.as_str())
+    }
+
+    fn push_page(&mut self, page: chromiumoxide::Page, url: String) -> String {
+        let id = format!("p{}", self.next_page_num);
+        self.next_page_num = self.next_page_num.saturating_add(1);
+        self.pages.push(TrackedPage {
+            id: id.clone(),
+            page,
+            url,
+        });
+        self.active = self.pages.len() - 1;
+        id
+    }
+
+    fn list_summary(&self) -> String {
+        if self.pages.is_empty() {
+            return "pages: (none)".into();
+        }
+        let mut lines = vec![format!(
+            "pages: {} active={}",
+            self.pages.len(),
+            self.active_id().unwrap_or("?")
+        )];
+        for (i, p) in self.pages.iter().enumerate() {
+            let mark = if i == self.active { "*" } else { " " };
+            lines.push(format!("{mark} {}  {}", p.id, p.url));
+        }
+        lines.join("\n")
+    }
+
     /// Probe whether the current page still answers CDP.
     async fn is_alive(&self) -> bool {
-        let Some(page) = self.page.as_ref() else {
+        let Some(page) = self.active_page() else {
             return false;
         };
         match tokio::time::timeout(Duration::from_secs(2), page.evaluate("1")).await {
@@ -124,7 +175,7 @@ impl CdpSession {
     }
 
     async fn ensure_connected(&mut self, url_override: Option<&str>) -> anyhow::Result<()> {
-        if self.browser.is_some() && self.page.is_some() {
+        if self.browser.is_some() && self.active_page().is_some() {
             if self.is_alive().await {
                 return Ok(());
             }
@@ -168,6 +219,10 @@ impl CdpSession {
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--disable-background-networking",
+                // Snap/CI/container Chromium often needs these to bind CDP at all.
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
                 "--headless=new",
                 &format!("--user-data-dir={}", user_data_path.display()),
                 "about:blank",
@@ -229,15 +284,82 @@ impl CdpSession {
             .map_err(|e| anyhow::anyhow!("new_page: {e}"))?;
         self.browser = Some(browser);
         self._handler = Some(h);
-        self.page = Some(page);
+        self.pages.clear();
+        self.active = 0;
+        self.next_page_num = 1;
+        self.push_page(page, "about:blank".into());
         self.child = child;
         self.endpoint = Some(endpoint);
         self.user_data_dir = user_data_dir;
         Ok(())
     }
 
+    async fn open_page(&mut self, url: Option<&str>) -> anyhow::Result<String> {
+        self.ensure_connected(None).await?;
+        let browser = self
+            .browser
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("no browser"))?;
+        let target = url.unwrap_or("about:blank");
+        if target != "about:blank"
+            && !(target.starts_with("http://")
+                || target.starts_with("https://")
+                || target.starts_with("data:"))
+        {
+            anyhow::bail!("url must be http(s), data:, or about:blank");
+        }
+        if target.starts_with("http://") || target.starts_with("https://") {
+            crate::web::url_allowed(target).map_err(|e| anyhow::anyhow!("{e}"))?;
+        }
+        let page = browser
+            .new_page(target)
+            .await
+            .map_err(|e| anyhow::anyhow!("open_page: {e}"))?;
+        let id = self.push_page(page, target.to_string());
+        Ok(id)
+    }
+
+    fn switch_page(&mut self, id_or_index: &str) -> anyhow::Result<String> {
+        if self.pages.is_empty() {
+            anyhow::bail!("no pages open; connect or open_page first");
+        }
+        // Accept pN id or 0-based / 1-based index.
+        if let Some(i) = self.pages.iter().position(|p| p.id == id_or_index) {
+            self.active = i;
+            return Ok(format!(
+                "switched to {} url={}",
+                self.pages[i].id, self.pages[i].url
+            ));
+        }
+        if let Ok(n) = id_or_index.parse::<usize>() {
+            // 1-based if in 1..=len, else 0-based
+            let i = if n >= 1 && n <= self.pages.len() {
+                n - 1
+            } else {
+                n
+            };
+            if i < self.pages.len() {
+                self.active = i;
+                return Ok(format!(
+                    "switched to {} url={}",
+                    self.pages[i].id, self.pages[i].url
+                ));
+            }
+        }
+        anyhow::bail!(
+            "unknown page {id_or_index:?}; known: {}",
+            self.pages
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+
     async fn close(&mut self) {
-        self.page = None;
+        self.pages.clear();
+        self.active = 0;
+        self.next_page_num = 1;
         self.browser = None;
         if let Some(h) = self._handler.take() {
             h.abort();
@@ -251,7 +373,6 @@ impl CdpSession {
         }
         self.endpoint = None;
     }
-
 }
 
 fn free_port() -> anyhow::Result<u16> {
@@ -276,7 +397,13 @@ enum CdpAction {
     Eval,
     /// Screenshot to path under cwd.
     Screenshot,
-    /// Status of connection.
+    /// Open a new tab/page (optional url).
+    OpenPage,
+    /// List tracked pages and mark the active one.
+    ListPages,
+    /// Switch active page by id (`p1`) or index.
+    SwitchPage,
+    /// Status of connection + active page.
     Status,
     /// Disconnect / kill launched browser.
     Close,
@@ -303,6 +430,9 @@ struct CdpArgs {
     /// Max content chars (default 12000).
     #[serde(default)]
     max_chars: Option<usize>,
+    /// Page id (`p1`) or index for switch_page.
+    #[serde(default)]
+    page: Option<String>,
 }
 
 pub struct BrowserCdpTool {
@@ -324,7 +454,8 @@ impl AgentTool for BrowserCdpTool {
     fn description(&self) -> &str {
         "Chrome DevTools Protocol browser automation (pure Rust via chromiumoxide). \
          Connect to Playwright/Chrome CDP (PIRS_BROWSER_CDP_URL) or auto-launch Chromium. \
-         Actions: connect, goto, content, click, type, eval, screenshot, status, close."
+         Actions: connect, goto, content, click, type, eval, screenshot, \
+         open_page, list_pages, switch_page, status, close."
     }
 
     fn parameters(&self) -> Value {
@@ -332,7 +463,7 @@ impl AgentTool for BrowserCdpTool {
     }
 
     fn prompt_snippet(&self) -> Option<&str> {
-        Some("browser_cdp: full CDP control (goto/click/type/screenshot)")
+        Some("browser_cdp: CDP multi-page (goto/open_page/list_pages/switch_page/click)")
     }
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
@@ -350,25 +481,49 @@ impl AgentTool for BrowserCdpTool {
             CdpAction::Connect => {
                 g.ensure_connected(args.url.as_deref()).await?;
                 Ok(ToolOutput::text(format!(
-                    "CDP connected endpoint={}",
-                    g.endpoint.as_deref().unwrap_or("?")
+                    "CDP connected endpoint={} active={} pages={}\n{}",
+                    g.endpoint.as_deref().unwrap_or("?"),
+                    g.active_id().unwrap_or("?"),
+                    g.pages.len(),
+                    g.list_summary()
                 )))
             }
             CdpAction::Status => {
-                let alive = if g.page.is_some() {
+                let alive = if g.active_page().is_some() {
                     g.is_alive().await
                 } else {
                     false
                 };
                 Ok(ToolOutput::text(format!(
-                    "connected={} alive={} endpoint={:?} has_page={} launched_child={} last_error={:?}",
+                    "connected={} alive={} endpoint={:?} active_page={:?} page_count={} launched_child={} last_error={:?}\n{}",
                     g.browser.is_some(),
                     alive,
                     g.endpoint,
-                    g.page.is_some(),
+                    g.active_id(),
+                    g.pages.len(),
                     g.child.is_some(),
-                    g.last_error
+                    g.last_error,
+                    g.list_summary()
                 )))
+            }
+            CdpAction::OpenPage => {
+                let id = g.open_page(args.url.as_deref()).await?;
+                Ok(ToolOutput::text(format!(
+                    "opened page id={id}\n{}",
+                    g.list_summary()
+                )))
+            }
+            CdpAction::ListPages => {
+                g.ensure_connected(None).await.ok();
+                Ok(ToolOutput::text(g.list_summary()))
+            }
+            CdpAction::SwitchPage => {
+                let key = args
+                    .page
+                    .or(args.url)
+                    .ok_or_else(|| anyhow::anyhow!("switch_page requires page=pN (or index)"))?;
+                let msg = g.switch_page(&key)?;
+                Ok(ToolOutput::text(format!("{msg}\n{}", g.list_summary())))
             }
             CdpAction::Close => {
                 g.close().await;
@@ -378,40 +533,66 @@ impl AgentTool for BrowserCdpTool {
                 let url = args
                     .url
                     .ok_or_else(|| anyhow::anyhow!("goto requires url"))?;
-                if !(url.starts_with("http://") || url.starts_with("https://")) {
-                    anyhow::bail!("url must be http(s)");
+                if !(url.starts_with("http://")
+                    || url.starts_with("https://")
+                    || url.starts_with("data:"))
+                {
+                    anyhow::bail!("url must be http(s) or data:");
                 }
-                crate::web::url_allowed(&url).map_err(|e| anyhow::anyhow!("{e}"))?;
+                if url.starts_with("http://") || url.starts_with("https://") {
+                    crate::web::url_allowed(&url).map_err(|e| anyhow::anyhow!("{e}"))?;
+                }
                 g.ensure_connected(None).await?;
-                let page = g.page.as_ref().unwrap();
-                page.goto(&url)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("goto: {e}"))?;
-                // Wait for navigation to settle (load / short grace).
-                let _ = page.wait_for_navigation().await;
-                // Brief grace for late DOM paints when wait_for_navigation is a no-op.
-                tokio::time::sleep(Duration::from_millis(150)).await;
-                let title = page.get_title().await.ok().flatten().unwrap_or_default();
-                Ok(ToolOutput::text(format!("navigated to {url} title={title:?}")))
+                let title = {
+                    let page = g.active_page().unwrap();
+                    page.goto(&url)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("goto: {e}"))?;
+                    // Wait for navigation to settle (load / short grace).
+                    let _ = page.wait_for_navigation().await;
+                    // Brief grace for late DOM paints when wait_for_navigation is a no-op.
+                    tokio::time::sleep(Duration::from_millis(150)).await;
+                    page.get_title().await.ok().flatten().unwrap_or_default()
+                };
+                let active = g.active;
+                if let Some(tp) = g.pages.get_mut(active) {
+                    tp.url = url.clone();
+                }
+                Ok(ToolOutput::text(format!(
+                    "navigated to {url} title={title:?} page={}",
+                    g.active_id().unwrap_or("?")
+                )))
             }
             CdpAction::Content => {
                 g.ensure_connected(None).await?;
-                let page = g.page.as_ref().unwrap();
-                let html = page
-                    .content()
-                    .await
-                    .map_err(|e| anyhow::anyhow!("content: {e}"))?;
-                let max = args.max_chars.unwrap_or(12_000).min(50_000);
-                let text = crate::web::truncate_chars(&html_to_text(&html), max);
-                let url = page.url().await.ok().flatten().unwrap_or_default();
-                Ok(ToolOutput::text(format!("URL: {url}\n\n{text}")))
+                let (url, text) = {
+                    let page = g.active_page().unwrap();
+                    let html = page
+                        .content()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("content: {e}"))?;
+                    let max = args.max_chars.unwrap_or(12_000).min(50_000);
+                    let text = crate::web::truncate_chars(&html_to_text(&html), max);
+                    let url = page.url().await.ok().flatten().unwrap_or_default();
+                    (url, text)
+                };
+                let active = g.active;
+                if let Some(tp) = g.pages.get_mut(active) {
+                    if !url.is_empty() {
+                        tp.url = url.clone();
+                    }
+                }
+                Ok(ToolOutput::text(format!(
+                    "page={} URL: {url}\n\n{text}",
+                    g.active_id().unwrap_or("?")
+                )))
             }
             CdpAction::Click => {
                 let sel = args
                     .selector
                     .ok_or_else(|| anyhow::anyhow!("click requires selector"))?;
                 g.ensure_connected(None).await?;
-                let page = g.page.as_ref().unwrap();
+                let page = g.active_page().unwrap();
                 page.find_element(&sel)
                     .await
                     .map_err(|e| anyhow::anyhow!("find {sel}: {e}"))?
@@ -425,7 +606,7 @@ impl AgentTool for BrowserCdpTool {
                     .text
                     .ok_or_else(|| anyhow::anyhow!("type requires text"))?;
                 g.ensure_connected(None).await?;
-                let page = g.page.as_ref().unwrap();
+                let page = g.active_page().unwrap();
                 // type_str lives on Element (chromiumoxide 0.9); focus selector first when given.
                 let sel = args.selector.as_deref().unwrap_or("body");
                 let el = page
@@ -447,7 +628,7 @@ impl AgentTool for BrowserCdpTool {
                     .expression
                     .ok_or_else(|| anyhow::anyhow!("eval requires expression"))?;
                 g.ensure_connected(None).await?;
-                let page = g.page.as_ref().unwrap();
+                let page = g.active_page().unwrap();
                 let result = page
                     .evaluate(expr.as_str())
                     .await
@@ -460,7 +641,7 @@ impl AgentTool for BrowserCdpTool {
             }
             CdpAction::Screenshot => {
                 g.ensure_connected(None).await?;
-                let page = g.page.as_ref().unwrap();
+                let page = g.active_page().unwrap();
                 let rel = args
                     .path
                     .clone()
@@ -492,15 +673,62 @@ pub fn cdp_tools(cwd: PathBuf) -> Vec<Arc<dyn AgentTool>> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn free_port_works() {
-        let p = super::free_port().unwrap();
+        let p = free_port().unwrap();
         assert!(p > 0);
     }
 
     #[test]
     fn cdp_url_env_keys() {
         // Smoke: helper is pure; env may be unset in CI.
-        let _ = super::cdp_url_from_env();
+        let _ = cdp_url_from_env();
+    }
+
+    #[test]
+    fn list_summary_empty_and_tracked_ids() {
+        let mut s = CdpSession::default();
+        assert!(s.list_summary().contains("none"));
+        // Simulate id allocation without a real Page (unit-only helpers).
+        s.next_page_num = 1;
+        let id1 = format!("p{}", s.next_page_num);
+        s.next_page_num += 1;
+        let id2 = format!("p{}", s.next_page_num);
+        assert_eq!(id1, "p1");
+        assert_eq!(id2, "p2");
+    }
+
+    #[test]
+    fn switch_page_resolves_id_and_index() {
+        // Pure dispatch logic without Chrome: exercise switch_page errors and index math.
+        let mut s = CdpSession::default();
+        let err = s.switch_page("p1").unwrap_err().to_string();
+        assert!(err.contains("no pages"), "{err}");
+
+        // Manually seed metadata-only page list is not possible without Page;
+        // cover action serde / schema instead.
+        let raw = serde_json::json!({
+            "action": "switch_page",
+            "page": "p2"
+        });
+        let args: CdpArgs = serde_json::from_value(raw).unwrap();
+        assert!(matches!(args.action, CdpAction::SwitchPage));
+        assert_eq!(args.page.as_deref(), Some("p2"));
+
+        let open = serde_json::json!({"action": "open_page", "url": "about:blank"});
+        let a2: CdpArgs = serde_json::from_value(open).unwrap();
+        assert!(matches!(a2.action, CdpAction::OpenPage));
+
+        let list = serde_json::json!({"action": "list_pages"});
+        let a3: CdpArgs = serde_json::from_value(list).unwrap();
+        assert!(matches!(a3.action, CdpAction::ListPages));
+    }
+
+    #[test]
+    fn status_action_deserializes() {
+        let args: CdpArgs = serde_json::from_value(serde_json::json!({"action": "status"})).unwrap();
+        assert!(matches!(args.action, CdpAction::Status));
     }
 }

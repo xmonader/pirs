@@ -389,8 +389,8 @@ pub fn collect(
         ),
         cap(
             "office_documents",
-            true,
-            "read extracts docx/pptx/xlsx/pdf/odt text; create/edit via office-documents skill + python-docx/openpyxl/python-pptx",
+            has("office_document"),
+            "read extracts docx/pptx/xlsx/pdf/odt; office_document tool creates/updates OOXML (skill for layout-heavy)",
         ),
     ];
 

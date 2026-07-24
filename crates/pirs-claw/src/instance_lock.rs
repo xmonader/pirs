@@ -118,4 +118,19 @@ mod tests {
         // After drop, can re-acquire
         let _b = try_acquire(dir.path(), "telegram").unwrap();
     }
+
+    #[test]
+    fn cron_and_telegram_locks_are_independent() {
+        let dir = tempfile::tempdir().unwrap();
+        let tg = try_acquire(dir.path(), "telegram").unwrap();
+        let cron = try_acquire(dir.path(), "cron").unwrap();
+        // Second cron tick path must fail closed while first holds cron.
+        let err = try_acquire(dir.path(), "cron").unwrap_err().to_string();
+        assert!(err.contains("cron") || err.contains("lock"), "{err}");
+        assert!(lock_status(dir.path(), "cron").contains("held"));
+        assert!(lock_status(dir.path(), "telegram").contains("held"));
+        drop(cron);
+        let _cron2 = try_acquire(dir.path(), "cron").unwrap();
+        drop(tg);
+    }
 }

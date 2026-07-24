@@ -105,7 +105,7 @@ impl AgentTool for ReadTool {
     fn prompt_snippet(&self) -> Option<&str> {
         Some(
             "read: text/images/office — docx pptx xlsx pdf odt extract to text automatically \
-             (never dumps binary). Create/edit office files via office-documents skill + bash/python.",
+             (never dumps binary). Create/edit via office_document tool (or office-documents skill).",
         )
     }
 

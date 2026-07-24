@@ -139,7 +139,7 @@ pub fn project_action_is_readonly(args: &serde_json::Value) -> bool {
 pub fn is_file_mutation_tool(tool: &str) -> bool {
     matches!(
         tool,
-        "write" | "edit" | "edit_block" | "safe_edit" | "ast_edit"
+        "write" | "edit" | "edit_block" | "safe_edit" | "ast_edit" | "office_document"
     )
 }
 

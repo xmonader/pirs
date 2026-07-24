@@ -662,6 +662,56 @@ mod tests {
     }
 
     #[test]
+    fn schedule_fail_count_increments_success_clears_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScheduleStore::open(dir.path().join("schedule.json")).unwrap();
+        let job = store.add("pulse", 60, 0).unwrap();
+        let now = now_secs() + 1;
+        store.mark_failed(&job.id, now, "first").unwrap();
+        store.mark_failed(&job.id, now + 1, "second failure is longer than needed").unwrap();
+        let j = store.find(&job.id).unwrap().unwrap();
+        assert_eq!(j.fail_count, 2);
+        assert_eq!(j.last_status.as_deref(), Some("error"));
+        assert!(j.last_error.as_deref().unwrap().contains("second"));
+        // Success clears last_error and sets ok (fail_count retained for observability).
+        store.mark_fired(&job.id, now + 2).unwrap();
+        let j = store.find(&job.id).unwrap().unwrap();
+        assert_eq!(j.last_status.as_deref(), Some("ok"));
+        assert!(j.last_error.is_none());
+        assert_eq!(j.fail_count, 2);
+        // Recurring advanced next_fire.
+        assert!(j.next_fire > now);
+    }
+
+    #[test]
+    fn schedule_list_exposes_fire_fail_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScheduleStore::open(dir.path().join("schedule.json")).unwrap();
+        let job = store
+            .add_with_deliver(
+                "brief",
+                0,
+                0,
+                DeliverTarget::Telegram {
+                    chat_id: "99".into(),
+                },
+            )
+            .unwrap();
+        store.mark_failed(&job.id, now_secs(), "send failed").unwrap();
+        let listed = store.list().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].last_status.as_deref(), Some("error"));
+        assert_eq!(listed[0].fail_count, 1);
+        assert!(listed[0].last_error.as_ref().unwrap().contains("send failed"));
+        assert_eq!(
+            listed[0].deliver,
+            DeliverTarget::Telegram {
+                chat_id: "99".into()
+            }
+        );
+    }
+
+    #[test]
     fn schedule_corrupt_read_fails_closed() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("schedule.json");

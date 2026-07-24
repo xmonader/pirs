@@ -1688,6 +1688,27 @@ mod tests {
         assert_eq!(parts.join(""), s);
     }
 
+    #[tokio::test]
+    async fn deliver_outbound_telegram_fails_closed_without_token() {
+        // Honest failure: no silent Ok when Telegram cannot send.
+        std::env::remove_var("TELEGRAM_BOT_TOKEN");
+        std::env::remove_var("PIRS_TELEGRAM_BOT_TOKEN");
+        let err = deliver_outbound(
+            &crate::DeliverTarget::Telegram {
+                chat_id: "1".into(),
+            },
+            "hello",
+        )
+        .await
+        .unwrap_err()
+        .to_string()
+        .to_lowercase();
+        assert!(
+            err.contains("token") || err.contains("telegram"),
+            "expected token error, got {err}"
+        );
+    }
+
     #[test]
     fn deliver_outbound_cli_is_required_after_captured_chat() {
         // Contract: tick uses Command::output(); Cli arm must print, not no-op.

@@ -59,6 +59,7 @@ pub mod permission_mode;
 pub mod tool_preset;
 pub mod ls;
 pub mod office;
+pub mod office_write;
 pub mod paths;
 pub mod pr_tools;
 pub mod project;
@@ -87,6 +88,10 @@ pub use find::FindTool;
 pub use grep::GrepTool;
 pub use ls::LsTool;
 pub use office::{extract_document, is_office_ext};
+pub use office_write::{
+    create_docx, create_pptx, create_xlsx, office_tools, update_docx, update_pptx, update_xlsx,
+    OfficeDocumentTool, SlideSpec,
+};
 pub use read::ReadTool;
 pub use recall::RecallTool;
 pub use project::{
@@ -151,6 +156,7 @@ pub fn default_tools_with_session(
         Arc::new(EditTool::new(cwd.clone())),
         Arc::new(EditBlockTool::new(cwd.clone())),
         Arc::new(WriteTool::new(cwd.clone())),
+        Arc::new(OfficeDocumentTool::new(cwd.clone())),
         Arc::new(GrepTool::new(cwd.clone())),
         Arc::new(FindTool::new(cwd.clone())),
         Arc::new(LsTool::new(cwd.clone())),
