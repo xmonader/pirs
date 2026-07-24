@@ -178,8 +178,10 @@ impl ChatItem {
 
 /// Live thinking while the model is generating.
 ///
-/// Collapsed (default): one quiet status line — no raw CoT flood above the
-/// composer. Expanded (`t` / ctrl-o): last few lines of reasoning.
+/// Collapsed (default): one **stable** status line (count only — no streaming
+/// hint text). A changing tail hint rewrote the end of the line every token
+/// and made the caret look like it was jumping start↔end.
+/// Expanded (`t` / ctrl-o): last few lines of reasoning.
 fn render_thinking_live(
     thinking: &str,
     theme: &Theme,
@@ -191,19 +193,7 @@ fn render_thinking_live(
         return Vec::new();
     }
     if !expanded {
-        let hint = lines
-            .last()
-            .map(|l| {
-                let t = l.trim();
-                let max = 56usize;
-                if t.chars().count() > max {
-                    let head: String = t.chars().take(max.saturating_sub(1)).collect();
-                    format!("{head}…")
-                } else {
-                    t.to_string()
-                }
-            })
-            .unwrap_or_default();
+        // Fixed shape: only the integer changes. No trailing live snippet.
         return vec![Line::from(vec![
             Span::styled("    · ", theme.accent),
             Span::styled("thinking", theme.thinking),
@@ -214,14 +204,9 @@ fn render_thinking_live(
                 ),
                 theme.dim,
             ),
-            if hint.is_empty() {
-                Span::raw("")
-            } else {
-                Span::styled(format!(" · {hint}"), theme.dim)
-            },
         ])];
     }
-    const TAIL: usize = 8;
+    const TAIL: usize = 6;
     let skip = total.saturating_sub(TAIL);
     let mut out = vec![Line::from(vec![
         Span::styled("    · ", theme.accent),
@@ -3051,15 +3036,20 @@ fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &Them
         if !text.trim().is_empty() {
             logical.extend(render_markdown(text, theme, width.saturating_sub(4)));
         }
-        let cursor = if (app.tick / 4).is_multiple_of(2) {
-            "▌"
-        } else {
-            " "
-        };
-        logical.push(Line::from(Span::styled(
-            format!("    {cursor}"),
-            theme.accent,
-        )));
+        // Blinking caret only while answer text is streaming. During pure
+        // thinking it sat under the status line and fought the real input
+        // cursor (looked like a caret flicking start/end of the thinking row).
+        if !text.trim().is_empty() {
+            let caret = if (app.tick / 4).is_multiple_of(2) {
+                "▌"
+            } else {
+                " "
+            };
+            logical.push(Line::from(Span::styled(
+                format!("    {caret}"),
+                theme.accent,
+            )));
+        }
         live_rows = flatten_rows(&logical, width);
     }
 
@@ -3326,6 +3316,14 @@ fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, theme: &The
         .wrap(Wrap { trim: false });
     frame.render_widget(para, inner);
 
+    // Cursor: hide while the agent runs with an empty composer so the real
+    // terminal caret doesn't sit in the input box and thrash as the live
+    // thinking pane above redraws every token. Show again as soon as the
+    // user types to steer (or when idle).
+    if app.running && app.input.is_empty() && !pending {
+        app.desired_cursor = None;
+        return;
+    }
     // Cursor position accounting for multi-line wrap.
     let cursor_text = if app.input.is_empty() {
         ""
@@ -4118,20 +4116,29 @@ mod tests {
     }
 
     #[test]
-    fn thinking_live_collapsed_is_one_line() {
+    fn thinking_live_collapsed_is_stable_one_line() {
         let theme = Theme::default_dark();
-        let body = (0..30).map(|i| format!("step {i}")).collect::<Vec<_>>().join("\n");
-        let lines = render_thinking_live(&body, &theme, false);
-        assert_eq!(lines.len(), 1, "collapsed live thinking is a single status line");
-        let flat: String = lines
-            .iter()
-            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
-            .collect();
-        assert!(flat.contains("thinking"), "{flat}");
-        assert!(flat.contains("30 line"), "{flat}");
-        assert!(flat.contains("t expand"), "{flat}");
-        // Hint may include last step, but not dump all 30 full lines as separate rows.
-        assert!(!flat.contains("step 0"), "must not dump early CoT when collapsed: {flat}");
+        let body_a = (0..10).map(|i| format!("step {i}")).collect::<Vec<_>>().join("\n");
+        let body_b = (0..30).map(|i| format!("step {i} more words here")).collect::<Vec<_>>().join("\n");
+        let flat = |body: &str, n: usize| {
+            let lines = render_thinking_live(body, &theme, false);
+            assert_eq!(lines.len(), 1, "collapsed live thinking is a single status line");
+            let s: String = lines
+                .iter()
+                .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+                .collect();
+            assert!(s.contains("thinking"), "{s}");
+            assert!(s.contains(&format!("{n} line")), "{s}");
+            assert!(s.contains("t expand"), "{s}");
+            // No streaming CoT snippet — that rewrote the line end every token.
+            assert!(!s.contains("step "), "collapsed must not embed CoT text: {s}");
+            s
+        };
+        let a = flat(&body_a, 10);
+        let b = flat(&body_b, 30);
+        // Shape stable: only the count digit region differs.
+        assert!(a.starts_with("    · thinking · "), "{a}");
+        assert!(b.starts_with("    · thinking · "), "{b}");
     }
 
     #[test]
