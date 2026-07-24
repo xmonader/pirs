@@ -10,7 +10,11 @@
 //! CLI `--weak` does not change packs. Project/user extension dirs still load
 //! *after* the profile pack set and can override tools by name (last wins).
 
-/// Pack stems in full-catalog order (used when a profile says `packs: "*"`).
+/// Pack stems loaded for the default profile (`packs: "*"`).
+///
+/// Multi-agent / role-hijack packs (conductor, swarm, …) stay in [`BUNDLED]
+/// for opt-in via `packs: ["conductor"]` but are **not** in `*` — they were
+/// pinning "[conductor mode]" into every casual TUI turn.
 pub const BUNDLED_ORDER: &[&str] = &[
     "weak-model",
     "context-janitor",
@@ -23,9 +27,7 @@ pub const BUNDLED_ORDER: &[&str] = &[
     "browser-cdp-workflow",
     "btw",
     "chapter-spine",
-    "conductor",
     "cost-sentinel",
-    "critic-arena",
     "critic",
     "diff-shield",
     "dirty-guard",
@@ -38,7 +40,6 @@ pub const BUNDLED_ORDER: &[&str] = &[
     "mutation-guard",
     "path-guard",
     "project-discipline",
-    "relay-race",
     "repo-pulse",
     "review-gate",
     "runs",
@@ -54,16 +55,15 @@ pub const BUNDLED_ORDER: &[&str] = &[
     "stash-checkpoint",
     "strict-plan",
     "subagents",
-    "swarm",
     "telemetry",
     "verify-guard",
     "verify-impact",
     "web-tools",
     "word-count",
-    "workflow"
+    "workflow",
 ];
 
-/// `(display_name, source)` for every catalog pack. Order matches [`BUNDLED_ORDER`].
+/// Full embedded catalog (includes opt-in packs not in [`BUNDLED_ORDER`]).
 pub const BUNDLED: &[(&str, &str)] = &[
     ("bundled:weak-model.rhai", include_str!("../../../extensions/weak-model.rhai")),
     ("bundled:context-janitor.rhai", include_str!("../../../extensions/context-janitor.rhai")),
@@ -231,18 +231,38 @@ mod tests {
     }
 
     #[test]
-    fn all_bundled_packs_load() {
+    fn all_default_star_packs_load() {
         let mut host = crate::ExtensionHost::new();
         load_into(&mut host);
         assert!(
             host.load_errors.is_empty(),
-            "bundled packs must load cleanly: {:?}",
+            "default * packs must load cleanly: {:?}",
             host.load_errors
         );
-        assert_eq!(host.extension_names().len(), BUNDLED.len());
+        assert_eq!(
+            host.extension_names().len(),
+            BUNDLED_ORDER.len(),
+            "default * loads BUNDLED_ORDER only"
+        );
         let cmds: Vec<_> = host.commands().into_iter().map(|(n, _)| n).collect();
         assert!(cmds.iter().any(|n| n == "goal"), "goal cmd missing: {cmds:?}");
         assert!(cmds.iter().any(|n| n == "btw"), "btw cmd missing: {cmds:?}");
+    }
+
+    #[test]
+    fn conductor_is_opt_in_not_in_default_star() {
+        assert!(
+            !BUNDLED_ORDER.contains(&"conductor"),
+            "conductor must not ship in packs:\"*\""
+        );
+        assert!(
+            bundled_source("conductor").is_some(),
+            "conductor still loadable by name for opt-in profiles"
+        );
+        let mut host = crate::ExtensionHost::new();
+        load_stems(&mut host, &["conductor".into()]);
+        assert!(host.load_errors.is_empty(), "{:?}", host.load_errors);
+        assert_eq!(host.extension_names().len(), 1);
     }
 
     #[test]
@@ -257,13 +277,15 @@ mod tests {
     }
 
     #[test]
-    fn bundled_order_matches_sources_and_is_deterministic() {
-        assert_eq!(BUNDLED.len(), BUNDLED_ORDER.len());
-        for (i, stem) in BUNDLED_ORDER.iter().enumerate() {
+    fn bundled_order_subset_of_catalog_and_is_deterministic() {
+        assert!(
+            BUNDLED.len() >= BUNDLED_ORDER.len(),
+            "catalog must cover default * plus opt-in packs"
+        );
+        for stem in BUNDLED_ORDER {
             assert!(
-                BUNDLED[i].0.contains(stem),
-                "BUNDLED[{i}] display name {:?} must contain stem {stem}",
-                BUNDLED[i].0
+                bundled_source(stem).is_some(),
+                "default stem {stem} missing from BUNDLED sources"
             );
         }
         assert_eq!(&BUNDLED_ORDER[..4], WEAK_ORDER);

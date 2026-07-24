@@ -1,4 +1,8 @@
-// conductor.rhai — strong-planner/weak-executor guidance pack.
+// conductor.rhai — strong-planner/weak-executor guidance pack (OPT-IN).
+// Not in the default `packs: "*"` catalog — casual chat was hijacked by
+// "[conductor mode]" on every turn. Load via profile packs: ["conductor"]
+// or a custom profile when you want plan→delegate→verify orchestration.
+//
 // Pins conductor instructions so the main model plans, delegates execution
 // steps with a model override, and verifies results.
 //

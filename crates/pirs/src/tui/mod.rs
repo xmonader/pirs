@@ -230,37 +230,43 @@ fn render_thinking_live(
     out
 }
 
+fn line_word(n: usize) -> &'static str {
+    if n == 1 {
+        "line"
+    } else {
+        "lines"
+    }
+}
+
 fn render_thinking(thinking: &str, theme: &Theme, expanded: bool) -> Vec<Line<'static>> {
     // History view: generous window when expanded.
-    const MAX: usize = 120;
+    const MAX: usize = 80;
     let lines: Vec<&str> = thinking.lines().filter(|l| !l.trim().is_empty()).collect();
     let total = lines.len();
     if total == 0 {
         return Vec::new();
     }
     if !expanded {
+        // Compact chip — no wall of chrome for a single reasoning line.
         return vec![Line::from(vec![
-            Span::styled("    ▶ ", theme.accent),
+            Span::styled("    · ", theme.dim),
             Span::styled(
-                format!(
-                    "thought · {total} line{}  · press t to show",
-                    if total == 1 { "" } else { "s" }
-                ),
+                format!("thought · {total} {} · t", line_word(total)),
                 theme.thinking,
             ),
         ])];
     }
     let skip = total.saturating_sub(MAX);
     let mut out = vec![Line::from(vec![
-        Span::styled("    ▼ ", theme.accent),
+        Span::styled("    · ", theme.dim),
         Span::styled(
-            format!("thought · {total} lines  · press t to hide"),
+            format!("thought · {total} {} · t hide", line_word(total)),
             theme.thinking,
         ),
     ])];
     if skip > 0 {
         out.push(Line::from(Span::styled(
-            format!("      … {skip} earlier lines omitted"),
+            format!("      … {skip} earlier omitted"),
             theme.dim,
         )));
     }
@@ -4103,7 +4109,8 @@ mod tests {
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
             .collect();
-        assert!(flat.contains("▶ thought"), "{flat}");
+        assert!(flat.contains("thought"), "{flat}");
+        assert!(flat.contains("3 lines"), "{flat}");
         assert!(!flat.contains("line1"), "body hidden when collapsed: {flat}");
 
         let expanded = item.render(&theme, 80, true);
@@ -4112,7 +4119,8 @@ mod tests {
             .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
             .collect();
         assert!(flat_e.contains("line1"), "{flat_e}");
-        assert!(flat_e.contains("▼ thought"), "{flat_e}");
+        assert!(flat_e.contains("thought"), "{flat_e}");
+        assert!(flat_e.contains("t hide"), "{flat_e}");
     }
 
     #[test]
