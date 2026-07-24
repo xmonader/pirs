@@ -178,7 +178,7 @@ pirs --model <cheap> --plan-model <strong> --strategy plan-exec \
   "Fix the failing tests without editing them."
 ```
 
-At session end, hybrid runs print a **by role** split (planner vs executor token totals, and dollars when the builtin price table knows the rates), in addition to the usual per-model lines.
+At session end, hybrid runs print a **by role** split (planner vs executor token totals, and dollars when the builtin price table knows the rates), in addition to the usual per-model lines. One-shot strategy exits go through the same role-split formatter as REPL/TUI `/stats` (via the compact usage footer when `--plan-model` differs from `--model`).
 
 **Weak-model hardening** (tool diet, sequential tools, retries; pairs well with `--plan-model`):
 

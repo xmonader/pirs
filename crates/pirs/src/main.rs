@@ -404,14 +404,22 @@ fn chain_gate_with_extensions(
     pirs_agent::Hooks::chain_before(gate_hook, ext_before)
 }
 
-fn print_usage(report: &pirs_agent::usage::UsageReport) {
+/// One-shot / compact usage footer. When `plan_model` differs from `model`,
+/// appends the same plan-vs-exec **by role** lines as session stats (hybrid path).
+fn format_usage_end(
+    report: &pirs_agent::usage::UsageReport,
+    model: &str,
+    plan_model: Option<&str>,
+    strategy: Option<&str>,
+) -> String {
     let total = report.grand_total();
     let hit_rate = if total.input + total.cache_read > 0 {
         100.0 * total.cache_read as f64 / (total.input + total.cache_read) as f64
     } else {
         0.0
     };
-    eprintln!(
+    let mut lines = Vec::new();
+    lines.push(format!(
         "[usage: {} api calls + {} delegate sub-agents | input {} (cached {}, {:.0}%) | output {} | reasoning {} | total {}]",
         report.calls.len() - report.delegate_calls(),
         report.delegate_calls(),
@@ -421,19 +429,37 @@ fn print_usage(report: &pirs_agent::usage::UsageReport) {
         total.output,
         total.reasoning,
         total.total_tokens,
-    );
+    ));
+    if let Some(s) = strategy {
+        lines.push(format!("  strategy       {s}"));
+    }
+    if let Some(pm) = plan_model {
+        lines.push(format!("  model          {model}"));
+        lines.push(format!("  plan-model     {pm}"));
+        lines.extend(session_stats::format_role_split_lines(report, model, pm));
+    }
     // Per-model lines make strong-plan / weak-exec splits visible at a glance.
-    for (model, u) in &report.by_model {
-        let calls = report.calls.iter().filter(|c| c.model == *model).count();
-        eprintln!(
-            "  {model} ({calls} call{}): input {} (cached {}) output {} total {}",
+    for (m, u) in &report.by_model {
+        let calls = report.calls.iter().filter(|c| c.model == *m).count();
+        lines.push(format!(
+            "  {m} ({calls} call{}): input {} (cached {}) output {} total {}",
             if calls == 1 { "" } else { "s" },
             u.input,
             u.cache_read,
             u.output,
             u.total_tokens
-        );
+        ));
     }
+    lines.join("\n")
+}
+
+fn print_usage(
+    report: &pirs_agent::usage::UsageReport,
+    model: &str,
+    plan_model: Option<&str>,
+    strategy: Option<&str>,
+) {
+    eprintln!("{}", format_usage_end(report, model, plan_model, strategy));
 }
 
 fn summarize_args(tool: &str, args: &serde_json::Value) -> String {
@@ -1923,7 +1949,15 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
             eprintln!();
-            print_usage(&report);
+            // Hybrid plan-exec path: role-split (planner vs executor) when --plan-model set.
+            print_usage(
+                &report,
+                &cli.model,
+                cli.plan_model.as_deref(),
+                cli.strategy
+                    .as_deref()
+                    .or(cli.profile.as_deref()),
+            );
             // A --verify gate (including weak auto-verify) that never passed
             // exits non-zero so scripts/CI can tell a green run from a red one.
             if cli.verify.is_some() && !passed {
@@ -1971,7 +2005,12 @@ async fn main() -> anyhow::Result<()> {
             .await;
         }
         eprintln!();
-        print_usage(&agent.usage_report());
+        print_usage(
+            &agent.usage_report(),
+            &cli.model,
+            cli.plan_model.as_deref(),
+            cli.strategy.as_deref().or(cli.profile.as_deref()),
+        );
         if let Some(hit) = agent.budget_hit {
             eprintln!("[budget exhausted: {hit:?}]");
             std::process::exit(match hit {
@@ -1991,6 +2030,8 @@ async fn main() -> anyhow::Result<()> {
         host.as_ref(),
         &file_commands,
         approval_shared,
+        cli.plan_model.as_deref(),
+        cli.strategy.as_deref().or(cli.profile.as_deref()),
     )
     .await
 }
@@ -2302,6 +2343,8 @@ async fn repl(
     host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
     file_commands: &[discovery::FileCommand],
     approval_shared: std::sync::Arc<std::sync::Mutex<approval::ApprovalMode>>,
+    plan_model: Option<&str>,
+    strategy: Option<&str>,
 ) -> anyhow::Result<()> {
     let mut rl = DefaultEditor::new()?;
     let mut clock = session_stats::SessionClock::new();
@@ -2324,6 +2367,8 @@ async fn repl(
                         printer,
                         &approval_shared,
                         &mut clock,
+                        plan_model,
+                        strategy,
                     )
                     .await
                     {
@@ -2410,8 +2455,8 @@ async fn repl(
         &clock,
         &agent.usage_report(),
         &agent.model,
-        None,
-        None,
+        plan_model,
+        strategy,
     );
     Ok(())
 }
@@ -2452,6 +2497,8 @@ async fn handle_command(
     printer: &Arc<Printer>,
     approval_shared: &std::sync::Arc<std::sync::Mutex<approval::ApprovalMode>>,
     clock: &mut session_stats::SessionClock,
+    plan_model: Option<&str>,
+    strategy: Option<&str>,
 ) -> anyhow::Result<bool> {
     let mut parts = line.splitn(2, ' ');
     let cmd = parts.next().unwrap_or("");
@@ -2601,8 +2648,8 @@ async fn handle_command(
                 clock,
                 &agent.usage_report(),
                 &agent.model,
-                None,
-                None,
+                plan_model,
+                strategy,
             );
         }
         "/approval" => {
@@ -2968,5 +3015,94 @@ mod tests {
             chained("1", "web_search", &serde_json::json!({})).as_deref(),
             Some("strict")
         );
+    }
+
+    /// Hybrid one-shot exit path (`print_usage` → `format_usage_end`) must emit
+    /// plan-vs-exec role split when --plan-model differs from --model.
+    #[test]
+    fn format_usage_end_hybrid_includes_by_role() {
+        use pirs_agent::usage::UsageReport;
+        use pirs_ai::Usage;
+
+        let mut report = UsageReport::default();
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "strong-planner".into(),
+            usage: Usage {
+                input: 1000,
+                output: 200,
+                total_tokens: 1200,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 0,
+        });
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "weak-executor".into(),
+            usage: Usage {
+                input: 500,
+                output: 100,
+                total_tokens: 600,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 1,
+        });
+        *report.by_model.entry("strong-planner".into()).or_default() = Usage {
+            input: 1000,
+            output: 200,
+            total_tokens: 1200,
+            ..Default::default()
+        };
+        *report.by_model.entry("weak-executor".into()).or_default() = Usage {
+            input: 500,
+            output: 100,
+            total_tokens: 600,
+            ..Default::default()
+        };
+
+        let text = format_usage_end(
+            &report,
+            "weak-executor",
+            Some("strong-planner"),
+            Some("plan-exec"),
+        );
+        assert!(
+            text.contains("by role"),
+            "one-shot hybrid footer must include by role:\n{text}"
+        );
+        assert!(text.contains("planner"), "{text}");
+        assert!(text.contains("executor"), "{text}");
+        assert!(text.contains("strong-planner"), "{text}");
+        assert!(text.contains("weak-executor"), "{text}");
+        assert!(text.contains("plan-exec"), "{text}");
+        assert!(text.contains("plan-model"), "{text}");
+    }
+
+    #[test]
+    fn format_usage_end_without_plan_model_skips_role_split() {
+        use pirs_agent::usage::UsageReport;
+        use pirs_ai::Usage;
+
+        let mut report = UsageReport::default();
+        report.calls.push(pirs_agent::usage::UsageRecord {
+            model: "only-model".into(),
+            usage: Usage {
+                input: 10,
+                output: 5,
+                total_tokens: 15,
+                ..Default::default()
+            },
+            stop_reason: pirs_ai::StopReason::Stop,
+            timestamp: 0,
+        });
+        *report.by_model.entry("only-model".into()).or_default() = Usage {
+            input: 10,
+            output: 5,
+            total_tokens: 15,
+            ..Default::default()
+        };
+        let text = format_usage_end(&report, "only-model", None, None);
+        assert!(!text.contains("by role"), "{text}");
+        assert!(!text.contains("plan-model"), "{text}");
     }
 }
