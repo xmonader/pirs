@@ -103,7 +103,14 @@ pub fn unattended_tools(cwd: &Path) -> Vec<Arc<dyn AgentTool>> {
 
 /// Tool names that must never appear in the default unattended profile.
 pub fn unattended_forbidden_tool_names() -> &'static [&'static str] {
-    &["bash", "write", "edit", "edit_block", "ast_edit"]
+    &[
+        "bash",
+        "write",
+        "edit",
+        "edit_block",
+        "ast_edit",
+        "office_document", // mutating OOXML — opt-in via PIRS_CLAW_SCHEDULE_CODE=1
+    ]
 }
 
 /// Optional safety profile from `PIRS_AGENT_PROFILE` (shared with pirs harness).
@@ -220,7 +227,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let tools = coding_tools(dir.path());
         let names: Vec<_> = tools.iter().map(|t| t.name().to_string()).collect();
-        for need in ["read", "write", "edit", "bash", "grep", "find", "ls"] {
+        // Hermes/OpenClaw-class coding surface: files + shell + office + browser CDP.
+        for need in [
+            "read",
+            "write",
+            "edit",
+            "bash",
+            "grep",
+            "find",
+            "ls",
+            "office_document",
+            "browser_cdp",
+            "web_fetch",
+            "doctor",
+        ] {
             assert!(
                 names.iter().any(|n| n == need),
                 "missing tool {need} in {names:?}"

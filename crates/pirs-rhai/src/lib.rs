@@ -666,6 +666,10 @@ impl ExtensionHost {
                     })
                     .collect()
             });
+        } else {
+            // Always expose inbox() so packs like critic.rhai don't warn when
+            // the host has no subagent runner (claw chat / unattended ticks).
+            engine.register_fn("inbox", || -> rhai::Array { rhai::Array::new() });
         }
 
         let ast = engine

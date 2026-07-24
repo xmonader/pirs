@@ -116,13 +116,26 @@ pub fn doctor_report(cwd: &Path) -> Vec<String> {
         _ => "git: not a repo or git missing".into(),
     });
 
-    // Chromium for CDP
+    // Chromium for CDP (include snap/debian wrapper names OpenClaw/Hermes users have)
     let mut chrome = false;
-    for n in ["chromium", "google-chrome", "google-chrome-stable", "chrome"] {
+    for n in [
+        "chromium",
+        "chromium-browser",
+        "google-chrome",
+        "google-chrome-stable",
+        "chrome",
+    ] {
         if which(n) {
             chrome = true;
             lines.push(format!("browser: {n} on PATH"));
             break;
+        }
+    }
+    if !chrome {
+        // Snap common path even when not first on PATH
+        if Path::new("/snap/bin/chromium").is_file() {
+            chrome = true;
+            lines.push("browser: /snap/bin/chromium present".into());
         }
     }
     if !chrome {

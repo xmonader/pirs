@@ -155,6 +155,14 @@ pub fn install_work_context(ctx: WorkContext) {
     *store().lock().unwrap() = ctx;
 }
 
+/// Clear process-wide work context (empty roots → path tools fall back to cwd).
+///
+/// Used by tests so a leaked install cannot poison later cases that write under
+/// ephemeral tempdirs (Hermes/OpenClaw-class reliability: isolation between runs).
+pub fn clear_work_context() {
+    *store().lock().unwrap() = WorkContext::default();
+}
+
 pub fn current_work_context() -> WorkContext {
     store().lock().unwrap().clone()
 }

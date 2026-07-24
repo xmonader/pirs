@@ -373,6 +373,8 @@ impl ScheduleStore {
                 j.last_run = Some(now);
                 j.last_status = Some("ok".into());
                 j.last_error = None;
+                // Successful fire clears the fail streak (Hermes-class recoverability).
+                j.fail_count = 0;
                 if j.cron.is_some() {
                     j.next_fire = next_fire_for_job(j, now).unwrap_or(now + 60);
                 } else if j.every_secs == 0 {
@@ -673,12 +675,12 @@ mod tests {
         assert_eq!(j.fail_count, 2);
         assert_eq!(j.last_status.as_deref(), Some("error"));
         assert!(j.last_error.as_deref().unwrap().contains("second"));
-        // Success clears last_error and sets ok (fail_count retained for observability).
+        // Success clears last_error, sets ok, and resets fail streak.
         store.mark_fired(&job.id, now + 2).unwrap();
         let j = store.find(&job.id).unwrap().unwrap();
         assert_eq!(j.last_status.as_deref(), Some("ok"));
         assert!(j.last_error.is_none());
-        assert_eq!(j.fail_count, 2);
+        assert_eq!(j.fail_count, 0);
         // Recurring advanced next_fire.
         assert!(j.next_fire > now);
     }

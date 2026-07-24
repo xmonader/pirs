@@ -34,6 +34,11 @@ Legend: **Spine** = production-usable path · **Stub** = thin · **Skip** = inte
 | Outbound attachments | **Spine** | `attach_file` + Telegram sendDocument |
 | Subagents / multi-model coding | **Spine / moat** | strategies, weak, graph, bench |
 | Runtime status | **Spine** | `pirs-claw status` |
+| Office create/edit | **Spine** | `office_document` + `read` extract |
+| Email/calendar | **Spine** (MCP) | connectors via `.mcp.json` / `~/.pirs/mcp.json` |
+| CDP multi-page | **Spine** | open_page / list_pages / switch_page |
+
+Viability matrix vs Hermes/OpenClaw: [VIABILITY-VS-HERMES-OPENCLAW.md](VIABILITY-VS-HERMES-OPENCLAW.md).
 
 ## CLI
 

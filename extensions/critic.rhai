@@ -28,7 +28,11 @@ fn on_tool_result(id, name, result) {
 }
 
 fn on_steering() {
+    // inbox() is empty when the host has no subagent runner (e.g. claw unattended).
     let items = inbox();
+    if items.is_empty() {
+        return ();
+    }
     for item in items {
         if item.tag == "critic" {
             state_del("critic_pending");

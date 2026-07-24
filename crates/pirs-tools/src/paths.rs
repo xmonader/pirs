@@ -42,10 +42,19 @@ pub fn resolve_contained(cwd: &Path, input: &str) -> anyhow::Result<PathBuf> {
 
     let ctx = current_work_context();
     // Prefer installed multi-root context; if empty (tests / early init), use cwd.
-    let roots: Vec<PathBuf> = if ctx.roots.is_empty() {
-        vec![std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf())]
-    } else {
-        ctx.root_paths()
+    // Drop roots that no longer exist (tempdir dropped after a prior test installed
+    // them) so file tools stay usable instead of failing with ENOENT on dead roots.
+    let roots: Vec<PathBuf> = {
+        let live: Vec<PathBuf> = ctx
+            .root_paths()
+            .into_iter()
+            .filter(|p| p.exists())
+            .collect();
+        if live.is_empty() {
+            vec![std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf())]
+        } else {
+            live
+        }
     };
 
     // Named root: //backend/src/foo
@@ -172,7 +181,15 @@ fn expand_tilde(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::work_context::{install_work_context, WorkContext};
+    use crate::work_context::{clear_work_context, install_work_context, WorkContext};
+
+    /// RAII: clear global work context when the guard drops (parallel-safe cleanup).
+    struct CtxGuard;
+    impl Drop for CtxGuard {
+        fn drop(&mut self) {
+            clear_work_context();
+        }
+    }
 
     #[test]
     fn relative_resolves_against_cwd() {
@@ -192,6 +209,7 @@ mod tests {
 
     #[test]
     fn contained_allows_in_root_paths() {
+        let _g = CtxGuard;
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir(root.join("src")).unwrap();
@@ -202,6 +220,7 @@ mod tests {
 
     #[test]
     fn contained_returns_canonical_existing_path() {
+        let _g = CtxGuard;
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let f = root.join("file.txt");
@@ -214,6 +233,7 @@ mod tests {
 
     #[test]
     fn contained_rejects_absolute_escape() {
+        let _g = CtxGuard;
         let dir = tempfile::tempdir().unwrap();
         install_work_context(WorkContext::single(dir.path().to_path_buf()));
         assert!(resolve_contained(dir.path(), "/etc/passwd").is_err());
@@ -221,6 +241,7 @@ mod tests {
 
     #[test]
     fn contained_rejects_dotdot_escape() {
+        let _g = CtxGuard;
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("root");
         std::fs::create_dir(&root).unwrap();
@@ -232,6 +253,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn contained_rejects_symlink_escape() {
+        let _g = CtxGuard;
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("root");
         std::fs::create_dir(&root).unwrap();
@@ -243,6 +265,7 @@ mod tests {
 
     #[test]
     fn multi_root_named_path() {
+        let _g = CtxGuard;
         let a = tempfile::tempdir().unwrap();
         let b = tempfile::tempdir().unwrap();
         std::fs::write(b.path().join("only-b.txt"), b"hi").unwrap();
@@ -260,6 +283,7 @@ mod tests {
 
     #[test]
     fn multi_root_relative_finds_secondary() {
+        let _g = CtxGuard;
         let a = tempfile::tempdir().unwrap();
         let b = tempfile::tempdir().unwrap();
         std::fs::write(b.path().join("secret-in-b.txt"), b"x").unwrap();
@@ -269,5 +293,18 @@ mod tests {
         // File only exists in secondary root — relative lookup should find it.
         let p = resolve_contained(a.path(), "secret-in-b.txt").unwrap();
         assert!(p.ends_with("secret-in-b.txt"));
+    }
+
+    #[test]
+    fn dead_installed_roots_fall_back_to_cwd() {
+        let _g = CtxGuard;
+        let gone = tempfile::tempdir().unwrap();
+        let dead = gone.path().to_path_buf();
+        install_work_context(WorkContext::single(dead.clone()));
+        drop(gone); // root no longer exists
+        let live = tempfile::tempdir().unwrap();
+        std::fs::write(live.path().join("ok.txt"), b"hi").unwrap();
+        let p = resolve_contained(live.path(), "ok.txt").unwrap();
+        assert!(p.ends_with("ok.txt"));
     }
 }

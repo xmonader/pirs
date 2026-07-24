@@ -901,6 +901,17 @@ fn chat_safe_tools_with_state(
     tools
 }
 
+fn which_bin(name: &str) -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let p = dir.join(name);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    None
+}
+
 async fn print_runtime_status(state: &Path, schedule_path: &Path) -> anyhow::Result<()> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -972,9 +983,20 @@ async fn print_runtime_status(state: &Path, schedule_path: &Path) -> anyhow::Res
         .or_else(|_| std::env::var("BROWSER_CDP_URL"))
         .or_else(|_| std::env::var("CDP_URL"))
         .ok();
+    let chrome_bin = ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome"]
+        .into_iter()
+        .find(|n| which_bin(n).is_some())
+        .or_else(|| {
+            if std::path::Path::new("/snap/bin/chromium").is_file() {
+                Some("chromium")
+            } else {
+                None
+            }
+        });
     println!(
-        "browser_cdp: {}",
-        cdp.as_deref().unwrap_or("(auto-launch or default :9222)")
+        "browser_cdp: {} chrome={}",
+        cdp.as_deref().unwrap_or("(auto-launch or default :9222)"),
+        chrome_bin.unwrap_or("missing")
     );
     println!("speech (probed):");
     for line in pirs_ai::speech_status_lines_probed().await {

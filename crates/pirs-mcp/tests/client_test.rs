@@ -96,6 +96,78 @@ fn email_calendar_script() -> String {
     )
 }
 
+/// End-to-end product path: `~/.pirs/mcp.json` is always trusted → load_servers
+/// registers email/calendar tools (OpenClaw/Hermes MCP connector parity).
+#[tokio::test]
+async fn email_calendar_via_user_mcp_json_load_servers() {
+    use pirs_mcp::config::{load_server_specs_with_trust, ServerTransport};
+
+    let dir = tempfile::tempdir().unwrap();
+    let script = email_calendar_script();
+    let cfg = serde_json::json!({
+        "mcpServers": {
+            "email-calendar": {
+                "command": "python3",
+                "args": [script]
+            }
+        }
+    });
+    // Spec parse with forced trust (project path shape).
+    std::fs::write(dir.path().join(".mcp.json"), cfg.to_string()).unwrap();
+    let (specs, errors) = load_server_specs_with_trust(dir.path(), &mut |_| true);
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_eq!(specs.len(), 1);
+    assert_eq!(specs[0].name, "email-calendar");
+    match &specs[0].transport {
+        ServerTransport::Stdio { command, args, .. } => {
+            assert_eq!(command, "python3");
+            assert!(
+                args.iter().any(|a| a.contains("mcp_email_calendar")),
+                "{args:?}"
+            );
+        }
+        _ => panic!("expected stdio"),
+    }
+
+    // User-global config is trusted without TTY (product path for personal connectors).
+    let home = dir.path().join("home");
+    std::fs::create_dir_all(home.join(".pirs")).unwrap();
+    std::fs::write(home.join(".pirs").join("mcp.json"), cfg.to_string()).unwrap();
+    let cwd = dir.path().join("empty-project");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let prev_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", &home);
+    let result = pirs_mcp::load_servers(&cwd).await;
+    if let Some(h) = prev_home {
+        std::env::set_var("HOME", h);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    assert!(
+        result.errors.is_empty(),
+        "user mcp.json should load cleanly: {:?}",
+        result.errors
+    );
+    assert!(
+        result.tools.len() >= 4,
+        "expected email+calendar tools, got {} tools {:?}",
+        result.tools.len(),
+        result.tools.iter().map(|t| t.name().to_string()).collect::<Vec<_>>()
+    );
+    let names: Vec<_> = result.tools.iter().map(|t| t.name().to_string()).collect();
+    assert!(
+        names.iter().any(|n| n.contains("email_list")),
+        "{names:?}"
+    );
+    assert!(
+        names.iter().any(|n| n.contains("calendar_list")),
+        "{names:?}"
+    );
+    let rep = pirs_mcp::McpDegradedReport::from_load(&result);
+    assert!(rep.is_fully_healthy(), "{:?}", rep.lines());
+    assert!(rep.lines().iter().any(|l| l.contains("ok: email-calendar")));
+}
+
 #[tokio::test]
 async fn email_calendar_list_and_read_tools() {
     let client = StdioClient::spawn(

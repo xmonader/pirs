@@ -685,4 +685,31 @@ mod tests {
         assert!(t2.contains("Fresh"), "{t2}");
         assert!(!t2.contains("Deck Title Here"), "{t2}");
     }
+
+    #[tokio::test]
+    async fn office_document_tool_create_then_read_via_extract() {
+        use pirs_agent::{AgentTool, ToolExecContext};
+        use tokio_util::sync::CancellationToken;
+
+        let dir = tempfile::tempdir().unwrap();
+        let tool = OfficeDocumentTool::new(dir.path().to_path_buf());
+        let out = tool
+            .execute(ToolExecContext {
+                tool_call_id: "t1".into(),
+                args: serde_json::json!({
+                    "action": "create",
+                    "path": "roundtrip.docx",
+                    "text": "Viable alternative body"
+                }),
+                cancel: CancellationToken::new(),
+                on_update: None,
+            })
+            .await
+            .unwrap();
+        let text = out.content[0].as_text().unwrap();
+        assert!(text.contains("Viable alternative body"), "{text}");
+        // Same path via extract_document (what `read` uses).
+        let extracted = extract_document(&dir.path().join("roundtrip.docx")).unwrap();
+        assert!(extracted.contains("Viable alternative body"), "{extracted}");
+    }
 }

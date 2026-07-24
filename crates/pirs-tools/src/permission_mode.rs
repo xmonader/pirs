@@ -310,6 +310,15 @@ mod tests {
     }
 
     #[test]
+    fn workspace_write_allows_office_document() {
+        assert!(
+            permission_deny_reason(PermissionMode::WorkspaceWrite, "office_document").is_none(),
+            "office_document is a file mutation (workspace-write+)"
+        );
+        assert!(permission_deny_reason(PermissionMode::ReadOnly, "office_document").is_some());
+    }
+
+    #[test]
     fn workspace_write_allows_edit_blocks_bash() {
         assert!(permission_deny_reason(PermissionMode::WorkspaceWrite, "edit").is_none());
         assert!(permission_deny_reason(PermissionMode::WorkspaceWrite, "bash").is_some());

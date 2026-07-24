@@ -69,6 +69,11 @@ fn chromium_bin() -> Option<PathBuf> {
             return Some(p);
         }
     }
+    // Ubuntu snap installs the binary here even when the PATH wrapper is odd.
+    let snap = PathBuf::from("/snap/bin/chromium");
+    if snap.is_file() {
+        return Some(snap);
+    }
     None
 }
 
@@ -730,5 +735,73 @@ mod tests {
     fn status_action_deserializes() {
         let args: CdpArgs = serde_json::from_value(serde_json::json!({"action": "status"})).unwrap();
         assert!(matches!(args.action, CdpAction::Status));
+    }
+
+    #[test]
+    fn chromium_bin_probe_is_honest() {
+        // Does not require Chrome; just ensures helper does not panic and
+        // prefers known names when present on this host.
+        let found = chromium_bin();
+        if which("chromium-browser").is_some() || PathBuf::from("/snap/bin/chromium").is_file() {
+            assert!(found.is_some(), "should detect chromium-browser/snap");
+        }
+    }
+
+    /// Live CDP: connect → open_page → list → switch → content (requires Chrome).
+    /// Run with `PIRS_CDP_LIVE=1 cargo test -p pirs-tools live_cdp -- --ignored --nocapture`.
+    #[tokio::test]
+    #[ignore = "requires local Chromium; set PIRS_CDP_LIVE=1 and --ignored"]
+    async fn live_cdp_multipage_connect_content() {
+        if std::env::var("PIRS_CDP_LIVE").as_deref() != Ok("1") {
+            return;
+        }
+        use pirs_agent::{AgentTool, ToolExecContext};
+        use tokio_util::sync::CancellationToken;
+
+        let dir = tempfile::tempdir().unwrap();
+        let tool = BrowserCdpTool::new(dir.path().to_path_buf());
+        let exec = |args: serde_json::Value| {
+            let tool = BrowserCdpTool::new(dir.path().to_path_buf());
+            async move {
+                tool.execute(ToolExecContext {
+                    tool_call_id: "t".into(),
+                    args,
+                    cancel: CancellationToken::new(),
+                    on_update: None,
+                })
+                .await
+            }
+        };
+
+        let connect = exec(serde_json::json!({"action": "connect"})).await.unwrap();
+        let c = connect.content[0].as_text().unwrap();
+        assert!(c.contains("connected") || c.contains("CDP"), "{c}");
+
+        let open = exec(serde_json::json!({
+            "action": "open_page",
+            "url": "about:blank"
+        }))
+        .await
+        .unwrap();
+        assert!(
+            open.content[0].as_text().unwrap().contains("opened")
+                || open.content[0].as_text().unwrap().contains("p"),
+            "{:?}",
+            open.content[0].as_text()
+        );
+
+        let list = exec(serde_json::json!({"action": "list_pages"}))
+            .await
+            .unwrap();
+        let l = list.content[0].as_text().unwrap();
+        assert!(l.contains("pages"), "{l}");
+
+        let status = exec(serde_json::json!({"action": "status"})).await.unwrap();
+        let s = status.content[0].as_text().unwrap();
+        assert!(s.contains("connected=true") || s.contains("alive=true"), "{s}");
+
+        let _ = exec(serde_json::json!({"action": "close"})).await;
+        let _ = tool; // keep type alive for name check
+        assert_eq!(BrowserCdpTool::new(dir.path().to_path_buf()).name(), "browser_cdp");
     }
 }

@@ -134,8 +134,8 @@ pub use worktree::{
 };
 pub use write::WriteTool;
 pub use work_context::{
-    current_work_context, install_work_context, load_named_context, work_context_summary,
-    WorkContext, WorkRoot,
+    clear_work_context, current_work_context, install_work_context, load_named_context,
+    work_context_summary, WorkContext, WorkRoot,
 };
 
 /// Session-aware tools (ask_user, todo) plus coding defaults.

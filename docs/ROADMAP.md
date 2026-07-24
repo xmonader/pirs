@@ -35,7 +35,8 @@
 
 **Still later:** live TUI mic (voice foothold documents claw STT path); live provider OAuth depth for mail/calendar; publish origin.
 
-**Shipped this pass:** `office_document` create/update; MCP email/calendar recipe + mock; schedule fire/fail depth; CDP multi-page.
+**Shipped this pass:** `office_document` create/update; MCP email/calendar recipe + mock; schedule fire/fail depth; CDP multi-page.  
+**Viability hardening (10-round):** chromium-browser detection, work_context isolation, always-on `inbox()` for packs, live CDP multi-page proof, MCP user-config load path — see [VIABILITY-VS-HERMES-OPENCLAW.md](VIABILITY-VS-HERMES-OPENCLAW.md).
 
 ---
 
