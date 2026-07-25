@@ -15,8 +15,6 @@ use crate::channel::{
 use crate::pairing::{warn_if_allow_all, PairingAllowlist};
 use crate::GatewayReply;
 
-use allow::require_allowlist;
-
 mod allow;
 mod bind;
 mod cron;
@@ -77,7 +75,7 @@ pub async fn run_gateway_channels(
 ) -> anyhow::Result<()> {
     warn_if_allow_all();
     let on_message: MessageHandler = Arc::new(on_message);
-    require_allowlist(allowlist, "gateway")?;
+    allow::require_allowlist_for_state(allowlist, "gateway", Some(state_dir))?;
 
     // Background cron tick (best-effort; does not own telegram flock).
     let state_cron = state_dir.to_path_buf();

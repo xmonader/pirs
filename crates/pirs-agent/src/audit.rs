@@ -172,6 +172,40 @@ pub fn is_secret_key_name(key: &str) -> bool {
     SECRET_KEY_FRAGMENTS.iter().any(|f| k.contains(f))
 }
 
+/// True if a string looks like a bearer token / API key payload.
+pub fn looks_like_secret_string(s: &str) -> bool {
+    let t = s.trim();
+    if t.len() < 12 {
+        return false;
+    }
+    let lower = t.to_ascii_lowercase();
+    if lower.starts_with("sk-")
+        || lower.starts_with("sk_")
+        || lower.starts_with("rk-")
+        || lower.starts_with("bearer ")
+        || lower.starts_with("basic ")
+    {
+        return true;
+    }
+    // Long hex / base64-ish blobs often used as tokens
+    if t.len() >= 32
+        && t.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '+' || c == '/' || c == '=')
+        && t.chars().any(|c| c.is_ascii_digit())
+        && t.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 8
+    {
+        // Avoid redacting normal paths/URLs
+        if t.contains('/') && (t.starts_with('/') || t.contains("://")) {
+            return false;
+        }
+        if t.contains(' ') {
+            return false;
+        }
+        return true;
+    }
+    false
+}
+
 /// Redact secret-shaped string values in JSON (recursive). Non-string secrets become `"***"`.
 pub fn redact_value(v: &Value) -> Value {
     match v {
@@ -187,6 +221,7 @@ pub fn redact_value(v: &Value) -> Value {
             Value::Object(out)
         }
         Value::Array(arr) => Value::Array(arr.iter().map(redact_value).collect()),
+        Value::String(s) if looks_like_secret_string(s) => Value::String("***".into()),
         other => other.clone(),
     }
 }
@@ -270,7 +305,8 @@ mod tests {
             "command": "echo hi",
             "api_key": "sk-live-abc",
             "nested": {"token": "xyz", "path": "/tmp/x"},
-            "Authorization": "Bearer super-secret"
+            "Authorization": "Bearer super-secret",
+            "raw": "sk-proj-abcdefghijklmnopqrstuv"
         });
         let r = redact_value(&v);
         assert_eq!(r["command"], "echo hi");
@@ -278,8 +314,10 @@ mod tests {
         assert_eq!(r["nested"]["token"], "***");
         assert_eq!(r["nested"]["path"], "/tmp/x");
         assert_eq!(r["Authorization"], "***");
+        assert_eq!(r["raw"], "***");
         assert!(!r.to_string().contains("sk-live"));
         assert!(!r.to_string().contains("super-secret"));
+        assert!(!r.to_string().contains("sk-proj"));
     }
 
     #[test]

@@ -152,10 +152,16 @@ pub enum SessionsCmd {
 pub enum PairCmd {
     /// List allowlisted peer ids.
     List,
-    /// Add a peer id (telegram chat_id, etc.).
+    /// Add a peer id (telegram chat_id, etc.). Accepts `telegram:123` prefixes.
     Add { peer: String },
     /// Remove a peer id.
     Remove { peer: String },
+    /// Mint a short code the unpaired peer can DM to self-pair (default TTL 10m).
+    Code {
+        /// Seconds until the code expires (60–86400).
+        #[arg(long, default_value_t = 600)]
+        ttl: u64,
+    },
 }
 
 #[derive(Subcommand, Debug)]

@@ -36,6 +36,14 @@ pub async fn fire_schedule_job(
     default_model: &str,
     all_skills: &[Skill],
 ) -> anyhow::Result<bool> {
+    // Fail early with a clear message (schedule fires always need an LLM key).
+    let key = match registry::resolve_llm(default_model, 1) {
+        Ok((_provider, key, _routed)) => key,
+        Err(e) => anyhow::bail!("schedule job {}: cannot resolve model/key: {e}", job.id),
+    };
+    if let Err(e) = require_llm_key(key.as_deref()) {
+        anyhow::bail!("schedule job {}: {e}", job.id);
+    }
     let model = job.model.as_deref().unwrap_or(default_model);
     let attached = pirs_claw::skills::select_skills(all_skills, &job.skills);
     let prompt = if attached.is_empty() {

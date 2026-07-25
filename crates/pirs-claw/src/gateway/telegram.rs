@@ -13,7 +13,7 @@ use crate::channel::{
 use crate::pairing::PairingAllowlist;
 use crate::GatewayReply;
 
-use super::allow::require_allowlist;
+use super::allow::require_allowlist_for_state;
 use super::utf8::utf8_chunks;
 use super::MessageHandler;
 
@@ -575,7 +575,7 @@ pub(super) async fn run_telegram(
     allowlist: &PairingAllowlist,
     on_message: MessageHandler,
 ) -> anyhow::Result<()> {
-    require_allowlist(allowlist, "telegram")?;
+    require_allowlist_for_state(allowlist, "telegram", Some(state_dir))?;
     // Exclusive getUpdates: hold flock for process lifetime.
     let _lock = crate::instance_lock::try_acquire(state_dir, "telegram")?;
     let bot = TelegramBot::from_env()?;
@@ -646,14 +646,40 @@ pub(super) async fn run_telegram(
                 .as_ref()
                 .map(|u| u.id.to_string())
                 .unwrap_or_else(|| peer.clone());
-            // Allow chat id or user id
+            // Allow chat id or user id; or redeem a pending pairing code from text.
+            let mut allowlist = allowlist.clone();
             if !allowlist.is_allowed(&peer) && !allowlist.is_allowed(&user) {
+                let text_probe = msg.text.as_deref().unwrap_or("").trim().to_string();
+                let allow_path = crate::pairing::PairingAllowlist::default_path(state_dir);
+                let redeemed = crate::pairing::try_redeem_pairing_code(
+                    state_dir,
+                    &allow_path,
+                    &text_probe,
+                    &peer,
+                )
+                .unwrap_or(false);
+                if redeemed {
+                    // Reload allowlist after redeem.
+                    if let Ok(al) = crate::pairing::PairingAllowlist::open(&allow_path) {
+                        allowlist = al;
+                    }
+                    let _ = bot
+                        .send_with_retry(
+                            &peer,
+                            "pirs-claw: paired successfully. You can chat now.",
+                        )
+                        .await;
+                    offset = upd.update_id + 1;
+                    continue;
+                }
                 eprintln!("[telegram] ignore unpaired peer chat={peer} user={user}");
+                let hint = if crate::pairing::looks_like_pairing_code(&text_probe) {
+                    "that pairing code is invalid or expired. Ask the owner for a new `pirs-claw pair code`."
+                } else {
+                    "you are not on the pairing allowlist. Ask the owner to run `pirs-claw pair add <chat_id>` or mint a code with `pirs-claw pair code`."
+                };
                 let _ = bot
-                    .send_with_retry(
-                        &peer,
-                        "pirs-claw: you are not on the pairing allowlist. Ask the owner to add your chat id.",
-                    )
+                    .send_with_retry(&peer, &format!("pirs-claw: {hint}"))
                     .await;
                 offset = upd.update_id + 1;
                 continue;

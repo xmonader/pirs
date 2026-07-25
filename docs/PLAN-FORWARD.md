@@ -27,8 +27,8 @@
 2. No Discord/Slack/WhatsApp/Signal production depth — stubs only.
 3. No Skills Hub marketplace — local + URL install only.
 4. Schedule fires still need an **LLM key** for chat body.
-5. Pairing UX is **allowlist ids**, not OpenClaw pairing codes.
-6. Secret redaction in audit is pragmatic (key-name denylist), not full DLP.
+5. Pairing: allowlist ids **or** short codes (`pirs-claw pair code` → DM the code). Not OpenClaw multi-device pairing product.
+6. Secret redaction in audit is pragmatic (key names + sk-/Bearer-shaped strings), not full DLP.
 
 ## Phase map
 

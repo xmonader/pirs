@@ -78,20 +78,33 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
                 PairCmd::Add { peer } => {
+                    let peer = pirs_claw::pairing::normalize_peer_id(&peer);
                     let added = al.add(&path, &peer)?;
                     if added {
                         println!("paired {peer} → {}", path.display());
+                        println!(
+                            "tip: or mint a code with `pirs-claw pair code` and have them DM it"
+                        );
                     } else {
                         println!("already paired: {peer}");
                     }
                 }
                 PairCmd::Remove { peer } => {
+                    let peer = pirs_claw::pairing::normalize_peer_id(&peer);
                     let removed = al.remove(&path, &peer)?;
                     if removed {
                         println!("unpaired {peer}");
                     } else {
                         println!("not in allowlist: {peer}");
                     }
+                }
+                PairCmd::Code { ttl } => {
+                    let code = pirs_claw::pairing::mint_pairing_code(&state, ttl)?;
+                    println!("pairing code: {code}");
+                    println!(
+                        "unpaired peers: DM this code to the bot within {ttl}s to self-pair"
+                    );
+                    println!("allowlist file: {}", path.display());
                 }
             }
         }

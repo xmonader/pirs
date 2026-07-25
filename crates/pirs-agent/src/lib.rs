@@ -21,8 +21,8 @@ pub mod validate;
 
 pub use agent::{Agent, AgentError, QueueMode};
 pub use audit::{
-    audit_enabled, audit_listener, default_audit_path, is_secret_key_name, redact_value, wrap_emit,
-    AuditLog,
+    audit_enabled, audit_listener, default_audit_path, is_secret_key_name, looks_like_secret_string,
+    redact_value, wrap_emit, AuditLog,
 };
 pub use control_pins::{
     enforce_tool_result_adjacency, is_reminder_kind, preserve_control_pins, reminder_kind,

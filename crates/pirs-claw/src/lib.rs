@@ -551,7 +551,9 @@ pub fn parse_channel_list(s: &str) -> anyhow::Result<Vec<String>> {
         anyhow::bail!("empty channel list");
     }
     if s.eq_ignore_ascii_case("all") {
-        return Ok(GATEWAY_CHANNELS.iter().map(|c| (*c).to_string()).collect());
+        let all: Vec<String> = GATEWAY_CHANNELS.iter().map(|c| (*c).to_string()).collect();
+        warn_stub_channels(&all);
+        return Ok(all);
     }
     let mut out = Vec::new();
     for part in s.split(',') {
@@ -572,7 +574,20 @@ pub fn parse_channel_list(s: &str) -> anyhow::Result<Vec<String>> {
     if out.is_empty() {
         anyhow::bail!("empty channel list");
     }
+    warn_stub_channels(&out);
     Ok(out)
+}
+
+fn warn_stub_channels(channels: &[String]) {
+    for ch in channels {
+        let depth = channel_depth_label(ch);
+        if depth.starts_with("stub") {
+            eprintln!(
+                "[pirs-claw] channel {ch}: {depth} — Telegram is the production spine; \
+                 other channels are best-effort stubs"
+            );
+        }
+    }
 }
 
 pub fn default_state_dir() -> PathBuf {
@@ -647,9 +662,19 @@ pub fn require_llm_key(key: Option<&str>) -> anyhow::Result<()> {
         Ok(())
     } else {
         anyhow::bail!(
-            "no API key for chat: set DASHSCOPE_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, \
-             or OPENAI_API_KEY (e.g. source ~/.pirs/secrets.env)"
+            "no API key for chat (schedule fires and chat both need a model key): \
+             set DASHSCOPE_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY \
+             (e.g. source ~/.pirs/secrets.env). See docs/PLAN-FORWARD.md residual gaps."
         )
+    }
+}
+
+/// Channels that are product spines vs stubs (for serve/status honesty).
+pub fn channel_depth_label(channel: &str) -> &'static str {
+    match channel {
+        "telegram" | "cli" => "spine",
+        "discord" | "slack" | "whatsapp" | "signal" => "stub/thin (not production depth)",
+        _ => "unknown",
     }
 }
 
@@ -955,6 +980,18 @@ not json
     fn require_llm_key_fails_closed() {
         assert!(require_llm_key(None).is_err());
         assert!(require_llm_key(Some("sk")).is_ok());
+        let err = require_llm_key(None).unwrap_err().to_string();
+        assert!(
+            err.contains("schedule fires") || err.contains("API key"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn channel_depth_labels_spine_vs_stub() {
+        assert_eq!(channel_depth_label("telegram"), "spine");
+        assert!(channel_depth_label("discord").starts_with("stub"));
+        assert!(channel_depth_label("slack").starts_with("stub"));
     }
 
     #[test]
