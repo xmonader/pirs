@@ -70,11 +70,14 @@ pirs-claw pair add <chat_id>
 ## Residual gaps (honest)
 
 1. **No live Gmail/Outlook OAuth product** — MCP only (by design).  
-2. **No Discord/Slack production depth** — stubs.  
+2. **No Discord/Slack/WhatsApp/Signal production depth** — stubs/thin.  
 3. **No Skills Hub marketplace.**  
 4. **Snap Chromium** needs `--no-sandbox` (we pass it on auto-launch).  
 5. **Schedule fires still need an LLM key** for chat body (same class as Hermes).  
-6. **Pairing UX** is allowlist ids, not OpenClaw pairing codes.
+6. **Pairing UX** is allowlist ids, not OpenClaw pairing codes.  
+7. **Audit secret redaction** is pragmatic key-name denylist, not full DLP.
+
+Plan forward: [PLAN-FORWARD.md](PLAN-FORWARD.md). Smoke: `scripts/viability-smoke.sh`.
 
 ## Bottom line
 

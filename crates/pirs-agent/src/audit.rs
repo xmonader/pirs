@@ -75,14 +75,14 @@ impl AuditLog {
         }
     }
 
-    /// Record a tool call start.
+    /// Record a tool call start (args redacted for secret-shaped keys).
     pub fn tool_start(&self, tool_call_id: &str, tool: &str, args: &Value) {
         self.append(json!({
             "ts": now_ms(),
             "kind": "tool_start",
             "tool_call_id": tool_call_id,
             "tool": tool,
-            "args": args,
+            "args": redact_value(args),
         }));
     }
 
@@ -148,6 +148,47 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// Key name fragments that mark secret-shaped fields (case-insensitive).
+const SECRET_KEY_FRAGMENTS: &[&str] = &[
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "auth_header",
+    "private_key",
+    "access_key",
+    "client_secret",
+    "bearer",
+];
+
+/// True if a JSON object key looks secret-shaped.
+pub fn is_secret_key_name(key: &str) -> bool {
+    let k = key.to_ascii_lowercase();
+    SECRET_KEY_FRAGMENTS.iter().any(|f| k.contains(f))
+}
+
+/// Redact secret-shaped string values in JSON (recursive). Non-string secrets become `"***"`.
+pub fn redact_value(v: &Value) -> Value {
+    match v {
+        Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, val) in map {
+                if is_secret_key_name(k) {
+                    out.insert(k.clone(), Value::String("***".into()));
+                } else {
+                    out.insert(k.clone(), redact_value(val));
+                }
+            }
+            Value::Object(out)
+        }
+        Value::Array(arr) => Value::Array(arr.iter().map(redact_value).collect()),
+        other => other.clone(),
+    }
 }
 
 /// Listener that writes tool/agent events to the audit log (subscribe on Agent).
@@ -221,5 +262,43 @@ mod tests {
         assert!(text.contains("tool_start"));
         assert!(text.contains("tool_end"));
         assert!(text.contains("bash"));
+    }
+
+    #[test]
+    fn redact_value_masks_secret_keys() {
+        let v = json!({
+            "command": "echo hi",
+            "api_key": "sk-live-abc",
+            "nested": {"token": "xyz", "path": "/tmp/x"},
+            "Authorization": "Bearer super-secret"
+        });
+        let r = redact_value(&v);
+        assert_eq!(r["command"], "echo hi");
+        assert_eq!(r["api_key"], "***");
+        assert_eq!(r["nested"]["token"], "***");
+        assert_eq!(r["nested"]["path"], "/tmp/x");
+        assert_eq!(r["Authorization"], "***");
+        assert!(!r.to_string().contains("sk-live"));
+        assert!(!r.to_string().contains("super-secret"));
+    }
+
+    #[test]
+    fn tool_start_redacts_secret_args_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.jsonl");
+        let log = AuditLog::open(path.clone());
+        log.tool_start(
+            "1",
+            "http",
+            &json!({"url": "https://api.example", "api_token": "sekrit-value-99"}),
+        );
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("tool_start"));
+        assert!(text.contains("***"));
+        assert!(
+            !text.contains("sekrit-value-99"),
+            "audit must not persist secret arg values: {text}"
+        );
+        assert!(text.contains("https://api.example"));
     }
 }

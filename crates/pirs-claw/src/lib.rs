@@ -439,6 +439,16 @@ impl ScheduleStore {
         Ok(jobs.into_iter().next())
     }
 
+    /// Human status lines for doctor/`pirs-claw status` (no secrets).
+    pub fn status_lines(&self, now: u64) -> anyhow::Result<Vec<String>> {
+        Ok(schedule_status_lines(
+            &self.list()?,
+            self.next_due()?,
+            now,
+            &self.path,
+        ))
+    }
+
     /// After long downtime, skip overdue recurring jobs to the next future fire
     /// instead of thundering-herd firing every missed slot. One-shots stay due.
     ///
@@ -480,6 +490,47 @@ impl ScheduleStore {
         }
         Ok(n)
     }
+}
+
+/// Pure schedule summary for status/doctor (testable without Telegram).
+pub fn schedule_status_lines(
+    jobs: &[ScheduleEntry],
+    next: Option<ScheduleEntry>,
+    now: u64,
+    path: &std::path::Path,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "schedule: {} job(s) at {}",
+        jobs.len(),
+        path.display()
+    ));
+    if let Some(next) = next {
+        let in_secs = next.next_fire.saturating_sub(now);
+        lines.push(format!(
+            "  next_due: {} in {}s (next_fire={})",
+            next.name.as_deref().unwrap_or(&next.id),
+            in_secs,
+            next.next_fire
+        ));
+    } else if jobs.is_empty() {
+        lines.push("  next_due: (none)".into());
+    }
+    for j in jobs.iter().take(8) {
+        lines.push(format!(
+            "  {} enabled={} status={:?} fails={} next={}",
+            j.name.as_deref().unwrap_or(&j.id),
+            j.enabled,
+            j.last_status,
+            j.fail_count,
+            j.next_fire
+        ));
+    }
+    if jobs.len() > 8 {
+        lines.push(format!("  … +{} more", jobs.len() - 8));
+    }
+    lines.push("  note: schedule fires require an LLM API key for chat body".into());
+    lines
 }
 
 /// Compute next fire for a job after `after` (unix secs).
@@ -731,6 +782,27 @@ mod tests {
         assert!(store.due(now).unwrap().is_empty());
     }
 
+
+    #[test]
+    fn schedule_status_lines_show_fail_and_llm_note() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("schedule.json");
+        let store = ScheduleStore::open(&path).unwrap();
+        let now = 1_700_000_000u64;
+        let job = store.add("hello", 60, 0).unwrap();
+        store.mark_failed(&job.id, now, "boom").unwrap();
+        let j = store.find(&job.id).unwrap().unwrap();
+        let lines = schedule_status_lines(std::slice::from_ref(&j), Some(j.clone()), now, &path);
+        let text = lines.join("\n");
+        assert!(text.contains("schedule: 1 job"));
+        assert!(text.contains("fails=1"));
+        assert!(text.contains("error") || text.contains("status="));
+        assert!(text.contains("require an LLM API key"));
+        // Via store helper too
+        let via = store.status_lines(now).unwrap().join("\n");
+        assert!(via.contains("fails=1"));
+        assert!(via.contains("LLM API key"));
+    }
 
     #[test]
     fn schedule_fire_uses_timeout_on_spawn_path() {

@@ -75,10 +75,12 @@ Deferred (non-goals / different product class):
 
 | Supported | Stubs only (no budget) | Never |
 |-----------|------------------------|--------|
-| CLI + **Telegram** | discord, slack, whatsapp, signal names | Full OpenClaw 20+ matrix |
+| CLI + **Telegram** | discord, slack, whatsapp, signal names (**thin — not production depth**) | Full OpenClaw 20+ matrix |
 | Pairing allowlist (fail closed) | — | Open bots without pairing |
 | Coding tools on gateway **opt-in** (`--gateway-code`) | — | Default RCE from chat |
 | Telegram single-instance flock | — | Concurrent long-poll on same bot |
+
+**Residual gaps:** schedule fires need an LLM key; pairing is allowlist ids (not pairing codes); mail/calendar via MCP only; no Skills Hub. See [PLAN-FORWARD.md](PLAN-FORWARD.md).
 
 ```bash
 pirs-claw pair add "$CHAT_ID"

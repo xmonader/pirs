@@ -56,40 +56,28 @@ pub async fn print_runtime_status(state: &Path, schedule_path: &Path) -> anyhow:
         pirs_claw::instance_lock::lock_status(state, "cron")
     );
     let store = ScheduleStore::open(schedule_path)?;
-    let jobs = store.list()?;
-    println!("schedule: {} job(s) at {}", jobs.len(), schedule_path.display());
-    if let Some(next) = store.next_due()? {
-        let in_secs = next.next_fire.saturating_sub(now);
-        println!(
-            "  next_due: {} in {}s (next_fire={})",
-            next.name.as_deref().unwrap_or(&next.id),
-            in_secs,
-            next.next_fire
-        );
+    for line in store.status_lines(now)? {
+        println!("{line}");
     }
-    for j in jobs.iter().take(8) {
-        println!(
-            "  {} enabled={} cron={:?} every={} next={} last_run={:?} status={:?} fails={} err={:?}",
-            j.name.as_deref().unwrap_or(&j.id),
-            j.enabled,
-            j.cron,
-            j.every_secs,
-            j.next_fire,
-            j.last_run,
-            j.last_status,
-            j.fail_count,
-            j.last_error.as_ref().map(|e| {
-                if e.chars().count() > 80 {
-                    format!("{}…", e.chars().take(80).collect::<String>())
-                } else {
-                    e.clone()
-                }
-            })
-        );
+    // Extra detail for top jobs (cron/every/error tail) beyond compact status_lines.
+    for j in store.list()?.iter().take(8) {
+        if j.last_error.is_some() || j.cron.is_some() {
+            println!(
+                "  detail {} cron={:?} every={} err={:?}",
+                j.name.as_deref().unwrap_or(&j.id),
+                j.cron,
+                j.every_secs,
+                j.last_error.as_ref().map(|e| {
+                    if e.chars().count() > 80 {
+                        format!("{}…", e.chars().take(80).collect::<String>())
+                    } else {
+                        e.clone()
+                    }
+                })
+            );
+        }
     }
-    if jobs.len() > 8 {
-        println!("  … +{} more", jobs.len() - 8);
-    }
+    println!("channels: telegram=spine; discord/slack/whatsapp/signal=stub/thin");
     let sessions = state.join("sessions");
     let n_sess = if sessions.is_dir() {
         walkdir_sessions(&sessions).len()

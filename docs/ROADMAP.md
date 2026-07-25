@@ -1,11 +1,13 @@
 # pirs product roadmap
 
-**As of:** 2026-07-21 (capability upgrade pass)  
-**Remote:** local `main` **ahead of `origin/main`** (unpushed) — publish is ops.
+**As of:** 2026-07-25 (plan-forward Phases 0–2)  
+**Remote:** local `main` may be **ahead of `origin/main`** — publish is an explicit ops decision (see `docs/PLAN-FORWARD.md`).
 
-**North star (current):** coding harness + personal agent **Yes** on A1–A8 / B1–B7 spines.  
+**North star (current):** coding harness (`pirs`) + **Telegram-first** personal agent (`pirs-claw`) on A1–A8 / B1–B7 spines.  
 **Not now:** more messaging channels, Skills Hub, desktop, Modal/Daytona, OpenClaw zoo.  
-**Email/calendar:** via MCP connectors (mock + docs shipped; no in-process OAuth).
+**Email/calendar:** via MCP connectors only (no in-process OAuth).  
+**Channel stubs:** Discord / Slack / WhatsApp / Signal are **thin/named only** — not production depth.  
+**Plan forward:** [PLAN-FORWARD.md](PLAN-FORWARD.md).
 
 ### Capability matrix (harness + shared core)
 
@@ -33,10 +35,10 @@
 | unit libs tools/agent | **109** ok |
 | Capability WIP | audit, diffs, LSP diagnostics, blast 2-hop, doctor, PR, research, fleet, ACP fs/image, TUI slash |
 
-**Still later:** live TUI mic (voice foothold documents claw STT path); live provider OAuth depth for mail/calendar; publish origin.
+**Still later:** live TUI mic productization; live provider OAuth depth for mail/calendar (MCP remains the path); optional publish to origin.
 
-**Shipped this pass:** `office_document` create/update; MCP email/calendar recipe + mock; schedule fire/fail depth; CDP multi-page.  
-**Viability hardening (10-round):** chromium-browser detection, work_context isolation, always-on `inbox()` for packs, live CDP multi-page proof, MCP user-config load path — see [VIABILITY-VS-HERMES-OPENCLAW.md](VIABILITY-VS-HERMES-OPENCLAW.md).
+**Shipped:** `office_document`; MCP email/calendar recipe + mock; schedule fire/fail + timeout; CDP multi-page; doctor honesty probes; audit secret-key redaction.  
+**Viability:** see [VIABILITY-VS-HERMES-OPENCLAW.md](VIABILITY-VS-HERMES-OPENCLAW.md) and `scripts/viability-smoke.sh`.
 
 ---
 
@@ -151,6 +153,14 @@ No new channels. Work is **internals first**, then UX polish on the same surface
 | Observability | Traces/session stats already started — make them default-useful |
 | Security review pass | Pairing, flock, SSRF, path containment, gateway-code opt-in |
 
+### Residual gaps (match code)
+
+1. MCP-only email/calendar — no first-party OAuth product.  
+2. Discord/Slack/WhatsApp/Signal — stubs/thin, not production.  
+3. No Skills Hub.  
+4. Schedule fires require an LLM key for the chat body.  
+5. Pairing is allowlist peer ids, not OpenClaw-style pairing codes.  
+
 ### Explicitly deferred (do not start)
 
 - Discord / Slack / any second channel productization  
@@ -159,6 +169,7 @@ No new channels. Work is **internals first**, then UX polish on the same surface
 - Desktop app  
 - Hermes CUA permission product / multi-tab browser product  
 - Full Honcho dialectic  
+- OpenClaw 20+ channel matrix
 
 ---
 
