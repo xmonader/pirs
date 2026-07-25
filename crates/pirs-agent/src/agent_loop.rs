@@ -498,6 +498,11 @@ async fn stream_assistant(
         if (cascade.judge)(&draft).await {
             return draft;
         }
+        // Credit rejected draft tokens before pop so cost accounting is honest (M-16).
+        {
+            let mut extra = config.extra_usage.lock().unwrap();
+            *extra += draft.usage.clone();
+        }
         if let Some(last) = context.messages.last() {
             if last.is_assistant() {
                 context.messages.pop();
@@ -1305,8 +1310,14 @@ async fn run_tool(
     };
     match tool.execute(ctx).await {
         Ok(out) => Ok(out),
-        Err(e) if is_transient_tool_error(&e) && !cancel.is_cancelled() => {
-            // One automatic retry for timeout/network-class failures.
+        Err(e)
+            if is_idempotent_tool(&name)
+                && is_transient_tool_error(&e)
+                && !cancel.is_cancelled() =>
+        {
+            // One automatic retry only for known-idempotent tools (M-5).
+            // Never re-run edit/write/bash on substring matches like "HTTP 503"
+            // printed by a successful script.
             let ctx2 = ToolExecContext {
                 tool_call_id: id,
                 args,
@@ -1319,21 +1330,45 @@ async fn run_tool(
     }
 }
 
-/// Network/timeout-class failures worth one automatic retry.
+/// Tools safe to re-execute once on network/timeout errors (no side effects).
+fn is_idempotent_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "read"
+            | "grep"
+            | "find"
+            | "ls"
+            | "web_fetch"
+            | "web_search"
+            | "doctor"
+            | "recall"
+            | "code_map"
+            | "code_search"
+            | "session_search"
+            | "mcp_search"
+            | "mcp_describe"
+            | "mcp_status"
+            | "vision_describe"
+            | "project"
+    ) || name.starts_with("lsp")
+}
+
+/// Network/timeout-class failures worth one automatic retry (idempotent tools only).
 fn is_transient_tool_error(e: &anyhow::Error) -> bool {
     let s = e.to_string().to_ascii_lowercase();
+    // Prefer explicit timeout/transport wording over bare "503" (bash scripts
+    // often print HTTP status codes in success output that becomes Err text).
     s.contains("timeout")
         || s.contains("timed out")
         || s.contains("connection reset")
         || s.contains("connection refused")
         || s.contains("broken pipe")
         || s.contains("temporarily unavailable")
-        || s.contains("try again")
-        || s.contains("503")
-        || s.contains("502")
-        || s.contains("504")
         || s.contains("econnreset")
         || s.contains("dns error")
+        || s.contains("network unreachable")
+        || s.contains("error sending request")
+        || s.contains("error decoding response")
 }
 
 #[cfg(test)]
@@ -1405,10 +1440,25 @@ mod result_cap_tests {
     #[test]
     fn transient_tool_error_classifier() {
         assert!(is_transient_tool_error(&anyhow::anyhow!("connection reset by peer")));
-        assert!(is_transient_tool_error(&anyhow::anyhow!("HTTP 503")));
         assert!(is_transient_tool_error(&anyhow::anyhow!("request timed out")));
+        // Bare "503" / "try again" no longer trigger retries (mutating tool hazard).
+        assert!(!is_transient_tool_error(&anyhow::anyhow!("HTTP 503")));
+        assert!(!is_transient_tool_error(&anyhow::anyhow!("please try again later")));
         assert!(!is_transient_tool_error(&anyhow::anyhow!("file not found")));
         assert!(!is_transient_tool_error(&anyhow::anyhow!("Invalid arguments")));
+    }
+
+    #[test]
+    fn idempotent_tool_retry_gate() {
+        assert!(is_idempotent_tool("read"));
+        assert!(is_idempotent_tool("grep"));
+        assert!(is_idempotent_tool("web_fetch"));
+        assert!(is_idempotent_tool("mcp_search"));
+        assert!(!is_idempotent_tool("bash"));
+        assert!(!is_idempotent_tool("write"));
+        assert!(!is_idempotent_tool("edit"));
+        assert!(!is_idempotent_tool("mcp_call"));
+        assert!(!is_idempotent_tool("mcp_enable"));
     }
 }
 

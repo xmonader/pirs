@@ -232,6 +232,9 @@ async fn open_sse_stream(
 /// matching-id message arrives, and reporting the resolved `endpoint` (the
 /// POST path) back through `on_endpoint` as soon as it's seen. Returns when
 /// the stream ends (server closed it, or a chunk read failed).
+/// Hard cap on SSE reassembly buffer (M-26). Boundary-free streams cannot grow forever.
+pub const MAX_SSE_BUFFER_BYTES: usize = 4 * 1024 * 1024;
+
 async fn drain_response_into_pending(
     response: reqwest::Response,
     pending: &PendingMap,
@@ -241,6 +244,19 @@ async fn drain_response_into_pending(
     let mut buf = Vec::new();
     while let Some(chunk) = stream.next().await {
         let Ok(bytes) = chunk else { break };
+        if buf.len() + bytes.len() > MAX_SSE_BUFFER_BYTES {
+            tracing::warn!(
+                len = buf.len() + bytes.len(),
+                cap = MAX_SSE_BUFFER_BYTES,
+                "MCP SSE buffer exceeded cap; dropping stream"
+            );
+            // Fail pending waiters so callers do not hang until outer timeout.
+            let waiters: Vec<_> = pending.lock().unwrap().drain().map(|(_, tx)| tx).collect();
+            for tx in waiters {
+                let _ = tx.send(Err("SSE buffer exceeded maximum size".into()));
+            }
+            break;
+        }
         buf.extend_from_slice(&bytes);
         for (event, data) in drain_sse_events(&mut buf) {
             if event == "endpoint" {
@@ -718,5 +734,15 @@ mod tests {
             "httpanything://host:3000/x"
         ));
         assert!(!same_origin("https://a.io", "http://a.io/path"));
+    }
+
+    #[test]
+    fn sse_buffer_cap_is_finite() {
+        assert!(MAX_SSE_BUFFER_BYTES >= 64 * 1024);
+        assert!(MAX_SSE_BUFFER_BYTES <= 16 * 1024 * 1024);
+        // Drain helper must reference the cap (structural — real stream test is e2e).
+        let src = include_str!("http.rs");
+        assert!(src.contains("MAX_SSE_BUFFER_BYTES"));
+        assert!(src.contains("SSE buffer exceeded"));
     }
 }

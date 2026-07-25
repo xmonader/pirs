@@ -1131,6 +1131,25 @@ async fn run_webhook_listener(
             "[pirs-claw] WARNING: webhook bound publicly on {addr} — ensure firewall + pairing"
         );
     }
+    // Public bind without a shared secret is remote prompt injection (M-33).
+    let public = host == "0.0.0.0" || host == "::";
+    if public && webhook_secret_for(channel).is_none() {
+        anyhow::bail!(
+            "{channel}: public webhook bind ({addr}) requires PIRS_WEBHOOK_SECRET \
+             (or PIRS_{}_WEBHOOK_SECRET). Refusing to listen open.",
+            channel.to_ascii_uppercase()
+        );
+    }
+    // Optional hard require even on localhost: PIRS_WEBHOOK_REQUIRE_SECRET=1
+    if matches!(
+        std::env::var("PIRS_WEBHOOK_REQUIRE_SECRET").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    ) && webhook_secret_for(channel).is_none()
+    {
+        anyhow::bail!(
+            "{channel}: PIRS_WEBHOOK_REQUIRE_SECRET=1 but no webhook secret configured"
+        );
+    }
     let listener = tokio::net::TcpListener::bind(addr).await?;
     eprintln!(
         "[pirs-claw gateway] {channel} webhook listening on {addr} (POST / JSON body; default localhost)"
@@ -1141,13 +1160,17 @@ async fn run_webhook_listener(
         let allowlist = allowlist.clone();
         let on_message = on_message.clone();
         tokio::spawn(async move {
-            use tokio::io::{AsyncReadExt, AsyncWriteExt};
-            let mut buf = vec![0u8; 65536];
-            let n = match sock.read(&mut buf).await {
-                Ok(n) => n,
-                Err(_) => return,
+            use tokio::io::AsyncWriteExt;
+            let raw = match read_http_request(&mut sock).await {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("[{channel}] bad HTTP request: {e}");
+                    let _ = sock
+                        .write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+                        .await;
+                    return;
+                }
             };
-            let raw = String::from_utf8_lossy(&buf[..n]);
             let first_line = raw.lines().next().unwrap_or("");
             // WhatsApp / Meta hub.challenge verification (GET).
             if first_line.starts_with("GET ") {
@@ -1167,10 +1190,10 @@ async fn run_webhook_listener(
                     .await;
                 return;
             }
-            // Crude HTTP: find body after \r\n\r\n
+            // Find body after \r\n\r\n (read_http_request already assembled full body).
             let (headers, body) = match raw.split_once("\r\n\r\n") {
-                Some((h, b)) => (h, b.trim_end_matches('\0')),
-                None => ("", raw.trim_end_matches('\0')),
+                Some((h, b)) => (h, b),
+                None => ("", raw.as_str()),
             };
             // Signature gate when a shared secret is configured (Opus §2.5).
             // Without a secret we still rely on pairing allowlist + localhost
@@ -1237,10 +1260,80 @@ async fn run_webhook_listener(
     }
 }
 
+/// Max webhook body we will buffer (1 MiB). Larger requests are rejected.
+pub const WEBHOOK_MAX_BODY: usize = 1024 * 1024;
+
+/// Read a full HTTP/1.x request (headers + body via Content-Length).
+///
+/// Replaces a single 64 KiB `read()` that mis-parsed fragmented or large
+/// bodies behind reverse proxies (review M-32).
+pub async fn read_http_request(
+    sock: &mut tokio::net::TcpStream,
+) -> anyhow::Result<String> {
+    use tokio::io::AsyncReadExt;
+    let mut buf: Vec<u8> = Vec::with_capacity(4096);
+    let mut tmp = [0u8; 4096];
+    // Header phase: read until \r\n\r\n
+    loop {
+        if buf.len() > 64 * 1024 {
+            anyhow::bail!("HTTP headers too large");
+        }
+        let n = sock.read(&mut tmp).await?;
+        if n == 0 {
+            anyhow::bail!("connection closed before headers complete");
+        }
+        buf.extend_from_slice(&tmp[..n]);
+        if let Some(pos) = find_header_end(&buf) {
+            // pos is start of \r\n\r\n; headers end at pos, body starts at pos+4.
+            let header_bytes = &buf[..pos];
+            let headers = String::from_utf8_lossy(header_bytes);
+            let content_len = parse_content_length(&headers).unwrap_or(0);
+            if content_len > WEBHOOK_MAX_BODY {
+                anyhow::bail!("body too large ({content_len} > {WEBHOOK_MAX_BODY})");
+            }
+            let mut body = buf[pos + 4..].to_vec();
+            while body.len() < content_len {
+                let n = sock.read(&mut tmp).await?;
+                if n == 0 {
+                    break;
+                }
+                body.extend_from_slice(&tmp[..n]);
+                if body.len() > WEBHOOK_MAX_BODY {
+                    anyhow::bail!("body exceeded max while reading");
+                }
+            }
+            if content_len > 0 {
+                body.truncate(content_len);
+            }
+            let mut raw = header_bytes.to_vec();
+            raw.extend_from_slice(b"\r\n\r\n");
+            raw.extend_from_slice(&body);
+            return Ok(String::from_utf8_lossy(&raw).into_owned());
+        }
+    }
+}
+
+fn find_header_end(buf: &[u8]) -> Option<usize> {
+    buf.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i)
+}
+
+fn parse_content_length(headers: &str) -> Option<usize> {
+    for line in headers.lines() {
+        let lower = line.to_ascii_lowercase();
+        if let Some(rest) = lower.strip_prefix("content-length:") {
+            return rest.trim().parse().ok();
+        }
+    }
+    None
+}
+
+/// Slack request timestamps older/newer than this are rejected (replay window).
+pub const SLACK_TIMESTAMP_SKEW_SECS: i64 = 5 * 60;
+
 /// Verify webhook authenticity when `PIRS_WEBHOOK_SECRET` (or channel-specific
 /// env) is set. Supports:
 /// - generic: `X-Pirs-Signature: sha256=<hex>` HMAC-SHA256 of body
-/// - Slack: `X-Slack-Signature` + `X-Slack-Request-Timestamp` (v0 scheme)
+/// - Slack: `X-Slack-Signature` + `X-Slack-Request-Timestamp` (v0 scheme, freshness)
 /// - GitHub-style: `X-Hub-Signature-256: sha256=<hex>`
 ///
 /// If no secret is configured, returns Ok (pairing allowlist remains the gate).
@@ -1250,30 +1343,46 @@ pub fn verify_webhook_signature(
     headers: &str,
     body: &str,
 ) -> Result<(), String> {
+    verify_webhook_signature_at(channel, headers, body, crate::channel::now_secs_pub() as i64)
+}
+
+/// Same as [`verify_webhook_signature`] with injectable clock (tests).
+pub fn verify_webhook_signature_at(
+    channel: &str,
+    headers: &str,
+    body: &str,
+    now_secs: i64,
+) -> Result<(), String> {
     let secret = webhook_secret_for(channel);
     let Some(secret) = secret else {
         return Ok(());
     };
     let hdrs = parse_http_headers(headers);
     // Prefer channel-native headers, then generic.
+    if let Some(sig) = hdrs.get("x-slack-signature").cloned() {
+        let ts = hdrs
+            .get("x-slack-request-timestamp")
+            .ok_or_else(|| "slack signature requires X-Slack-Request-Timestamp".to_string())?;
+        let ts_i: i64 = ts
+            .parse()
+            .map_err(|_| "invalid X-Slack-Request-Timestamp".to_string())?;
+        if (now_secs - ts_i).abs() > SLACK_TIMESTAMP_SKEW_SECS {
+            return Err(format!(
+                "slack timestamp skew too large (|{now_secs}-{ts_i}| > {SLACK_TIMESTAMP_SKEW_SECS}s)"
+            ));
+        }
+        // Slack: v0:{ts}:{body}
+        let base = format!("v0:{ts}:{body}");
+        if hmac_sha256_hex_eq(secret.as_bytes(), base.as_bytes(), &sig) {
+            return Ok(());
+        }
+        return Err("slack/hmac signature mismatch".into());
+    }
     if let Some(sig) = hdrs
-        .get("x-slack-signature")
+        .get("x-hub-signature-256")
         .cloned()
-        .or_else(|| hdrs.get("x-hub-signature-256").cloned())
         .or_else(|| hdrs.get("x-pirs-signature").cloned())
     {
-        if let Some(ts) = hdrs.get("x-slack-request-timestamp") {
-            // Slack: v0:{ts}:{body}
-            let base = format!("v0:{ts}:{body}");
-            if hmac_sha256_hex_eq(secret.as_bytes(), base.as_bytes(), &sig) {
-                return Ok(());
-            }
-            // Also accept raw body HMAC under the same header (tests / simple relays).
-            if hmac_sha256_hex_eq(secret.as_bytes(), body.as_bytes(), &sig) {
-                return Ok(());
-            }
-            return Err("slack/hmac signature mismatch".into());
-        }
         if hmac_sha256_hex_eq(secret.as_bytes(), body.as_bytes(), &sig) {
             return Ok(());
         }
@@ -1884,5 +1993,65 @@ mod tests {
         let hdr = format!("POST / HTTP/1.1\r\nX-Pirs-Signature: {sig}");
         assert!(verify_webhook_signature("slack", &hdr, body).is_ok());
         std::env::remove_var("PIRS_WEBHOOK_SECRET");
+    }
+
+    #[test]
+    fn slack_signature_requires_fresh_timestamp() {
+        let _g = webhook_secret_env_lock();
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        let secret = b"s3cret";
+        let body = r#"{"type":"event_callback"}"#;
+        let now = 1_700_000_000i64;
+        std::env::set_var("PIRS_WEBHOOK_SECRET", "s3cret");
+
+        // Fresh timestamp + valid v0 HMAC
+        let ts = now.to_string();
+        let base = format!("v0:{ts}:{body}");
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret).unwrap();
+        mac.update(base.as_bytes());
+        let sig = format!("v0={}", hex::encode(mac.finalize().into_bytes()));
+        let hdr = format!(
+            "POST / HTTP/1.1\r\nX-Slack-Signature: {sig}\r\nX-Slack-Request-Timestamp: {ts}"
+        );
+        assert!(
+            verify_webhook_signature_at("slack", &hdr, body, now).is_ok(),
+            "fresh slack sig should pass"
+        );
+
+        // Stale timestamp (1 hour old) with matching HMAC for that old ts
+        let old = now - 3600;
+        let base_old = format!("v0:{old}:{body}");
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret).unwrap();
+        mac.update(base_old.as_bytes());
+        let sig_old = format!("v0={}", hex::encode(mac.finalize().into_bytes()));
+        let hdr_old = format!(
+            "POST /\r\nX-Slack-Signature: {sig_old}\r\nX-Slack-Request-Timestamp: {old}"
+        );
+        let err = verify_webhook_signature_at("slack", &hdr_old, body, now).unwrap_err();
+        assert!(
+            err.contains("skew") || err.contains("timestamp"),
+            "{err}"
+        );
+
+        // Missing timestamp header
+        let hdr_no_ts = format!("POST /\r\nX-Slack-Signature: {sig}");
+        let err2 = verify_webhook_signature_at("slack", &hdr_no_ts, body, now).unwrap_err();
+        assert!(err2.contains("Timestamp"), "{err2}");
+        std::env::remove_var("PIRS_WEBHOOK_SECRET");
+    }
+
+    #[test]
+    fn parse_content_length_and_header_end() {
+        assert_eq!(
+            parse_content_length("POST /\r\nContent-Length: 12\r\nHost: x"),
+            Some(12)
+        );
+        let raw = b"POST / HTTP/1.1\r\nContent-Length: 2\r\n\r\nOK";
+        assert_eq!(find_header_end(raw), Some(raw.len() - 6)); // before \r\n\r\n... wait
+        // "\r\n\r\n" starts at index of double CRLF
+        let pos = find_header_end(raw).unwrap();
+        assert_eq!(&raw[pos..pos + 4], b"\r\n\r\n");
+        assert_eq!(&raw[pos + 4..], b"OK");
     }
 }

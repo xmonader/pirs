@@ -27,12 +27,33 @@ pub async fn wait_and_drain(
     );
     tokio::pin!(sleep);
 
+    // Cap docker/ssh output the same way local bash does (M-3): unbounded
+    // `yes` under PIRS_SANDBOX=docker must not OOM the agent.
+    const MAX_SANDBOX_OUTPUT: usize = 8 * 1024 * 1024;
+    let mut stdout_full = false;
+    let mut stderr_full = false;
     while pipes_open || status.is_none() {
         tokio::select! {
             chunk = rx.recv(), if pipes_open => {
                 match chunk {
                     Some((is_out, c)) => {
-                        if is_out { out.stdout.push_str(&c); } else { out.stderr.push_str(&c); }
+                        if is_out {
+                            if !stdout_full {
+                                if out.stdout.len() + c.len() > MAX_SANDBOX_OUTPUT {
+                                    out.stdout.push_str("\n…[stdout truncated at 8MB]\n");
+                                    stdout_full = true;
+                                } else {
+                                    out.stdout.push_str(&c);
+                                }
+                            }
+                        } else if !stderr_full {
+                            if out.stderr.len() + c.len() > MAX_SANDBOX_OUTPUT {
+                                out.stderr.push_str("\n…[stderr truncated at 8MB]\n");
+                                stderr_full = true;
+                            } else {
+                                out.stderr.push_str(&c);
+                            }
+                        }
                     }
                     None => pipes_open = false,
                 }

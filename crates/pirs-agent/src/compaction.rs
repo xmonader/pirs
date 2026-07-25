@@ -401,6 +401,19 @@ pub async fn compact_messages(
     if !tool_pairs_intact(&messages[cut..]) {
         return false;
     }
+    // Credit usage from assistant messages about to be spliced out (M-16).
+    // Without this, long sessions systematically under-report cost after compact.
+    {
+        let mut dropped = pirs_ai::Usage::default();
+        for m in &messages[..cut] {
+            if let Message::Assistant(a) = m {
+                dropped += a.usage.clone();
+            }
+        }
+        if dropped.input > 0 || dropped.output > 0 || dropped.total_tokens > 0 {
+            *extra_usage.lock().unwrap() += dropped;
+        }
+    }
     // Demote, don't destroy: the dropped range goes to searchable storage.
     if let Some(mem) = crate::memory::global() {
         mem.add_messages(&messages[..cut]);

@@ -113,6 +113,24 @@ mod tests {
     }
 
     #[test]
+    fn compaction_extra_usage_is_reported() {
+        // Simulates M-16 credit path: compact-out tokens live in compaction_usage.
+        let msgs = vec![assistant("m", 10, 0, 5)];
+        let mut compact = Usage::default();
+        compact.input = 1000;
+        compact.output = 50;
+        compact.total_tokens = 1050;
+        let report = usage_report(&msgs, compact);
+        assert_eq!(report.compaction_usage.input, 1000);
+        assert_eq!(report.main_usage.input, 10);
+        let grand = report.grand_total();
+        assert!(
+            grand.input >= 1010,
+            "grand total must include compact credits: {grand:?}"
+        );
+    }
+
+    #[test]
     fn aggregates_main_delegate_and_extra() {
         let delegate_result = Message::ToolResult(ToolResultMessage {
             tool_call_id: "c".into(),
