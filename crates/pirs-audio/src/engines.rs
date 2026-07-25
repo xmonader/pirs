@@ -7,6 +7,21 @@ use anyhow::{anyhow, bail, Context};
 
 use crate::ffmpeg;
 
+/// Allow only alnum / `_` / `-` / `.` so env-bound template values cannot
+/// reintroduce shell metacharacters even if a template expands them unsafely.
+pub fn sanitize_audio_token(raw: &str, fallback: &str) -> String {
+    let s: String = raw
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-' || *c == '.')
+        .take(64)
+        .collect();
+    if s.is_empty() {
+        fallback.to_string()
+    } else {
+        s
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub stt_engine: String,
@@ -88,13 +103,17 @@ impl SttEngine for CmdStt {
         "cmd"
     }
     fn transcribe(&self, path: &Path, language: Option<&str>) -> anyhow::Result<String> {
-        let cmd = self
+        // Never shell-interpolate untrusted HTTP fields (C-6): pass via env.
+        let mut cmd = self
             .template
-            .replace("{path}", &path.display().to_string())
-            .replace("{language}", language.unwrap_or("en"));
+            .replace("{path}", &path.display().to_string());
+        if cmd.contains("{language}") {
+            cmd = cmd.replace("{language}", "$PIRS_AUDIO_STT_LANGUAGE");
+        }
         let out = Command::new("sh")
             .arg("-c")
             .arg(&cmd)
+            .env("PIRS_AUDIO_STT_LANGUAGE", language.unwrap_or("en"))
             .output()
             .context("spawn PIRS_AUDIO_STT_CMD")?;
         if !out.status.success() {
@@ -167,19 +186,27 @@ impl TtsEngine for CmdTts {
         let dir = tempfile::tempdir()?;
         let ext = if format == "opus" { "ogg" } else { format };
         let out_path = dir.path().join(format!("out.{ext}"));
+        // Path is our temp file; voice/format/text from HTTP must not enter sh -c (C-6).
         let mut env_cmd = self
             .template
-            .replace("{path}", &out_path.display().to_string())
-            .replace("{voice}", voice.unwrap_or("default"))
-            .replace("{format}", format);
-        // Prefer env for text to avoid shell injection.
+            .replace("{path}", &out_path.display().to_string());
+        if env_cmd.contains("{voice}") {
+            env_cmd = env_cmd.replace("{voice}", "$PIRS_AUDIO_TTS_VOICE");
+        }
+        if env_cmd.contains("{format}") {
+            env_cmd = env_cmd.replace("{format}", "$PIRS_AUDIO_TTS_FORMAT");
+        }
         if env_cmd.contains("{text}") {
             env_cmd = env_cmd.replace("{text}", "$PIRS_AUDIO_TTS_TEXT");
         }
+        let safe_format = sanitize_audio_token(format, "wav");
+        let safe_voice = sanitize_audio_token(voice.unwrap_or("default"), "default");
         let out = Command::new("sh")
             .arg("-c")
             .arg(&env_cmd)
             .env("PIRS_AUDIO_TTS_TEXT", text)
+            .env("PIRS_AUDIO_TTS_VOICE", &safe_voice)
+            .env("PIRS_AUDIO_TTS_FORMAT", &safe_format)
             .output()
             .context("spawn PIRS_AUDIO_TTS_CMD")?;
         if !out.status.success() || !out_path.is_file() {

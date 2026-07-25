@@ -367,6 +367,8 @@ fn exec_capped(caps: &caps::Caps, command: &str, timeout_secs: u64) -> rhai::Map
 
 fn exec_impl(command: &str, timeout_secs: u64) -> rhai::Map {
     let mut map = rhai::Map::new();
+    // Cap absurd timeouts (i64::MAX → Instant panic / multi-day wedges).
+    let timeout_secs = timeout_secs.min(7 * 86400).max(1);
     let spawned = std::process::Command::new("/bin/bash")
         .arg("-c")
         .arg(command)
@@ -396,17 +398,34 @@ fn exec_impl(command: &str, timeout_secs: u64) -> rhai::Map {
     };
     let pid = child.id();
 
-    fn read_all<R: std::io::Read + Send + 'static>(mut r: R) -> std::sync::mpsc::Receiver<String> {
+    fn read_all_capped<R: std::io::Read + Send + 'static>(
+        mut r: R,
+        max_bytes: usize,
+    ) -> std::sync::mpsc::Receiver<String> {
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let mut s = String::new();
-            let _ = r.read_to_string(&mut s);
-            let _ = tx.send(s);
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 8192];
+            loop {
+                match r.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if buf.len() < max_bytes {
+                            let take = n.min(max_bytes.saturating_sub(buf.len()));
+                            buf.extend_from_slice(&chunk[..take]);
+                        }
+                        // Keep draining so the child can exit (avoid pipe deadlock).
+                    }
+                    Err(_) => break,
+                }
+            }
+            let _ = tx.send(String::from_utf8_lossy(&buf).into_owned());
         });
         rx
     }
-    let out_rx = read_all(child.stdout.take().expect("piped"));
-    let err_rx = read_all(child.stderr.take().expect("piped"));
+    // Cap buffered output to avoid OOM; always drain pipes.
+    let out_rx = read_all_capped(child.stdout.take().expect("piped"), 1_000_000);
+    let err_rx = read_all_capped(child.stderr.take().expect("piped"), 512_000);
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
     let mut status = None;
@@ -424,6 +443,7 @@ fn exec_impl(command: &str, timeout_secs: u64) -> rhai::Map {
                     unsafe {
                         libc::kill(-(pid as i32), libc::SIGKILL);
                     }
+                    let _ = child.kill();
                     let _ = child.wait();
                     break;
                 }
@@ -432,8 +452,10 @@ fn exec_impl(command: &str, timeout_secs: u64) -> rhai::Map {
             Err(_) => break,
         }
     }
-    let stdout = out_rx.recv().unwrap_or_default();
-    let stderr = err_rx.recv().unwrap_or_default();
+    // Never block forever on pipe EOF after kill (C-4): bounded recv.
+    let recv_deadline = std::time::Duration::from_secs(2);
+    let stdout = out_rx.recv_timeout(recv_deadline).unwrap_or_default();
+    let stderr = err_rx.recv_timeout(recv_deadline).unwrap_or_default();
     let mut combined = stdout;
     combined.push_str(&stderr);
     if combined.chars().count() > 10_000 {

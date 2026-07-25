@@ -42,15 +42,28 @@ pub struct RefreshStats {
 }
 
 impl GraphStore {
-    /// Open (or create) the store at `db_path`. On any incompatibility the file
-    /// is wiped and recreated — the cache is always safe to discard.
+    /// Open (or create) the store at `db_path`.
+    ///
+    /// Only wipe on **schema/version** incompatibility — never on transient
+    /// `SQLITE_BUSY` / lock contention (review M-22).
     pub fn open(db_path: &Path, root: &Path) -> Result<GraphStore> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).ok();
         }
         let conn = match Self::open_verified(db_path) {
             Ok(conn) => conn,
-            Err(_) => {
+            Err(e) => {
+                let msg = e.to_string();
+                let busy = msg.to_ascii_lowercase().contains("busy")
+                    || msg.to_ascii_lowercase().contains("locked");
+                if busy {
+                    return Err(e).with_context(|| {
+                        format!(
+                            "graph store busy at {} (another process indexing?); not deleting",
+                            db_path.display()
+                        )
+                    });
+                }
                 // Corrupt or wrong-version: start clean.
                 std::fs::remove_file(db_path).ok();
                 Self::open_verified(db_path)
@@ -65,6 +78,8 @@ impl GraphStore {
 
     fn open_verified(db_path: &Path) -> Result<Connection> {
         let conn = Connection::open(db_path)?;
+        // Wait briefly under concurrent readers instead of failing instantly.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.execute_batch(

@@ -155,6 +155,15 @@ fn strict_caps() -> bool {
     )
 }
 
+/// Binaries that become full FS/network RCE when only argv[0] is allowlisted
+/// and the rest of the line is free-form (review C-3).
+const SHELL_CAPABLE: &[&str] = &[
+    "cat", "head", "tail", "less", "more", "curl", "wget", "fetch", "nc", "ncat",
+    "dd", "base64", "xxd", "od", "scp", "rsync", "tar", "zip", "unzip", "python",
+    "python3", "perl", "ruby", "node", "php", "lua", "bash", "sh", "zsh", "fish",
+    "env", "xargs", "find", "grep", "rg", "sed", "awk",
+];
+
 /// Check a command against the exec capability. Returns Err(reason) when
 /// blocked; the reason is shown to the model.
 pub fn check_exec(caps: &Caps, command: &str) -> Result<(), String> {
@@ -174,16 +183,37 @@ pub fn check_exec(caps: &Caps, command: &str) -> Result<(), String> {
             ));
         }
     }
-    let first = command.split_whitespace().next().unwrap_or("");
+    let mut parts = command.split_whitespace();
+    let first = parts.next().unwrap_or("");
     let base = first.rsplit('/').next().unwrap_or(first);
-    if allow.iter().any(|a| a == base || a == first) {
-        Ok(())
-    } else {
-        Err(format!(
+    if !allow.iter().any(|a| a == base || a == first) {
+        return Err(format!(
             "blocked by capability manifest: {base:?} not in exec allowlist [{}]",
             allow.join(", ")
-        ))
+        ));
     }
+    // argv0-only allowlist is not a free pass for absolute paths / URLs / ..
+    // (cat /etc/passwd, curl evil, python -c …).
+    if SHELL_CAPABLE.iter().any(|b| *b == base) {
+        for arg in parts {
+            if arg.starts_with('/')
+                || arg.contains("..")
+                || arg.starts_with("http://")
+                || arg.starts_with("https://")
+                || arg.starts_with("file:")
+                || arg == "-c"
+                || arg == "-e"
+                || arg == "--checkpoint-action=exec"
+            {
+                return Err(format!(
+                    "blocked by capability manifest: {base:?} with arg {arg:?} can read/exfil \
+                     outside the pack sandbox; use a relative path under the workspace or \
+                     expand the exec allowlist with an explicit full command entry"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Lexically resolve `.`/`..` without touching the filesystem (works for
@@ -334,6 +364,22 @@ mod tests {
 
         // No manifest: anything goes.
         assert!(check_exec(&Caps::default(), "rm -rf / | cat").is_ok());
+    }
+
+    #[test]
+    fn exec_allowlist_blocks_shell_capable_absolute_paths() {
+        let caps = Caps {
+            exec: Some(vec!["cat".into(), "curl".into()]),
+            ..Default::default()
+        };
+        assert!(check_exec(&caps, "cat").is_ok());
+        assert!(check_exec(&caps, "cat notes.txt").is_ok());
+        assert!(
+            check_exec(&caps, "cat /etc/passwd").is_err(),
+            "absolute path must be denied"
+        );
+        assert!(check_exec(&caps, "curl https://evil.example/x").is_err());
+        assert!(check_exec(&caps, "cat ../secret").is_err());
     }
 
     #[test]

@@ -18,7 +18,7 @@ use serde_json::Value;
 use pirs_agent::{AgentTool, ToolExecContext, ToolOutput};
 
 use crate::client::{server_for_file, LspClient};
-use crate::edit::apply_workspace_edit;
+use crate::edit::apply_workspace_edit_contained;
 
 #[derive(Deserialize, JsonSchema)]
 struct RenameArgs {
@@ -91,7 +91,8 @@ impl AgentTool for RenameSymbolTool {
         if args.new_name.trim().is_empty() {
             anyhow::bail!("new_name must not be empty");
         }
-        let path = self.root.join(&args.path);
+        // Same workspace confinement as other file tools (review C-7).
+        let path = pirs_tools::paths::resolve_contained(&self.root, &args.path)?;
         if !path.exists() {
             anyhow::bail!("file not found: {}", path.display());
         }
@@ -114,8 +115,8 @@ impl AgentTool for RenameSymbolTool {
             );
         }
 
-        // Apply the edits to disk and report what changed.
-        let changed = apply_workspace_edit(&workspace_edit)?;
+        // Apply only edits under work roots (LSP may return absolute URIs outside).
+        let changed = apply_workspace_edit_contained(&self.root, &workspace_edit)?;
         let total: usize = changed.iter().map(|(_, n)| n).sum();
         let mut lines = vec![format!(
             "renamed to `{}`: {total} edit(s) across {} file(s)",

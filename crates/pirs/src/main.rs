@@ -1935,6 +1935,13 @@ async fn main() -> anyhow::Result<()> {
     if cli.serve || cli.mode == "web" {
         let loopback = matches!(cli.bind.as_str(), "127.0.0.1" | "localhost" | "::1");
         let token = match cli.serve_token.clone() {
+            Some(t) if t.trim().is_empty() => {
+                // Empty token makes constant_time_eq(b"", b"") succeed → open auth (M-35).
+                anyhow::bail!(
+                    "--serve-token must be non-empty (empty token disables auth). \
+                     Omit the flag to auto-generate a token on loopback, or pass a real secret."
+                );
+            }
             Some(t) => t,
             None => {
                 if !loopback {
@@ -1946,6 +1953,9 @@ async fn main() -> anyhow::Result<()> {
                 generate_serve_token()
             }
         };
+        if token.trim().is_empty() {
+            anyhow::bail!("serve token resolved empty; refusing to start without auth");
+        }
         eprintln!("[serve token: {token}]");
         return serve::run(serve::ServeOptions {
             agent,

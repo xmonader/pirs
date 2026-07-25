@@ -388,7 +388,11 @@ impl ScheduleStore {
         Ok(())
     }
 
-    /// Record a failed fire attempt without advancing `next_fire` (stays due for retry).
+    /// Record a failed fire attempt.
+    ///
+    /// After repeated failures, advance `next_fire` with exponential backoff
+    /// (or disable one-shots) so a broken deliver target does not burn a full
+    /// LLM chat every 60 s forever (review M-29 / prioritized #8).
     pub fn mark_failed(&self, id: &str, now: u64, err: &str) -> anyhow::Result<()> {
         let mut f = self.read()?;
         for j in &mut f.jobs {
@@ -397,6 +401,26 @@ impl ScheduleStore {
                 j.last_status = Some("error".into());
                 j.last_error = Some(truncate_err(err, 500));
                 j.fail_count = j.fail_count.saturating_add(1);
+                // Backoff after 3+ consecutive failures.
+                if j.fail_count >= 3 {
+                    let shift = (j.fail_count - 2).min(8); // 2^1 .. 2^8
+                    let base = if j.every_secs > 0 {
+                        j.every_secs
+                    } else if j.cron.is_some() {
+                        300 // 5m for cron
+                    } else {
+                        600 // one-shot: wait 10m then disable on next threshold
+                    };
+                    let backoff = base.saturating_mul(1u64 << shift).min(24 * 3600);
+                    j.next_fire = now.saturating_add(backoff.max(60));
+                    if j.every_secs == 0 && j.cron.is_none() && j.fail_count >= 5 {
+                        j.enabled = false;
+                        j.last_error = Some(truncate_err(
+                            &format!("{err}; disabled after {} consecutive failures", j.fail_count),
+                            500,
+                        ));
+                    }
+                }
             }
         }
         self.write(&f)?;
@@ -683,6 +707,46 @@ mod tests {
         assert_eq!(j.fail_count, 0);
         // Recurring advanced next_fire.
         assert!(j.next_fire > now);
+    }
+
+    #[test]
+    fn schedule_mark_failed_backoff_after_three() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScheduleStore::open(dir.path().join("schedule.json")).unwrap();
+        let job = store.add("pulse", 60, 0).unwrap();
+        let now = now_secs() + 1;
+        store.mark_failed(&job.id, now, "1").unwrap();
+        store.mark_failed(&job.id, now, "2").unwrap();
+        // Still due after 2 fails.
+        assert_eq!(store.due(now).unwrap().len(), 1);
+        store.mark_failed(&job.id, now, "3").unwrap();
+        let j = store.find(&job.id).unwrap().unwrap();
+        assert_eq!(j.fail_count, 3);
+        assert!(
+            j.next_fire > now,
+            "after 3 fails next_fire must advance, got {}",
+            j.next_fire
+        );
+        // Not immediately due again.
+        assert!(store.due(now).unwrap().is_empty());
+    }
+
+    #[test]
+    fn session_load_skips_corrupt_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = SessionStore::open_for(dir.path(), SessionId::cli_local()).unwrap();
+        std::fs::write(
+            s.path(),
+            r#"{"ts":1,"role":"user","text":"hi"}
+not json
+{"ts":2,"role":"assistant","text":"yo"}
+"#,
+        )
+        .unwrap();
+        let lines = s.load().unwrap();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].text, "hi");
+        assert_eq!(lines[1].text, "yo");
     }
 
     #[test]

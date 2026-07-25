@@ -32,10 +32,9 @@ const OPENROUTER_BASE: &str = "https://openrouter.ai/api/v1";
 /// provider key even if another key is also set.
 pub fn resolve_openai_compat(model_hint: Option<&str>) -> (Option<String>, Option<String>) {
     if let Some(base) = non_empty_env("OPENAI_BASE_URL") {
-        let key = non_empty_env("OPENAI_API_KEY")
-            .or_else(|| non_empty_env("DASHSCOPE_API_KEY"))
-            .or_else(|| non_empty_env("DEEPSEEK_API_KEY"))
-            .or_else(|| non_empty_env("OPENROUTER_API_KEY"));
+        // Only pair OPENAI_BASE_URL with OPENAI_API_KEY (M-14). Never send
+        // DashScope/DeepSeek/OpenRouter secrets to an arbitrary base URL.
+        let key = non_empty_env("OPENAI_API_KEY");
         return (Some(base), key);
     }
 
@@ -135,6 +134,25 @@ mod tests {
         let (base, key) = resolve_openai_compat(Some("gpt-4o-mini"));
         assert_eq!(base.as_deref(), Some(DASHSCOPE_BASE));
         assert_eq!(key.as_deref(), Some("dscope"));
+        clear_keys();
+    }
+
+    #[test]
+    fn openai_base_url_does_not_pair_foreign_keys() {
+        let _g = LOCK.lock().unwrap();
+        clear_keys();
+        std::env::set_var("OPENAI_BASE_URL", "https://evil.example/v1");
+        std::env::set_var("DASHSCOPE_API_KEY", "dscope-secret");
+        let (base, key) = resolve_openai_compat(Some("gpt-4o"));
+        assert_eq!(base.as_deref(), Some("https://evil.example/v1"));
+        assert!(
+            key.is_none(),
+            "must not send DashScope key to arbitrary OPENAI_BASE_URL, got {key:?}"
+        );
+        std::env::set_var("OPENAI_API_KEY", "sk-ok");
+        let (base2, key2) = resolve_openai_compat(None);
+        assert_eq!(base2.as_deref(), Some("https://evil.example/v1"));
+        assert_eq!(key2.as_deref(), Some("sk-ok"));
         clear_keys();
     }
 

@@ -140,10 +140,27 @@ impl SessionStore {
             role: role.into(),
             text: text.into(),
         };
+        // Single-write + exclusive flock so concurrent gateway tasks cannot
+        // interleave JSON and brick load() forever (review M-30).
         let mut f = OpenOptions::new().create(true).append(true).open(&self.path)?;
-        serde_json::to_writer(&mut f, &line)?;
-        f.write_all(b"\n")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = f.as_raw_fd();
+            let rc = unsafe { libc::flock(fd, libc::LOCK_EX) };
+            if rc != 0 {
+                anyhow::bail!("session flock failed on {}", self.path.display());
+            }
+        }
+        let mut buf = serde_json::to_vec(&line)?;
+        buf.push(b'\n');
+        f.write_all(&buf)?;
         f.flush()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let _ = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_UN) };
+        }
         self.touch_meta()?;
         Ok(())
     }
@@ -181,15 +198,33 @@ impl SessionStore {
     }
 
     pub fn load(&self) -> anyhow::Result<Vec<SessionLine>> {
-        let f = fs::File::open(&self.path)?;
+        let f = match fs::File::open(&self.path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+            Err(e) => return Err(e.into()),
+        };
         let reader = BufReader::new(f);
         let mut out = Vec::new();
+        let mut skipped = 0u32;
         for line in reader.lines() {
             let line = line?;
             if line.trim().is_empty() {
                 continue;
             }
-            out.push(serde_json::from_str(&line)?);
+            match serde_json::from_str(&line) {
+                Ok(l) => out.push(l),
+                Err(_) => {
+                    // Tolerate a corrupt interior line rather than bricking the peer.
+                    skipped += 1;
+                }
+            }
+        }
+        if skipped > 0 {
+            tracing::warn!(
+                path = %self.path.display(),
+                skipped,
+                "session JSONL had corrupt lines; skipped"
+            );
         }
         Ok(out)
     }

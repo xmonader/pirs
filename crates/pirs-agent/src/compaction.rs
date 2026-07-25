@@ -80,11 +80,28 @@ pub fn find_cut_point(messages: &[Message], keep_recent_tokens: u64) -> Option<u
 
 /// Like [`find_cut_point`], also ensuring at least `min_recent_user_turns`
 /// recent user messages remain in the tail (when that many exist).
+///
+/// **Single-prompt autonomous runs** often have exactly one user message and
+/// hundreds of tool turns. Requiring four user turns permanently disabled
+/// compaction (cut always landed at index 0). We clamp the turn requirement to
+/// the turns actually available, and fall back to a token-only emergency cut
+/// that may start mid-history (still tool-pair-safe).
 pub fn find_cut_point_ex(
     messages: &[Message],
     keep_recent_tokens: u64,
     min_recent_user_turns: usize,
 ) -> Option<usize> {
+    if messages.len() < 2 {
+        return None;
+    }
+    let available_user = count_user_turns(messages);
+    // Clamp retention to what exists so one-shot runs can still compact.
+    let min_turns = if min_recent_user_turns == 0 || available_user == 0 {
+        0
+    } else {
+        min_recent_user_turns.min(available_user)
+    };
+
     let mut acc = 0u64;
     let mut cut = None;
     let mut user_turns = 0usize;
@@ -93,21 +110,52 @@ pub fn find_cut_point_ex(
         if matches!(messages[i], Message::User(_)) {
             cut = Some(i);
             user_turns += 1;
-            let turns_ok = min_recent_user_turns == 0 || user_turns >= min_recent_user_turns;
+            let turns_ok = min_turns == 0 || user_turns >= min_turns;
             if acc >= keep_recent_tokens && turns_ok {
                 break;
             }
         }
     }
     let cut = match cut {
-        Some(0) | None => return None,
+        Some(0) | None => {
+            // No safe user-boundary cut with a non-empty drop prefix — emergency.
+            return emergency_token_cut(messages, keep_recent_tokens);
+        }
         Some(c) => c,
     };
     let cut = snap_cut_to_tool_pair_boundary(messages, cut);
     if cut == 0 {
-        None
+        emergency_token_cut(messages, keep_recent_tokens)
     } else {
         Some(cut)
+    }
+}
+
+/// Keep the last ~`keep_recent_tokens` of history even without enough user
+/// turns, snapping to a tool-pair boundary so providers still accept the tail.
+pub fn emergency_token_cut(messages: &[Message], keep_recent_tokens: u64) -> Option<usize> {
+    if messages.len() < 3 {
+        return None;
+    }
+    let mut acc = 0u64;
+    for i in (0..messages.len()).rev() {
+        acc += estimate_message_tokens(&messages[i]);
+        if acc >= keep_recent_tokens && i > 0 {
+            let cut = snap_cut_to_tool_pair_boundary(messages, i);
+            if cut > 0 && cut < messages.len() {
+                return Some(cut);
+            }
+        }
+    }
+    // Last resort: drop the first half at a tool-pair boundary.
+    let mid = messages.len() / 2;
+    let cut = snap_cut_to_tool_pair_boundary(messages, mid);
+    if cut > 0 && cut < messages.len() {
+        Some(cut)
+    } else if mid > 0 {
+        Some(mid)
+    } else {
+        None
     }
 }
 
@@ -591,6 +639,33 @@ mod tests {
             tool_pairs_intact(&msgs[cut..]),
             "tail pairs broken cut={cut}"
         );
+    }
+
+    #[test]
+    fn single_prompt_autonomous_run_can_cut() {
+        // One user message + many large tool turns — classic one-shot agent.
+        // Previously min_recent_user_turns=4 made cut permanently None.
+        let mut msgs = vec![user("fix all the bugs")];
+        for i in 0..40 {
+            let id = format!("c{i}");
+            msgs.push(assistant_with_tool(&id, "bash"));
+            msgs.push(tool_result_id(
+                &id,
+                "bash",
+                &format!("output {i} {}", "y".repeat(800)),
+            ));
+        }
+        let tokens = estimate_tokens(&msgs);
+        assert!(tokens > 5_000, "fixture should be fat enough: {tokens}");
+        let cut = find_cut_point_ex(&msgs, 2_000, 4).expect("must cut single-prompt history");
+        assert!(cut > 0, "cut must drop a prefix");
+        assert!(cut < msgs.len());
+        assert!(
+            tool_pairs_intact(&msgs[cut..]),
+            "emergency/token cut must keep tool pairs intact cut={cut}"
+        );
+        let kept = estimate_tokens(&msgs[cut..]);
+        assert!(kept < tokens, "kept {kept} should be less than full {tokens}");
     }
 
     #[test]

@@ -199,17 +199,30 @@ impl AgentTool for JobKillTool {
         let Some(job) = jobs::registry().get(args.id) else {
             anyhow::bail!("no such job: {}", args.id);
         };
-        let (pid, kind) = {
+        let (pid, kind, status) = {
             let j = job.lock().unwrap();
-            (j.pid, j.kind)
+            (j.pid, j.kind, j.status.clone())
         };
+        // Do not SIGKILL recycled PIDs after the job already exited (M-2).
+        if !matches!(status, JobStatus::Running) {
+            return Ok(ToolOutput::text(format!(
+                "job {} already {:?}; not sending kill",
+                args.id, status
+            )));
+        }
         jobs::registry().request_stop(args.id);
         match kind {
             jobs::JobKind::Bash => {
                 if let Some(pid) = pid {
                     #[cfg(unix)]
-                    unsafe {
-                        libc::kill(-(pid as i32), libc::SIGKILL);
+                    {
+                        // Existence check: signal 0; skip if pid is gone/reused.
+                        let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
+                        if alive {
+                            unsafe {
+                                libc::kill(-(pid as i32), libc::SIGKILL);
+                            }
+                        }
                     }
                 }
             }

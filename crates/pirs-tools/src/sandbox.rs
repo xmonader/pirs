@@ -17,10 +17,12 @@ pub async fn wait_and_drain(
     let mut out = ExecOutput::default();
     let mut pipes_open = true;
     let mut status: Option<std::process::ExitStatus> = None;
+    // Saturate huge timeouts (model/script u64::MAX) — Instant + Duration panics (M-1).
+    let timeout = timeout.map(|t| t.min(Duration::from_secs(7 * 86400)));
     let deadline = timeout.map(|t| std::time::Instant::now() + t);
     let sleep = tokio::time::sleep_until(
         deadline
-            .unwrap_or_else(|| std::time::Instant::now() + Duration::from_secs(86400 * 365))
+            .unwrap_or_else(|| std::time::Instant::now() + Duration::from_secs(86400))
             .into(),
     );
     tokio::pin!(sleep);

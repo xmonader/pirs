@@ -905,7 +905,13 @@ impl AgentTool for ProjectTool {
             .and_then(|v| v.as_u64())
             .unwrap_or(300);
         ctx.emit_update(format!("project {action}: {cmd}"));
-        let out = crate::bash::exec_local(&cmd, &root, Some(Duration::from_secs(timeout))).await?;
+        // Honor PIRS_SANDBOX (docker/ssh) — never bypass with bare host exec when
+        // the operator believes the session is containerized (review C-2).
+        let sandbox = crate::sandbox::from_env();
+        let out = sandbox
+            .exec(&cmd, &root, Some(Duration::from_secs(timeout)))
+            .await
+            .map_err(|e| anyhow::anyhow!("project {action} via {}: {e}", sandbox.name()))?;
         let combined = format!("{}{}", out.stdout, out.stderr);
         let passed = matches!(out.code, Some(0)) && !out.timed_out;
         let verdict = if out.timed_out {

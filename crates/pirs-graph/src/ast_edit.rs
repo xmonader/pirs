@@ -321,6 +321,25 @@ fn full_item_span(func: tree_sitter::Node, source: &str, lang: Lang) -> (usize, 
 }
 
 fn move_function(src: &Path, dest: &Path, lang: Lang, name: &str) -> anyhow::Result<EditResult> {
+    // Same inode: write dest then strip src would delete the function (M-21).
+    let src_c = std::fs::canonicalize(src).unwrap_or_else(|_| src.to_path_buf());
+    let dest_c = if dest.exists() {
+        std::fs::canonicalize(dest).unwrap_or_else(|_| dest.to_path_buf())
+    } else {
+        dest.to_path_buf()
+    };
+    if src_c == dest_c
+        || (src.exists()
+            && dest.exists()
+            && src_c == dest_c)
+        || src == dest
+    {
+        bail!(
+            "move_function: destination is the same file as source ({}); \
+             refusing (would delete the function)",
+            src.display()
+        );
+    }
     let source = std::fs::read_to_string(src)?;
     let tree = parse(lang, &source)?;
     let func = find_function(&tree, &source, lang, name)
@@ -502,6 +521,23 @@ mod tests {
         assert!(b_after.contains("/// docs for gone"), "docs: {b_after:?}");
         assert!(b_after.contains("#[inline]"), "attr: {b_after:?}");
         assert!(b_after.contains("fn gone() { 1; }"));
+    }
+
+    #[test]
+    fn move_function_rejects_same_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("a.rs");
+        std::fs::write(&f, "fn foo() { 1 }\n").unwrap();
+        let err = match move_function(&f, &f, Lang::Rust, "foo") {
+            Ok(_) => panic!("expected same-file reject"),
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            err.contains("same file") || err.contains("refusing"),
+            "{err}"
+        );
+        let src = std::fs::read_to_string(&f).unwrap();
+        assert!(src.contains("fn foo"), "must not delete: {src}");
     }
 
     #[tokio::test]

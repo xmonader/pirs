@@ -299,9 +299,26 @@ impl LegacySseClient {
         let (response, url) = open_sse_stream(&client, url).await?;
 
         let base = base_url(&url);
+        let origin = origin_of(&url);
         let compute_post_url = move |endpoint: String| {
-            if endpoint.starts_with("http") {
-                endpoint
+            // MCP legacy-SSE: absolute endpoint must be same-origin (M-25).
+            // `starts_with("http")` alone accepted `httpanything://` and cross-origin.
+            if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
+                if same_origin(&origin, &endpoint) {
+                    endpoint
+                } else {
+                    tracing::warn!(
+                        endpoint = %endpoint,
+                        origin = %origin,
+                        "rejecting cross-origin MCP SSE endpoint redirect"
+                    );
+                    // Fall back to relative join on original base (ignore redirect).
+                    format!("{base}")
+                }
+            } else if endpoint.starts_with("http") {
+                // Reject non http(s) schemes that start with "http" (e.g. httpanything://).
+                tracing::warn!(endpoint = %endpoint, "rejecting non-http(s) MCP SSE endpoint");
+                base.clone()
             } else {
                 format!("{base}{}", endpoint.trim_start_matches('/'))
             }
@@ -625,6 +642,18 @@ fn base_url(url: &str) -> String {
     }
 }
 
+/// Scheme + host[:port] for same-origin checks (no trailing path).
+fn origin_of(url: &str) -> String {
+    let base = base_url(url);
+    base.trim_end_matches('/').to_string()
+}
+
+fn same_origin(origin: &str, absolute_url: &str) -> bool {
+    let other = origin_of(absolute_url);
+    // Case-insensitive host compare for scheme://host
+    origin.eq_ignore_ascii_case(&other)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -672,5 +701,22 @@ mod tests {
     fn base_url_extraction() {
         assert_eq!(base_url("http://host:3000/sse"), "http://host:3000/");
         assert_eq!(base_url("https://x.io"), "https://x.io/");
+    }
+
+    #[test]
+    fn same_origin_rejects_cross_origin_and_fake_schemes() {
+        assert!(same_origin(
+            "http://host:3000",
+            "http://host:3000/messages"
+        ));
+        assert!(!same_origin(
+            "http://host:3000",
+            "http://evil.example/steal"
+        ));
+        assert!(!same_origin(
+            "http://host:3000",
+            "httpanything://host:3000/x"
+        ));
+        assert!(!same_origin("https://a.io", "http://a.io/path"));
     }
 }

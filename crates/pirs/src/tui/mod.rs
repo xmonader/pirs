@@ -1507,6 +1507,11 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     // stdout — otherwise they could race and interleave.
     tui_writer.shutdown();
 
+    // Deny any pending approval and cancel the agent *before* restore/stats so
+    // we never deadlock forever on agent.lock while the worker holds it in an
+    // approval recv (review C-5).
+    tui_prepare_exit(&app, &agent).await;
+
     // Explicit restore before Drop (Drop is best-effort).
     restore_terminal()?;
     drop(_guard);
@@ -1515,8 +1520,21 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     {
         app.clock.agent_end();
         let report = {
-            let a = agent.lock().await;
-            a.usage_report()
+            // try_lock: if still busy after cancel, skip stats rather than hang.
+            match agent.try_lock() {
+                Ok(a) => a.usage_report(),
+                Err(_) => {
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(2),
+                        agent.lock(),
+                    )
+                    .await
+                    {
+                        Ok(a) => a.usage_report(),
+                        Err(_) => pirs_agent::usage::UsageReport::default(),
+                    }
+                }
+            }
         };
         let pins = app.report_pins();
         session_stats::print_session_stats_pins(
@@ -1553,6 +1571,28 @@ fn compact_num(n: u64) -> String {
         format!("{:.1}k", n as f64 / 1_000.0)
     } else {
         n.to_string()
+    }
+}
+
+/// Cancel in-flight work and deny pending approvals so quit cannot deadlock
+/// on `agent.lock()` (review C-5).
+async fn tui_prepare_exit(
+    app: &App,
+    agent: &Arc<tokio::sync::Mutex<Agent>>,
+) {
+    // Answer any pending approval with deny so the worker unblocks.
+    {
+        let mut pending = app.pending_approval.lock().unwrap();
+        if pending.is_some() {
+            *pending = None;
+            let _ = app.approval_answer.send("n".into());
+        }
+    }
+    // Request cancel on the live turn.
+    app.cancel.lock().unwrap().cancel();
+    // Best-effort: also cancel via agent handle if still lockable quickly.
+    if let Ok(a) = agent.try_lock() {
+        let _ = a; // cancel already fired via shared CancelSlot
     }
 }
 

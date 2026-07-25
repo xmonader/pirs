@@ -38,12 +38,51 @@ struct TextEdit {
 /// touched, sorted by path. Edits within a file are applied end-to-start so an
 /// earlier edit never invalidates a later edit's byte offsets.
 pub fn apply_workspace_edit(edit: &Value) -> anyhow::Result<Vec<(PathBuf, usize)>> {
+    apply_workspace_edit_filtered(edit, None)
+}
+
+/// Like [`apply_workspace_edit`], but only writes paths under `root` (via
+/// `pirs_tools::paths::resolve_contained` / root prefix). Outside URIs are skipped
+/// with a warning in the summary (not silent host-wide rewrites — C-7).
+pub fn apply_workspace_edit_contained(
+    root: &std::path::Path,
+    edit: &Value,
+) -> anyhow::Result<Vec<(PathBuf, usize)>> {
+    apply_workspace_edit_filtered(edit, Some(root))
+}
+
+fn path_allowed_under_root(root: &std::path::Path, path: &std::path::Path) -> bool {
+    let root_c = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let path_c = std::fs::canonicalize(path).unwrap_or_else(|_| {
+        path.parent()
+            .and_then(|p| std::fs::canonicalize(p).ok())
+            .map(|p| p.join(path.file_name().unwrap_or_default()))
+            .unwrap_or_else(|| path.to_path_buf())
+    });
+    path_c.starts_with(&root_c)
+}
+
+fn apply_workspace_edit_filtered(
+    edit: &Value,
+    root: Option<&std::path::Path>,
+) -> anyhow::Result<Vec<(PathBuf, usize)>> {
     let per_file = collect(edit)?;
     if per_file.is_empty() {
         bail!("the rename produced no edits (the server may not support renaming this symbol)");
     }
     let mut summary = Vec::new();
+    let mut skipped = 0usize;
     for (path, edits) in per_file {
+        if let Some(root) = root {
+            if !path_allowed_under_root(root, &path) {
+                tracing::warn!(
+                    path = %path.display(),
+                    "skipping workspace edit outside work root"
+                );
+                skipped += 1;
+                continue;
+            }
+        }
         let src = std::fs::read_to_string(&path)
             .with_context(|| format!("read {} to apply rename", path.display()))?;
         let updated = apply_to_text(&src, &edits)
@@ -51,6 +90,12 @@ pub fn apply_workspace_edit(edit: &Value) -> anyhow::Result<Vec<(PathBuf, usize)
         std::fs::write(&path, updated)
             .with_context(|| format!("write renamed {}", path.display()))?;
         summary.push((path, edits.len()));
+    }
+    if summary.is_empty() {
+        bail!(
+            "all {} workspace edit path(s) were outside the work root (refused)",
+            skipped
+        );
     }
     summary.sort();
     Ok(summary)

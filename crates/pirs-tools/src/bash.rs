@@ -102,13 +102,21 @@ impl AgentTool for BashTool {
         {
             if let Some(checks) = crate::project::detect_native_checks(&self.cwd) {
                 ctx.emit_update(format!("pre-commit checks: {checks}"));
-                let pre = exec_local(
-                    &checks,
-                    &self.cwd,
-                    Some(std::time::Duration::from_secs(args.timeout.unwrap_or(300))),
-                )
-                .await
-                .map_err(|e| anyhow::anyhow!("pre-commit checks failed to run: {e}"))?;
+                // Same sandbox as bash (C-2): pre-commit must not host-RCE under docker.
+                let sandbox = crate::sandbox::from_env();
+                let pre = sandbox
+                    .exec(
+                        &checks,
+                        &self.cwd,
+                        Some(std::time::Duration::from_secs(args.timeout.unwrap_or(300))),
+                    )
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "pre-commit checks failed to run ({}): {e}",
+                            sandbox.name()
+                        )
+                    })?;
                 if !matches!(pre.code, Some(0)) || pre.timed_out {
                     let body = format!("{}{}", pre.stdout, pre.stderr);
                     let tail = if body.len() > 4000 {
@@ -338,10 +346,12 @@ async fn run_command_raw(
     let mut out_err = String::new();
     let mut status: Option<std::process::ExitStatus> = None;
     let mut pipes_open = true;
+    // Cap huge model-supplied timeouts (Instant + Duration panics on overflow).
+    let timeout_secs = timeout_secs.map(|t| t.min(7 * 86400));
     let deadline = timeout_secs.map(|t| Instant::now() + Duration::from_secs(t));
     let timeout_sleep = tokio::time::sleep_until(
         deadline
-            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400 * 365))
+            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400))
             .into(),
     );
     tokio::pin!(timeout_sleep);
