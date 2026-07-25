@@ -15,16 +15,22 @@ mod runtime_features;
 mod runtime_safety;
 mod auth;
 mod blame;
+mod cli;
 mod config_file;
 mod discovery;
+mod gates;
+mod login;
 mod pack;
+mod printer;
 mod replay;
+mod repl;
 mod rpc_mode;
 mod serve;
 mod session;
 mod subagent;
 mod system_prompt;
 mod tui;
+mod turn;
 mod observability;
 mod models_cmd;
 mod registry;
@@ -32,450 +38,21 @@ mod secrets_edit;
 mod session_stats;
 mod weak_compose;
 
-#[derive(Parser)]
-#[command(
-    name = "pirs",
-    about = "Rust port of the pi coding agent, extensible via rhai"
-)]
-struct Cli {
-    /// One-shot prompt; if omitted, starts the interactive REPL.
-    /// Collects all trailing args so pseudo-subcommands work unquoted
-    /// (`pirs blame src/main.rs:42`, `pirs pack install <url> --yes`).
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-    prompt: Vec<String>,
+use cli::Cli;
+use gates::{
+    chain_gate_with_extensions, install_gate_if_absent, install_profile_under_yolo_if_needed,
+    summarize_args,
+};
+use login::parse_login_request;
+use printer::Printer;
+use repl::repl;
+use turn::run_turn;
 
-    /// Run mode: `repl` (default), `tui` (ratatui console), `web` (browser UI
-    /// on localhost — full tools/packs/MCP, same agent as TUI), `rpc`
-    /// (JSONL over stdio), or `acp` (Agent Client Protocol for editors).
-    #[arg(long, default_value = "repl")]
-    mode: String,
+pub(crate) use turn::run_strategy_turn;
 
-    /// Model id to use
-    #[arg(short, long, env = "PIRS_MODEL", default_value = "gpt-4o-mini")]
-    model: String,
-
-    /// LLM provider: openai (OpenAI-compatible) or anthropic
-    #[arg(long, env = "PIRS_PROVIDER", default_value = "openai")]
-    provider: String,
-
-    /// OpenAI-compatible base URL
-    #[arg(long, env = "OPENAI_BASE_URL")]
-    base_url: Option<String>,
-
-    /// API key (falls back to the provider's auth store or env var)
-    #[arg(long)]
-    api_key: Option<String>,
-
-    /// Resume the most recent session for this directory
-    #[arg(long)]
-    resume: bool,
-
-    /// Run a multi-phase loop strategy for a one-shot prompt. Primary built-ins:
-    /// `monolithic`, `plan-exec`, `plan-critic-exec` (alias `plan-exec-critic`).
-    /// Also accepts other built-in names, `.pirs/strategies/<name>.rhai`, or a
-    /// path to a .rhai script. No effect in the interactive REPL.
-    /// Pair with `--plan-model` for strong-plan / weak-exec multi-model runs.
-    #[arg(long)]
-    strategy: Option<String>,
-
-    /// Model for planning (and critique) phases only. Executor phases use
-    /// `--model`. Enables the strong-planner / weak-executor pitch without
-    /// editing strategy scripts, e.g.:
-    ///   pirs --model cheap-model --plan-model strong-model --strategy plan-exec "…"
-    #[arg(long)]
-    plan_model: Option<String>,
-
-    /// Run under a profile (a role: persona + model + strategy + tool policy +
-    /// extension packs). Accepts a name resolved from .pirs/profiles/<name>.rhai
-    /// (project then ~/.pirs), a built-in (`default`, `weak`), or a path to a
-    /// .rhai script. Implies its strategy when used with strategy mode;
-    /// --strategy overrides which strategy the profile runs.
-    /// Pack selection: without this flag, built-in `default` (`packs: "*"`)
-    /// loads the full catalog. Pass a custom profile to curate packs.
-    #[arg(long)]
-    profile: Option<String>,
-
-    /// Shell command that verifies a strategy attempt succeeded (exit 0 = pass,
-    /// e.g. "cargo test" or "pytest -x"). On failure its output is fed into the
-    /// next attempt as the prior verdict, so the strategy re-plans against the
-    /// real error. Only used with --strategy/--profile.
-    #[arg(long)]
-    verify: Option<String>,
-
-    /// Max strategy attempts when --verify is set (retry on gate failure).
-    /// Defaults to 3 with --verify, 1 otherwise.
-    #[arg(long)]
-    max_attempts: Option<u32>,
-
-    /// Skip injecting the PageRank repo-map sketch into the system prompt
-    /// (on by default when the code graph is enabled).
-    #[arg(long)]
-    no_repo_map: bool,
-
-    /// Disable rhai extension loading
-    #[arg(long)]
-    no_extensions: bool,
-
-    /// Disable MCP server connections (.mcp.json)
-    #[arg(long)]
-    no_mcp: bool,
-
-    /// Shortcut for full autonomy: all tools + no approval prompts.
-    /// Equivalent to `--autonomy full` (and sets approval=yolo).
-    /// Without this flag, bare `--yolo` was previously ignored as an unknown
-    /// trailing token and tools stayed on the default `edit` ladder.
-    #[arg(long)]
-    yolo: bool,
-
-    /// Approval prompts only: auto | ask | yolo.
-    /// Prefer `--yolo` or `--autonomy full` so the tool ladder is raised too.
-    #[arg(long, env = "PIRS_APPROVAL", default_value = "auto")]
-    approval: String,
-
-    /// Low-level safety profile (prefer `--autonomy`): default | plan |
-    /// accept-edits | auto-approve.
-    #[arg(long = "agent-profile", env = "PIRS_AGENT_PROFILE", default_value = "default")]
-    agent_profile: String,
-
-    /// Working directory for the session (project root). Equivalent to `cd DIR && pirs …`.
-    /// Applied before config/registry/tools resolve. Env: `PIRS_CWD`.
-    #[arg(long, env = "PIRS_CWD", value_name = "DIR")]
-    cwd: Option<PathBuf>,
-
-    /// Extra work-context roots (multi-repo). Repeatable. Paths resolve relative
-    /// to the process cwd before `--cwd` chdir. Use `//name/path` in tools to
-    /// pin a root by directory basename.
-    #[arg(long = "also", value_name = "DIR", action = clap::ArgAction::Append)]
-    also: Vec<PathBuf>,
-
-    /// Named multi-root context from `~/.pirs/contexts.toml` (`[[context]]`).
-    /// Combined with `--cwd` / `--also` if both are set (named context first).
-    #[arg(long = "context", value_name = "NAME", env = "PIRS_CONTEXT")]
-    context: Option<String>,
-
-    /// Run this session inside a git worktree for the named branch (create or reuse
-    /// under `.pirs/worktrees/<name>`). Session cwd becomes that worktree.
-    #[arg(long, env = "PIRS_WORKTREE")]
-    worktree: Option<String>,
-
-    /// Retry failed/rate-limited requests up to N times
-    #[arg(long, default_value = "0")]
-    max_retries: u32,
-
-    /// Disable automatic context compaction
-    #[arg(long)]
-    no_compaction: bool,
-
-    /// Model context window in tokens (drives compaction threshold)
-    #[arg(long, default_value = "128000")]
-    context_window: u64,
-
-    /// Disable the code graph (code_map/ast_edit tools, blast-radius notes)
-    #[arg(long)]
-    no_graph: bool,
-
-    /// Cache the code graph in .pirs/graph.db and refresh it incrementally
-    /// (re-parse only changed files). Speeds up warm starts on large repos;
-    /// off by default. The cache is disposable and never source of truth.
-    #[arg(long)]
-    persist_graph: bool,
-
-    /// Enable the semantic_search tool: natural-language code search via an
-    /// embedding service (implies --persist-graph for the vector store). Point
-    /// it at any OpenAI-compatible /v1/embeddings endpoint with the flags below.
-    #[arg(long)]
-    semantic: bool,
-
-    /// Embeddings endpoint base URL (OpenAI-compatible), e.g. Ollama's
-    /// http://localhost:11434/v1 [env: PIRS_EMBED_BASE_URL]
-    #[arg(long, env = "PIRS_EMBED_BASE_URL")]
-    embed_base_url: Option<String>,
-
-    /// Embedding model id [env: PIRS_EMBED_MODEL]
-    #[arg(long, env = "PIRS_EMBED_MODEL")]
-    embed_model: Option<String>,
-
-    /// API key for the embeddings endpoint (optional for local servers)
-    /// [env: PIRS_EMBED_API_KEY]
-    #[arg(long, env = "PIRS_EMBED_API_KEY")]
-    embed_api_key: Option<String>,
-
-    /// Max source chars embedded per symbol. Lower it for small-context models
-    /// (e.g. 512 for all-minilm) to avoid the truncating fallback; big-context
-    /// models can leave the default [env: PIRS_EMBED_MAX_CHARS]
-    #[arg(long, env = "PIRS_EMBED_MAX_CHARS")]
-    embed_max_chars: Option<usize>,
-
-    /// Opt into SYNCHRONOUS inline embedding instead of the default background
-    /// indexer: code_search embeds up to N symbols per call (and no background
-    /// task runs). Useful for a one-shot that must build the index in-process.
-    /// By default, indexing runs in the background and searches never block.
-    #[arg(long, env = "PIRS_EMBED_BATCH_CAP")]
-    embed_batch_cap: Option<usize>,
-
-    /// Start with only core tools loaded; model loads more via use_tool
-    #[arg(long)]
-    tool_diet: bool,
-
-    /// Execute tool calls one at a time (helps weaker models)
-    #[arg(long)]
-    sequential: bool,
-
-    /// Weak-model hardening preset (CLI only): --tool-diet, --sequential,
-    /// --max-retries at least 3, defaults --strategy to plan-exec when
-    /// neither --strategy nor --profile is set, and auto-sets --verify from
-    /// the project test ecosystem when possible. Does not change extension
-    /// packs — those come from profile `default` (`packs: "*"`). Multi-model:
-    /// pair with `--plan-model <strong>` so planning stays strong while this
-    /// run's `--model` is the weak executor; or use phase `model:` / `--cascade`.
-    #[arg(long)]
-    weak: bool,
-
-    /// Draft each turn with a cheaper model; escalate to the main model only when the draft is rejected
-    #[arg(long)]
-    cascade: Option<String>,
-
-    /// JSONL flight recorder for this run (agent events + strategy phases).
-    /// Omit PATH to write `~/.pirs/traces/<session>-<ts>-<pid>.jsonl`.
-    /// Same schema as `pirs-bench --trace` (jq-friendly, crash-safe).
-    #[arg(long, value_name = "PATH", num_args = 0..=1, default_missing_value = "AUTO")]
-    trace: Option<String>,
-
-    /// Max agent turns (exit code 53 when hit)
-    #[arg(long)]
-    max_turns: Option<usize>,
-
-    /// Max wall-clock seconds (exit code 54 when hit)
-    #[arg(long)]
-    max_wall_time: Option<u64>,
-
-    /// Max tool calls (exit code 55 when hit)
-    #[arg(long)]
-    max_tool_calls: Option<usize>,
-
-    /// Run the local web app (browser UI on localhost). Equivalent to
-    /// `--mode web`. Full agent stack (tools, default profile packs, MCP).
-    #[arg(long)]
-    serve: bool,
-
-    /// Port for --serve
-    #[arg(long, default_value = "8477")]
-    port: u16,
-
-    /// Bind address for --serve
-    #[arg(long, default_value = "127.0.0.1")]
-    bind: String,
-
-    /// Auth token for --serve writes (default: generated per run)
-    #[arg(long, env = "PIRS_SERVE_TOKEN")]
-    serve_token: Option<String>,
-
-    /// Allow --serve to bind non-loopback addresses
-    #[arg(long)]
-    serve_external: bool,
-
-    /// Print how model/provider/base-url/approval were each resolved (cli
-    /// flag / env var / project config / user config / default) and exit.
-    #[arg(long)]
-    show_config: bool,
-
-    /// Print runtime doctor report (API keys present, toolchain, LSP, MCP,
-    /// git, browser/CDP, computer-use, gh, soul/audit) and exit.
-    #[arg(long)]
-    doctor: bool,
-
-    /// **Primary tool autonomy** (streamlined): `plan` | `edit` | `full`.
-    /// - plan  — read-only (no writes/shell)
-    /// - edit  — workspace edits; shell blocked
-    /// - full  — all tools + no approval prompts (true yolo)
-    /// Prefer this over stacking --permission-mode / --agent-profile / --approval.
-    /// Env: `PIRS_AUTONOMY`. Aliases: yolo→full, act→edit, read-only→plan.
-    #[arg(long = "autonomy", env = "PIRS_AUTONOMY")]
-    autonomy: Option<String>,
-
-    /// Permission ladder (low-level; prefer `--autonomy`):
-    /// read-only | workspace-write | danger-full-access.
-    /// Env: PIRS_PERMISSION_MODE.
-    #[arg(long = "permission-mode", env = "PIRS_PERMISSION_MODE")]
-    permission_mode: Option<String>,
-
-    /// Alias for `--autonomy plan|edit|full` (legacy: plan|act).
-    #[arg(long = "mode-dial", env = "PIRS_MODE_DIAL")]
-    mode_dial: Option<String>,
-
-    /// Named tool-policy preset for hybrid experiments:
-    /// `full` | `edit-test` | `read-only` | `no-tools`.
-    /// Maps into the same autonomy ladder (+ tool-diet / sequential for experiments).
-    #[arg(long = "tool-preset", env = "PIRS_TOOL_PRESET")]
-    tool_preset: Option<String>,
-}
-
-struct Printer {
-    streaming: Mutex<bool>,
-}
-
-impl Printer {
-    fn new() -> Self {
-        Printer {
-            streaming: Mutex::new(false),
-        }
-    }
-
-    fn event(&self, event: AgentEvent) {
-        let mut streaming = self.streaming.lock().unwrap();
-        match event {
-            AgentEvent::MessageUpdate { .. } => {}
-            AgentEvent::MessageStart { message } => {
-                if let Message::Assistant(_) = &*message {
-                    *streaming = true;
-                }
-            }
-            AgentEvent::MessageEnd { message } => {
-                if let Message::Assistant(a) = &*message {
-                    if *streaming {
-                        println!();
-                        *streaming = false;
-                    }
-                    if a.stop_reason == pirs_ai::StopReason::Error {
-                        eprintln!(
-                            "\n[error: {}]",
-                            a.error_message.as_deref().unwrap_or("unknown")
-                        );
-                    }
-                }
-            }
-            AgentEvent::ToolExecutionStart {
-                tool_name, args, ..
-            } => {
-                let summary = summarize_args(&tool_name, &args);
-                println!("\n\x1b[2m> {tool_name} {summary}\x1b[0m");
-            }
-            AgentEvent::ToolExecutionEnd { result, .. } => {
-                // Prefer details.uiText (full) over model-capped content for display.
-                let text = result.display_text();
-                let preview: String = text.lines().take(6).collect::<Vec<_>>().join("\n");
-                let marker = if result.is_error { "x" } else { "-" };
-                if !preview.is_empty() {
-                    println!("\x1b[2m{marker} {preview}\x1b[0m");
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-impl Default for Printer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Installs the approval gate as the before-tool hook when nothing else claimed
-/// the slot. Yolo mode explicitly waives this install (interactive approval);
-/// safety-profile denials under yolo are chained separately via
-/// [`chain_gate_with_extensions`] / [`install_profile_under_yolo_if_needed`].
-fn install_gate_if_absent(
-    hooks: &mut pirs_agent::Hooks,
-    gate_hook: &Option<pirs_agent::events::BeforeToolCallHook>,
-    approval: &str,
-) {
-    let yolo = approval::ApprovalMode::parse(approval) == Some(approval::ApprovalMode::Yolo);
-    if !yolo && hooks.before_tool_call.is_none() {
-        hooks.before_tool_call = gate_hook.clone();
-    }
-}
-
-/// Under yolo, still enforce non-default `--agent-profile` hard denials when no
-/// before_tool hook was installed (e.g. `--no-extensions`).
-fn install_profile_under_yolo_if_needed(
-    hooks: &mut pirs_agent::Hooks,
-    gate_hook: &Option<pirs_agent::events::BeforeToolCallHook>,
-    approval: &str,
-    safety: pirs_tools::SafetyProfile,
-) {
-    let yolo = approval::ApprovalMode::parse(approval) == Some(approval::ApprovalMode::Yolo);
-    if yolo
-        && safety != pirs_tools::SafetyProfile::Default
-        && hooks.before_tool_call.is_none()
-    {
-        hooks.before_tool_call = gate_hook.clone();
-    }
-}
-
-/// Chain approval/profile gate with extension before_tool hooks.
-///
-/// Pure yolo still keeps `gate_hook` when present — production always folds the
-/// live permission ladder into `gate_hook`, and yolo must not drop that ladder
-/// (only interactive approval prompts are waived via ApprovalMode::Yolo).
-/// Non-default safety profiles still run hard denials under yolo.
-fn chain_gate_with_extensions(
-    gate_hook: Option<pirs_agent::events::BeforeToolCallHook>,
-    ext_before: Option<pirs_agent::events::BeforeToolCallHook>,
-    yolo: bool,
-    safety: pirs_tools::SafetyProfile,
-) -> Option<pirs_agent::events::BeforeToolCallHook> {
-    let _ = (yolo, safety); // gate_hook already encodes profile/permission; always chain.
-    // Gate first (permission ladder / profile denials / optional prompts), then ext.
-    pirs_agent::Hooks::chain_before(gate_hook, ext_before)
-}
-
-fn summarize_args(tool: &str, args: &serde_json::Value) -> String {
-    let key = match tool {
-        "bash" => "command",
-        "read" | "write" | "edit" => "path",
-        "grep" | "find" => "pattern",
-        _ => "",
-    };
-    args.get(key)
-        .and_then(|v| v.as_str())
-        .map(|s| {
-            let s = s.replace('\n', " ");
-            if s.chars().count() > 80 {
-                format!("{}...", s.chars().take(80).collect::<String>())
-            } else {
-                s
-            }
-        })
-        .unwrap_or_default()
-}
-
+/// Serializes tests that mutate process-global env (HOME, secrets path, etc.).
 #[cfg(test)]
 pub(crate) static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-/// Detect the `login` pseudo-subcommand and resolve which provider to store a
-/// key for, returning `None` when this is not a login invocation.
-///
-/// `prompt` is the *flattened* one-shot prompt (all trailing argv joined by
-/// single spaces by the time this is called), `mode` is `--mode`, and
-/// `provider` is the already-resolved `--provider`/config value.
-///
-/// Matches only the exact shapes `login`, `login openai`, `login anthropic`
-/// (or `--mode login`). We split the flattened prompt back into tokens because
-/// after flattening `cli.prompt.first()` is the whole `"login openai"` string,
-/// not `"login"` -- the original bug where `pirs login openai` silently ran the
-/// agent with "login openai" as a prompt instead of logging in. The narrow
-/// match keeps a genuine prompt that merely starts with the word "login"
-/// (e.g. `pirs "login and restart the box"`) out of the login path. An explicit
-/// `login <provider>` token wins over the ambient `--provider` value.
-fn parse_login_request(prompt: Option<&str>, mode: &str, provider: &str) -> Option<&'static str> {
-    let tokens: Vec<&str> = prompt
-        .map(|s| s.split_whitespace().collect())
-        .unwrap_or_default();
-    let is_login = mode == "login"
-        || matches!(
-            tokens.as_slice(),
-            ["login"] | ["login", "openai"] | ["login", "anthropic"]
-        );
-    if !is_login {
-        return None;
-    }
-    Some(match tokens.get(1).copied() {
-        Some("anthropic") => "anthropic",
-        Some("openai") => "openai",
-        _ if provider == "anthropic" => "anthropic",
-        _ => "openai",
-    })
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -615,41 +192,41 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("[{}]", ctx.summary_line());
         }
     }
-    let (project_cfg, user_cfg) = config_file::load_layers(&cwd);
+    let (project_cfg, user_cfg) = crate::config_file::load_layers(&cwd);
     // `base_url`/`approval` are security-relevant (redirect API traffic /
     // disable the approval gate) so they are deliberately NEVER read from the
     // project layer — a `git clone`d repo's own .pirs/config.toml must not be
     // able to silently point requests at an attacker's endpoint or turn off
     // approval prompts just by being checked out. model/provider are inert
-    // preferences and stay project-configurable. See config_file::FileConfig.
+    // preferences and stay project-configurable. See crate::config_file::FileConfig.
     if project_cfg.base_url.is_some() || project_cfg.approval.is_some() {
         eprintln!(
             "[note: project .pirs/config.toml sets base_url/approval, which are user-config-only and were ignored]"
         );
     }
-    let project_cfg = config_file::restrict_project_layer(project_cfg);
-    let (model, model_src) = config_file::resolve_str(
+    let project_cfg = crate::config_file::restrict_project_layer(project_cfg);
+    let (model, model_src) = crate::config_file::resolve_str(
         &matches,
         "model",
         &cli.model,
         project_cfg.model.as_deref(),
         user_cfg.model.as_deref(),
     );
-    let (provider, provider_src) = config_file::resolve_str(
+    let (provider, provider_src) = crate::config_file::resolve_str(
         &matches,
         "provider",
         &cli.provider,
         project_cfg.provider.as_deref(),
         user_cfg.provider.as_deref(),
     );
-    let (base_url, base_url_src) = config_file::resolve_opt(
+    let (base_url, base_url_src) = crate::config_file::resolve_opt(
         &matches,
         "base_url",
         cli.base_url.clone(),
         project_cfg.base_url.as_deref(),
         user_cfg.base_url.as_deref(),
     );
-    let (mut approval, mut approval_src) = config_file::resolve_str(
+    let (mut approval, mut approval_src) = crate::config_file::resolve_str(
         &matches,
         "approval",
         &cli.approval,
@@ -658,7 +235,7 @@ async fn main() -> anyhow::Result<()> {
     );
     if cli.yolo {
         approval = "yolo".into();
-        approval_src = config_file::ConfigSource::Cli;
+        approval_src = crate::config_file::ConfigSource::Cli;
     }
     if cli.show_config {
         let autonomy = pirs_tools::resolve_autonomy(
@@ -702,8 +279,8 @@ async fn main() -> anyhow::Result<()> {
         } else {
             None
         };
-        let composed = weak_compose::apply_weak_preset(
-            weak_compose::WeakComposeInput {
+        let composed = crate::weak_compose::apply_weak_preset(
+            crate::weak_compose::WeakComposeInput {
                 has_prompt: !cli.prompt.is_empty(),
                 strategy: cli.strategy.clone(),
                 profile: cli.profile.clone(),
@@ -735,7 +312,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Model/backends inspection (no API key required for listing).
     if let Some(spec) = cli.prompt.first().cloned() {
-        if models_cmd::try_run(&cwd, &spec)? {
+        if crate::models_cmd::try_run(&cwd, &spec)? {
             return Ok(());
         }
     }
@@ -778,7 +355,7 @@ async fn main() -> anyhow::Result<()> {
             .windows(2)
             .find(|w| w[0] == "--model")
             .map(|w| w[1].to_string());
-        let tape = replay::load_cassette(std::path::Path::new(file))?;
+        let tape = crate::replay::load_cassette(std::path::Path::new(file))?;
         let cwd = std::env::current_dir()?;
         let diverged = std::sync::Arc::new(std::sync::Mutex::new(None));
         let live = live_model.is_some();
@@ -791,12 +368,12 @@ async fn main() -> anyhow::Result<()> {
                 Arc::new(OpenAiCompat::new(cli.base_url.clone()))
             }
         } else {
-            Arc::new(replay::ReplayProvider::new(&tape))
+            Arc::new(crate::replay::ReplayProvider::new(&tape))
         };
         let tools: Vec<Arc<dyn pirs_agent::AgentTool>> = pirs_tools::default_tools(cwd.clone())
             .into_iter()
             .map(|t| {
-                Arc::new(replay::CassetteTool::wrap(
+                Arc::new(crate::replay::CassetteTool::wrap(
                     t,
                     &tape,
                     live,
@@ -809,15 +386,15 @@ async fn main() -> anyhow::Result<()> {
         // different session and every message would spuriously "diverge".
         // (Strict replay drives the model from the tape, so the prompt is
         // inert there; building it unconditionally keeps one code path.)
-        let mut system = system_prompt::build_system_prompt(&cwd, &tools);
-        if let Some(ctx) = system_prompt::read_project_context(&cwd) {
+        let mut system = crate::system_prompt::build_system_prompt(&cwd, &tools);
+        if let Some(ctx) = crate::system_prompt::read_project_context(&cwd) {
             system.push_str(&ctx);
         }
         let mut agent = Agent::new(provider, &model)
             .with_system_prompt(system)
             .with_tools(tools);
-        let produced = replay::run_replay(&mut agent, &tape).await;
-        let report = replay::compare(&replay::expected_of(&tape), &produced);
+        let produced = crate::replay::run_replay(&mut agent, &tape).await;
+        let report = crate::replay::compare(&crate::replay::expected_of(&tape), &produced);
         match report.divergence {
             None => {
                 println!("replay: {} messages matched", report.matched);
@@ -858,15 +435,15 @@ async fn main() -> anyhow::Result<()> {
         let yes = args.contains(&"--yes");
         let force = args.contains(&"--force");
 
-        let name = pack::pack_name_from_url(url);
+        let name = crate::pack::pack_name_from_url(url);
         eprintln!(
             "[pack: cloning {url}{}]",
             pin.as_deref()
                 .map(|p| format!(" @ {p}"))
                 .unwrap_or_default()
         );
-        let (tmp, head) = pack::clone_pinned(url, pin.as_deref())?;
-        let scripts = pack::collect_scripts(&tmp.path().join("repo"));
+        let (tmp, head) = crate::pack::clone_pinned(url, pin.as_deref())?;
+        let scripts = crate::pack::collect_scripts(&tmp.path().join("repo"));
         if scripts.is_empty() {
             anyhow::bail!("{url}: no .rhai scripts found (root, extensions/, packs/)");
         }
@@ -897,7 +474,7 @@ async fn main() -> anyhow::Result<()> {
         // caps) and a later tamper/pull re-prompts. --yes skips the *install*
         // confirmation only, never the load-time trust decision.
         let dest = std::path::Path::new(&home).join(".pirs").join("packs");
-        let installed = pack::install_scripts(&scripts, &dest, force)?;
+        let installed = crate::pack::install_scripts(&scripts, &dest, force)?;
         for p in &installed {
             println!("installed {}", p.display());
         }
@@ -919,8 +496,8 @@ async fn main() -> anyhow::Result<()> {
         };
         let line: u32 = line.parse().context("line must be a number")?;
         let cwd = std::env::current_dir()?;
-        let info = blame::blame_line(&cwd, file, line)?;
-        println!("{}", blame::format_blame(&info));
+        let info = crate::blame::blame_line(&cwd, file, line)?;
+        println!("{}", crate::blame::format_blame(&info));
         return Ok(());
     }
     let cwd = std::env::current_dir()?;
@@ -928,13 +505,13 @@ async fn main() -> anyhow::Result<()> {
     if let Some(provider) =
         parse_login_request(cli.prompt.first().map(|s| s.as_str()), &cli.mode, &cli.provider)
     {
-        return auth::login(provider);
+        return crate::auth::login(provider);
     }
 
     // Load ~/.pirs/secrets.env into process env (does not override existing vars).
-    registry::load_secrets_env();
+    crate::registry::load_secrets_env();
     // Model registry first so backend api_key_env can satisfy auth without OPENAI_API_KEY.
-    let model_registry = registry::load_registry_layers(&cwd);
+    let model_registry = crate::registry::load_registry_layers(&cwd);
 
     let env_var = if cli.provider == "anthropic" {
         "ANTHROPIC_API_KEY"
@@ -948,20 +525,20 @@ async fn main() -> anyhow::Result<()> {
     } else {
         pirs_ai::resolve_openai_compat(Some(&cli.model))
     };
-    let api_key = auth::resolve(cli.api_key.as_deref(), &cli.provider, env_var)
-        .or_else(|| registry::api_key_for_alias(&model_registry, &cli.model))
+    let api_key = crate::auth::resolve(cli.api_key.as_deref(), &cli.provider, env_var)
+        .or_else(|| crate::registry::api_key_for_alias(&model_registry, &cli.model))
         .or_else(|| {
             cli.plan_model
                 .as_ref()
-                .and_then(|m| registry::api_key_for_alias(&model_registry, m))
+                .and_then(|m| crate::registry::api_key_for_alias(&model_registry, m))
         })
-        .or_else(|| registry::first_available_backend_key(&model_registry))
+        .or_else(|| crate::registry::first_available_backend_key(&model_registry))
         .or(compat_key)
         .with_context(|| {
             let mut hint = format!(
                 "no API key: pass --api-key, run `pirs login`, set {env_var}"
             );
-            let mut envs = registry::expected_key_envs(&model_registry);
+            let mut envs = crate::registry::expected_key_envs(&model_registry);
             for k in pirs_ai::well_known_key_envs() {
                 if !envs.iter().any(|e| e == k) {
                     envs.push((*k).to_string());
@@ -983,7 +560,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if cli.mode == "rpc" {
-        return rpc_mode::run(rpc_mode::RpcOptions {
+        return crate::rpc_mode::run(crate::rpc_mode::RpcOptions {
             cwd: cwd.clone(),
             model: cli.model.clone(),
             base_url: cli.base_url.clone(),
@@ -997,7 +574,7 @@ async fn main() -> anyhow::Result<()> {
         .await;
     }
     if cli.mode == "acp" {
-        return acp_mode::run(acp_mode::AcpOptions {
+        return crate::acp_mode::run(crate::acp_mode::AcpOptions {
             cwd: cwd.clone(),
             model: cli.model.clone(),
             base_url: cli.base_url.clone(),
@@ -1033,7 +610,7 @@ async fn main() -> anyhow::Result<()> {
     // Multi-backend registry: pin `backend/model` or portable bare names.
     // Builtins + user config; see `pirs backends` / `pirs models`.
     let provider: Arc<dyn pirs_ai::LlmProvider> =
-        if let Some(router) = registry::build_routing_provider(
+        if let Some(router) = crate::registry::build_routing_provider(
             &model_registry,
             Arc::clone(&default_provider),
             Some(api_key.clone()),
@@ -1113,27 +690,27 @@ async fn main() -> anyhow::Result<()> {
     let safety = autonomy.profile();
     let perm_mode = autonomy.permission();
     // Approval: explicit CLI wins if parseable; else autonomy default (full→yolo).
-    let approval_mode = approval::ApprovalMode::parse(&cli.approval)
-        .or_else(|| approval::ApprovalMode::parse(autonomy.approval_name()))
-        .unwrap_or(approval::ApprovalMode::Auto);
+    let approval_mode = crate::approval::ApprovalMode::parse(&cli.approval)
+        .or_else(|| crate::approval::ApprovalMode::parse(autonomy.approval_name()))
+        .unwrap_or(crate::approval::ApprovalMode::Auto);
     // If user said --approval yolo but autonomy resolved lower via explicit pin,
     // keep their approval for prompts while permission stays pinned.
     let approval_mode = if cli.approval.eq_ignore_ascii_case("yolo") {
-        approval::ApprovalMode::Yolo
+        crate::approval::ApprovalMode::Yolo
     } else if autonomy.is_yolo() && cli.approval.eq_ignore_ascii_case("auto") {
-        approval::ApprovalMode::Yolo
+        crate::approval::ApprovalMode::Yolo
     } else {
         approval_mode
     };
     eprintln!("[{}]", pirs_tools::autonomy_status_line(autonomy));
     // Always install gate when a non-default safety profile is set (hard denials),
     // or when approval is Ask. Auto+default stays open.
-    let gate = std::sync::Arc::new(approval::ApprovalGate::with_profile(
+    let gate = std::sync::Arc::new(crate::approval::ApprovalGate::with_profile(
         approval_mode,
         cwd.clone(),
         safety,
     ));
-    let mut gate_hook = if approval_mode == approval::ApprovalMode::Ask
+    let mut gate_hook = if approval_mode == crate::approval::ApprovalMode::Ask
         || safety != pirs_tools::SafetyProfile::Default
     {
         Some(gate.hook())
@@ -1306,7 +883,7 @@ async fn main() -> anyhow::Result<()> {
                 g.get().affected_tests(&abs)
             });
         }
-        h.set_subagent_runner(subagent::build_subagent_runner(
+        h.set_subagent_runner(crate::subagent::build_subagent_runner(
             std::sync::Arc::clone(&provider),
             CompletionOptions {
                 api_key: Some(api_key.clone()),
@@ -1354,7 +931,7 @@ async fn main() -> anyhow::Result<()> {
         tools.extend(h.tools());
         let ext_hooks = h.hooks();
         let yolo =
-            approval::ApprovalMode::parse(&cli.approval) == Some(approval::ApprovalMode::Yolo);
+            crate::approval::ApprovalMode::parse(&cli.approval) == Some(crate::approval::ApprovalMode::Yolo);
         // Subagents inherit gate+extension policy. Previously required BOTH
         // before and after hooks, so packs with only on_tool_call (strict-plan,
         // session-discipline, weak-model) never reached subagents.
@@ -1491,7 +1068,7 @@ async fn main() -> anyhow::Result<()> {
     // policy_slot empty (previously only filled inside the extensions branch).
     {
         let yolo =
-            approval::ApprovalMode::parse(&cli.approval) == Some(approval::ApprovalMode::Yolo);
+            crate::approval::ApprovalMode::parse(&cli.approval) == Some(crate::approval::ApprovalMode::Yolo);
         if policy_slot.lock().unwrap().is_none() {
             if let Some(b) =
                 chain_gate_with_extensions(gate_hook.clone(), None, yolo, safety)
@@ -1547,15 +1124,15 @@ async fn main() -> anyhow::Result<()> {
         tools.extend(mcp.tools);
     }
 
-    let skills = discovery::discover_skills(&cwd);
-    let file_commands = discovery::discover_commands(&cwd);
+    let skills = crate::discovery::discover_skills(&cwd);
+    let file_commands = crate::discovery::discover_commands(&cwd);
     // Shared skill tools (same crate as pirs-claw).
     tools.extend(pirs_skills::skill_tools(
         std::sync::Arc::new(skills.clone()),
         true,
     ));
     // Runtime self-inspection tool (LLM + /status).
-    tools.push(Arc::new(runtime_features::SessionStateTool::new()));
+    tools.push(Arc::new(crate::runtime_features::SessionStateTool::new()));
 
     // Inject a PageRank-ranked symbol sketch so the model sees structure
     // without a first tool call (classic repomap idea). Weak mode gets a
@@ -1608,7 +1185,7 @@ async fn main() -> anyhow::Result<()> {
     } else {
         "one-shot"
     };
-    let rt = runtime_features::collect(
+    let rt = crate::runtime_features::collect(
         &cwd,
         ui_mode,
         &cli.model,
@@ -1624,7 +1201,7 @@ async fn main() -> anyhow::Result<()> {
         has_mcp,
         has_lsp,
     );
-    runtime_features::publish(rt);
+    crate::runtime_features::publish(rt);
     eprintln!(
         "[runtime: autonomy={} tools={} packs={} — session_state tool + /status]",
         pirs_tools::live_permission_mode().name(),
@@ -1633,9 +1210,9 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let mut system =
-        system_prompt::build_system_prompt_with_map(&cwd, &tools, repo_map.as_deref(), cli.weak);
+        crate::system_prompt::build_system_prompt_with_map(&cwd, &tools, repo_map.as_deref(), cli.weak);
     // Progressive agentskills index (shared with pirs-claw) via discovery helper.
-    if let Some(block) = discovery::skills_prompt_block(&skills) {
+    if let Some(block) = crate::discovery::skills_prompt_block(&skills) {
         system.push_str(&block);
     }
     if let Some(h) = &host {
@@ -1647,7 +1224,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
-    if let Some(ctx) = system_prompt::read_project_context(&cwd) {
+    if let Some(ctx) = crate::system_prompt::read_project_context(&cwd) {
         system.push_str(&ctx);
     }
     // Interactive role: stamp profile persona onto the system prompt so TUI/REPL
@@ -1729,7 +1306,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // approval_mode already resolved with autonomy above.
-    if approval_mode == approval::ApprovalMode::Yolo {
+    if approval_mode == crate::approval::ApprovalMode::Yolo {
         eprintln!(
             "[WARNING: autonomy full / yolo — no approval prompts; tools follow autonomy ladder]"
         );
@@ -1740,7 +1317,7 @@ async fn main() -> anyhow::Result<()> {
             .as_ref()
             .map(|draft_model| pirs_agent::agent_loop::CascadeConfig {
                 draft_model: draft_model.clone(),
-                judge: subagent::build_cascade_judge(
+                judge: crate::subagent::build_cascade_judge(
                     std::sync::Arc::clone(&provider),
                     draft_model.clone(),
                 ),
@@ -1751,7 +1328,7 @@ async fn main() -> anyhow::Result<()> {
     let strategy_mode = cli.strategy.is_some() || cli.profile.is_some();
     // Resolve hybrid report pins once — every one-shot / REPL exit must use these
     // so print sites cannot hardcode empty plan-model / strategy.
-    let report_pins = session_stats::ReportPins::from_cli(
+    let report_pins = crate::session_stats::ReportPins::from_cli(
         cli.plan_model.clone(),
         cli.strategy.clone(),
         cli.profile.clone(),
@@ -1788,7 +1365,7 @@ async fn main() -> anyhow::Result<()> {
     }
     let approval_shared = gate.shared_mode();
 
-    let session_path = session::session_path(&cwd)?;
+    let session_path = crate::session::session_path(&cwd)?;
     let session_stem = session_path
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
@@ -1805,25 +1382,25 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Optional flight recorder: agent events + strategy phase boundaries.
-    let run_id = observability::make_run_id(&session_stem);
-    let trace_path = observability::resolve_trace_path(cli.trace.as_deref(), &run_id);
+    let run_id = crate::observability::make_run_id(&session_stem);
+    let trace_path = crate::observability::resolve_trace_path(cli.trace.as_deref(), &run_id);
     let trace_phase: Arc<Mutex<String>> = Arc::new(Mutex::new("main".into()));
     let recorder: Option<Arc<pirs_agent::trace::Recorder>> = match &trace_path {
         Some(path) => {
-            let rec = observability::open_recorder(path, &run_id)?;
+            let rec = crate::observability::open_recorder(path, &run_id)?;
             let aliases: Vec<String> = model_registry
                 .models
                 .iter()
                 .map(|m| m.alias.clone())
                 .collect();
-            observability::record_run_config(
+            crate::observability::record_run_config(
                 &rec,
                 &cli.model,
                 cli.plan_model.as_deref(),
                 cli.strategy.as_deref().or(cli.profile.as_deref()),
                 &aliases,
             );
-            observability::attach_agent_trace(
+            crate::observability::attach_agent_trace(
                 &mut agent,
                 Arc::clone(&rec),
                 Arc::clone(&trace_phase),
@@ -1845,12 +1422,12 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     if cli.resume {
-        match session::load_latest(&cwd) {
+        match crate::session::load_latest(&cwd) {
             Ok((path, messages)) => {
                 eprintln!("[resumed {} ({} messages)]", path.display(), messages.len());
                 let n = messages.len();
                 agent.messages = messages;
-                session::append(&session_path, &agent.messages)?;
+                crate::session::append(&session_path, &agent.messages)?;
                 eprintln!("[carried {} messages into the new session file]", n);
             }
             Err(e) => eprintln!("[no session to resume: {e}]"),
@@ -1864,7 +1441,7 @@ async fn main() -> anyhow::Result<()> {
         agent.subscribe(Arc::new(move |event: AgentEvent| {
             if let AgentEvent::MessageEnd { message } = event {
                 let path = sf.lock().unwrap().clone();
-                let _ = session::append(&path, &[*message]);
+                let _ = crate::session::append(&path, &[*message]);
             }
         }));
     }
@@ -1957,7 +1534,7 @@ async fn main() -> anyhow::Result<()> {
             anyhow::bail!("serve token resolved empty; refusing to start without auth");
         }
         eprintln!("[serve token: {token}]");
-        return serve::run(serve::ServeOptions {
+        return crate::serve::run(crate::serve::ServeOptions {
             agent,
             host,
             port: cli.port,
@@ -2025,7 +1602,7 @@ async fn main() -> anyhow::Result<()> {
             .await?;
             eprintln!();
             // Hybrid plan-exec path: role-split via shared format_usage_end + ReportPins.
-            session_stats::print_usage_end(&report, &cli.model, &report_pins);
+            crate::session_stats::print_usage_end(&report, &cli.model, &report_pins);
             // A --verify gate (including weak auto-verify) that never passed
             // exits non-zero so scripts/CI can tell a green run from a red one.
             if cli.verify.is_some() && !passed {
@@ -2073,7 +1650,7 @@ async fn main() -> anyhow::Result<()> {
             .await;
         }
         eprintln!();
-        session_stats::print_usage_end(&agent.usage_report(), &cli.model, &report_pins);
+        crate::session_stats::print_usage_end(&agent.usage_report(), &cli.model, &report_pins);
         if let Some(hit) = agent.budget_hit {
             eprintln!("[budget exhausted: {hit:?}]");
             std::process::exit(match hit {
@@ -2098,843 +1675,7 @@ async fn main() -> anyhow::Result<()> {
     .await
 }
 
-async fn run_turn(
-    agent: &mut Agent,
-    input: &str,
-    _printer: &Arc<Printer>,
-    _session_path: &Path,
-    approval_mode: approval::ApprovalMode,
-    host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
-    steer_from_stdin: bool,
-) -> anyhow::Result<()> {
-    let cancel = agent.cancel_handle();
-    // The stdin steer thread lets you inject a line into the *running* turn, but
-    // it reads stdin in the background and its stop() only signals a flag the
-    // thread checks *before* its blocking read -- so once a turn ends it stays
-    // parked in that read, competing with the next rustyline `readline` for the
-    // same terminal fd and stealing keystrokes (dropped characters). The
-    // interactive REPL therefore opts out (`steer_from_stdin = false`): with no
-    // background reader, whatever you type during a turn stays in the terminal's
-    // line buffer and rustyline picks it up as your next line (type-ahead). Only
-    // callers with no subsequent readline (one-shot) keep it on.
-    let steer_handle = if approval_mode == approval::ApprovalMode::Ask || !steer_from_stdin {
-        None
-    } else {
-        Some(SteerHandle::start(agent))
-    };
 
-    let mut run = std::pin::pin!(agent.prompt(input));
-    let result = loop {
-        tokio::select! {
-            r = &mut run => break r,
-            _ = tokio::signal::ctrl_c() => {
-                cancel.lock().unwrap().cancel();
-            }
-        }
-    };
-    if let Some(h) = steer_handle {
-        h.stop();
-    }
-
-    result?;
-    if let Some(h) = host {
-        for err in h.drain_hook_errors() {
-            eprintln!("[extension error] {err}");
-        }
-    }
-    Ok(())
-}
-
-/// Tools a read-only (planning/critique) phase may use: navigation and search
-/// only, nothing that can change the tree. An allowlist — not a denylist — so a
-/// newly added mutating tool can never silently leak into a planner's scope.
-const READONLY_PHASE_TOOLS: &[&str] = &[
-    "read",
-    "grep",
-    "find",
-    "ls",
-    "recall",
-    "code_map",
-    "lsp",
-    "doctor",
-    "audit_tail",
-    "research",
-    "web_fetch",
-    "web_search",
-    "fleet",
-    "pr",
-];
-
-/// Run a shell verification command in `cwd`. Returns `(passed, output_tail)`;
-/// the last 4000 chars of combined stdout+stderr (errors cluster at the end) are
-/// what feeds the next attempt's verdict.
-async fn run_verify_command(cmd: String, cwd: PathBuf) -> (bool, String) {
-    let result = tokio::task::spawn_blocking(move || {
-        let ev = pirs_agent::GreenEvidence::from_command(&cmd, &cwd);
-        (ev.passed, format!("{}\n{}", ev.summary_line(), ev.output_tail))
-    })
-    .await;
-    match result {
-        Ok(pair) => pair,
-        Err(e) => (false, format!("verify task panicked: {e}")),
-    }
-}
-
-/// Run a one-shot prompt through a loop strategy/profile on the real agent, with
-/// an optional verify-and-retry gate.
-///
-/// Each phase forks the fully wired `base` agent (same hooks, listeners, session
-/// persistence, completion), re-scoped to the phase's tools and model. When
-/// `verify` is set, the whole strategy re-runs (up to `max_attempts`, default 3)
-/// with the failing command's output fed back as the next attempt's verdict.
-/// Returns a usage report spanning every phase of every attempt.
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn run_strategy_turn(
-    base: &Agent,
-    input: &str,
-    strategy_arg: Option<&str>,
-    profile_arg: Option<&str>,
-    default_model: &str,
-    plan_model: Option<&str>,
-    full_tools: Vec<Arc<dyn AgentTool>>,
-    cwd: &Path,
-    verify: Option<&str>,
-    max_attempts: Option<u32>,
-    recorder: Option<&Arc<pirs_agent::trace::Recorder>>,
-    trace_phase: Option<Arc<Mutex<String>>>,
-) -> anyhow::Result<(pirs_agent::usage::UsageReport, bool)> {
-    use pirs_agent::gate::{run_gated, GateOutcome};
-    use pirs_agent::phase_agent::AgentPhaseDriver;
-    use pirs_agent::profile::Profile;
-    use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, ToolScope};
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    // Effective profile: a neutral wrapper when only --strategy is given. A
-    // --strategy always overrides which strategy the profile runs, keeping the
-    // profile's persona, model, and tool policy.
-    let mut profile = match profile_arg {
-        Some(p) => pirs_rhai::discover::resolve_profile(p, cwd)
-            .with_context(|| format!("resolving profile {p:?}"))?,
-        // Placeholder strategy; always replaced below because reaching here means
-        // --strategy was given (strategy_mode with no --profile).
-        None => Profile::from_strategy(
-            "adhoc",
-            pirs_rhai::builtins::builtin("monolithic").expect("monolithic is a built-in"),
-        ),
-    };
-    if let Some(s) = strategy_arg {
-        profile.strategy = pirs_rhai::discover::resolve_strategy(s, cwd)
-            .with_context(|| format!("resolving strategy {s:?}"))?;
-    }
-    let mut strategy = profile.resolved_strategy();
-    // Strong plan / weak exec: pin read-only phases to --plan-model; full-scope
-    // executor keeps profile/script model or falls back to --model (default_model).
-    if let Some(pm) = plan_model {
-        pin_plan_model(&mut strategy, pm);
-    }
-    let policy = profile.tools.clone();
-
-    // Retry only makes sense with a gate; default to 3 attempts when verifying.
-    let attempts = max_attempts.unwrap_or(if verify.is_some() { 3 } else { 1 });
-
-    eprintln!(
-        "[strategy '{}' · {} step(s){}{}{}]",
-        strategy.name,
-        strategy.steps.len(),
-        profile_arg
-            .map(|p| format!(" · profile '{p}'"))
-            .unwrap_or_default(),
-        plan_model
-            .map(|m| format!(" · plan-model '{m}' · exec-model '{default_model}'"))
-            .unwrap_or_default(),
-        verify
-            .map(|_| format!(" · verify (≤{attempts} attempts)"))
-            .unwrap_or_default(),
-    );
-
-    // All phases of all attempts accumulate here for one run-wide usage report.
-    let all_messages: Rc<RefCell<Vec<Message>>> = Rc::new(RefCell::new(Vec::new()));
-    let default_model = default_model.to_string();
-    let strategy_ref = &strategy;
-    let policy_ref = &policy;
-    let tools_ref = &full_tools;
-    let model_ref = default_model.as_str();
-    let rec_owned = recorder.cloned();
-    let phase_slot = trace_phase.unwrap_or_else(|| Arc::new(Mutex::new("main".into())));
-
-    // One strategy attempt: a fresh driver seeded with the prior failure verdict.
-    let attempt = |verdict: Option<String>| {
-        let all_messages = Rc::clone(&all_messages);
-        let rec = rec_owned.clone();
-        let phase_slot = Arc::clone(&phase_slot);
-        async move {
-            let mut driver = AgentPhaseDriver::new(|req: &PhaseReq| {
-                // Profile tool policy first (a role can forbid tools entirely),
-                // then the phase's read/write scope narrows a planner to nav-only.
-                let mut scoped: Vec<Arc<dyn AgentTool>> = tools_ref
-                    .iter()
-                    .filter(|t| policy_ref.permits(t.name()))
-                    .cloned()
-                    .collect();
-                if req.scope == ToolScope::ReadOnly {
-                    scoped.retain(|t| READONLY_PHASE_TOOLS.contains(&t.name()));
-                }
-                let model = req.model.clone().unwrap_or_else(|| model_ref.to_string());
-                eprintln!(
-                    "\n\x1b[2m── phase {} · model {} · {}\x1b[0m",
-                    req.phase_id,
-                    model,
-                    if req.scope == ToolScope::ReadOnly {
-                        "read-only"
-                    } else {
-                        "full"
-                    },
-                );
-                if let Ok(mut p) = phase_slot.lock() {
-                    *p = req.phase_id.clone();
-                }
-                if let Some(rec) = &rec {
-                    observability::record_phase_start(rec, req);
-                }
-                // Per-phase model so telemetry packs / session_meta see the active one.
-                pirs_rhai::set_session_meta(&pirs_rhai::current_session_id(), &model);
-                base.fork_for_phase(req.system.clone(), model, scoped)
-            });
-            let task = Task {
-                issue: input.to_string(),
-                targets: Vec::new(),
-                verdict,
-            };
-            let result = run_strategy_async(strategy_ref, &mut driver, &task).await;
-            if let Some(rec) = &rec {
-                // Pair phase.start with phase.end (last active phase id + transcript size).
-                let phase_id = phase_slot
-                    .lock()
-                    .map(|g| g.clone())
-                    .unwrap_or_else(|_| "strategy".into());
-                let output_chars: usize = driver
-                    .messages()
-                    .iter()
-                    .map(|m| match m {
-                        Message::Assistant(a) => a.text().len(),
-                        Message::User(u) => match &u.content {
-                            pirs_ai::UserContent::Text(t) => t.len(),
-                            pirs_ai::UserContent::Blocks(bs) => bs
-                                .iter()
-                                .filter_map(|b| b.as_text())
-                                .map(|t| t.len())
-                                .sum(),
-                        },
-                        Message::ToolResult(r) => r
-                            .content
-                            .iter()
-                            .filter_map(|b| b.as_text())
-                            .map(|t| t.len())
-                            .sum(),
-                    })
-                    .sum();
-                observability::record_phase_end(
-                    rec,
-                    &phase_id,
-                    output_chars,
-                    result.is_ok(),
-                );
-                rec.event(
-                    "strategy.attempt_end",
-                    serde_json::json!({ "ok": result.is_ok() }),
-                );
-            }
-            all_messages
-                .borrow_mut()
-                .extend(driver.messages().iter().cloned());
-            result
-        }
-    };
-
-    // The gate: run the verify command (no command → always passes, single run).
-    let verify_gate = || async move {
-        let cmd = verify?;
-        eprintln!("\n[verify: {cmd}]");
-        let (ok, output) = run_verify_command(cmd.to_string(), cwd.to_path_buf()).await;
-        if ok {
-            eprintln!("[verify passed]");
-            None
-        } else {
-            eprintln!("[verify failed — feeding the failure back to the next attempt]");
-            Some(output)
-        }
-    };
-
-    // Ctrl-C aborts the whole gated run by dropping its future, cancelling the
-    // in-flight provider stream at its await point. The future is scoped to this
-    // block so its borrows are released before we read the accumulated usage.
-    let result: anyhow::Result<GateOutcome> = {
-        let gated = run_gated(attempts, attempt, verify_gate);
-        tokio::select! {
-            r = gated => r,
-            _ = tokio::signal::ctrl_c() => {
-                eprintln!("\n[interrupted]");
-                Err(anyhow::anyhow!("interrupted"))
-            }
-        }
-    };
-
-    let report = pirs_agent::usage::usage_report(&all_messages.borrow(), pirs_ai::Usage::default());
-    let passed = match result? {
-        GateOutcome::Passed { on_attempt } => {
-            if verify.is_some() {
-                eprintln!("\n[strategy passed the gate on attempt {on_attempt}]");
-            }
-            true
-        }
-        GateOutcome::Exhausted { .. } => {
-            eprintln!("\n[strategy did not pass the gate after {attempts} attempt(s)]");
-            false
-        }
-    };
-    Ok((report, passed))
-}
-
-struct SteerHandle {
-    tx: std::sync::mpsc::Sender<()>,
-}
-
-impl SteerHandle {
-    fn start(agent: &Agent) -> Self {
-        let (tx, rx) = std::sync::mpsc::channel::<()>();
-        let steer = agent.steer_sender();
-        std::thread::spawn(move || {
-            use std::io::BufRead;
-            let stdin = std::io::stdin();
-            let mut lines = stdin.lock().lines();
-            loop {
-                if rx.try_recv().is_ok() {
-                    break;
-                }
-                match lines.next() {
-                    Some(Ok(line)) if !line.trim().is_empty() => {
-                        steer(Message::user(line));
-                    }
-                    Some(Ok(_)) => {}
-                    Some(Err(_)) | None => break,
-                }
-            }
-        });
-        SteerHandle { tx }
-    }
-
-    fn stop(self) {
-        let _ = self.tx.send(());
-    }
-}
-
-async fn repl(
-    agent: &mut Agent,
-    printer: &Arc<Printer>,
-    session_path: &std::sync::Arc<std::sync::Mutex<PathBuf>>,
-    cwd: &Path,
-    host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
-    file_commands: &[discovery::FileCommand],
-    approval_shared: std::sync::Arc<std::sync::Mutex<approval::ApprovalMode>>,
-    report_pins: &session_stats::ReportPins,
-) -> anyhow::Result<()> {
-    let mut rl = DefaultEditor::new()?;
-    let mut clock = session_stats::SessionClock::new();
-    println!("pirs — pi agent harness, Rust port. /help for commands, Ctrl-D to quit.");
-    loop {
-        match rl.readline("pirs> ") {
-            Ok(line) => {
-                let line = line.trim();
-                if line.is_empty() {
-                    continue;
-                }
-                let _ = rl.add_history_entry(line);
-                if line.starts_with('/') {
-                    match handle_command(
-                        line,
-                        agent,
-                        &session_path.clone(),
-                        host,
-                        file_commands,
-                        printer,
-                        &approval_shared,
-                        &mut clock,
-                        report_pins,
-                    )
-                    .await
-                    {
-                        Ok(true) => break,
-                        Ok(false) => continue,
-                        Err(e) => {
-                            eprintln!("[command error: {e}]");
-                            continue;
-                        }
-                    }
-                }
-                if let Some(cmd) = line.strip_prefix("!!") {
-                    run_local_bash(cmd, cwd, false, agent).await;
-                    continue;
-                }
-                if let Some(cmd) = line.strip_prefix('!') {
-                    run_local_bash(cmd, cwd, true, agent).await;
-                    continue;
-                }
-                let mode = *approval_shared.lock().unwrap();
-                let sp = session_path.lock().unwrap().clone();
-                clock.mark_user_turn();
-                clock.agent_start();
-                // Snapshot before the turn so /undo can rewind conversation.
-                pirs_tools::rewind_snapshot(
-                    &line.chars().take(80).collect::<String>(),
-                    &agent.messages,
-                );
-                let before = agent.messages.len();
-                let user_line = line.to_string();
-                // false: the interactive REPL reads the next line with rustyline,
-                // so a background stdin steer thread would race it and drop chars.
-                if let Err(e) = run_turn(agent, line, printer, &sp, mode, host, false).await {
-                    eprintln!("[error: {e}]");
-                }
-                clock.agent_end();
-                clock.absorb_messages(&agent.messages[before..]);
-                // Long-term memory of the user (soul + memory.db) when durable.
-                if pirs_skills::learn_enabled_interactive() || pirs_skills::looks_durable(&user_line)
-                {
-                    let reply = agent
-                        .messages
-                        .iter()
-                        .rev()
-                        .find_map(|m| match m {
-                            pirs_ai::Message::Assistant(a) => {
-                                let t = a.text();
-                                if t.trim().is_empty() {
-                                    None
-                                } else {
-                                    Some(t)
-                                }
-                            }
-                            _ => None,
-                        })
-                        .unwrap_or_default();
-                    let state_dir = cwd.join(".pirs");
-                    let key = session_path
-                        .lock()
-                        .ok()
-                        .and_then(|p| {
-                            p.file_stem()
-                                .map(|s| s.to_string_lossy().into_owned())
-                        })
-                        .unwrap_or_else(|| "repl".into());
-                    pirs_skills::maybe_memory_nudge(
-                        agent.provider.clone(),
-                        &agent.model,
-                        None, // env/auth store resolves keys
-                        &state_dir,
-                        &key,
-                        &user_line,
-                        &reply,
-                    )
-                    .await;
-                }
-            }
-            Err(ReadlineError::Interrupted) => continue,
-            Err(ReadlineError::Eof) => break,
-            Err(e) => bail!(e),
-        }
-    }
-    session_stats::print_session_stats_pins(
-        &clock,
-        &agent.usage_report(),
-        &agent.model,
-        report_pins,
-    );
-    Ok(())
-}
-
-async fn run_local_bash(cmd: &str, cwd: &Path, record: bool, agent: &mut Agent) {
-    let tool = pirs_tools::BashTool::new(cwd.to_path_buf());
-    let out = tool
-        .execute(pirs_agent::ToolExecContext {
-            tool_call_id: format!("local-{}", pirs_ai::now_millis()),
-            args: serde_json::json!({"command": cmd}),
-            cancel: tokio_util::sync::CancellationToken::new(),
-            on_update: None,
-        })
-        .await;
-    let text = match &out {
-        Ok(o) => o
-            .content
-            .iter()
-            .filter_map(|b| b.as_text())
-            .collect::<Vec<_>>()
-            .join("\n"),
-        Err(e) => e.to_string(),
-    };
-    println!("{text}");
-    if record {
-        agent.messages.push(Message::user(format!(
-            "User ran a local command: `{cmd}`\nOutput:\n{text}"
-        )));
-    }
-}
-
-async fn handle_command(
-    line: &str,
-    agent: &mut Agent,
-    session_path: &std::sync::Arc<std::sync::Mutex<PathBuf>>,
-    host: Option<&std::sync::Arc<pirs_rhai::ExtensionHost>>,
-    file_commands: &[discovery::FileCommand],
-    printer: &Arc<Printer>,
-    approval_shared: &std::sync::Arc<std::sync::Mutex<approval::ApprovalMode>>,
-    clock: &mut session_stats::SessionClock,
-    report_pins: &session_stats::ReportPins,
-) -> anyhow::Result<bool> {
-    let mut parts = line.splitn(2, ' ');
-    let cmd = parts.next().unwrap_or("");
-    let arg = parts.next().unwrap_or("").trim();
-    match cmd {
-        "/quit" | "/exit" => return Ok(true),
-        "/help" => {
-            for fc in file_commands {
-                println!(
-                    "/{:<12} {}  [{}]",
-                    fc.name,
-                    fc.description,
-                    fc.path.display()
-                );
-            }
-            println!(
-                "/model [id]     show or set model\n\
-                 /stats          session wall time, agent time, tokens\n\
-                 /usage          same as /stats\n\
-                 /export <p>     export session to a JSONL file\n\
-                 /compact        compact history now\n\
-                 /undo           rewind conversation to previous snapshot\n\
-                 /doctor         runtime diagnostics (keys, lsp, mcp, browser)\n\
-                 /audit [n]      tail last N audit log lines\n\
-                 /profile [p]    show or set agent safety profile\n\
-                 /image <path>   attach image to next prompt (vision)\n\
-                 /plan | /act    product dial (read-only vs full tools)\n\
-                 /status         runtime features, autonomy, packs, caps\n\
-                 /features       alias for /status\n\
-                 /autonomy [m]   plan|edit|full  (one tool-access knob)\n\
-                 /plan | /act    shortcuts for autonomy plan / full\n\
-                 /permission [m] legacy alias for autonomy\n\
-                 /checkpoint     list|create|restore [id]\n\
-                 /approval       auto|ask|yolo (prompts; yolo→full autonomy)\n\
-                 /fork [n]       fork session at entry\n\
-                 /tree           session lineage\n\
-                 /quit           exit (prints session stats)\n\
-                 !<cmd>          run command locally, record output in context\n\
-                 !!<cmd>         run command locally, do not record"
-            );
-        }
-        "/undo" => match pirs_tools::host_undo(&mut agent.messages) {
-            Ok(msg) => println!("{msg}"),
-            Err(e) => eprintln!("[undo] {e}"),
-        },
-        "/doctor" => {
-            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            for line in pirs_tools::doctor_report(&cwd) {
-                println!("{line}");
-            }
-        }
-        "/status" | "/features" | "/runtime" => {
-            if let Some(mut snap) = runtime_features::live() {
-                snap.refresh_live_dials();
-                println!("{}", snap.format_human());
-            } else {
-                println!("(runtime snapshot not ready)");
-            }
-        }
-        "/audit" => {
-            let n: usize = arg.parse().unwrap_or(40).clamp(1, 200);
-            let path = pirs_agent::default_audit_path();
-            if !path.is_file() {
-                println!("no audit log yet at {}", path.display());
-            } else {
-                let text = std::fs::read_to_string(&path).unwrap_or_default();
-                let lines: Vec<&str> = text.lines().collect();
-                let start = lines.len().saturating_sub(n);
-                println!(
-                    "audit {} (last {} of {}):\n{}",
-                    path.display(),
-                    lines.len() - start,
-                    lines.len(),
-                    lines[start..].join("\n")
-                );
-            }
-        }
-        "/profile" => {
-            if arg.is_empty() {
-                println!(
-                    "agent-profile: {}",
-                    std::env::var("PIRS_AGENT_PROFILE").unwrap_or_else(|_| "default".into())
-                );
-            } else if pirs_tools::SafetyProfile::parse(arg).is_some() {
-                std::env::set_var("PIRS_AGENT_PROFILE", arg);
-                println!("agent-profile set to {arg} (new denials apply on next tool call)");
-            } else {
-                println!("usage: /profile <default|plan|accept-edits|auto-approve>");
-            }
-        }
-        "/image" => {
-            if arg.is_empty() {
-                println!("usage: /image <path-to-png-or-jpg>");
-            } else {
-                match attach_image_message(agent, Path::new(arg)) {
-                    Ok(msg) => println!("{msg}"),
-                    Err(e) => eprintln!("[image] {e}"),
-                }
-            }
-        }
-        "/plan" | "/act" => {
-            let mode = if cmd == "/plan" {
-                pirs_tools::PermissionMode::ReadOnly
-            } else {
-                pirs_tools::PermissionMode::DangerFullAccess
-            };
-            pirs_tools::set_live_permission_mode(mode);
-            if cmd == "/plan" {
-                std::env::set_var("PIRS_AGENT_PROFILE", "plan");
-            }
-            println!(
-                "mode → {} (permission={}; denials apply on next tool call)",
-                cmd.trim_start_matches('/'),
-                mode.name()
-            );
-        }
-        "/checkpoint" => {
-            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            let action = if arg.is_empty() { "list" } else { arg };
-            match action {
-                "list" => {
-                    for m in pirs_tools::list_checkpoints(&cwd) {
-                        println!("{} {} {:?}", m.id, m.kind, m.label);
-                    }
-                }
-                "create" => match pirs_tools::create_checkpoint(&cwd, "manual", agent.messages.len())
-                {
-                    Ok(m) => println!("created {}", m.id),
-                    Err(e) => eprintln!("[checkpoint] {e}"),
-                },
-                s if s.starts_with("restore") => {
-                    let id = s.split_whitespace().nth(1);
-                    match pirs_tools::restore_checkpoint(&cwd, id) {
-                        Ok(msg) => println!("{msg}"),
-                        Err(e) => eprintln!("[checkpoint] {e}"),
-                    }
-                }
-                _ => println!("usage: /checkpoint [list|create|restore [id]]"),
-            }
-        }
-        "/permission" => {
-            if arg.is_empty() {
-                println!(
-                    "permission-mode: {}",
-                    pirs_tools::live_permission_mode().name()
-                );
-            } else if let Some(m) = pirs_tools::PermissionMode::parse(arg) {
-                pirs_tools::set_live_permission_mode(m);
-                println!("permission-mode → {}", m.name());
-            } else {
-                println!("usage: /permission read-only|workspace-write|danger-full-access");
-            }
-        }
-        "/model" => {
-            if arg.is_empty() {
-                println!("current model: {}", agent.model);
-            } else {
-                agent.model = arg.to_string();
-                println!("model set to {arg}");
-            }
-        }
-        "/usage" | "/stats" => {
-            session_stats::print_session_stats_pins(
-                clock,
-                &agent.usage_report(),
-                &agent.model,
-                report_pins,
-            );
-        }
-        "/approval" | "/autonomy" => {
-            if arg.is_empty() {
-                let a = match pirs_tools::live_permission_mode() {
-                    pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
-                    pirs_tools::PermissionMode::WorkspaceWrite => pirs_tools::Autonomy::Edit,
-                    pirs_tools::PermissionMode::DangerFullAccess => pirs_tools::Autonomy::Full,
-                };
-                println!(
-                    "{}  ·  approval prompts: {}",
-                    pirs_tools::autonomy_status_line(a),
-                    approval_shared.lock().unwrap().name()
-                );
-            } else if let Some(a) = pirs_tools::Autonomy::parse(arg) {
-                pirs_tools::apply_autonomy(a);
-                if a.is_yolo() {
-                    *approval_shared.lock().unwrap() = approval::ApprovalMode::Yolo;
-                }
-                println!("{}", pirs_tools::autonomy_status_line(a));
-            } else if let Some(m) = approval::ApprovalMode::parse(arg) {
-                // Legacy: /approval yolo → full autonomy
-                *approval_shared.lock().unwrap() = m;
-                if m == approval::ApprovalMode::Yolo {
-                    pirs_tools::apply_autonomy(pirs_tools::Autonomy::Full);
-                    println!("{}", pirs_tools::autonomy_status_line(pirs_tools::Autonomy::Full));
-                } else {
-                    println!(
-                        "approval prompts → {}  ({})",
-                        m.name(),
-                        pirs_tools::autonomy_status_line({
-                            match pirs_tools::live_permission_mode() {
-                                pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
-                                pirs_tools::PermissionMode::WorkspaceWrite => {
-                                    pirs_tools::Autonomy::Edit
-                                }
-                                pirs_tools::PermissionMode::DangerFullAccess => {
-                                    pirs_tools::Autonomy::Full
-                                }
-                            }
-                        })
-                    );
-                }
-            } else {
-                println!("usage: /autonomy plan|edit|full   or   /approval auto|ask|yolo");
-            }
-        }
-        "/compact" => {
-            println!("compacting...");
-            let done = agent.compact_now().await;
-            if done {
-                println!("compacted ({} messages now)", agent.messages.len());
-            } else {
-                println!("nothing to compact (or compaction disabled)");
-            }
-        }
-        "/fork" => {
-            let idx: Option<usize> = if arg.is_empty() {
-                None
-            } else {
-                Some(arg.parse()?)
-            };
-            let (new_path, messages, meta) =
-                session::fork_session(&session_path.lock().unwrap().clone(), idx)?;
-            agent.messages = messages;
-            println!(
-                "forked at entry {} -> {} (parent: {})",
-                meta.parent_entry.unwrap_or(0),
-                new_path.display(),
-                meta.parent_session.unwrap_or_default()
-            );
-            *session_path.lock().unwrap() = new_path;
-        }
-        "/tree" => {
-            for (id, parent, parent_entry, entries) in
-                session::lineage(&session_path.lock().unwrap().clone())
-            {
-                println!(
-                    "{id} ({} entries){}",
-                    entries,
-                    parent
-                        .map(|p| format!(" <- fork of {p} @ {parent_entry:?}"))
-                        .unwrap_or_default()
-                );
-            }
-        }
-        "/export" => {
-            if arg.is_empty() {
-                bail!("usage: /export <path>");
-            }
-            let dest = PathBuf::from(arg);
-            std::fs::copy(session_path.lock().unwrap().clone(), &dest)
-                .with_context(|| format!("failed to export to {}", dest.display()))?;
-            println!("exported to {}", dest.display());
-        }
-        other => {
-            let cmd_name = other.trim_start_matches('/');
-            let mut handled = false;
-            if let Some(h) = host {
-                if h.commands().iter().any(|(n, _)| n == cmd_name) {
-                    match h.run_command(cmd_name, arg) {
-                        Ok(out) if !out.is_empty() => println!("{out}"),
-                        Ok(_) => {}
-                        Err(e) => eprintln!("[command error: {e}]"),
-                    }
-                    handled = true;
-                }
-            }
-            if !handled {
-                let cmd_name = other.trim_start_matches('/');
-                if let Some(fc) = file_commands.iter().find(|c| c.name == cmd_name) {
-                    let prompt = discovery::expand_command(fc, arg);
-                    let mode = *approval_shared.lock().unwrap();
-                    let sp = session_path.lock().unwrap().clone();
-                    // false: handle_command runs inside the interactive REPL loop,
-                    // so a rustyline readline follows -- same stdin race as above.
-                    if let Err(e) = run_turn(agent, &prompt, printer, &sp, mode, host, false).await {
-                        eprintln!("[error: {e}]");
-                    }
-                } else {
-                    println!("unknown command: {other}");
-                }
-            }
-        }
-    }
-    Ok(false)
-}
-
-/// Attach a local image as a multimodal user message (for vision models).
-fn attach_image_message(agent: &mut Agent, path: &Path) -> anyhow::Result<String> {
-    use base64::Engine as _;
-    let abs = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(path)
-    };
-    if !abs.is_file() {
-        bail!("image not found: {}", abs.display());
-    }
-    let bytes = std::fs::read(&abs)?;
-    if bytes.len() > 12 * 1024 * 1024 {
-        bail!("image too large ({} bytes)", bytes.len());
-    }
-    let mime = match abs
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        "gif" => "image/gif",
-        other => bail!("unsupported image type .{other}; use png/jpg/webp/gif"),
-    };
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    agent.messages.push(Message::User(pirs_ai::UserMessage {
-        content: pirs_ai::UserContent::Blocks(vec![
-            pirs_ai::ContentBlock::Text {
-                text: format!("[image attached: {}]", abs.display()),
-                text_signature: None,
-            },
-            pirs_ai::ContentBlock::Image {
-                data: b64,
-                mime_type: mime.into(),
-            },
-        ]),
-        timestamp: pirs_ai::now_millis(),
-    }));
-    Ok(format!(
-        "attached {} ({} bytes) — send a follow-up message to discuss it",
-        abs.display(),
-        bytes.len()
-    ))
-}
-
-/// A 256-bit random bearer token, hex-encoded. Never derive serve auth from a
-/// clock: a timestamp token is brute-forceable from the process start time.
 fn generate_serve_token() -> String {
     let mut buf = [0u8; 32];
     getrandom::getrandom(&mut buf).expect("getrandom failed to produce a serve token");
@@ -2947,305 +1688,5 @@ fn generate_serve_token() -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn login_bare_uses_ambient_provider() {
-        // `pirs login` -> provider comes from --provider/config.
-        assert_eq!(parse_login_request(Some("login"), "repl", "openai"), Some("openai"));
-        assert_eq!(
-            parse_login_request(Some("login"), "repl", "anthropic"),
-            Some("anthropic")
-        );
-    }
-
-    #[test]
-    fn login_with_provider_token_wins_over_ambient() {
-        // The regression: flattened prompt is "login openai", must still log in
-        // (previously fell through to agent mode), and the token wins.
-        assert_eq!(
-            parse_login_request(Some("login openai"), "repl", "anthropic"),
-            Some("openai")
-        );
-        assert_eq!(
-            parse_login_request(Some("login anthropic"), "repl", "openai"),
-            Some("anthropic")
-        );
-    }
-
-    #[test]
-    fn mode_login_forces_login_regardless_of_prompt() {
-        assert_eq!(parse_login_request(None, "login", "openai"), Some("openai"));
-        assert_eq!(
-            parse_login_request(None, "login", "anthropic"),
-            Some("anthropic")
-        );
-    }
-
-    #[test]
-    fn genuine_prompt_starting_with_login_is_not_intercepted() {
-        assert_eq!(
-            parse_login_request(Some("login and restart the box"), "repl", "openai"),
-            None
-        );
-        // Unknown trailing token is not a provider -> treated as a prompt.
-        assert_eq!(parse_login_request(Some("login foo"), "repl", "openai"), None);
-        // No prompt at all in the default REPL mode -> not a login.
-        assert_eq!(parse_login_request(None, "repl", "openai"), None);
-    }
-
-    #[test]
-    fn serve_token_is_random_and_long() {
-        let a = generate_serve_token();
-        let b = generate_serve_token();
-        assert_eq!(a.len(), 64);
-        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
-        assert_ne!(a, b, "tokens must not be predictable/repeating");
-    }
-    use std::sync::Arc;
-
-    fn gate() -> Option<pirs_agent::events::BeforeToolCallHook> {
-        Some(Arc::new(|_, name, _| {
-            if name == "danger" {
-                Some("blocked by gate".to_string())
-            } else {
-                None
-            }
-        }))
-    }
-
-    #[test]
-    fn gate_installed_when_hooks_empty() {
-        // --approval ask --no-extensions: previously no gate was installed.
-        let mut hooks = pirs_agent::Hooks::default();
-        install_gate_if_absent(&mut hooks, &gate(), "ask");
-        let before = hooks.before_tool_call.expect("gate must be installed");
-        assert_eq!(
-            before("1", "danger", &serde_json::json!({})).as_deref(),
-            Some("blocked by gate")
-        );
-    }
-
-    #[test]
-    fn gate_not_installed_in_yolo() {
-        let mut hooks = pirs_agent::Hooks::default();
-        install_gate_if_absent(&mut hooks, &gate(), "yolo");
-        assert!(hooks.before_tool_call.is_none());
-    }
-
-    #[test]
-    fn existing_hook_not_overwritten() {
-        let mut hooks = pirs_agent::Hooks {
-            before_tool_call: Some(Arc::new(|_, _, _| Some("ext".to_string()))),
-            ..Default::default()
-        };
-        install_gate_if_absent(&mut hooks, &gate(), "ask");
-        let before = hooks.before_tool_call.unwrap();
-        assert_eq!(
-            before("1", "x", &serde_json::json!({})).as_deref(),
-            Some("ext")
-        );
-    }
-
-    #[test]
-    fn yolo_with_plan_profile_installs_denials_without_extensions() {
-        let mut hooks = pirs_agent::Hooks::default();
-        install_gate_if_absent(&mut hooks, &gate(), "yolo");
-        assert!(hooks.before_tool_call.is_none());
-        install_profile_under_yolo_if_needed(
-            &mut hooks,
-            &gate(),
-            "yolo",
-            pirs_tools::SafetyProfile::Plan,
-        );
-        let before = hooks.before_tool_call.expect("profile under yolo");
-        assert_eq!(
-            before("1", "danger", &serde_json::json!({})).as_deref(),
-            Some("blocked by gate")
-        );
-    }
-
-    #[test]
-    fn yolo_with_plan_chains_gate_before_extension() {
-        let ext: pirs_agent::events::BeforeToolCallHook =
-            Arc::new(|_, _, _| Some("ext-deny".into()));
-        let chained = chain_gate_with_extensions(
-            gate(),
-            Some(ext),
-            true,
-            pirs_tools::SafetyProfile::Plan,
-        )
-        .expect("chained");
-        // Gate runs first: danger blocked by gate, not ext.
-        assert_eq!(
-            chained("1", "danger", &serde_json::json!({})).as_deref(),
-            Some("blocked by gate")
-        );
-        // Non-danger falls through to extension.
-        assert_eq!(
-            chained("1", "read", &serde_json::json!({})).as_deref(),
-            Some("ext-deny")
-        );
-    }
-
-    #[test]
-    fn pure_yolo_still_chains_gate_hook_then_extension() {
-        // Production pure-yolo gate_hook is the live permission ladder (no prompts).
-        // Yolo must not drop that ladder — only interactive approval is waived.
-        let ext: pirs_agent::events::BeforeToolCallHook =
-            Arc::new(|_, _, _| Some("ext-only".into()));
-        let chained = chain_gate_with_extensions(
-            gate(),
-            Some(ext),
-            true,
-            pirs_tools::SafetyProfile::Default,
-        )
-        .expect("chained");
-        // Gate runs first.
-        assert_eq!(
-            chained("1", "danger", &serde_json::json!({})).as_deref(),
-            Some("blocked by gate")
-        );
-        // Non-danger falls through to extension.
-        assert_eq!(
-            chained("1", "read", &serde_json::json!({})).as_deref(),
-            Some("ext-only")
-        );
-    }
-
-    #[test]
-    fn pure_yolo_with_permission_ladder_denies_bash_under_read_only() {
-        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::ReadOnly);
-        let perm = Some(pirs_tools::live_permission_hook());
-        let chained = chain_gate_with_extensions(
-            perm,
-            None,
-            true,
-            pirs_tools::SafetyProfile::Default,
-        )
-        .expect("perm under yolo");
-        assert!(chained("1", "bash", &serde_json::json!({"command": "ls"})).is_some());
-        assert!(chained("1", "read", &serde_json::json!({"path": "a"})).is_none());
-        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::DangerFullAccess);
-    }
-
-    #[test]
-    fn chain_with_before_only_ext_still_returns_gate_under_plan() {
-        // Packs like strict-plan only register on_tool_call (before), no after.
-        let ext: pirs_agent::events::BeforeToolCallHook =
-            Arc::new(|_, name, _| {
-                if name == "web_search" {
-                    Some("strict".into())
-                } else {
-                    None
-                }
-            });
-        let chained = chain_gate_with_extensions(
-            gate(),
-            Some(ext),
-            false,
-            pirs_tools::SafetyProfile::Plan,
-        )
-        .expect("before-only chain");
-        assert_eq!(
-            chained("1", "danger", &serde_json::json!({})).as_deref(),
-            Some("blocked by gate")
-        );
-        assert_eq!(
-            chained("1", "web_search", &serde_json::json!({})).as_deref(),
-            Some("strict")
-        );
-    }
-
-    /// Production one-shot / REPL exits must thread ReportPins (no hard-coded empty pins).
-    #[test]
-    fn production_exit_paths_use_report_pins_not_hardcoded_none() {
-        let src = include_str!("main.rs");
-        // Drop unit-test module so test fixtures with None do not count.
-        let prod = src
-            .split("#[cfg(test)]\nmod tests {")
-            .next()
-            .expect("production half of main.rs");
-        assert!(
-            prod.contains("ReportPins::from_cli"),
-            "main must resolve ReportPins once from CLI"
-        );
-        assert!(
-            prod.contains("print_usage_end"),
-            "one-shot exit must call session_stats::print_usage_end"
-        );
-        assert!(
-            prod.contains("print_session_stats_pins"),
-            "REPL session-end and /usage must call print_session_stats_pins"
-        );
-        // No production hardcode of empty pins at the classic print_session_stats sites.
-        assert!(
-            !prod.contains("&agent.model,\n        None,\n        None,"),
-            "REPL must not hardcode plan_model=None strategy=None at print sites"
-        );
-        assert!(
-            !prod.contains("&agent.model,\n                None,\n                None,"),
-            "/usage must not hardcode empty pins"
-        );
-    }
-
-    /// Residual: strategy path must emit phase.end (not only phase.start).
-    #[test]
-    fn strategy_path_records_phase_end() {
-        let src = include_str!("main.rs");
-        let prod = src
-            .split("#[cfg(test)]\nmod tests {")
-            .next()
-            .expect("production main");
-        assert!(
-            prod.contains("record_phase_start"),
-            "strategy path must record phase.start"
-        );
-        assert!(
-            prod.contains("record_phase_end"),
-            "strategy path must record phase.end (pair with start)"
-        );
-        assert!(
-            prod.contains("discovery::skills_prompt_block")
-                && prod.contains("discovery::discover_skills"),
-            "main must use discovery skill helpers (not dead re-exports)"
-        );
-        assert!(
-            prod.contains("fc.path.display()"),
-            "/help must surface FileCommand.path"
-        );
-        assert!(
-            prod.contains("d.kind"),
-            "replay CLI must print Divergence.kind"
-        );
-    }
-
-    /// All three surfaces (one-shot, REPL, TUI) share pin + role-split APIs.
-    #[test]
-    fn all_exit_surfaces_use_shared_report_apis() {
-        let main_src = include_str!("main.rs");
-        let tui_src = include_str!("tui/mod.rs");
-        let main_prod = main_src
-            .split("#[cfg(test)]\nmod tests {")
-            .next()
-            .unwrap();
-        let tui_prod = tui_src
-            .split("#[cfg(test)]\nmod tests {")
-            .next()
-            .unwrap();
-        assert!(main_prod.contains("print_usage_end") && main_prod.contains("report_pins"));
-        assert!(main_prod.contains("print_session_stats_pins"));
-        assert!(tui_prod.contains("print_session_stats_pins"));
-        assert!(tui_prod.contains("format_session_stats_pins"));
-        assert!(tui_prod.contains("app.report_pins()"));
-        // Shared role-split lives only in session_stats (single template).
-        let stats = include_str!("session_stats.rs");
-        let stats_prod = stats.split("#[cfg(test)]\nmod tests {").next().unwrap();
-        assert_eq!(
-            stats_prod.matches("\"  by role\"").count(),
-            1,
-            "single by-role template"
-        );
-    }
-}
+#[path = "main_tests.rs"]
+mod tests;

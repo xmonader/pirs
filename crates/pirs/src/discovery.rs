@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn discovers_skills_and_commands() {
-        let _guard = crate::TEST_ENV_LOCK.lock().unwrap();
+        let _guard = crate::TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let skill_dir = dir.path().join(".claude/skills/review");
         std::fs::create_dir_all(&skill_dir).unwrap();
@@ -177,10 +177,13 @@ mod tests {
 
         std::env::set_var("HOME", dir.path().join("no-home"));
         let skills = discover_skills(dir.path());
-        assert_eq!(skills.len(), 1);
-        assert_eq!(skills[0].name, "review");
-        assert_eq!(skills[0].description, "Review code");
-        assert!(skills[0].path.ends_with("SKILL.md"));
+        // Bundled skills may also be present (ensure_bundled_skills); require our fixture.
+        let review = skills
+            .iter()
+            .find(|s| s.name == "review")
+            .expect("project skill 'review' must be discovered");
+        assert_eq!(review.description, "Review code");
+        assert!(review.path.ends_with("SKILL.md"));
 
         let commands = discover_commands(dir.path());
         // path field is product-facing (/help shows it)
