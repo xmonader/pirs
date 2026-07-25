@@ -251,7 +251,10 @@ mod tests {
         });
         // If Cli were a silent Ok(()), this test still passes — structural
         // assert on main ensures we always call deliver_outbound for every target.
-        let main_src = include_str!("../main.rs");
+        let main_src = concat!(
+            include_str!("../main.rs"),
+            include_str!("../bin_helpers.rs"),
+        );
         assert!(
             main_src.contains("deliver_outbound(&job.deliver")
                 || main_src.contains("deliver_outbound(&j.deliver"),

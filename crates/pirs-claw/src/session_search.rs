@@ -402,7 +402,8 @@ mod tests {
     fn gateway_message_handler_wires_peer_scoped_search() {
         // Structural: handle_gateway_message must pass sid.key() into tool build,
         // not bare session_search_tool(state) / env-only scope.
-        let main_src = include_str!("main.rs");
+        // Handler lives in bin_helpers after the binary main split.
+        let main_src = concat!(include_str!("main.rs"), include_str!("bin_helpers.rs"));
         assert!(
             main_src.contains("gateway_session_search_tool"),
             "gateway tool assembly must use gateway_session_search_tool"
