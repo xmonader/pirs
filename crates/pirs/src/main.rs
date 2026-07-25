@@ -1510,13 +1510,35 @@ async fn main() -> anyhow::Result<()> {
         for err in &mcp.errors {
             eprintln!("[mcp error] {err}");
         }
-        if !mcp.handles.is_empty() {
-            let names: Vec<String> = mcp.handles.iter().map(|h| h.name.clone()).collect();
-            eprintln!("[mcp: {} ({} tools)]", names.join(", "), mcp.tools.len());
-            has_mcp = true;
+        match mcp.mode {
+            pirs_mcp::McpLoadMode::Eager if !mcp.handles.is_empty() => {
+                let names: Vec<String> = mcp.handles.iter().map(|h| h.name.clone()).collect();
+                eprintln!(
+                    "[mcp eager: {} ({} tools)]",
+                    names.join(", "),
+                    mcp.tools.len()
+                );
+                has_mcp = true;
+            }
+            pirs_mcp::McpLoadMode::CatalogRouter => {
+                eprintln!(
+                    "[mcp catalog-router: catalog={} agent_tools={} max_live={} — use mcp_search/mcp_call]",
+                    mcp.catalog_size,
+                    mcp.tools.len(),
+                    mcp.pool.as_ref().map(|p| p.max_live()).unwrap_or(0)
+                );
+                has_mcp = true;
+            }
+            _ => {}
         }
-        let rep = pirs_mcp::McpDegradedReport::from_load(&mcp);
-        if !rep.working.is_empty() || !rep.failed.is_empty() {
+        let mut rep = pirs_mcp::McpDegradedReport::from_load(&mcp);
+        if let Some(pool) = &mcp.pool {
+            let st = pool.status().await;
+            rep.live_count = st.live.len();
+            rep.max_live = st.max_live;
+            rep.catalog_size = st.catalog_size;
+        }
+        if rep.catalog_size > 0 || !rep.working.is_empty() || !rep.failed.is_empty() {
             std::env::set_var("PIRS_MCP_DOCTOR_LINES", rep.lines().join("\n"));
         }
         if !mcp.tools.is_empty() {

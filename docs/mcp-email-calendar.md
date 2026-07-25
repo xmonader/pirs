@@ -82,3 +82,7 @@ referenced from `~/.pirs/mcp.json` — never commit secrets.
 
 - **In scope:** load, invoke, doctor lines, mock proof.
 - **Out of scope:** bundled OAuth product, provider-specific UI, channel zoo.
+
+## Large catalogs
+
+Many servers use **catalog + lazy pool** (not connect-all). See [mcp-scale.md](mcp-scale.md).

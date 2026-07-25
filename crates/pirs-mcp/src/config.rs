@@ -311,6 +311,10 @@ fn prompt_mcp_trust(path: &Path) -> bool {
     }
 }
 
+/// Serializes tests that mutate process-global HOME / MCP env vars.
+#[cfg(test)]
+pub(crate) static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,7 +322,7 @@ mod tests {
     // These tests mutate the process-global HOME to isolate from a real
     // ~/.pirs/mcp.json. Cargo runs tests in parallel threads, so they must be
     // serialized or one test's set_var races another's read.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use super::TEST_ENV_LOCK as ENV_LOCK;
 
     #[test]
     fn loads_claude_code_format() {

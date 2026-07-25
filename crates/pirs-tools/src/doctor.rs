@@ -100,6 +100,12 @@ pub fn doctor_report(cwd: &Path) -> Vec<String> {
          (see docs/mcp-email-calendar.md; mock: crates/pirs-mcp/tests/mcp_email_calendar.py)"
             .into(),
     );
+    lines.push(
+        "mcp_scale: catalog+lazy pool when servers > PIRS_MCP_EAGER_MAX (default 8); \
+         router tools mcp_search/mcp_call; live cap PIRS_MCP_MAX_LIVE (default 16); \
+         see docs/mcp-scale.md"
+            .into(),
+    );
     if let Ok(report) = std::env::var("PIRS_MCP_DOCTOR_LINES") {
         for line in report.lines().filter(|l| !l.is_empty()) {
             lines.push(format!("  {line}"));
