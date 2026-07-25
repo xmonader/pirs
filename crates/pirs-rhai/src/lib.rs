@@ -33,6 +33,8 @@ pub type SubagentRunner =
 
 pub mod builtins;
 pub mod caps;
+mod convert;
+mod trust;
 pub mod discover;
 pub mod profile_script;
 pub mod strategy_script;
@@ -515,7 +517,7 @@ impl ExtensionHost {
     }
 
     pub fn load_default_dirs(&mut self, cwd: &Path) {
-        self.load_default_dirs_with_trust(cwd, &mut |dir| prompt_trust(dir));
+        self.load_default_dirs_with_trust(cwd, &mut |dir| trust::prompt_trust(dir));
     }
 
     pub fn load_default_dirs_with_trust(
@@ -1161,7 +1163,7 @@ impl ExtensionHost {
         let mut out = Vec::new();
         self.for_each_with(ExtensionFlag::Steering, |host, i| {
             match host.call_extension(i, "on_steering", ()) {
-                Ok(d) => out.extend(dynamic_to_messages(&d)),
+                Ok(d) => out.extend(convert::dynamic_to_messages(&d)),
                 Err(e) => self.record_error("on_steering", e),
             }
         });
@@ -1172,7 +1174,7 @@ impl ExtensionHost {
         let mut out = Vec::new();
         self.for_each_with(ExtensionFlag::FollowUp, |host, i| {
             match host.call_extension(i, "on_follow_up", ()) {
-                Ok(d) => out.extend(dynamic_to_messages(&d)),
+                Ok(d) => out.extend(convert::dynamic_to_messages(&d)),
                 Err(e) => self.record_error("on_follow_up", e),
             }
         });
@@ -1180,7 +1182,7 @@ impl ExtensionHost {
     }
 
     fn dispatch_event(&self, event: &pirs_agent::AgentEvent) {
-        let (ty, data) = event_to_rhai(event);
+        let (ty, data) = convert::event_to_rhai(event);
         self.for_each_with(ExtensionFlag::Event, |host, i| {
             if let Err(e) = host.call_extension(i, "on_event", (ty.clone(), data.clone())) {
                 host.record_error("on_event", e);
@@ -1275,151 +1277,7 @@ fn parallel_map_impl(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TrustDecision {
-    Allow,
-    Deny,
-    Skip,
-}
 
-fn trust_store_path() -> Option<std::path::PathBuf> {
-    std::env::var("HOME")
-        .ok()
-        .map(|h| std::path::Path::new(&h).join(".pirs").join("trusted.json"))
-}
-
-fn load_trusted() -> std::collections::HashSet<String> {
-    let Some(path) = trust_store_path() else {
-        return std::collections::HashSet::new();
-    };
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|c| serde_json::from_str(&c).ok())
-        .unwrap_or_default()
-}
-
-pub fn trust_directory(dir: &Path) -> Result<(), String> {
-    let canonical = dir.canonicalize().map_err(|e| e.to_string())?;
-    let ext_dir = canonical.join(".pirs").join("extensions");
-    if !ext_dir.exists() {
-        return Err(format!(
-            "{} has no .pirs/extensions directory",
-            canonical.display()
-        ));
-    }
-    // Store the same key prompt_trust looks up at load time: the canonical
-    // extensions directory itself.
-    let key = ext_dir.canonicalize().unwrap_or(ext_dir);
-    save_trusted_key(trust_key(&key));
-    Ok(())
-}
-
-fn save_trusted_key(key: String) {
-    let Some(path) = trust_store_path() else {
-        return;
-    };
-    let mut set = load_trusted();
-    set.insert(key);
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let _ = std::fs::write(
-        &path,
-        serde_json::to_string_pretty(&set).unwrap_or_default(),
-    );
-}
-
-fn scripts_hash(dir: &Path) -> String {
-    use sha2::Digest;
-    let mut h = sha2::Sha256::new();
-    let mut files: Vec<_> = std::fs::read_dir(dir)
-        .map(|rd| {
-            rd.flatten()
-                .map(|e| e.path())
-                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("rhai"))
-                .collect()
-        })
-        .unwrap_or_default();
-    files.sort();
-    for f in files {
-        h.update(f.to_string_lossy().as_bytes());
-        if let Ok(content) = std::fs::read(&f) {
-            h.update(&content);
-        }
-    }
-    format!("{:x}", h.finalize())
-}
-
-fn trust_key(dir: &Path) -> String {
-    format!("{}#{}", dir.display(), scripts_hash(dir))
-}
-
-fn prompt_trust(dir: &Path) -> TrustDecision {
-    if !dir.exists() {
-        return TrustDecision::Skip;
-    }
-    let canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
-    // Only pirs' own global dir is implicitly trusted; everything else asks.
-    let home_ext =
-        std::env::var("HOME").map(|h| std::path::Path::new(&h).join(".pirs").join("extensions"));
-    if home_ext
-        .as_ref()
-        .map(|h| h.canonicalize().unwrap_or_else(|_| h.clone()))
-        == Ok(canonical.clone())
-    {
-        return TrustDecision::Allow;
-    }
-    let trusted = load_trusted();
-    if trusted.contains(&trust_key(&canonical))
-        || trusted.contains(&canonical.display().to_string())
-        || canonical
-            .parent()
-            .map(|p| trusted.contains(&p.display().to_string()))
-            .unwrap_or(false)
-    {
-        return TrustDecision::Allow;
-    }
-    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-        return TrustDecision::Deny;
-    }
-    // Show what you're granting, not "full permissions y/N": each script's
-    // capability manifest (or its absence) is part of the prompt.
-    let mut caps_lines = String::new();
-    if let Ok(rd) = std::fs::read_dir(&canonical) {
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.extension().and_then(|x| x.to_str()) != Some("rhai") {
-                continue;
-            }
-            if let Ok(src) = std::fs::read_to_string(&p) {
-                let c = caps::parse_caps(&src);
-                caps_lines.push_str(&format!(
-                    "  {}: {}\n",
-                    p.file_name().and_then(|f| f.to_str()).unwrap_or("?"),
-                    c.summary()
-                ));
-            }
-        }
-    }
-    eprintln!(
-        "\nProject extensions found at {}\n{}\nThey run with the permissions shown above (tools, hooks, shell). Trust this directory? [y/N]",
-        canonical.display(),
-        if caps_lines.is_empty() {
-            "  (no scripts found)\n".to_string()
-        } else {
-            caps_lines
-        }
-    );
-    let mut line = String::new();
-    if std::io::stdin().read_line(&mut line).is_err() {
-        return TrustDecision::Deny;
-    }
-    if matches!(line.trim(), "y" | "yes" | "Y") {
-        save_trusted_key(trust_key(&canonical));
-        TrustDecision::Allow
-    } else {
-        TrustDecision::Deny
-    }
-}
 
 enum ExtensionFlag {
     Context,
@@ -1427,145 +1285,6 @@ enum ExtensionFlag {
     Steering,
     FollowUp,
     Event,
-}
-
-fn dynamic_to_messages(d: &Dynamic) -> Vec<pirs_ai::Message> {
-    if d.is_unit() {
-        return vec![];
-    }
-    if d.is::<String>() {
-        return vec![pirs_ai::Message::user(d.clone().cast::<String>())];
-    }
-    let value: Value = match rhai::serde::from_dynamic(d) {
-        Ok(v) => v,
-        Err(_) => return vec![],
-    };
-    match value {
-        Value::Array(items) => items.into_iter().filter_map(value_to_message).collect(),
-        single => value_to_message(single).into_iter().collect(),
-    }
-}
-
-fn value_to_message(v: Value) -> Option<pirs_ai::Message> {
-    match &v {
-        Value::String(s) => Some(pirs_ai::Message::user(s.clone())),
-        _ => serde_json::from_value(v).ok(),
-    }
-}
-
-fn event_to_rhai(event: &pirs_agent::AgentEvent) -> (String, Dynamic) {
-    use pirs_agent::AgentEvent as E;
-    let mut map = rhai::Map::new();
-    let ty = match event {
-        E::AgentStart => "agent_start",
-        E::AgentEnd { messages } => {
-            map.insert("numMessages".into(), (messages.len() as i64).into());
-            let report = pirs_agent::usage::usage_report(messages, pirs_ai::Usage::default());
-            let total = report.grand_total();
-            map.insert("inputTokens".into(), (total.input as i64).into());
-            map.insert("cacheReadTokens".into(), (total.cache_read as i64).into());
-            map.insert("outputTokens".into(), (total.output as i64).into());
-            map.insert("totalTokens".into(), (total.total_tokens as i64).into());
-            "agent_end"
-        }
-        E::TurnStart => "turn_start",
-        E::TurnEnd {
-            message,
-            tool_results,
-        } => {
-            map.insert("text".into(), message.text().into());
-            map.insert("model".into(), message.model.clone().into());
-            map.insert(
-                "stopReason".into(),
-                format!("{:?}", message.stop_reason).into(),
-            );
-            map.insert("numToolResults".into(), (tool_results.len() as i64).into());
-            map.insert("inputTokens".into(), (message.usage.input as i64).into());
-            map.insert(
-                "cacheReadTokens".into(),
-                (message.usage.cache_read as i64).into(),
-            );
-            map.insert("outputTokens".into(), (message.usage.output as i64).into());
-            "turn_end"
-        }
-        E::MessageStart { message } => {
-            map.insert("role".into(), message_role(message).into());
-            "message_start"
-        }
-        E::MessageUpdate { message } => {
-            map.insert("text".into(), message.text().into());
-            "message_update"
-        }
-        E::MessageEnd { message } => {
-            map.insert("role".into(), message_role(message).into());
-            "message_end"
-        }
-        E::ToolExecutionStart {
-            tool_call_id,
-            tool_name,
-            args,
-        } => {
-            map.insert("id".into(), tool_call_id.clone().into());
-            map.insert("name".into(), tool_name.clone().into());
-            map.insert(
-                "args".into(),
-                rhai::serde::to_dynamic(args).unwrap_or(Dynamic::UNIT),
-            );
-            "tool_execution_start"
-        }
-        E::ToolExecutionUpdate {
-            tool_call_id,
-            tool_name,
-            partial,
-        } => {
-            map.insert("id".into(), tool_call_id.clone().into());
-            map.insert("name".into(), tool_name.clone().into());
-            map.insert("partial".into(), partial.clone().into());
-            "tool_execution_update"
-        }
-        E::ToolExecutionEnd {
-            tool_call_id,
-            tool_name,
-            result,
-        } => {
-            map.insert("id".into(), tool_call_id.clone().into());
-            map.insert("name".into(), tool_name.clone().into());
-            map.insert("isError".into(), result.is_error.into());
-            let text: String = result
-                .content
-                .iter()
-                .filter_map(|b| b.as_text())
-                .collect::<Vec<_>>()
-                .join("\n");
-            map.insert("text".into(), text.into());
-            "tool_execution_end"
-        }
-        E::CompactionStart { reason } => {
-            map.insert("reason".into(), reason.clone().into());
-            "compaction_start"
-        }
-        E::CompactionEnd {
-            reason,
-            aborted,
-            error_message,
-        } => {
-            map.insert("reason".into(), reason.clone().into());
-            map.insert("aborted".into(), (*aborted).into());
-            if let Some(e) = error_message {
-                map.insert("errorMessage".into(), e.clone().into());
-            }
-            "compaction_end"
-        }
-    };
-    (ty.to_string(), Dynamic::from_map(map))
-}
-
-fn message_role(m: &pirs_ai::Message) -> &'static str {
-    match m {
-        pirs_ai::Message::User(_) => "user",
-        pirs_ai::Message::Assistant(_) => "assistant",
-        pirs_ai::Message::ToolResult(_) => "toolResult",
-    }
 }
 
 impl Default for ExtensionHost {
@@ -1645,6 +1364,8 @@ impl AgentTool for RhaiTool {
         Ok(ToolOutput::text(text))
     }
 }
+
+pub use trust::{trust_directory, TrustDecision};
 
 #[cfg(test)]
 mod host_api_tests {
