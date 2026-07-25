@@ -25,50 +25,94 @@ pub fn which(name: &str) -> Option<PathBuf> {
     None
 }
 
-/// Run a command with a hard wall-clock timeout; kill the child on expiry.
+/// Run a command with a hard wall-clock timeout; kill the **process group** on
+/// expiry so `sh -c 'sleep …'` grandchildren cannot keep pipes open forever.
 ///
 /// Unbounded `Command::output()` can hang the audio server forever on a stuck
 /// engine (review AC3). All speech/ffmpeg spawns should go through this.
 pub fn run_with_timeout(mut command: Command, timeout: Duration) -> anyhow::Result<Output> {
     let timeout = timeout.min(Duration::from_secs(600)).max(Duration::from_secs(1));
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Own process group: kill(-pid) reaps shell + grandchildren (CmdStt/CmdTts).
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            command.pre_exec(|| {
+                // New session/group leader = this child's pid.
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
     let mut child = command.spawn().context("spawn subprocess")?;
+    let pid = child.id();
     let mut stdout_pipe = child.stdout.take().context("stdout")?;
     let mut stderr_pipe = child.stderr.take().context("stderr")?;
-    let out_h = std::thread::spawn(move || {
+    let (out_tx, out_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    let (err_tx, err_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
         let mut buf = Vec::new();
         let _ = stdout_pipe.read_to_end(&mut buf);
-        buf
+        let _ = out_tx.send(buf);
     });
-    let err_h = std::thread::spawn(move || {
+    std::thread::spawn(move || {
         let mut buf = Vec::new();
         let _ = stderr_pipe.read_to_end(&mut buf);
-        buf
+        let _ = err_tx.send(buf);
     });
     let start = Instant::now();
+    let mut timed_out = false;
     let status = loop {
         match child.try_wait().context("try_wait")? {
             Some(s) => break s,
             None if start.elapsed() >= timeout => {
+                timed_out = true;
+                kill_process_group(pid);
+                // Direct kill as backup if setpgid failed.
                 let _ = child.kill();
-                let _ = child.wait();
-                let _ = out_h.join();
-                let _ = err_h.join();
-                bail!(
-                    "subprocess timed out after {}s",
-                    timeout.as_secs()
-                );
+                break child.wait().context("wait after kill")?;
             }
             None => std::thread::sleep(Duration::from_millis(50)),
         }
     };
-    let stdout = out_h.join().unwrap_or_default();
-    let stderr = err_h.join().unwrap_or_default();
+    // Bounded pipe drain: after group kill, EOF should arrive quickly; never
+    // join forever if a rogue descendant still holds a dup'd fd.
+    let join_budget = if timed_out {
+        Duration::from_secs(2)
+    } else {
+        Duration::from_secs(30)
+    };
+    let stdout = out_rx.recv_timeout(join_budget).unwrap_or_default();
+    let stderr = err_rx.recv_timeout(join_budget).unwrap_or_default();
+    if timed_out {
+        bail!(
+            "subprocess timed out after {}s",
+            timeout.as_secs()
+        );
+    }
     Ok(Output {
         status,
         stdout,
         stderr,
     })
+}
+
+fn kill_process_group(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    #[cfg(unix)]
+    unsafe {
+        // Negative pid = process group (shell + grandchildren from sh -c).
+        let _ = libc::kill(-(pid as i32), libc::SIGKILL);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+    }
 }
 
 /// Convert audio to 16 kHz mono wav when ffmpeg is available and needed.
@@ -146,6 +190,24 @@ mod tests {
         assert!(
             start.elapsed() < Duration::from_secs(5),
             "must not wait full sleep"
+        );
+    }
+
+    /// Real CmdStt/CmdTts path: `sh -c 'sleep N'` leaves a grandchild holding
+    /// pipes. Must process-group kill and return quickly (not hang on join).
+    #[test]
+    fn run_with_timeout_kills_sh_c_grandchild() {
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("sleep 30");
+        let start = Instant::now();
+        let err = run_with_timeout(cmd, Duration::from_secs(1))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("timed out"), "{err}");
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed < Duration::from_secs(4),
+            "sh -c sleep must not hang after kill (elapsed {elapsed:?})"
         );
     }
 
