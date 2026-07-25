@@ -1,3 +1,4 @@
+//! Tool preparation, parallel/serial execution, retries, caps.
 use std::sync::Arc;
 
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -15,652 +16,13 @@ use crate::events::{AgentEvent, Emit, Hooks, ToolResultPatch};
 use crate::tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext};
 use crate::validate::{coerce_args, validate_args};
 
-pub struct LoopConfig {
-    pub model: String,
-    pub completion: CompletionOptions,
-    pub tool_execution: ExecutionMode,
-    pub hooks: Hooks,
-    pub compaction: Option<CompactionConfig>,
-    pub visible_tools: Option<VisibleTools>,
-    pub extra_usage: std::sync::Arc<std::sync::Mutex<pirs_ai::Usage>>,
-    pub cascade: Option<CascadeConfig>,
-    pub budgets: Budgets,
-    /// Loop/mistake thrash guard (default-on when set by Agent).
-    pub thrash: Option<crate::thrash::ThrashGuard>,
-    /// When sequential tools run, if this returns true after a tool finishes,
-    /// remaining tools in the batch are skipped (steering pending, etc.).
-    pub skip_remaining_if: Option<std::sync::Arc<dyn Fn() -> bool + Send + Sync>>,
-}
+use super::{is_visible, LoopConfig, ToolCallData, VisibleTools, MODEL_MAX_TOOL_RESULT_CHARS};
 
-#[derive(Debug, Clone, Default)]
-pub struct Budgets {
-    pub max_turns: Option<usize>,
-    pub max_tool_calls: Option<usize>,
-    pub max_wall_time: Option<std::time::Duration>,
-}
+pub(super) const MODEL_MAX_ERROR_CHARS: usize = 8_000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BudgetHit {
-    Turns,
-    WallTime,
-    ToolCalls,
-}
 
-pub type CascadeJudge =
-    Arc<dyn Fn(&AssistantMessage) -> futures::future::BoxFuture<'static, bool> + Send + Sync>;
 
-#[derive(Clone)]
-pub struct CascadeConfig {
-    pub draft_model: String,
-    pub judge: CascadeJudge,
-}
-
-pub type VisibleTools = std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>;
-
-pub fn is_visible(visible: &Option<VisibleTools>, name: &str) -> bool {
-    match visible {
-        None => true,
-        Some(set) => set.lock().unwrap().contains(name),
-    }
-}
-
-pub struct ToolCallData {
-    pub id: String,
-    pub name: String,
-    pub arguments: Value,
-}
-
-pub async fn run_agent_loop(
-    prompts: Vec<Message>,
-    context: &mut Context,
-    tools: &[Arc<dyn AgentTool>],
-    provider: &Arc<dyn LlmProvider>,
-    config: &LoopConfig,
-    emit: &Emit,
-    cancel: CancellationToken,
-) -> (Vec<Message>, Option<BudgetHit>) {
-    let mut new_messages: Vec<Message> = Vec::new();
-
-    emit(AgentEvent::AgentStart);
-    emit(AgentEvent::TurnStart);
-    for prompt in prompts {
-        emit(AgentEvent::MessageStart {
-            message: Box::new(prompt.clone()),
-        });
-        emit(AgentEvent::MessageEnd {
-            message: Box::new(prompt.clone()),
-        });
-        context.messages.push(prompt.clone());
-        new_messages.push(prompt);
-    }
-
-    let mut pending = config.hooks.steering();
-    let mut first_turn = true;
-    let mut turn_count = 0usize;
-    let mut tool_call_count = 0usize;
-    let mut freeform_tool_nudge_sent = false;
-    let started = std::time::Instant::now();
-    let mut budget_hit = None;
-
-    'outer: loop {
-        let mut has_more_tool_calls = true;
-        while has_more_tool_calls || !pending.is_empty() || first_turn {
-            first_turn = false;
-            for msg in pending.drain(..) {
-                emit(AgentEvent::MessageStart {
-                    message: Box::new(msg.clone()),
-                });
-                context.messages.push(msg.clone());
-                emit(AgentEvent::MessageEnd {
-                    message: Box::new(msg.clone()),
-                });
-                new_messages.push(msg);
-            }
-
-            let assistant =
-                stream_assistant(context, tools, provider, config, emit, cancel.clone()).await;
-            emit(AgentEvent::MessageEnd {
-                message: Box::new(Message::Assistant(assistant.clone())),
-            });
-            new_messages.push(Message::Assistant(assistant.clone()));
-
-            if matches!(
-                assistant.stop_reason,
-                StopReason::Error | StopReason::Aborted
-            ) {
-                // An errored/aborted assistant can still carry ToolCall blocks
-                // (partial Done). Persisting a tool_use with no following
-                // tool_result makes the next Anthropic request 400 forever,
-                // permanently wedging the session. Synthesize error results for
-                // any dangling calls so the history stays valid.
-                let dangling = extract_tool_calls(&assistant);
-                let mut tool_results = Vec::new();
-                for call in &dangling {
-                    let r = error_result_kind(
-                        &call.id,
-                        &call.name,
-                        "Tool call was not executed: the turn ended with an error or was aborted.",
-                        "aborted",
-                    );
-                    let msg = Message::ToolResult(r.clone());
-                    context.messages.push(msg.clone());
-                    new_messages.push(msg);
-                    tool_results.push(r);
-                }
-                emit(AgentEvent::TurnEnd {
-                    message: Box::new(assistant),
-                    tool_results,
-                });
-                emit(AgentEvent::AgentEnd {
-                    messages: new_messages.clone(),
-                });
-                return (new_messages, None);
-            }
-
-            let calls = extract_tool_calls(&assistant);
-            let had_calls = !calls.is_empty();
-            let mut results: Vec<ToolResultMessage> = Vec::new();
-            // Weak models sometimes paste pseudo-tool calls as freeform text
-            // (markdown fences / JSON arrays) with no native ToolCall blocks.
-            // That is not successful tool use — re-prompt once for native tools.
-            if !had_calls && !freeform_tool_nudge_sent {
-                if let Some(nudge) = freeform_tool_repair_nudge(&assistant) {
-                    freeform_tool_nudge_sent = true;
-                    let msg = Message::user(nudge);
-                    emit(AgentEvent::MessageStart {
-                        message: Box::new(msg.clone()),
-                    });
-                    context.messages.push(msg.clone());
-                    emit(AgentEvent::MessageEnd {
-                        message: Box::new(msg.clone()),
-                    });
-                    new_messages.push(msg);
-                    // Continue the turn loop so the model can re-issue properly.
-                    turn_count += 1;
-                    if config
-                        .budgets
-                        .max_turns
-                        .map(|m| turn_count >= m)
-                        .unwrap_or(false)
-                    {
-                        budget_hit = Some(BudgetHit::Turns);
-                        emit(AgentEvent::AgentEnd {
-                            messages: new_messages.clone(),
-                        });
-                        return (new_messages, budget_hit);
-                    }
-                    continue;
-                }
-            }
-            if had_calls {
-                if assistant.stop_reason == StopReason::Length {
-                    for call in &calls {
-                        results.push(error_result_kind(
-                            &call.id,
-                            &call.name,
-                            "Tool call arguments were truncated due to token limit. Re-issue the tool call.",
-                            "truncated",
-                        ));
-                    }
-                } else {
-                    let forced_sequential = config.tool_execution == ExecutionMode::Sequential
-                        || calls.iter().any(|c| {
-                            tools
-                                .iter()
-                                .find(|t| t.name() == c.name)
-                                .map(|t| t.execution_mode() == ExecutionMode::Sequential)
-                                .unwrap_or(false)
-                        });
-                    results = execute_tool_calls(
-                        calls,
-                        tools,
-                        &config.hooks,
-                        cancel.clone(),
-                        emit,
-                        forced_sequential,
-                        config.visible_tools.clone(),
-                        config.thrash.as_ref(),
-                        config.skip_remaining_if.as_ref().map(|f| f.as_ref()),
-                    )
-                    .await;
-                }
-                // Always attach tool_results before any thrash stop. Returning early
-                // here used to leave assistant tool_use without matching results and
-                // permanently wedge the next Anthropic request (400 forever).
-                for r in &results {
-                    // Spill every tool result to searchable session memory —
-                    // except recall's own output, which would recursively
-                    // pollute the store with copies of past hits.
-                    if r.tool_name != "recall" {
-                        if let Some(mem) = crate::memory::global() {
-                            let text: String = r
-                                .content
-                                .iter()
-                                .filter_map(|b| b.as_text())
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            mem.add("tool_result", &r.tool_name, &text);
-                        }
-                    }
-                    let msg = Message::ToolResult(r.clone());
-                    emit(AgentEvent::MessageStart {
-                        message: Box::new(msg.clone()),
-                    });
-                    context.messages.push(msg.clone());
-                    emit(AgentEvent::MessageEnd {
-                        message: Box::new(msg.clone()),
-                    });
-                    new_messages.push(msg);
-                }
-            }
-
-            emit(AgentEvent::TurnEnd {
-                message: Box::new(assistant.clone()),
-                tool_results: results.clone(),
-            });
-            // Thrash stop after tool_results are on the wire (protocol-safe).
-            if had_calls {
-                if let Some(guard) = &config.thrash {
-                    if let Some(msg) = guard.take_stop() {
-                        let stop = Message::user(format!("[system thrash stop] {msg}"));
-                        emit(AgentEvent::MessageStart {
-                            message: Box::new(stop.clone()),
-                        });
-                        context.messages.push(stop.clone());
-                        emit(AgentEvent::MessageEnd {
-                            message: Box::new(stop.clone()),
-                        });
-                        new_messages.push(stop);
-                        emit(AgentEvent::AgentEnd {
-                            messages: new_messages.clone(),
-                        });
-                        return (new_messages, None);
-                    }
-                }
-            }
-            turn_count += 1;
-            tool_call_count += results.len();
-            if config
-                .budgets
-                .max_turns
-                .map(|m| turn_count >= m)
-                .unwrap_or(false)
-            {
-                budget_hit = Some(BudgetHit::Turns);
-            } else if config
-                .budgets
-                .max_tool_calls
-                .map(|m| tool_call_count >= m)
-                .unwrap_or(false)
-            {
-                budget_hit = Some(BudgetHit::ToolCalls);
-            } else if config
-                .budgets
-                .max_wall_time
-                .map(|m| started.elapsed() >= m)
-                .unwrap_or(false)
-            {
-                budget_hit = Some(BudgetHit::WallTime);
-            }
-            if budget_hit.is_some() {
-                emit(AgentEvent::AgentEnd {
-                    messages: new_messages.clone(),
-                });
-                return (new_messages, budget_hit);
-            }
-
-            if let Some(cfg) = &config.compaction {
-                // Prefer provider-reported input tokens; fall back to local estimate
-                // so huge tool dumps still trigger compaction when usage is missing.
-                let over = last_input_tokens(&context.messages)
-                    .map(|t| should_compact(t, cfg))
-                    .unwrap_or(false)
-                    || should_compact(estimate_tokens(&context.messages), cfg);
-                if over {
-                    // Defense: shrink oversized tool results in history first
-                    // (cheap) so cut-point retention stays meaningful.
-                    let _shrunk = crate::compaction::shrink_oversized_tool_results(
-                        &mut context.messages,
-                        MODEL_MAX_TOOL_RESULT_CHARS,
-                    );
-                    compact_messages(
-                        provider,
-                        &config.model,
-                        &mut context.messages,
-                        cfg,
-                        emit,
-                        cancel.clone(),
-                        &config.extra_usage,
-                    )
-                    .await;
-                }
-            }
-
-            let batch_terminate = !results.is_empty() && results.iter().all(|r| r.terminate);
-            has_more_tool_calls = had_calls && !batch_terminate;
-
-            if let Some(f) = &config.hooks.should_stop_after_turn {
-                if f(context) {
-                    emit(AgentEvent::AgentEnd {
-                        messages: new_messages.clone(),
-                    });
-                    return (new_messages, None);
-                }
-            }
-            pending = config.hooks.steering();
-        }
-
-        let follow = config.hooks.follow_up();
-        if follow.is_empty() {
-            emit(AgentEvent::AgentEnd {
-                messages: new_messages.clone(),
-            });
-            break 'outer;
-        }
-        pending = follow;
-    }
-
-    (new_messages, budget_hit)
-}
-
-fn extract_tool_calls(assistant: &AssistantMessage) -> Vec<ToolCallData> {
-    assistant
-        .content
-        .iter()
-        .filter_map(|b| match b {
-            ContentBlock::ToolCall {
-                id,
-                name,
-                arguments,
-                ..
-            } => Some(ToolCallData {
-                id: id.clone(),
-                name: name.clone(),
-                arguments: arguments.clone(),
-            }),
-            _ => None,
-        })
-        .collect()
-}
-
-/// Detect freeform / non-native "tool" text that was not emitted as ToolCall blocks.
-///
-/// Used to re-prompt weak models that paste markdown JSON or shell-style
-/// invocations instead of using the provider tool protocol.
-pub fn looks_like_freeform_tool_text(text: &str) -> bool {
-    let t = text.trim();
-    if t.is_empty() {
-        return false;
-    }
-    if t.contains("```")
-        && (t.contains("\"function\"")
-            || t.contains("\"name\"")
-            || t.contains("\"tool\"")
-            || t.contains("\"arguments\""))
-    {
-        return true;
-    }
-    if t.starts_with('[')
-        && t.contains('{')
-        && (t.contains("\"function\"") || t.contains("\"name\""))
-        && (t.contains("\"path\"")
-            || t.contains("\"command\"")
-            || t.contains("\"arguments\"")
-            || t.contains("\"tool\""))
-    {
-        return true;
-    }
-    if t.lines().any(|l| {
-        let s = l.trim_start();
-        s.starts_with("> bash")
-            || s.starts_with("> read")
-            || s.starts_with("> edit")
-            || s.starts_with("> grep")
-    }) {
-        return true;
-    }
-    false
-}
-
-fn freeform_tool_repair_nudge(assistant: &AssistantMessage) -> Option<String> {
-    let text: String = assistant
-        .content
-        .iter()
-        .filter_map(|b| b.as_text())
-        .collect::<Vec<_>>()
-        .join("\n");
-    if !looks_like_freeform_tool_text(&text) {
-        return None;
-    }
-    Some(
-        "[system tool protocol] Your previous reply looks like a tool invocation written as \
-         freeform text (markdown/JSON/shell), not as a native tool call. That is not executed. \
-         Re-issue using the provider's native tool/function calling protocol only — \
-         no markdown fences, no pseudo `> bash` lines, no JSON arrays of tools as plain text."
-            .into(),
-    )
-}
-
-/// Validate a single tool call against the registered tools without executing it.
-///
-/// Returns `Ok(())` when the call would be dispatched, or `Err(message)` when it
-/// is rejected (unknown tool, not loaded, invalid args). Invalid payloads are
-/// never treated as successful tool use — callers attach the error as a
-/// `tool_result` so the model can retry.
-pub fn validate_tool_call_payload(
-    name: &str,
-    arguments: &Value,
-    tools: &[Arc<dyn AgentTool>],
-    visible: &Option<VisibleTools>,
-) -> Result<(), String> {
-    let call = ToolCallData {
-        id: "validate".into(),
-        name: name.to_string(),
-        arguments: arguments.clone(),
-    };
-    match prepare_call(0, &call, tools, &Hooks::default(), visible) {
-        Prepared::Ready { .. } => Ok(()),
-        Prepared::Failed { result, .. } => {
-            let msg: String = result
-                .content
-                .iter()
-                .filter_map(|b| b.as_text())
-                .collect::<Vec<_>>()
-                .join("\n");
-            Err(if msg.is_empty() {
-                "tool call rejected".into()
-            } else {
-                msg
-            })
-        }
-    }
-}
-
-async fn stream_assistant(
-    context: &mut Context,
-    tools: &[Arc<dyn AgentTool>],
-    provider: &Arc<dyn LlmProvider>,
-    config: &LoopConfig,
-    emit: &Emit,
-    cancel: CancellationToken,
-) -> AssistantMessage {
-    if let Some(cascade) = &config.cascade {
-        let draft = stream_once(
-            context,
-            tools,
-            provider,
-            config,
-            &cascade.draft_model,
-            emit,
-            cancel.clone(),
-        )
-        .await;
-        if (cascade.judge)(&draft).await {
-            return draft;
-        }
-        // Credit rejected draft tokens before pop so cost accounting is honest (M-16).
-        {
-            let mut extra = config.extra_usage.lock().unwrap();
-            *extra += draft.usage.clone();
-        }
-        if let Some(last) = context.messages.last() {
-            if last.is_assistant() {
-                context.messages.pop();
-            }
-        }
-        emit(AgentEvent::MessageEnd {
-            message: Box::new(Message::Assistant(draft)),
-        });
-    }
-    stream_once(
-        context,
-        tools,
-        provider,
-        config,
-        &config.model.clone(),
-        emit,
-        cancel,
-    )
-    .await
-}
-
-async fn stream_once(
-    context: &mut Context,
-    tools: &[Arc<dyn AgentTool>],
-    provider: &Arc<dyn LlmProvider>,
-    config: &LoopConfig,
-    model: &str,
-    emit: &Emit,
-    cancel: CancellationToken,
-) -> AssistantMessage {
-    let mut opts = config.completion.clone();
-    if let Some(f) = &config.hooks.get_api_key {
-        if let Some(key) = f() {
-            opts.api_key = Some(key);
-        }
-    }
-
-    // Packs may rewrite the LLM-facing list (plan pins, janitor, …). Snapshot
-    // first so the host can restore protected control pins (stop_gate, verify,
-    // thrash nudges) if a transform strips them.
-    let original_messages = context.messages.clone();
-    let mut messages = original_messages.clone();
-    if let Some(t) = &config.hooks.transform_context {
-        messages = t(messages);
-    }
-    messages = crate::control_pins::preserve_control_pins(&original_messages, messages);
-    // A pin inserted at len-1 by a transform (or preserve_control_pins) can land
-    // between a trailing assistant tool_use and its tool_result; repair adjacency
-    // before serialization or the backend rejects the request (dangling tool_call).
-    crate::control_pins::enforce_tool_result_adjacency(&mut messages);
-    let llm_ctx = Context {
-        system_prompt: context.system_prompt.clone(),
-        messages,
-        tools: tool_defs(tools)
-            .into_iter()
-            .filter(|d| is_visible(&config.visible_tools, &d.name))
-            .collect(),
-    };
-
-    let mut stream = provider
-        .stream(model, &llm_ctx, &opts, cancel.clone())
-        .await;
-
-    let mut partial = AssistantMessage {
-        provider: "unknown".into(),
-        model: model.to_string(),
-        ..Default::default()
-    };
-    context.messages.push(Message::Assistant(partial.clone()));
-    emit(AgentEvent::MessageStart {
-        message: Box::new(Message::Assistant(partial.clone())),
-    });
-
-    let mut last_error: Option<String> = None;
-    while let Some(event) = stream.next().await {
-        match event {
-            StreamEvent::Start | StreamEvent::ToolCallDelta => {}
-            StreamEvent::TextDelta(d) => {
-                append_text(&mut partial, d.clone());
-                append_delta_to_last(context, &d, false);
-                emit(AgentEvent::MessageUpdate {
-                    message: Box::new(partial.clone()),
-                });
-            }
-            StreamEvent::ThinkingDelta(d) => {
-                append_thinking(&mut partial, d.clone());
-                append_delta_to_last(context, &d, true);
-                emit(AgentEvent::MessageUpdate {
-                    message: Box::new(partial.clone()),
-                });
-            }
-            StreamEvent::Error(e) => {
-                last_error = Some(e);
-            }
-            StreamEvent::Done(msg) => {
-                partial = *msg;
-            }
-        }
-    }
-    if let Some(err) = last_error {
-        if partial.error_message.is_none() {
-            partial.error_message = Some(err);
-        }
-        // A transport drop after an Error frame (no Done) leaves stop_reason at
-        // its default Stop, so the loop would treat a failed turn as a clean
-        // final answer. Force Error unless a Done already set a terminal reason.
-        if partial.stop_reason == StopReason::Stop {
-            partial.stop_reason = StopReason::Error;
-        }
-    }
-
-    replace_last(context, &partial);
-    partial
-}
-
-fn append_text(msg: &mut AssistantMessage, delta: String) {
-    match msg.content.last_mut() {
-        Some(ContentBlock::Text { text, .. }) => text.push_str(&delta),
-        _ => msg.content.push(ContentBlock::text(delta)),
-    }
-}
-
-fn append_thinking(msg: &mut AssistantMessage, delta: String) {
-    match msg.content.last_mut() {
-        Some(ContentBlock::Thinking { thinking, .. }) => thinking.push_str(&delta),
-        _ => msg.content.push(ContentBlock::Thinking {
-            thinking: delta,
-            thinking_signature: None,
-            redacted: false,
-        }),
-    }
-}
-
-fn replace_last(context: &mut Context, msg: &AssistantMessage) {
-    if let Some(last) = context.messages.last_mut() {
-        *last = Message::Assistant(msg.clone());
-    }
-}
-
-/// O(1) delta application to the trailing assistant message in context —
-/// avoids cloning the whole AssistantMessage on every streamed token.
-fn append_delta_to_last(context: &mut Context, delta: &str, thinking: bool) {
-    if let Some(Message::Assistant(a)) = context.messages.last_mut() {
-        if thinking {
-            append_thinking(a, delta.to_string());
-        } else {
-            append_text(a, delta.to_string());
-        }
-    }
-}
-
-/// Defense-in-depth cap for model-facing tool results (MCP/Rhai/hooks included).
-/// Per-tool caps (e.g. bash `cap_for_model`) still apply first; this is the backstop.
-pub const MODEL_MAX_TOOL_RESULT_CHARS: usize = 20_000;
-/// Cap for error result bodies so a failed bash dump cannot blow the next turn.
-pub const MODEL_MAX_ERROR_CHARS: usize = 8_000;
-
-fn cap_chars_tail(s: &str, max_chars: usize) -> String {
+pub(super) fn cap_chars_tail(s: &str, max_chars: usize) -> String {
     let n = s.chars().count();
     if n <= max_chars {
         return s.to_string();
@@ -669,7 +31,7 @@ fn cap_chars_tail(s: &str, max_chars: usize) -> String {
     s.chars().skip(skip).collect()
 }
 
-fn merge_result_details(details: &mut Option<serde_json::Value>, extra: serde_json::Value) {
+pub(super) fn merge_result_details(details: &mut Option<serde_json::Value>, extra: serde_json::Value) {
     match details {
         Some(serde_json::Value::Object(existing)) => {
             if let serde_json::Value::Object(add) = extra {
@@ -685,7 +47,7 @@ fn merge_result_details(details: &mut Option<serde_json::Value>, extra: serde_js
 }
 
 /// Truncate model-facing text blocks; spill full text into `details.uiText` when missing.
-fn apply_model_result_cap(result: &mut ToolResultMessage) {
+pub(super) fn apply_model_result_cap(result: &mut ToolResultMessage) {
     let text = result.model_text();
     if text.chars().count() <= MODEL_MAX_TOOL_RESULT_CHARS {
         return;
@@ -709,7 +71,7 @@ fn apply_model_result_cap(result: &mut ToolResultMessage) {
     ))];
 }
 
-fn error_result_kind(id: &str, name: &str, message: &str, kind: &str) -> ToolResultMessage {
+pub(super) fn error_result_kind(id: &str, name: &str, message: &str, kind: &str) -> ToolResultMessage {
     let message = if message.chars().count() > MODEL_MAX_ERROR_CHARS {
         format!(
             "[error truncated]\n{}",
@@ -733,7 +95,7 @@ fn error_result_kind(id: &str, name: &str, message: &str, kind: &str) -> ToolRes
 /// calls in one batch must not interleave on. All of pirs's file-touching
 /// tools (read/edit/write) use a single `path` argument, so this is a plain
 /// lookup rather than pirs-tools-specific logic living in the loop.
-fn tool_path_for_lock(args: &Value) -> Option<String> {
+pub(super) fn tool_path_for_lock(args: &Value) -> Option<String> {
     let raw = args.get("path")?.as_str()?;
     Some(normalize_lock_path(raw))
 }
@@ -745,7 +107,7 @@ fn tool_path_for_lock(args: &Value) -> Option<String> {
 /// canonicalizing the parent directory and re-attaching the leaf name; if
 /// even the parent can't be resolved, the raw string is used as-is rather
 /// than failing the lookup.
-fn normalize_lock_path(raw: &str) -> String {
+pub(super) fn normalize_lock_path(raw: &str) -> String {
     let path = std::path::Path::new(raw);
     if let Ok(canon) = std::fs::canonicalize(path) {
         return canon.to_string_lossy().into_owned();
@@ -759,7 +121,7 @@ fn normalize_lock_path(raw: &str) -> String {
 }
 
 /// Cheap "did you mean" for unknown tool names: longest common prefix / substring.
-fn did_you_mean<'a>(name: &str, available: &[&'a str]) -> Option<&'a str> {
+pub(super) fn did_you_mean<'a>(name: &str, available: &[&'a str]) -> Option<&'a str> {
     let name_l = name.to_ascii_lowercase();
     let mut best: Option<(&str, usize)> = None;
     for &cand in available {
@@ -786,7 +148,7 @@ fn did_you_mean<'a>(name: &str, available: &[&'a str]) -> Option<&'a str> {
     best.map(|(c, _)| c)
 }
 
-fn schema_summary(schema: &Value) -> String {
+pub(super) fn schema_summary(schema: &Value) -> String {
     let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
         return "(any object)".to_string();
     };
@@ -810,7 +172,7 @@ fn schema_summary(schema: &Value) -> String {
         .join(", ")
 }
 
-enum Prepared {
+pub(super) enum Prepared {
     Ready {
         index: usize,
         id: String,
@@ -824,7 +186,7 @@ enum Prepared {
     },
 }
 
-fn prepare_call(
+pub(super) fn prepare_call(
     index: usize,
     call: &ToolCallData,
     tools: &[Arc<dyn AgentTool>],
@@ -911,7 +273,7 @@ fn prepare_call(
     }
 }
 
-fn finalize_result(
+pub(super) fn finalize_result(
     id: &str,
     name: &str,
     outcome: anyhow::Result<crate::tool::ToolOutput>,
@@ -1014,7 +376,7 @@ pub async fn execute_tool_calls_for_test(
     .await
 }
 
-async fn execute_tool_calls(
+pub(super) async fn execute_tool_calls(
     calls: Vec<ToolCallData>,
     tools: &[Arc<dyn AgentTool>],
     hooks: &Hooks,
@@ -1282,7 +644,7 @@ async fn execute_tool_calls(
         .collect()
 }
 
-async fn run_tool(
+pub(super) async fn run_tool(
     tool: Arc<dyn AgentTool>,
     id: String,
     name: String,
@@ -1331,7 +693,7 @@ async fn run_tool(
 }
 
 /// Tools safe to re-execute once on network/timeout errors (no side effects).
-fn is_idempotent_tool(name: &str) -> bool {
+pub(super) fn is_idempotent_tool(name: &str) -> bool {
     matches!(
         name,
         "read"
@@ -1354,7 +716,7 @@ fn is_idempotent_tool(name: &str) -> bool {
 }
 
 /// Network/timeout-class failures worth one automatic retry (idempotent tools only).
-fn is_transient_tool_error(e: &anyhow::Error) -> bool {
+pub(super) fn is_transient_tool_error(e: &anyhow::Error) -> bool {
     let s = e.to_string().to_ascii_lowercase();
     // Prefer explicit timeout/transport wording over bare "503" (bash scripts
     // often print HTTP status codes in success output that becomes Err text).
@@ -1371,14 +733,38 @@ fn is_transient_tool_error(e: &anyhow::Error) -> bool {
         || s.contains("error decoding response")
 }
 
-#[cfg(test)]
-#[path = "agent_loop_result_cap_tests.rs"]
-mod result_cap_tests;
 
-#[cfg(test)]
-#[path = "agent_loop_skip_remaining_tests.rs"]
-mod skip_remaining_tests;
-
-#[cfg(test)]
-#[path = "agent_loop_tool_dispatch_tests.rs"]
-mod tool_dispatch_tests;
+/// Validate a single tool call against the registered tools without executing it.
+///
+/// Returns `Ok(())` when the call would be dispatched, or `Err(message)` when it
+/// is rejected (unknown tool, not loaded, invalid args). Invalid payloads are
+/// never treated as successful tool use — callers attach the error as a
+/// `tool_result` so the model can retry.
+pub fn validate_tool_call_payload(
+    name: &str,
+    arguments: &Value,
+    tools: &[Arc<dyn AgentTool>],
+    visible: &Option<VisibleTools>,
+) -> Result<(), String> {
+    let call = ToolCallData {
+        id: "validate".into(),
+        name: name.to_string(),
+        arguments: arguments.clone(),
+    };
+    match prepare_call(0, &call, tools, &Hooks::default(), visible) {
+        Prepared::Ready { .. } => Ok(()),
+        Prepared::Failed { result, .. } => {
+            let msg: String = result
+                .content
+                .iter()
+                .filter_map(|b| b.as_text())
+                .collect::<Vec<_>>()
+                .join("\n");
+            Err(if msg.is_empty() {
+                "tool call rejected".into()
+            } else {
+                msg
+            })
+        }
+    }
+}
