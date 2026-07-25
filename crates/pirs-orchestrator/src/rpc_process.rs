@@ -12,6 +12,13 @@ use tokio::sync::{mpsc, oneshot};
 
 type PendingMap = Arc<Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>>;
 
+/// Fan out `v` to every subscriber and drop closed senders in place.
+///
+/// Shared by the stdout event path and tests so reaping is one code path.
+pub fn fanout_and_reap(senders: &mut Vec<mpsc::UnboundedSender<Value>>, v: &Value) {
+    senders.retain(|tx| tx.send(v.clone()).is_ok());
+}
+
 pub struct RpcProcess {
     stdin: tokio::sync::Mutex<tokio::process::ChildStdin>,
     pending: PendingMap,
@@ -81,7 +88,7 @@ impl RpcProcess {
                     }
                     // Drop closed subscribers so disconnects do not grow forever (M-20).
                     let mut senders = event_senders.lock().unwrap();
-                    senders.retain(|tx| tx.send(v.clone()).is_ok());
+                    fanout_and_reap(&mut senders, &v);
                 }
             });
         }
@@ -175,7 +182,7 @@ impl RpcProcess {
     /// Broadcast a test event and reap closed senders (same path as stdout fan-out).
     pub fn broadcast_event_for_test(&self, v: Value) {
         let mut senders = self.event_senders.lock().unwrap();
-        senders.retain(|tx| tx.send(v.clone()).is_ok());
+        fanout_and_reap(&mut senders, &v);
     }
 
     pub fn on_exit(&self) -> oneshot::Receiver<i64> {
@@ -227,19 +234,23 @@ fn resolve_pirs_binary() -> anyhow::Result<std::path::PathBuf> {
 
 #[cfg(test)]
 mod fanout_tests {
+    use super::fanout_and_reap;
     use serde_json::json;
 
     #[test]
     fn broadcast_reaps_closed_subscribers() {
-        // Unit-level: retain on send failure matches production fan-out path
-        // (stdout reader + broadcast_event_for_test).
+        // Drives the shipped helper used by the stdout fan-out path.
         let (tx_live, mut rx_live) = tokio::sync::mpsc::unbounded_channel();
         let (tx_dead, rx_dead) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
         drop(rx_dead); // closed
         let mut senders = vec![tx_live, tx_dead];
         let v = json!({"type": "event"});
-        senders.retain(|tx| tx.send(v.clone()).is_ok());
+        fanout_and_reap(&mut senders, &v);
         assert_eq!(senders.len(), 1, "dead sender must be reaped");
         assert_eq!(rx_live.try_recv().unwrap()["type"], "event");
+        // Second fan-out with only the live sender still works.
+        fanout_and_reap(&mut senders, &json!({"type": "again"}));
+        assert_eq!(senders.len(), 1);
+        assert_eq!(rx_live.try_recv().unwrap()["type"], "again");
     }
 }
