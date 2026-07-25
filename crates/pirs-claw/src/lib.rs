@@ -731,7 +731,17 @@ mod tests {
         assert!(store.due(now).unwrap().is_empty());
     }
 
+
     #[test]
+    fn schedule_fire_uses_timeout_on_spawn_path() {
+        // Structural: fire_schedule_job must use tokio timeout (M-28).
+        let main = include_str!("main.rs");
+        assert!(main.contains("PIRS_CLAW_SCHEDULE_TIMEOUT_SECS") || main.contains("timeout_secs"));
+        assert!(main.contains("tokio::time::timeout"));
+        assert!(main.contains("start_kill") || main.contains("kill_on_drop"));
+    }
+
+        #[test]
     fn session_load_skips_corrupt_lines() {
         let dir = tempfile::tempdir().unwrap();
         let s = SessionStore::open_for(dir.path(), SessionId::cli_local()).unwrap();

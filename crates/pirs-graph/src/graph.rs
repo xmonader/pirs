@@ -148,17 +148,23 @@ impl Graph {
         }
         for _ in 0..ITERS {
             let mut next = vec![(1.0 - DAMPING) / n as f64; n];
+            // Accumulate dangling mass once (O(n)), then distribute once —
+            // not O(n) per dangling node per iteration (M-23 / 20·n²).
+            let mut dangling_mass = 0.0f64;
             for (i, targets) in &outgoing {
                 if targets.is_empty() {
-                    let share = DAMPING * rank[*i] / n as f64;
-                    for v in next.iter_mut() {
-                        *v += share;
-                    }
+                    dangling_mass += rank[*i];
                 } else {
                     let share = DAMPING * rank[*i] / targets.len() as f64;
                     for &t in targets {
                         next[t] += share;
                     }
+                }
+            }
+            if dangling_mass > 0.0 {
+                let share = DAMPING * dangling_mass / n as f64;
+                for v in next.iter_mut() {
+                    *v += share;
                 }
             }
             rank = next;
@@ -453,4 +459,43 @@ fn callee_name<'a>(node: tree_sitter::Node<'a>, source: &'a str) -> Option<Strin
 
 fn node_text<'a>(node: tree_sitter::Node<'a>, source: &'a str) -> &'a str {
     node.utf8_text(source.as_bytes()).unwrap_or("")
+}
+
+#[cfg(test)]
+mod pagerank_tests {
+    use super::*;
+
+    fn sym(name: &str, calls: &[&str]) -> Symbol {
+        Symbol {
+            name: name.into(),
+            kind: SymKind::Function,
+            file: PathBuf::from("t.rs"),
+            line: 1,
+            start_byte: 0,
+            end_byte: 1,
+            calls: calls.iter().map(|s| (*s).to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn pagerank_dangling_and_linked_are_finite() {
+        // Mix of dangling leaves and a small hub — must finish fast and rank.
+        let mut symbols = Vec::new();
+        for i in 0..200 {
+            symbols.push(sym(&format!("leaf_{i}"), &[]));
+        }
+        symbols.push(sym("hub", &["leaf_0", "leaf_1", "leaf_2"]));
+        symbols.push(sym("entry", &["hub"]));
+        let g = Graph::from_symbols(symbols);
+        let top = g.top(5);
+        assert!(!top.is_empty());
+        for (s, r) in &top {
+            assert!(r.is_finite(), "rank for {} not finite: {r}", s.name);
+            assert!(*r >= 0.0, "negative rank {r}");
+        }
+        // Hub should outrank a random leaf.
+        let hub = g.pagerank.get("hub").copied().unwrap_or(0.0);
+        let leaf = g.pagerank.get("leaf_50").copied().unwrap_or(0.0);
+        assert!(hub >= leaf, "hub {hub} should be >= leaf {leaf}");
+    }
 }

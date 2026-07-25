@@ -128,7 +128,7 @@ impl AgentTool for EditTool {
             out.push('\u{feff}');
         }
         out.push_str(&edited_orig);
-        std::fs::write(&path, out.as_bytes())
+        crate::paths::atomic_write(&path, out.as_bytes())
             .with_context(|| format!("failed to write {}", path.display()))?;
 
         // Report the diff in LF terms so line-ending bytes never show up as

@@ -409,3 +409,5 @@ mod tests {
         assert!(subagents_allowed(&Caps::default()));
     }
 }
+
+// parallel_map clamp lives in lib.rs — re-export test there.

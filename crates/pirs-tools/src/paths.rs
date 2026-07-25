@@ -1,8 +1,62 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::bail;
+use anyhow::{bail, Context as _};
 
 use crate::work_context::{current_work_context, parse_named_path};
+
+/// Write `data` to `path` via temp file + rename (atomic replace on same FS).
+///
+/// Avoids truncated destinations on crash mid-write (review M-7).
+/// Temp name includes pid + thread id + a monotonic counter so concurrent
+/// writers (or same-process parallel tools) never share a temp path.
+pub fn atomic_write(path: &Path, data: impl AsRef<[u8]>) -> anyhow::Result<()> {
+    let data = data.as_ref();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("create parent {}", parent.display()))?;
+    }
+    static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tid = std::thread::current().id();
+    let tag = format!("pirs-tmp-{}-{tid:?}-{seq}", std::process::id());
+    let tmp = path.with_extension(format!(
+        "{}.{tag}",
+        path.extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("tmp"),
+    ));
+    // Prefer a unique sibling name if extension dance collides.
+    let tmp = if tmp == path {
+        path.with_file_name(format!(
+            ".{}.{tag}",
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("file"),
+        ))
+    } else {
+        tmp
+    };
+    let write_result = (|| -> anyhow::Result<()> {
+        let mut f = std::fs::File::create(&tmp)
+            .with_context(|| format!("create temp {}", tmp.display()))?;
+        f.write_all(data)
+            .with_context(|| format!("write temp {}", tmp.display()))?;
+        f.sync_all().ok();
+        std::fs::rename(&tmp, path).with_context(|| {
+            format!(
+                "atomic rename {} -> {}",
+                tmp.display(),
+                path.display()
+            )
+        })?;
+        Ok(())
+    })();
+    if write_result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    write_result
+}
 
 /// Lexically resolve `input` against `cwd` (expanding a leading `~/`).
 ///

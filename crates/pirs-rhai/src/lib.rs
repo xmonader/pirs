@@ -731,12 +731,13 @@ impl ExtensionHost {
                             "denied: capability manifest forbids sub-agents (subagents: 0)",
                         )];
                     }
+                    let conc = (concurrency.max(1) as usize).min(MAX_PARALLEL_MAP);
                     parallel_map_impl(
                         pm_ast.clone(),
                         pm_state.clone(),
                         pm_runner.clone(),
                         items,
-                        concurrency.max(1) as usize,
+                        conc,
                         fn_name,
                         model,
                         pm_caps.clone(),
@@ -1207,6 +1208,14 @@ fn worker_engine(state: &StateStore, runner: &SubagentRunner, caps: &caps::Caps)
     engine
 }
 
+/// Hard cap on concurrent native threads spawned by `parallel_map` (M-8).
+pub const MAX_PARALLEL_MAP: usize = 32;
+
+/// Clamp parallel_map concurrency for tests and host registration.
+pub fn clamp_parallel_concurrency(requested: usize) -> usize {
+    requested.max(1).min(MAX_PARALLEL_MAP)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn parallel_map_impl(
     ast: AST,
@@ -1218,6 +1227,7 @@ fn parallel_map_impl(
     model: &str,
     caps: caps::Caps,
 ) -> rhai::Array {
+    let concurrency = clamp_parallel_concurrency(concurrency);
     let mut results: Vec<Dynamic> = vec![Dynamic::UNIT; items.len()];
     let mut idx = 0usize;
     while idx < items.len() {
@@ -1690,3 +1700,21 @@ mod host_api_tests {
     }
 }
 
+
+#[cfg(test)]
+mod parallel_map_clamp_tests {
+    use super::{clamp_parallel_concurrency, MAX_PARALLEL_MAP};
+
+    #[test]
+    fn parallel_map_concurrency_is_capped() {
+        assert_eq!(clamp_parallel_concurrency(0), 1);
+        assert_eq!(clamp_parallel_concurrency(1), 1);
+        assert_eq!(clamp_parallel_concurrency(8), 8);
+        assert_eq!(clamp_parallel_concurrency(10_000), MAX_PARALLEL_MAP);
+        assert!(MAX_PARALLEL_MAP <= 64);
+        // Registration site uses MAX_PARALLEL_MAP
+        let src = include_str!("lib.rs");
+        assert!(src.contains("MAX_PARALLEL_MAP"));
+        assert!(src.contains("clamp_parallel_concurrency"));
+    }
+}

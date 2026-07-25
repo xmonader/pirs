@@ -66,7 +66,7 @@ impl AgentTool for WriteTool {
         } else {
             String::new()
         };
-        std::fs::write(&path, &args.content)
+        crate::paths::atomic_write(&path, args.content.as_bytes())
             .with_context(|| format!("failed to write {}", path.display()))?;
         let summary = format!(
             "Successfully wrote {bytes} bytes to {} ({})",
@@ -130,5 +130,32 @@ mod tests {
             std::fs::read_to_string(dir.path().join("a/b/c.txt")).unwrap(),
             "hello"
         );
+    }
+
+    #[tokio::test]
+    async fn write_is_atomic_no_tmp_left() {
+        let dir = tempfile::tempdir().unwrap();
+        let tool = WriteTool::new(dir.path().to_path_buf());
+        tool.execute(ToolExecContext {
+            tool_call_id: "t".into(),
+            args: serde_json::json!({"path": "atomic.txt", "content": "payload-ok"}),
+            cancel: CancellationToken::new(),
+            on_update: None,
+        })
+        .await
+        .unwrap();
+        let path = dir.path().join("atomic.txt");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "payload-ok");
+        // No leftover temp siblings.
+        for e in std::fs::read_dir(dir.path()).unwrap() {
+            let n = e.unwrap().file_name().to_string_lossy().into_owned();
+            assert!(
+                !n.contains("pirs-tmp"),
+                "temp file left behind: {n}"
+            );
+        }
+        // atomic_write helper itself
+        crate::paths::atomic_write(&path, b"second").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "second");
     }
 }

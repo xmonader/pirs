@@ -61,7 +61,16 @@ impl AuditLog {
         }
         let _g = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let line = entry.to_string();
+        let created = !self.path.exists();
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&self.path) {
+            // Owner-only when we create the file (table #18 partial: perms).
+            if created {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600));
+                }
+            }
             let _ = writeln!(f, "{line}");
         }
     }
@@ -185,6 +194,21 @@ pub fn wrap_emit(inner: Emit, audit: AuditLog) -> Emit {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn audit_create_is_owner_only_on_unix() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let log = AuditLog::open(path.clone());
+        log.append(json!({"kind": "test"}));
+        assert!(path.is_file());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "audit file should be 0600, got {mode:o}");
+        }
+    }
 
     #[test]
     fn writes_jsonl() {

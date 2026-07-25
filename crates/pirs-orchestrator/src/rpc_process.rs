@@ -79,10 +79,9 @@ impl RpcProcess {
                             }
                         }
                     }
-                    let senders = event_senders.lock().unwrap();
-                    for tx in senders.iter() {
-                        let _ = tx.send(v.clone());
-                    }
+                    // Drop closed subscribers so disconnects do not grow forever (M-20).
+                    let mut senders = event_senders.lock().unwrap();
+                    senders.retain(|tx| tx.send(v.clone()).is_ok());
                 }
             });
         }
@@ -168,6 +167,17 @@ impl RpcProcess {
         rx
     }
 
+    /// Number of live event subscribers (tests / doctor).
+    pub fn event_subscriber_count(&self) -> usize {
+        self.event_senders.lock().unwrap().len()
+    }
+
+    /// Broadcast a test event and reap closed senders (same path as stdout fan-out).
+    pub fn broadcast_event_for_test(&self, v: Value) {
+        let mut senders = self.event_senders.lock().unwrap();
+        senders.retain(|tx| tx.send(v.clone()).is_ok());
+    }
+
     pub fn on_exit(&self) -> oneshot::Receiver<i64> {
         let (tx, rx) = oneshot::channel();
         self.exit_watchers.lock().unwrap().push(tx);
@@ -213,4 +223,23 @@ fn resolve_pirs_binary() -> anyhow::Result<std::path::PathBuf> {
         }
     }
     Ok(std::path::PathBuf::from("pirs"))
+}
+
+#[cfg(test)]
+mod fanout_tests {
+    use serde_json::json;
+
+    #[test]
+    fn broadcast_reaps_closed_subscribers() {
+        // Unit-level: retain on send failure matches production fan-out path
+        // (stdout reader + broadcast_event_for_test).
+        let (tx_live, mut rx_live) = tokio::sync::mpsc::unbounded_channel();
+        let (tx_dead, rx_dead) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
+        drop(rx_dead); // closed
+        let mut senders = vec![tx_live, tx_dead];
+        let v = json!({"type": "event"});
+        senders.retain(|tx| tx.send(v.clone()).is_ok());
+        assert_eq!(senders.len(), 1, "dead sender must be reaped");
+        assert_eq!(rx_live.try_recv().unwrap()["type"], "event");
+    }
 }

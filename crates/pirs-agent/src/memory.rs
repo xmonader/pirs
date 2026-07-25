@@ -29,6 +29,9 @@ pub struct MemoryStore {
     /// Current session id; stamped on every row and used to scope `search`.
     /// Empty = unscoped (tests / embedded use).
     session: Mutex<String>,
+    /// Snapshotted at open so env races cannot change mid-flight / across tests.
+    max_rows: usize,
+    max_semantic_scan: usize,
 }
 
 fn vec_to_blob(v: &[f32]) -> Vec<u8> {
@@ -95,6 +98,15 @@ pub struct MemoryHit {
 
 impl MemoryStore {
     pub fn open(path: &Path) -> Result<Arc<Self>, rusqlite::Error> {
+        Self::open_with_limits(path, Self::env_max_rows(), Self::env_max_semantic_scan())
+    }
+
+    /// Open with explicit row/scan caps (tests and callers that must not race env).
+    pub fn open_with_limits(
+        path: &Path,
+        max_rows: usize,
+        max_semantic_scan: usize,
+    ) -> Result<Arc<Self>, rusqlite::Error> {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -116,7 +128,38 @@ impl MemoryStore {
         Ok(Arc::new(Self {
             conn: Mutex::new(conn),
             session: Mutex::new(String::new()),
+            max_rows: max_rows.clamp(10, 5_000_000),
+            max_semantic_scan: max_semantic_scan.clamp(50, 100_000),
         }))
+    }
+
+    /// Max FTS rows retained (oldest evicted). Override with `PIRS_MEMORY_MAX_ROWS`.
+    /// Clamped to `[10, 5_000_000]`; default 50_000.
+    pub fn env_max_rows() -> usize {
+        std::env::var("PIRS_MEMORY_MAX_ROWS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(50_000)
+            .clamp(10, 5_000_000)
+    }
+
+    /// Max vectors loaded for one semantic search (brute-force cosine).
+    pub fn env_max_semantic_scan() -> usize {
+        std::env::var("PIRS_MEMORY_MAX_SEMANTIC_SCAN")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(8_000)
+            .clamp(50, 100_000)
+    }
+
+    /// Instance row cap (snapshotted at open).
+    pub fn max_rows(&self) -> usize {
+        self.max_rows
+    }
+
+    /// Instance semantic scan cap (snapshotted at open).
+    pub fn max_semantic_scan(&self) -> usize {
+        self.max_semantic_scan
     }
 
     /// Scope subsequent adds and searches to this session id.
@@ -133,10 +176,39 @@ impl MemoryStore {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         let session = self.session.lock().unwrap().clone();
-        let _ = self.conn.lock().unwrap().execute(
+        let conn = self.conn.lock().unwrap();
+        let _ = conn.execute(
             "INSERT INTO mem (kind, name, text, ts, session) VALUES (?1, ?2, ?3, ?4, ?5)",
             rusqlite::params![kind, name, text, ts, session],
         );
+        // Evict oldest rows beyond the cap (M-15).
+        let max = self.max_rows as i64;
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM mem", [], |r| r.get(0))
+            .unwrap_or(0);
+        if count > max {
+            let excess = count - max;
+            let _ = conn.execute(
+                "DELETE FROM mem WHERE rowid IN (
+                    SELECT rowid FROM mem ORDER BY ts ASC, rowid ASC LIMIT ?1
+                 )",
+                [excess],
+            );
+            // Drop orphan vectors for deleted FTS rows.
+            let _ = conn.execute(
+                "DELETE FROM mem_vec WHERE mem_rowid NOT IN (SELECT rowid FROM mem)",
+                [],
+            );
+        }
+    }
+
+    /// Row count helper for tests / doctor.
+    pub fn row_count(&self) -> usize {
+        self.conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM mem", [], |r| r.get::<_, i64>(0))
+            .unwrap_or(0) as usize
     }
 
     /// Demote a range of messages (about to be compacted away) into the store.
@@ -337,13 +409,18 @@ impl MemoryStore {
             _ => return Vec::new(),
         };
 
+        // Cap scan so we never load every embedding into RAM (M-15).
+        let scan_limit = self.max_semantic_scan;
         let all: Vec<(i64, Vec<f32>)> = {
             let conn = self.conn.lock().unwrap();
-            let mut stmt = match conn.prepare("SELECT mem_rowid, vector FROM mem_vec") {
+            let mut stmt = match conn.prepare(
+                "SELECT mem_rowid, vector FROM mem_vec
+                 ORDER BY mem_rowid DESC LIMIT ?1",
+            ) {
                 Ok(s) => s,
                 Err(_) => return Vec::new(),
             };
-            stmt.query_map([], |r| {
+            stmt.query_map([scan_limit as i64], |r| {
                 let rowid: i64 = r.get(0)?;
                 let blob: Vec<u8> = r.get(1)?;
                 Ok((rowid, blob_to_vec(&blob)))
@@ -654,6 +731,32 @@ mod tests {
         let candidates = vec![("only", vec![1.0, 0.0, 0.0])];
         let selected = mmr_select(&query, candidates, 5, 0.5);
         assert_eq!(selected, vec!["only"]);
+    }
+
+    #[test]
+    fn add_evicts_when_over_max_rows() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Explicit limits — no process-global env (avoids races with other tests).
+        let store = MemoryStore::open_with_limits(&tmp.path().join("cap.db"), 50, 8_000).unwrap();
+        for i in 0..80 {
+            store.add("user", "u", &format!("memory row number {i} unique"));
+        }
+        let n = store.row_count();
+        assert!(
+            n <= 50,
+            "expected eviction to cap at 50 rows, got {n}"
+        );
+        assert!(n >= 40, "should keep most recent rows, got {n}");
+        assert_eq!(store.max_rows(), 50);
+    }
+
+    #[test]
+    fn semantic_scan_limit_is_clamped() {
+        assert!(MemoryStore::env_max_semantic_scan() <= 100_000);
+        assert!(MemoryStore::env_max_semantic_scan() >= 50);
+        let tmp = tempfile::tempdir().unwrap();
+        let store = MemoryStore::open_with_limits(&tmp.path().join("s.db"), 100, 50).unwrap();
+        assert_eq!(store.max_semantic_scan(), 50);
     }
 
     #[test]
