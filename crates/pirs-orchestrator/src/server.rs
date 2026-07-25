@@ -276,10 +276,16 @@ async fn bridge_stream(
                 }
             }
             resp = resp_rx.recv() => {
-                if let Some(v) = resp {
-                    if writer.write_all(encode_message(&v).as_bytes()).await.is_err() {
-                        break;
+                match resp {
+                    Some(v) => {
+                        if writer.write_all(encode_message(&v).as_bytes()).await.is_err() {
+                            break;
+                        }
                     }
+                    // Channel closed (command_task ended / disconnect): stop
+                    // the select loop. Leaving this arm as `if let Some` busy-spins
+                    // at 100% CPU forever (review prioritized #7 / M-19).
+                    None => break,
                 }
             }
         }
@@ -307,5 +313,30 @@ mod tests {
         assert!(peer_authorized(0, 1000));
         assert!(!peer_authorized(1001, 1000));
         assert!(!peer_authorized(65534, 1000));
+    }
+
+    #[test]
+    fn bridge_stream_breaks_on_resp_channel_close() {
+        // M-19 / prioritized #7: resp_rx.recv() => None must exit the loop.
+        let src = include_str!("server.rs");
+        let bridge = src
+            .split("async fn bridge_stream")
+            .nth(1)
+            .expect("bridge_stream present");
+        let bridge = bridge.split("fn peer_authorized").next().unwrap_or(bridge);
+        assert!(
+            bridge.contains("resp = resp_rx.recv()"),
+            "resp arm must exist"
+        );
+        // Both event and resp arms break on None (not a busy-spin empty if-let).
+        let none_breaks = bridge.matches("None => break").count();
+        assert!(
+            none_breaks >= 2,
+            "expected None => break on events and resp arms, found {none_breaks}"
+        );
+        assert!(
+            !bridge.contains("if let Some(v) = resp {"),
+            "must not use if-let Some on resp (spins on None)"
+        );
     }
 }
