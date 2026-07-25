@@ -403,7 +403,16 @@ mod tests {
         // Structural: handle_gateway_message must pass sid.key() into tool build,
         // not bare session_search_tool(state) / env-only scope.
         // Handler lives in bin_helpers after the binary main split.
-        let main_src = concat!(include_str!("main.rs"), include_str!("bin_helpers.rs"));
+        let main_src = concat!(
+    include_str!("main.rs"),
+    include_str!("bin_helpers/mod.rs"),
+    include_str!("bin_helpers/schedule_fire.rs"),
+    include_str!("bin_helpers/gateway_msg.rs"),
+    include_str!("bin_helpers/chat.rs"),
+    include_str!("bin_helpers/code.rs"),
+    include_str!("bin_helpers/tools.rs"),
+    include_str!("bin_helpers/status.rs"),
+);
         assert!(
             main_src.contains("gateway_session_search_tool"),
             "gateway tool assembly must use gateway_session_search_tool"

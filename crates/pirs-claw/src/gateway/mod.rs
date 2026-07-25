@@ -253,7 +253,13 @@ mod tests {
         // assert on main ensures we always call deliver_outbound for every target.
         let main_src = concat!(
             include_str!("../main.rs"),
-            include_str!("../bin_helpers.rs"),
+            include_str!("../bin_helpers/mod.rs"),
+            include_str!("../bin_helpers/schedule_fire.rs"),
+            include_str!("../bin_helpers/gateway_msg.rs"),
+            include_str!("../bin_helpers/chat.rs"),
+            include_str!("../bin_helpers/code.rs"),
+            include_str!("../bin_helpers/tools.rs"),
+            include_str!("../bin_helpers/status.rs"),
         );
         assert!(
             main_src.contains("deliver_outbound(&job.deliver")

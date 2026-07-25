@@ -736,7 +736,16 @@ mod tests {
     fn schedule_fire_uses_timeout_on_spawn_path() {
         // Structural: fire_schedule_job must use tokio timeout (M-28).
         // Lives in bin_helpers after the main.rs split.
-        let src = concat!(include_str!("main.rs"), include_str!("bin_helpers.rs"));
+        let src = concat!(
+    include_str!("main.rs"),
+    include_str!("bin_helpers/mod.rs"),
+    include_str!("bin_helpers/schedule_fire.rs"),
+    include_str!("bin_helpers/gateway_msg.rs"),
+    include_str!("bin_helpers/chat.rs"),
+    include_str!("bin_helpers/code.rs"),
+    include_str!("bin_helpers/tools.rs"),
+    include_str!("bin_helpers/status.rs"),
+);
         assert!(src.contains("PIRS_CLAW_SCHEDULE_TIMEOUT_SECS") || src.contains("timeout_secs"));
         assert!(src.contains("tokio::time::timeout"));
         assert!(src.contains("start_kill") || src.contains("kill_on_drop"));
