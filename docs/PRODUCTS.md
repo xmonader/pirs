@@ -45,7 +45,8 @@ Shipped in the capability upgrade pass (beyond Vibe parity):
 |------------|------|
 | Native audit log | `~/.pirs/audit.jsonl`, `audit_tail`, `PIRS_AUDIT` |
 | Conversation undo | `/undo`, `session_rewind`, snapshots each user turn |
-| LSP diagnostics | `lsp` action=`diagnostics` (+ hover/definition/refs) |
+| LSP awareness | `lsp`: definition/refs/hover/symbols/workspace_symbols/find_symbol/implementations/type_definition/call hierarchy/diagnostics; `rename_symbol` project-wide |
+| AST symbol edits | `ast_edit`: list_functions, replace body, insert before/after, rename, move (rs/py/ts/go) |
 | Blast radius 2-hop | `code_map` action=`blast` |
 | PR workflow | tool `pr` (status/diff/create/checks via git+gh) |
 | Doctor | `pirs --doctor`, tool `doctor` |

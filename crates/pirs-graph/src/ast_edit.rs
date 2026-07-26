@@ -11,13 +11,16 @@ use crate::graph::Lang;
 
 #[derive(Deserialize, JsonSchema)]
 struct AstEditArgs {
-    /// Operation: replace_function_body | rename_symbol | move_function
+    /// Operation: replace_function_body | rename_symbol | move_function |
+    /// insert_before_function | insert_after_function | list_functions
     op: String,
-    /// File path containing the symbol
+    /// File path containing the symbol (required except when op=list_functions still needs path)
     path: String,
-    /// Symbol name (function for replace_function_body/move_function; any symbol for rename_symbol)
+    /// Symbol name (function for body/move/insert; any symbol for rename_symbol). Optional for list_functions.
+    #[serde(default)]
     name: String,
-    /// New body (replace_function_body) or new name (rename_symbol) or destination file (move_function)
+    /// New body / new name / destination path / source text to insert (depending on op). Optional for list_functions.
+    #[serde(default)]
     value: String,
 }
 
@@ -38,7 +41,10 @@ impl AgentTool for AstEditTool {
     }
 
     fn description(&self) -> &str {
-        "Edit code at the symbol level (Rust and Python): replace_function_body (keeps the signature), rename_symbol (AST-precise, no string-match accidents), move_function to another file. Safer than text edit for structural changes."
+        "Symbol-level code edits (Rust, Python, TypeScript/TSX, Go) without fragile line numbers: \
+         list_functions, replace_function_body (keeps signature), insert_before_function / \
+         insert_after_function, rename_symbol (AST identifiers only), move_function. \
+         Prefer over text edit for structural refactors; for project-wide rename use rename_symbol (LSP) tool."
     }
 
     fn parameters(&self) -> Value {
@@ -46,25 +52,62 @@ impl AgentTool for AstEditTool {
     }
 
     fn prompt_snippet(&self) -> Option<&str> {
-        Some("ast_edit: symbol-level edits (replace function body, rename, move) — prefer over edit for refactors")
+        Some(
+            "ast_edit: list_functions|replace_function_body|insert_before/after_function|\
+             rename_symbol|move_function (rs/py/ts/go)",
+        )
     }
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: AstEditArgs = serde_json::from_value(ctx.args)?;
         let path = pirs_tools::paths::resolve_contained(&self.cwd, &args.path)?;
         let lang = Lang::from_path(&path)
-            .filter(|l| matches!(l, Lang::Rust | Lang::Python))
-            .context("ast_edit supports Rust and Python files")?;
+            .filter(|l| {
+                matches!(
+                    l,
+                    Lang::Rust | Lang::Python | Lang::TypeScript | Lang::Tsx | Lang::Go
+                )
+            })
+            .context("ast_edit supports Rust, Python, TypeScript/TSX, and Go files")?;
 
         let result = match args.op.as_str() {
-            "replace_function_body" => replace_function_body(&path, lang, &args.name, &args.value)?,
-            "rename_symbol" => rename_symbol(&path, lang, &args.name, &args.value)?,
+            "list_functions" => list_functions(&path, lang)?,
+            "replace_function_body" => {
+                if args.name.is_empty() {
+                    bail!("name required for replace_function_body");
+                }
+                replace_function_body(&path, lang, &args.name, &args.value)?
+            }
+            "insert_before_function" => {
+                if args.name.is_empty() || args.value.is_empty() {
+                    bail!("name and value (source text) required for insert_before_function");
+                }
+                insert_around_function(&path, lang, &args.name, &args.value, true)?
+            }
+            "insert_after_function" => {
+                if args.name.is_empty() || args.value.is_empty() {
+                    bail!("name and value (source text) required for insert_after_function");
+                }
+                insert_around_function(&path, lang, &args.name, &args.value, false)?
+            }
+            "rename_symbol" => {
+                if args.name.is_empty() || args.value.is_empty() {
+                    bail!("name (old) and value (new) required for rename_symbol");
+                }
+                rename_symbol(&path, lang, &args.name, &args.value)?
+            }
             "move_function" => {
+                if args.name.is_empty() || args.value.is_empty() {
+                    bail!("name and value (dest path) required for move_function");
+                }
                 let dest = pirs_tools::paths::resolve_contained(&self.cwd, &args.value)?;
                 move_function(&path, &dest, lang, &args.name)?
             }
             other => {
-                bail!("unknown op '{other}': use replace_function_body|rename_symbol|move_function")
+                bail!(
+                    "unknown op '{other}': use list_functions|replace_function_body|\
+                     insert_before_function|insert_after_function|rename_symbol|move_function"
+                )
             }
         };
 
@@ -100,10 +143,25 @@ fn parse(lang: Lang, source: &str) -> anyhow::Result<tree_sitter::Tree> {
     let language = match lang {
         Lang::Rust => tree_sitter_rust::LANGUAGE.into(),
         Lang::Python => tree_sitter_python::LANGUAGE.into(),
-        _ => bail!("unsupported language for ast_edit"),
+        Lang::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        Lang::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+        Lang::Go => tree_sitter_go::LANGUAGE.into(),
     };
     parser.set_language(&language)?;
     parser.parse(source, None).context("failed to parse source")
+}
+
+fn function_kinds(lang: Lang) -> &'static [&'static str] {
+    match lang {
+        Lang::Rust => &["function_item"],
+        Lang::Python => &["function_definition"],
+        Lang::TypeScript | Lang::Tsx => &[
+            "function_declaration",
+            "method_definition",
+            "generator_function_declaration",
+        ],
+        Lang::Go => &["function_declaration", "method_declaration"],
+    }
 }
 
 fn find_function<'a>(
@@ -112,32 +170,28 @@ fn find_function<'a>(
     lang: Lang,
     name: &str,
 ) -> Option<tree_sitter::Node<'a>> {
-    let target_kind = match lang {
-        Lang::Rust => "function_item",
-        Lang::Python => "function_definition",
-        _ => return None,
-    };
+    let kinds = function_kinds(lang);
     let mut cursor = tree.root_node().walk();
-    find_fn_inner(tree.root_node(), source, &mut cursor, target_kind, name)
+    find_fn_inner(tree.root_node(), source, &mut cursor, kinds, name)
 }
 
 fn find_fn_inner<'a>(
     node: tree_sitter::Node<'a>,
     source: &'a str,
     cursor: &mut tree_sitter::TreeCursor<'a>,
-    target_kind: &str,
+    target_kinds: &[&str],
     name: &str,
 ) -> Option<tree_sitter::Node<'a>> {
-    if node.kind() == target_kind {
-        if let Some(n) = node.child_by_field_name("name") {
-            if n.utf8_text(source.as_bytes()).unwrap_or("") == name {
-                return Some(node);
-            }
+    if target_kinds.contains(&node.kind()) {
+        if function_name(node, source) == Some(name) {
+            return Some(node);
         }
     }
     if cursor.goto_first_child() {
         loop {
-            if let Some(found) = find_fn_inner(cursor.node(), source, cursor, target_kind, name) {
+            if let Some(found) =
+                find_fn_inner(cursor.node(), source, cursor, target_kinds, name)
+            {
                 return Some(found);
             }
             if !cursor.goto_next_sibling() {
@@ -149,12 +203,128 @@ fn find_fn_inner<'a>(
     None
 }
 
+fn function_name<'a>(node: tree_sitter::Node<'a>, source: &'a str) -> Option<&'a str> {
+    if let Some(n) = node.child_by_field_name("name") {
+        return n.utf8_text(source.as_bytes()).ok();
+    }
+    // Go method_declaration: name is under field "name" usually; fallback scan
+    let mut c = node.walk();
+    if c.goto_first_child() {
+        loop {
+            let n = c.node();
+            if matches!(n.kind(), "identifier" | "property_identifier" | "field_identifier") {
+                if let Ok(t) = n.utf8_text(source.as_bytes()) {
+                    return Some(t);
+                }
+            }
+            if !c.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+    None
+}
+
 fn body_node<'a>(func: tree_sitter::Node<'a>, lang: Lang) -> Option<tree_sitter::Node<'a>> {
     match lang {
-        Lang::Rust => func.child_by_field_name("body"),
-        Lang::Python => func.child_by_field_name("body"),
-        _ => None,
+        Lang::Rust | Lang::Python | Lang::TypeScript | Lang::Tsx | Lang::Go => {
+            func.child_by_field_name("body")
+                .or_else(|| func.child_by_field_name("statement_block"))
+        }
     }
+}
+
+fn list_functions(path: &Path, lang: Lang) -> anyhow::Result<EditResult> {
+    let source = std::fs::read_to_string(path)?;
+    let tree = parse(lang, &source)?;
+    let kinds = function_kinds(lang);
+    let mut names: Vec<(String, usize)> = Vec::new();
+    let mut cursor = tree.root_node().walk();
+    collect_functions(tree.root_node(), &source, &mut cursor, kinds, &mut names);
+    if names.is_empty() {
+        return Ok(EditResult {
+            message: format!("no functions found in {}", path.display()),
+            first_line: 1,
+        });
+    }
+    let lines: Vec<String> = names
+        .iter()
+        .map(|(n, line)| format!("  L{line}: {n}"))
+        .collect();
+    Ok(EditResult {
+        message: format!(
+            "{} function(s) in {}:\n{}",
+            names.len(),
+            path.display(),
+            lines.join("\n")
+        ),
+        first_line: names[0].1,
+    })
+}
+
+fn collect_functions(
+    node: tree_sitter::Node,
+    source: &str,
+    cursor: &mut tree_sitter::TreeCursor,
+    kinds: &[&str],
+    out: &mut Vec<(String, usize)>,
+) {
+    if kinds.contains(&node.kind()) {
+        if let Some(n) = function_name(node, source) {
+            out.push((n.to_string(), node.start_position().row + 1));
+        }
+    }
+    if cursor.goto_first_child() {
+        loop {
+            collect_functions(cursor.node(), source, cursor, kinds, out);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+        cursor.goto_parent();
+    }
+}
+
+fn insert_around_function(
+    path: &Path,
+    lang: Lang,
+    name: &str,
+    text: &str,
+    before: bool,
+) -> anyhow::Result<EditResult> {
+    let source = std::fs::read_to_string(path)?;
+    let tree = parse(lang, &source)?;
+    let func = find_function(&tree, &source, lang, name).with_context(|| {
+        format!(
+            "function '{name}' not found in {}. Use op=list_functions to see symbols.",
+            path.display()
+        )
+    })?;
+    let (span_start, span_end) = full_item_span(func, &source, lang);
+    let insert = if text.ends_with('\n') {
+        text.to_string()
+    } else {
+        format!("{text}\n")
+    };
+    let mut edited = source.clone();
+    if before {
+        edited.insert_str(span_start, &insert);
+    } else {
+        let mut at = span_end;
+        if edited.as_bytes().get(at) == Some(&b'\n') {
+            at += 1;
+        }
+        edited.insert_str(at, &insert);
+    }
+    write_with_rollback(path, &edited, lang)?;
+    Ok(EditResult {
+        message: format!(
+            "Inserted {} function '{name}' in {}",
+            if before { "before" } else { "after" },
+            path.display()
+        ),
+        first_line: func.start_position().row + 1,
+    })
 }
 
 fn reparse_check(path: &Path, lang: Lang) -> anyhow::Result<()> {
@@ -193,18 +363,20 @@ fn replace_function_body(
 
     let mut edited = source.clone();
     match lang {
-        Lang::Rust => {
-            edited.replace_range(
-                body.start_byte()..body.end_byte(),
-                &format!("{{\n{new_body}\n}}"),
-            );
+        Lang::Rust | Lang::Go | Lang::TypeScript | Lang::Tsx => {
+            // Brace languages: body is a block node including braces.
+            let replacement = if new_body.trim_start().starts_with('{') {
+                new_body.to_string()
+            } else {
+                format!("{{\n{new_body}\n}}")
+            };
+            edited.replace_range(body.start_byte()..body.end_byte(), &replacement);
         }
         Lang::Python => {
             // The body node starts at the first statement (after the indent);
             // replacing without a leading newline keeps exactly one indent.
             edited.replace_range(body.start_byte()..body.end_byte(), new_body.trim_end());
         }
-        _ => bail!("unsupported"),
     }
     write_with_rollback(path, &edited, lang)?;
     Ok(EditResult {
@@ -256,8 +428,14 @@ fn collect_identifiers(
     name: &str,
     spans: &mut Vec<(usize, usize)>,
 ) {
-    if matches!(node.kind(), "identifier" | "type_identifier")
-        && node.utf8_text(source.as_bytes()).unwrap_or("") == name
+    if matches!(
+        node.kind(),
+        "identifier"
+            | "type_identifier"
+            | "property_identifier"
+            | "field_identifier"
+            | "shorthand_property_identifier"
+    ) && node.utf8_text(source.as_bytes()).unwrap_or("") == name
     {
         spans.push((node.start_byte(), node.end_byte()));
     }
@@ -287,7 +465,16 @@ fn full_item_span(func: tree_sitter::Node, source: &str, lang: Lang) -> (usize, 
         }
         return (func.start_byte(), func.end_byte());
     }
-    // Rust: walk back over contiguous attribute / doc-comment siblings.
+    if matches!(lang, Lang::TypeScript | Lang::Tsx) {
+        // export function / async function: include export_statement parent when present
+        if let Some(parent) = func.parent() {
+            if parent.kind() == "export_statement" {
+                return (parent.start_byte(), parent.end_byte());
+            }
+        }
+        return (func.start_byte(), func.end_byte());
+    }
+    // Rust/Go: walk back over contiguous attribute / doc-comment siblings.
     let mut start = func.start_byte();
     let mut node = func;
     while let Some(prev) = node.prev_sibling() {
@@ -575,5 +762,157 @@ mod tests {
         .await
         .unwrap_err();
         assert!(err.to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn list_functions_rust() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("a.rs");
+        std::fs::write(&f, "fn alpha() {}\nfn beta() {}\n").unwrap();
+        let out = run(
+            &tool(dir.path()),
+            json!({"op": "list_functions", "path": "a.rs"}),
+        )
+        .await
+        .unwrap();
+        let text = out.content[0].as_text().unwrap();
+        assert!(text.contains("alpha"), "{text}");
+        assert!(text.contains("beta"), "{text}");
+        assert!(text.contains("2 function"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn insert_before_and_after_function() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("a.rs");
+        std::fs::write(&f, "fn mid() { 1 }\n").unwrap();
+        run(
+            &tool(dir.path()),
+            json!({
+                "op": "insert_before_function",
+                "path": "a.rs",
+                "name": "mid",
+                "value": "fn before() {}"
+            }),
+        )
+        .await
+        .unwrap();
+        run(
+            &tool(dir.path()),
+            json!({
+                "op": "insert_after_function",
+                "path": "a.rs",
+                "name": "mid",
+                "value": "fn after() {}"
+            }),
+        )
+        .await
+        .unwrap();
+        let content = std::fs::read_to_string(&f).unwrap();
+        assert!(content.contains("fn before()"), "{content}");
+        assert!(content.contains("fn mid()"), "{content}");
+        assert!(content.contains("fn after()"), "{content}");
+        let b = content.find("fn before()").unwrap();
+        let m = content.find("fn mid()").unwrap();
+        let a = content.find("fn after()").unwrap();
+        assert!(b < m && m < a, "order wrong: {content}");
+    }
+
+    #[tokio::test]
+    async fn replace_body_typescript() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("a.ts");
+        std::fs::write(&f, "function add(a: number, b: number): number {\n  return 0;\n}\n")
+            .unwrap();
+        run(
+            &tool(dir.path()),
+            json!({
+                "op": "replace_function_body",
+                "path": "a.ts",
+                "name": "add",
+                "value": "  return a + b;"
+            }),
+        )
+        .await
+        .unwrap();
+        let content = std::fs::read_to_string(&f).unwrap();
+        assert!(content.contains("return a + b"), "{content}");
+        assert!(content.contains("function add"), "{content}");
+    }
+
+    #[tokio::test]
+    async fn replace_body_go() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("a.go");
+        std::fs::write(
+            &f,
+            "package main\n\nfunc Add(a int, b int) int {\n\treturn 0\n}\n",
+        )
+        .unwrap();
+        run(
+            &tool(dir.path()),
+            json!({
+                "op": "replace_function_body",
+                "path": "a.go",
+                "name": "Add",
+                "value": "\treturn a + b"
+            }),
+        )
+        .await
+        .unwrap();
+        let content = std::fs::read_to_string(&f).unwrap();
+        assert!(content.contains("return a + b"), "{content}");
+        assert!(content.contains("func Add"), "{content}");
+    }
+
+    #[tokio::test]
+    async fn list_functions_go_and_ts() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("a.go"),
+            "package main\n\nfunc Foo() {}\nfunc Bar() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("a.ts"),
+            "function one() {}\nexport function two() {}\n",
+        )
+        .unwrap();
+        let go = run(
+            &tool(dir.path()),
+            json!({"op": "list_functions", "path": "a.go"}),
+        )
+        .await
+        .unwrap();
+        let go_t = go.content[0].as_text().unwrap();
+        assert!(go_t.contains("Foo") && go_t.contains("Bar"), "{go_t}");
+        let ts = run(
+            &tool(dir.path()),
+            json!({"op": "list_functions", "path": "a.ts"}),
+        )
+        .await
+        .unwrap();
+        let ts_t = ts.content[0].as_text().unwrap();
+        assert!(ts_t.contains("one") && ts_t.contains("two"), "{ts_t}");
+    }
+
+    #[tokio::test]
+    async fn move_export_function_typescript() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.ts");
+        let b = dir.path().join("b.ts");
+        std::fs::write(&a, "function keep() {}\nexport function gone() {\n  return 1;\n}\n")
+            .unwrap();
+        run(
+            &tool(dir.path()),
+            json!({"op": "move_function", "path": "a.ts", "name": "gone", "value": "b.ts"}),
+        )
+        .await
+        .unwrap();
+        let a_after = std::fs::read_to_string(&a).unwrap();
+        assert!(!a_after.contains("gone"), "{a_after}");
+        assert!(a_after.contains("keep"), "{a_after}");
+        let b_after = std::fs::read_to_string(&b).unwrap();
+        assert!(b_after.contains("export function gone"), "{b_after}");
     }
 }

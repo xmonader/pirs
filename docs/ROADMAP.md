@@ -15,7 +15,7 @@
 |----|------------|--------|-----|
 | **A1** | Show diffs / interrupt | **Yes** | `edit`/`write` unified diffs in UI+audit; Ctrl-C cancel; TUI Esc |
 | **A2** | Audit log + undo/rewind | **Yes** | native `~/.pirs/audit.jsonl` (`PIRS_AUDIT`); `audit_tail`; `/undo` + `session_rewind` |
-| **A3** | LSP types / diagnostics / callers | **Yes** | `lsp` action=`diagnostics`/`hover`/…; `code_map` blast second-hop |
+| **A3** | LSP types / diagnostics / callers | **Yes** | `lsp`: workspace_symbols, find_symbol, impls, type_def, call hierarchy, diagnostics/hover/def/refs; `ast_edit` multi-lang; `code_map` blast |
 | **A5** | TUI / ACP / slash / images | **Yes** | expanded slash (`/undo` `/doctor` `/audit` `/image`…); ACP image+fs; `/voice` foothold |
 | **A6** | PR + multi-agent fleets | **Yes** | `pr` tool (gh); `fleet` + `pirs-orchestrator`; `delegate` subagents |
 | **A8** | Safety / errors / MCP / doctor | **Yes** | profiles+ask+todo+worktree; MCP load; `pirs --doctor` + tool `doctor` |

@@ -242,12 +242,30 @@ impl LspClient {
                 "capabilities": {
                     "textDocument": {
                         "definition": { "linkSupport": false },
+                        "typeDefinition": { "linkSupport": false },
+                        "implementation": { "linkSupport": false },
                         "references": {},
-                        "hover": { "contentFormat": ["plaintext"] },
-                        "documentSymbol": { "hierarchicalDocumentSymbolSupport": true },
-                        "rename": { "prepareSupport": false }
+                        "hover": { "contentFormat": ["plaintext", "markdown"] },
+                        "documentSymbol": {
+                            "hierarchicalDocumentSymbolSupport": true,
+                            "symbolKind": {
+                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                            }
+                        },
+                        "rename": { "prepareSupport": false },
+                        "callHierarchy": { "dynamicRegistration": false },
+                        "publishDiagnostics": {
+                            "relatedInformation": true,
+                            "tagSupport": { "valueSet": [1, 2] },
+                            "versionSupport": true
+                        }
                     },
                     "workspace": {
+                        "symbol": {
+                            "symbolKind": {
+                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                            }
+                        },
                         "workspaceEdit": {
                             "documentChanges": true,
                             "resourceOperations": []
@@ -462,6 +480,81 @@ impl LspClient {
         .await
     }
 
+    /// Workspace-wide symbol search (LSP `workspace/symbol`).
+    pub async fn workspace_symbols(&self, query: &str) -> anyhow::Result<Value> {
+        self.request_indexed("workspace/symbol", json!({ "query": query }))
+            .await
+    }
+
+    /// Go to type definition of the symbol at position.
+    pub async fn type_definition(
+        &self,
+        path: &std::path::Path,
+        line: u32,
+        character: u32,
+    ) -> anyhow::Result<Value> {
+        self.request_indexed(
+            "textDocument/typeDefinition",
+            self.position_params(path, line, character),
+        )
+        .await
+    }
+
+    /// Find implementations of the symbol at position.
+    pub async fn implementations(
+        &self,
+        path: &std::path::Path,
+        line: u32,
+        character: u32,
+    ) -> anyhow::Result<Value> {
+        self.request_indexed(
+            "textDocument/implementation",
+            self.position_params(path, line, character),
+        )
+        .await
+    }
+
+    /// Prepare call hierarchy item at position (may be null if unsupported).
+    pub async fn prepare_call_hierarchy(
+        &self,
+        path: &std::path::Path,
+        line: u32,
+        character: u32,
+    ) -> anyhow::Result<Value> {
+        self.request(
+            "textDocument/prepareCallHierarchy",
+            self.position_params(path, line, character),
+        )
+        .await
+    }
+
+    pub async fn incoming_calls(&self, item: &Value) -> anyhow::Result<Value> {
+        self.request("callHierarchy/incomingCalls", json!({ "item": item }))
+            .await
+    }
+
+    pub async fn outgoing_calls(&self, item: &Value) -> anyhow::Result<Value> {
+        self.request("callHierarchy/outgoingCalls", json!({ "item": item }))
+            .await
+    }
+
+    /// Walk document symbols and return the first selection position for `name`
+    /// (1-based line/col). Prefers exact name match, then suffix after `::`.
+    pub async fn find_symbol_position(
+        &self,
+        path: &std::path::Path,
+        name: &str,
+    ) -> anyhow::Result<(u32, u32)> {
+        let symbols = self.document_symbols(path).await?;
+        if let Some(pos) = find_name_in_symbols(&symbols, name) {
+            return Ok(pos);
+        }
+        anyhow::bail!(
+            "symbol '{name}' not found in document symbols of {}",
+            path.display()
+        )
+    }
+
     /// Latest published diagnostics for a file (from textDocument/publishDiagnostics).
     /// Call after open_document; may be empty if server has not pushed yet.
     pub fn diagnostics_for(&self, path: &std::path::Path) -> Option<Value> {
@@ -554,6 +647,51 @@ async fn read_message(
     Ok(Some(value))
 }
 
+/// Search LSP DocumentSymbol / SymbolInformation trees for `name`.
+/// Returns 1-based (line, character).
+pub fn find_name_in_symbols(symbols: &Value, name: &str) -> Option<(u32, u32)> {
+    let bare = name.rsplit("::").next().unwrap_or(name);
+    fn walk(node: &Value, name: &str, bare: &str, out: &mut Option<(u32, u32)>) {
+        if out.is_some() {
+            return;
+        }
+        if let Some(arr) = node.as_array() {
+            for child in arr {
+                walk(child, name, bare, out);
+            }
+            return;
+        }
+        let Some(obj) = node.as_object() else {
+            return;
+        };
+        let n = obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        if n == name || n == bare {
+            // Prefer selectionRange, then location.range, then range
+            let line = node
+                .pointer("/selectionRange/start/line")
+                .or_else(|| node.pointer("/location/range/start/line"))
+                .or_else(|| node.pointer("/range/start/line"))
+                .and_then(|l| l.as_u64());
+            let col = node
+                .pointer("/selectionRange/start/character")
+                .or_else(|| node.pointer("/location/range/start/character"))
+                .or_else(|| node.pointer("/range/start/character"))
+                .and_then(|c| c.as_u64())
+                .unwrap_or(0);
+            if let Some(line) = line {
+                *out = Some((line as u32 + 1, col as u32 + 1));
+                return;
+            }
+        }
+        if let Some(children) = obj.get("children") {
+            walk(children, name, bare, out);
+        }
+    }
+    let mut found = None;
+    walk(symbols, name, bare, &mut found);
+    found
+}
+
 pub fn format_location(loc: &Value, root: &std::path::Path) -> Option<String> {
     let uri = loc.get("uri").and_then(|u| u.as_str())?;
     let path = path_from_uri(uri);
@@ -572,7 +710,7 @@ pub fn format_location(loc: &Value, root: &std::path::Path) -> Option<String> {
 
 #[cfg(test)]
 mod uri_tests {
-    use super::{path_from_uri, uri_for};
+    use super::{find_name_in_symbols, path_from_uri, uri_for};
     use serde_json::json;
 
     #[test]
@@ -603,5 +741,44 @@ mod uri_tests {
         let out = super::format_location(&loc, dir.path()).unwrap();
         // Relative path is decoded (real space), line is 1-based.
         assert_eq!(out, "a b.rs:5");
+    }
+
+    #[test]
+    fn find_name_in_symbols_walks_hierarchy_and_bare_suffix() {
+        let syms = json!([{
+            "name": "MyStruct",
+            "kind": 23,
+            "selectionRange": {"start": {"line": 0, "character": 11}},
+            "children": [{
+                "name": "method_a",
+                "kind": 6,
+                "selectionRange": {"start": {"line": 4, "character": 7}},
+                "range": {"start": {"line": 4, "character": 4}}
+            }]
+        }]);
+        assert_eq!(
+            find_name_in_symbols(&syms, "method_a"),
+            Some((5, 8))
+        );
+        assert_eq!(
+            find_name_in_symbols(&syms, "MyStruct::method_a"),
+            Some((5, 8))
+        );
+        assert_eq!(find_name_in_symbols(&syms, "MyStruct"), Some((1, 12)));
+        assert!(find_name_in_symbols(&syms, "missing").is_none());
+    }
+
+    #[test]
+    fn find_name_in_symbols_symbol_information_shape() {
+        // Flat SymbolInformation[] (no children, location.range)
+        let syms = json!([{
+            "name": "flat_fn",
+            "kind": 12,
+            "location": {
+                "uri": "file:///tmp/x.rs",
+                "range": {"start": {"line": 9, "character": 3}, "end": {"line": 9, "character": 10}}
+            }
+        }]);
+        assert_eq!(find_name_in_symbols(&syms, "flat_fn"), Some((10, 4)));
     }
 }

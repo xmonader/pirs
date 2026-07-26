@@ -157,7 +157,7 @@ Shipped packs in `extensions/`:
 
 Loop features: `--cascade <draft_model>` drafts each turn on a cheap model and escalates only when the judge rejects it; `spawn_subagent(task, model, tag)` + `inbox()` let scripts run background sub-agents.
 
-Code graph (`--no-graph` to disable): tree-sitter index of the repo (rust/py/ts/go) powering `code_map` (definitions/callers/callees/top/blast — much cheaper than grep+read), `ast_edit` (replace_function_body/rename_symbol/move_function at symbol level), blast-radius notes appended to edit/write results, and a shared (path,mtime) read cache across main and sub-agents. Rollback snapshots are also tagged as git refs (`refs/pirs/turn-N`).
+Code graph (`--no-graph` to disable): tree-sitter index of the repo (rust/py/ts/go) powering `code_map` (definitions/callers/callees/top/blast — much cheaper than grep+read), `ast_edit` (list_functions / replace_function_body / insert_before|after_function / rename_symbol / move_function — multi-lang symbol edits with parse rollback), blast-radius notes appended to edit/write results, and a shared (path,mtime) read cache across main and sub-agents. LSP tool (`lsp`, when rust-analyzer/tsserver/pyright/gopls on PATH): definition, references, hover, symbols, workspace_symbols, find_symbol (name→position), implementations, type_definition, call hierarchy (incoming/outgoing), diagnostics; `rename_symbol` for project-wide renames. Rollback snapshots are also tagged as git refs (`refs/pirs/turn-N`).
 
 Scripts can also spawn fresh-context sub-agents themselves: `run_subagent(task, model?)`.
 

@@ -161,6 +161,97 @@ async fn lsp_tool_end_to_end() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lsp_find_symbol_and_workspace_symbols() {
+    if !rust_analyzer_available() {
+        eprintln!("rust-analyzer not available, skipping");
+        return;
+    }
+    let dir = fixture_crate();
+    let tool = LspTool::new(dir.path().to_path_buf());
+    let run = |args: serde_json::Value| async {
+        match tool
+            .execute(pirs_agent::ToolExecContext {
+                tool_call_id: "t".into(),
+                args,
+                cancel: tokio_util::sync::CancellationToken::new(),
+                on_update: None,
+            })
+            .await
+        {
+            Ok(out) => out.content[0]
+                .as_text()
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
+            Err(_) => String::new(),
+        }
+    };
+
+    // name-only resolution → definition + references (no line/col required)
+    let find = serde_json::json!({
+        "action": "find_symbol",
+        "path": "src/lib.rs",
+        "name": "target_fn"
+    });
+    let text = poll_until("definition", || run(find.clone())).await;
+    assert!(
+        text.contains("resolved 'target_fn'") || text.contains("target_fn"),
+        "find_symbol: {text}"
+    );
+    assert!(
+        text.contains("lib.rs") || text.contains("definition"),
+        "find_symbol missing def: {text}"
+    );
+
+    // Workspace-wide search by name (may need index warm-up)
+    let ws = serde_json::json!({
+        "action": "workspace_symbols",
+        "name": "target_fn",
+        "path": "src/lib.rs"
+    });
+    let text = poll_until("target_fn", || run(ws.clone())).await;
+    assert!(text.contains("target_fn"), "workspace_symbols: {text}");
+
+    // definition via name= without line (open_and_pos path)
+    let def_by_name = serde_json::json!({
+        "action": "definition",
+        "path": "src/lib.rs",
+        "name": "target_fn"
+    });
+    let text = poll_until("lib.rs", || run(def_by_name.clone())).await;
+    assert!(text.contains("lib.rs"), "definition by name: {text}");
+
+    tool.shutdown_all().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lsp_client_find_symbol_position() {
+    if !rust_analyzer_available() {
+        eprintln!("rust-analyzer not available, skipping");
+        return;
+    }
+    let dir = fixture_crate();
+    let client = LspClient::spawn("rust-analyzer", &[], dir.path())
+        .await
+        .unwrap();
+    let lib = dir.path().join("src/lib.rs");
+    client.open_document(&lib, "rust").await.unwrap();
+
+    // Poll until document symbols are ready, then resolve by name.
+    let pos = poll_until("ok", || async {
+        match client.find_symbol_position(&lib, "target_fn").await {
+            Ok((line, col)) => format!("ok {line}:{col}"),
+            Err(_) => String::new(),
+        }
+    })
+    .await;
+    assert!(pos.starts_with("ok "), "position: {pos}");
+    // target_fn is on line 1 of lib.rs
+    assert!(pos.contains("1:"), "expected line 1: {pos}");
+
+    client.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn rename_symbol_updates_all_references_across_files() {
     if !rust_analyzer_available() {
         eprintln!("skipping: rust-analyzer not installed");
