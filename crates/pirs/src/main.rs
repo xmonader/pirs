@@ -500,6 +500,38 @@ async fn main() -> anyhow::Result<()> {
         println!("{}", crate::blame::format_blame(&info));
         return Ok(());
     }
+    // Deterministic code review: file selection + units + structured findings (no LLM).
+    // Usage: pirs review [--json] [--from REV] [--to REV] [--no-untracked]
+    if let Some(spec) = cli
+        .prompt
+        .first()
+        .cloned()
+        .filter(|p| p == "review" || p.starts_with("review "))
+    {
+        let rest: Vec<&str> = spec
+            .trim_start_matches("review")
+            .split_whitespace()
+            .collect();
+        if rest.iter().any(|a| *a == "-h" || *a == "--help") {
+            println!(
+                "usage: pirs review [--json] [--from REV] [--to REV] [--no-untracked]\n\
+                 \n\
+                 Deterministic review plan over git changes (model does not choose files).\n\
+                 Emits structured findings (JSON with --json). Read-only tool diet only."
+            );
+            return Ok(());
+        }
+        let opts = pirs_tools::code_review::parse_review_cli_args(&rest);
+        let as_json = pirs_tools::code_review::wants_json(&rest);
+        let cwd = std::env::current_dir()?;
+        let report = pirs_tools::run_review(&cwd, &opts)?;
+        if as_json {
+            println!("{}", pirs_tools::format_report_json(&report)?);
+        } else {
+            println!("{}", pirs_tools::format_report_text(&report));
+        }
+        return Ok(());
+    }
     let cwd = std::env::current_dir()?;
 
     if let Some(provider) =

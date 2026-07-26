@@ -44,6 +44,7 @@ pub mod browser;
 #[cfg(feature = "cdp")]
 pub mod browser_cdp;
 pub mod checkpoint;
+pub mod code_review;
 pub mod computer;
 pub mod doctor;
 pub mod edit;
@@ -111,6 +112,12 @@ pub use computer::computer_tools;
 pub use vision::vision_tools;
 pub use checkpoint::{
     create_checkpoint, list_checkpoints, maybe_auto_checkpoint, restore_checkpoint, CheckpointTool,
+};
+pub use code_review::{
+    filter_precision, format_report_json, format_report_text, is_noise_path, partition_units,
+    review_tool_allowed, review_tool_diet, run_review, select_changed_files, Finding,
+    FindingSeverity, ReviewReport, ReviewSelectOpts, ReviewUnit, REVIEW_ALLOWED_TOOLS,
+    REVIEW_DENIED_TOOLS,
 };
 pub use doctor::{doctor_report, DoctorTool};
 pub use fleet::fleet_tools;
