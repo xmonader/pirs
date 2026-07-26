@@ -61,6 +61,8 @@ impl AgentTool for AstEditTool {
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         let args: AstEditArgs = serde_json::from_value(ctx.args)?;
         let path = pirs_tools::paths::resolve_contained(&self.cwd, &args.path)?;
+        // Serialize with edit/write on the same path (same process-wide filelock).
+        let _mutation_guard = pirs_tools::filelock::lock(&path).await;
         let lang = Lang::from_path(&path)
             .filter(|l| {
                 matches!(

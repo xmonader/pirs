@@ -60,6 +60,13 @@ fn live_slot() -> &'static Mutex<PermissionMode> {
     SLOT.get_or_init(|| Mutex::new(PermissionMode::from_env()))
 }
 
+/// Serializes test (and rare multi-thread) pin/restore of the live mode so
+/// parallel suite tests cannot interleave `set` + `assert` on the global slot.
+fn live_test_gate() -> &'static Mutex<()> {
+    static GATE: OnceLock<Mutex<()>> = OnceLock::new();
+    GATE.get_or_init(|| Mutex::new(()))
+}
+
 /// Current live permission mode (slash commands update this).
 pub fn live_permission_mode() -> PermissionMode {
     *live_slot().lock().unwrap()
@@ -68,12 +75,25 @@ pub fn live_permission_mode() -> PermissionMode {
 /// Set live mode and mirror to `PIRS_PERMISSION_MODE` for doctor/status.
 pub fn set_live_permission_mode(mode: PermissionMode) {
     *live_slot().lock().unwrap() = mode;
+    // SAFETY: process-global permission mirror for doctor/status; single-threaded
+    // at startup, and mid-session slash updates are intentional shared state.
     std::env::set_var("PIRS_PERMISSION_MODE", mode.name());
 }
 
 /// Install initial live mode (startup).
 pub fn init_live_permission_mode(mode: PermissionMode) {
     set_live_permission_mode(mode);
+}
+
+/// Run `f` with `mode` pinned on the live slot, restoring the previous value.
+/// Holds a process-wide gate so concurrent tests cannot race the global mode.
+pub fn with_live_permission_mode<R>(mode: PermissionMode, f: impl FnOnce() -> R) -> R {
+    let _gate = live_test_gate().lock().unwrap();
+    let prev = live_permission_mode();
+    set_live_permission_mode(mode);
+    let out = f();
+    set_live_permission_mode(prev);
+    out
 }
 
 /// Required mode for a tool name (static classification).
@@ -346,20 +366,21 @@ mod tests {
 
     #[test]
     fn live_mode_change_affects_hook() {
-        init_live_permission_mode(PermissionMode::DangerFullAccess);
-        let h = live_permission_hook();
-        assert!(
-            h("1", "bash", &serde_json::json!({})).is_none(),
-            "full access allows bash"
-        );
-        set_live_permission_mode(PermissionMode::ReadOnly);
-        let deny = h("1", "bash", &serde_json::json!({}));
-        assert!(
-            deny.as_ref().is_some_and(|s| s.contains("read-only")),
-            "after /plan-style switch, bash denied: {deny:?}"
-        );
-        set_live_permission_mode(PermissionMode::DangerFullAccess);
-        assert!(h("1", "bash", &serde_json::json!({})).is_none());
+        with_live_permission_mode(PermissionMode::DangerFullAccess, || {
+            let h = live_permission_hook();
+            assert!(
+                h("1", "bash", &serde_json::json!({})).is_none(),
+                "full access allows bash"
+            );
+            set_live_permission_mode(PermissionMode::ReadOnly);
+            let deny = h("1", "bash", &serde_json::json!({}));
+            assert!(
+                deny.as_ref().is_some_and(|s| s.contains("read-only")),
+                "after /plan-style switch, bash denied: {deny:?}"
+            );
+            set_live_permission_mode(PermissionMode::DangerFullAccess);
+            assert!(h("1", "bash", &serde_json::json!({})).is_none());
+        });
     }
 
     #[test]

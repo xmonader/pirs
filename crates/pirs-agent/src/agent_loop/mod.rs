@@ -10,10 +10,9 @@ pub use tool_exec::execute_tool_calls_for_test;
 
 use std::sync::Arc;
 
-use futures::stream::{FuturesUnordered, StreamExt};
 use pirs_ai::{
-    AssistantMessage, CompletionOptions, ContentBlock, Context, LlmProvider, Message, StopReason,
-    StreamEvent, ToolResultMessage,
+    AssistantMessage, CompletionOptions, Context, LlmProvider, Message, StopReason,
+    ToolResultMessage,
 };
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -21,9 +20,8 @@ use tokio_util::sync::CancellationToken;
 use crate::compaction::{
     compact_messages, estimate_tokens, last_input_tokens, should_compact, CompactionConfig,
 };
-use crate::events::{AgentEvent, Emit, Hooks, ToolResultPatch};
-use crate::tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext};
-use crate::validate::{coerce_args, validate_args};
+use crate::events::{AgentEvent, Emit, Hooks};
+use crate::tool::{AgentTool, ExecutionMode};
 
 /// Cap tool result text fed back to the model (chars).
 pub const MODEL_MAX_TOOL_RESULT_CHARS: usize = 20_000;

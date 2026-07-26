@@ -121,7 +121,7 @@ pub use autonomy::{
 pub use permission_mode::{
     apply_yolo_permission_default, init_live_permission_mode, live_permission_hook,
     live_permission_mode, permission_deny_reason, permission_deny_reason_with_args, permission_hook,
-    required_mode_for_tool, set_live_permission_mode, PermissionMode,
+    required_mode_for_tool, set_live_permission_mode, with_live_permission_mode, PermissionMode,
 };
 pub use tool_preset::{apply_tool_preset, ToolPreset, ToolPresetConfig};
 pub use pr_tools::pr_tools;

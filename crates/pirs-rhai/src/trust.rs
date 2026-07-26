@@ -1,5 +1,5 @@
 //! Script directory trust store and interactive prompt.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub enum TrustDecision {
     Allow,

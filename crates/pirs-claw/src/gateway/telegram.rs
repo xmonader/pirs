@@ -1,6 +1,5 @@
 //! Telegram Bot API long-poll + send.
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
@@ -11,7 +10,6 @@ use crate::channel::{
     Channel, InboundMessage, OutboundReply, CHANNEL_TELEGRAM,
 };
 use crate::pairing::PairingAllowlist;
-use crate::GatewayReply;
 
 use super::allow::require_allowlist_for_state;
 use super::utf8::utf8_chunks;

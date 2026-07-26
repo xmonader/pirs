@@ -1,10 +1,5 @@
 //! HTTP webhooks: Discord / Slack / WhatsApp ingress + signature verify.
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::path::Path;
-use std::sync::Arc;
 
-use anyhow::Context as _;
 
 use crate::channel::{InboundMessage, CHANNEL_DISCORD, CHANNEL_SLACK, CHANNEL_WHATSAPP};
 use crate::pairing::PairingAllowlist;

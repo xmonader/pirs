@@ -1,5 +1,4 @@
 //! Outbound message delivery to all channel backends.
-use anyhow::{bail, Context as _};
 use serde_json::json;
 
 use super::telegram::TelegramBot;

@@ -1,23 +1,7 @@
 //! Freeform tool text repair and payload validation.
-use std::sync::Arc;
+use pirs_ai::{AssistantMessage, ContentBlock};
 
-use futures::stream::{FuturesUnordered, StreamExt};
-use pirs_ai::{
-    AssistantMessage, CompletionOptions, ContentBlock, Context, LlmProvider, Message, StopReason,
-    StreamEvent, ToolResultMessage,
-};
-use serde_json::Value;
-use tokio_util::sync::CancellationToken;
-
-use crate::compaction::{
-    compact_messages, estimate_tokens, last_input_tokens, should_compact, CompactionConfig,
-};
-use crate::events::{AgentEvent, Emit, Hooks, ToolResultPatch};
-use crate::tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext};
-use crate::validate::{coerce_args, validate_args};
-
-use super::{ToolCallData, VisibleTools};
-
+use super::ToolCallData;
 
 pub(super) fn extract_tool_calls(assistant: &AssistantMessage) -> Vec<ToolCallData> {
     assistant
@@ -96,4 +80,3 @@ pub(super) fn freeform_tool_repair_nudge(assistant: &AssistantMessage) -> Option
             .into(),
     )
 }
-

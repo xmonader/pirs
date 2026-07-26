@@ -4,13 +4,13 @@
 //! Webhook listeners bind **127.0.0.1** by default; set `PIRS_CLAW_PUBLIC_BIND=1`
 //! (or `PIRS_CLAW_BIND=0.0.0.0`) to listen on all interfaces.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::channel::{
-    Channel, InboundMessage, CHANNEL_DISCORD, CHANNEL_SIGNAL, CHANNEL_SLACK,
-    CHANNEL_TELEGRAM, CHANNEL_WHATSAPP,
+    InboundMessage, CHANNEL_DISCORD, CHANNEL_SIGNAL, CHANNEL_SLACK, CHANNEL_TELEGRAM,
+    CHANNEL_WHATSAPP,
 };
 use crate::pairing::{warn_if_allow_all, PairingAllowlist};
 use crate::GatewayReply;

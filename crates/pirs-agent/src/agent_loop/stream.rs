@@ -1,20 +1,14 @@
 //! LLM streaming into context.
 use std::sync::Arc;
 
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::stream::StreamExt;
 use pirs_ai::{
-    AssistantMessage, CompletionOptions, ContentBlock, Context, LlmProvider, Message, StopReason,
-    StreamEvent, ToolResultMessage,
+    AssistantMessage, ContentBlock, Context, LlmProvider, Message, StopReason, StreamEvent,
 };
-use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use crate::compaction::{
-    compact_messages, estimate_tokens, last_input_tokens, should_compact, CompactionConfig,
-};
-use crate::events::{AgentEvent, Emit, Hooks, ToolResultPatch};
-use crate::tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext};
-use crate::validate::{coerce_args, validate_args};
+use crate::events::{AgentEvent, Emit};
+use crate::tool::{tool_defs, AgentTool};
 
 use super::{is_visible, LoopConfig};
 
@@ -197,7 +191,4 @@ pub(super) fn append_delta_to_last(context: &mut Context, delta: &str, thinking:
     }
 }
 
-/// Defense-in-depth cap for model-facing tool results (MCP/Rhai/hooks included).
-/// Per-tool caps (e.g. bash `cap_for_model`) still apply first; this is the backstop.
-/// Cap for error result bodies so a failed bash dump cannot blow the next turn.
-pub const MODEL_MAX_ERROR_CHARS: usize = 8_000;
+

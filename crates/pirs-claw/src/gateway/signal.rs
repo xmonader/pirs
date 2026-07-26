@@ -1,11 +1,8 @@
 //! signal-cli channel loop.
-use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Context as _;
 
-use crate::channel::{Channel, InboundMessage, CHANNEL_SIGNAL};
+use crate::channel::{InboundMessage, CHANNEL_SIGNAL};
 use crate::pairing::PairingAllowlist;
 use crate::GatewayReply;
 

@@ -2,22 +2,17 @@
 use std::sync::Arc;
 
 use futures::stream::{FuturesUnordered, StreamExt};
-use pirs_ai::{
-    AssistantMessage, CompletionOptions, ContentBlock, Context, LlmProvider, Message, StopReason,
-    StreamEvent, ToolResultMessage,
-};
+use pirs_ai::{ContentBlock, ToolResultMessage};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use crate::compaction::{
-    compact_messages, estimate_tokens, last_input_tokens, should_compact, CompactionConfig,
-};
 use crate::events::{AgentEvent, Emit, Hooks, ToolResultPatch};
-use crate::tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext};
+use crate::tool::{AgentTool, ToolExecContext};
 use crate::validate::{coerce_args, validate_args};
 
-use super::{is_visible, LoopConfig, ToolCallData, VisibleTools, MODEL_MAX_TOOL_RESULT_CHARS};
+use super::{is_visible, ToolCallData, VisibleTools, MODEL_MAX_TOOL_RESULT_CHARS};
 
+/// Cap for error result bodies so a failed bash dump cannot blow the next turn.
 pub(super) const MODEL_MAX_ERROR_CHARS: usize = 8_000;
 
 

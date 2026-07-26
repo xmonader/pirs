@@ -326,15 +326,17 @@ use ratatui::Terminal;
     #[test]
     fn composer_title_does_not_call_default_auto_yolo() {
         // Default approval "auto" must not paint as the yolo badge.
-        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::WorkspaceWrite);
-        assert_eq!(composer_title("auto", false, false), " edit ");
-        assert_ne!(composer_title("auto", false, false), " yolo ");
-        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::DangerFullAccess);
-        assert_eq!(composer_title("yolo", false, false), " full ");
-        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::ReadOnly);
-        assert_eq!(composer_title("auto", false, false), " plan ");
-        assert_eq!(composer_title("auto", true, false), " running ");
-        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::WorkspaceWrite);
+        pirs_tools::with_live_permission_mode(pirs_tools::PermissionMode::WorkspaceWrite, || {
+            assert_eq!(composer_title("auto", false, false), " edit ");
+            assert_ne!(composer_title("auto", false, false), " yolo ");
+        });
+        pirs_tools::with_live_permission_mode(pirs_tools::PermissionMode::DangerFullAccess, || {
+            assert_eq!(composer_title("yolo", false, false), " full ");
+        });
+        pirs_tools::with_live_permission_mode(pirs_tools::PermissionMode::ReadOnly, || {
+            assert_eq!(composer_title("auto", false, false), " plan ");
+            assert_eq!(composer_title("auto", true, false), " running ");
+        });
     }
 
     #[test]
@@ -366,17 +368,17 @@ use ratatui::Terminal;
     fn composer_mode_styles_differ_for_yolo_and_plan() {
         // composer_mode_style consults live_permission_mode() first — pin
         // workspace-write so approval_mode string colors are what we assert.
-        let prev = pirs_tools::live_permission_mode();
-        pirs_tools::set_live_permission_mode(pirs_tools::PermissionMode::WorkspaceWrite);
-        let theme = Theme::default_dark();
-        let idle = composer_mode_style(&theme, "ask", false, false);
-        let yolo = composer_mode_style(&theme, "yolo", false, false);
-        let plan = composer_mode_style(&theme, "plan", false, false);
-        let pending = composer_mode_style(&theme, "ask", false, true);
-        pirs_tools::set_live_permission_mode(prev);
-        assert_ne!(yolo.fg, idle.fg);
-        assert_ne!(plan.fg, yolo.fg);
-        assert_eq!(pending.fg, theme.approval.fg);
+        // with_live_permission_mode gates concurrent suite tests on the same slot.
+        pirs_tools::with_live_permission_mode(pirs_tools::PermissionMode::WorkspaceWrite, || {
+            let theme = Theme::default_dark();
+            let idle = composer_mode_style(&theme, "ask", false, false);
+            let yolo = composer_mode_style(&theme, "yolo", false, false);
+            let plan = composer_mode_style(&theme, "plan", false, false);
+            let pending = composer_mode_style(&theme, "ask", false, true);
+            assert_ne!(yolo.fg, idle.fg);
+            assert_ne!(plan.fg, yolo.fg);
+            assert_eq!(pending.fg, theme.approval.fg);
+        });
     }
 
     #[test]

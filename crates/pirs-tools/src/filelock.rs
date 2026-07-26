@@ -6,13 +6,28 @@ static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> = O
 
 pub type FileMutationGuard = tokio::sync::OwnedMutexGuard<()>;
 
+/// Collapse path aliases so concurrent `edit`/`write` on the same inode share one lock.
+/// Existing files canonicalize; missing leaves canonicalize the parent and reattach the name.
+fn lock_key(path: &Path) -> PathBuf {
+    if let Ok(canon) = std::fs::canonicalize(path) {
+        return canon;
+    }
+    if let (Some(parent), Some(name)) = (path.parent(), path.file_name()) {
+        if let Ok(cp) = std::fs::canonicalize(parent) {
+            return cp.join(name);
+        }
+    }
+    path.to_path_buf()
+}
+
 pub async fn lock(path: &Path) -> FileMutationGuard {
+    let key = lock_key(path);
     let arc = {
         let mut map = LOCKS
             .get_or_init(|| Mutex::new(HashMap::new()))
             .lock()
             .unwrap();
-        map.entry(path.to_path_buf())
+        map.entry(key)
             .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
             .clone()
     };

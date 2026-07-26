@@ -1,32 +1,14 @@
 //! tools.rs
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{bail, Context as _};
-use pirs_agent::phase_agent::AgentPhaseDriver;
-use pirs_agent::strategy::{run_strategy_async, PhaseReq, Task, ToolScope};
 use pirs_agent::Agent;
-use pirs_agent::AgentTool;
-use pirs_claw::channel::{Channel, CliChannel, InboundMessage, OutboundReply, GATEWAY_CHANNELS};
-use pirs_claw::memory_bridge;
-use pirs_claw::pairing::PairingAllowlist;
-use pirs_claw::presets::{
-    apply_code_defaults, build_code_agent, coding_system_prompt, coding_tools, looks_like_repo,
-    resolve_code_strategy, CodeOptions, DEFAULT_MODEL, DEFAULT_PLAN_MODEL, DEFAULT_STRATEGY,
-};
-use pirs_claw::registry;
+use pirs_claw::presets::coding_tools;
 use pirs_skills::{
-    default_skills_dir, find_skill, install_skill, install_skill_url, load_skills, remove_skill,
-    skill_tools, skills_full_section, skills_prompt_section, usage_counts, validate_skill, Skill,
+    default_skills_dir, load_skills,
+    skill_tools, Skill,
 };
 use pirs_tools::life_tools;
-use pirs_claw::parse_duration_secs;
-use pirs_claw::{
-    apply_exec_backend, claw_system_prompt, default_state_dir, describe_exec_backend,
-    empty_assistant_diag, extract_assistant_reply, load_secrets_env, require_llm_key,
-    should_mark_schedule_fired, DeliverTarget, GatewayReply, ScheduleStore, SessionId,
-    SessionStore,
-};
 
 
 pub fn load_all_skills(cwd: &Path, extra: Option<&Path>) -> Vec<Skill> {

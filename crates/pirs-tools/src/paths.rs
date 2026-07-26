@@ -95,21 +95,22 @@ pub fn resolve_contained(cwd: &Path, input: &str) -> anyhow::Result<PathBuf> {
     }
 
     let ctx = current_work_context();
-    // Prefer installed multi-root context; if empty (tests / early init), use cwd.
-    // Drop roots that no longer exist (tempdir dropped after a prior test installed
-    // them) so file tools stay usable instead of failing with ENOENT on dead roots.
-    let roots: Vec<PathBuf> = {
-        let live: Vec<PathBuf> = ctx
-            .root_paths()
-            .into_iter()
-            .filter(|p| p.exists())
-            .collect();
-        if live.is_empty() {
-            vec![std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf())]
-        } else {
-            live
+    // Tool `cwd` is always first among roots. Global work context may be
+    // multi-root (or left installed by a parallel test); without putting the
+    // caller's cwd first, relative paths like `f.txt` can resolve into another
+    // root (ENOENT / cross-test pollution) instead of the tool's workspace.
+    // Drop roots that no longer exist (tempdir dropped after a prior install).
+    let cwd_root = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let mut roots: Vec<PathBuf> = vec![cwd_root.clone()];
+    for p in ctx.root_paths() {
+        if !p.exists() {
+            continue;
         }
-    };
+        let c = std::fs::canonicalize(&p).unwrap_or(p);
+        if !roots.iter().any(|r| r == &c) {
+            roots.push(c);
+        }
+    }
 
     // Named root: //backend/src/foo
     if let Some((name, rel)) = parse_named_path(input) {
@@ -360,5 +361,26 @@ mod tests {
         std::fs::write(live.path().join("ok.txt"), b"hi").unwrap();
         let p = resolve_contained(live.path(), "ok.txt").unwrap();
         assert!(p.ends_with("ok.txt"));
+    }
+
+    #[test]
+    fn tool_cwd_wins_over_foreign_work_context() {
+        // Parallel tests may leave a live work context installed. A tool
+        // constructed with its own cwd must still resolve relative paths
+        // there, not into the foreign root.
+        let _g = CtxGuard;
+        let foreign = tempfile::tempdir().unwrap();
+        std::fs::write(foreign.path().join("f.txt"), b"foreign\n").unwrap();
+        install_work_context(WorkContext::single(foreign.path().to_path_buf()));
+
+        let mine = tempfile::tempdir().unwrap();
+        std::fs::write(mine.path().join("f.txt"), b"mine\n").unwrap();
+        let p = resolve_contained(mine.path(), "f.txt").unwrap();
+        let body = std::fs::read_to_string(&p).unwrap();
+        assert_eq!(body, "mine\n", "resolved into foreign root: {p:?}");
+        assert!(
+            p.starts_with(std::fs::canonicalize(mine.path()).unwrap()),
+            "path {p:?} not under mine"
+        );
     }
 }

@@ -106,7 +106,7 @@ pub fn doctor_channel_policy_lines(telegram_token_set: bool) -> Vec<String> {
         "channel_whatsapp: stub/thin (not production depth)".into(),
         "channel_signal: stub/thin (not production depth)".into(),
         "schedule_fires: require an LLM API key for chat body".into(),
-        "pairing: allowlist peer ids (not OpenClaw pairing codes)".into(),
+        "pairing: allowlist peer ids + optional short pairing codes (mint/redeem)".into(),
     ]
 }
 
