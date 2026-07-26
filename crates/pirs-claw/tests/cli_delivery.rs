@@ -118,8 +118,28 @@ fn serve_allow_all_warns_then_fails_without_token() {
 
 #[test]
 fn webhook_bind_host_is_localhost_in_source_default() {
-    // Structural + unit-tested helper: default must not be world bind.
-    let src = include_str!("../src/gateway.rs");
+    // Structural + unit-tested helper: the default must not be a world bind.
+    //
+    // Reads the whole `gateway/` module rather than one file. It used to
+    // `include_str!("../src/gateway.rs")`, which stopped existing when 6d1adb3 split that file
+    // into channel modules — and because `include_str!` of a missing path is a COMPILE error,
+    // that broke `cargo test --workspace` for the entire repo, not just this test. The invariant
+    // it guards (bind 127.0.0.1 unless explicitly opted in) survived the refactor untouched; only
+    // the path did not.
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/gateway");
+    let src: String = std::fs::read_dir(&dir)
+        .expect("gateway module dir")
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("rs"))
+        .map(|p| std::fs::read_to_string(p).unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !src.is_empty(),
+        "gateway module is empty or unreadable at {}",
+        dir.display()
+    );
     assert!(
         src.contains("127.0.0.1"),
         "gateway must document/default localhost bind"

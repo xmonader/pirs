@@ -302,10 +302,19 @@ async fn plan_pinned_at_tail_of_context() {
         pin_pos.is_some(),
         "plan pin should be in context: {last_call:?}"
     );
+    // The pack inserts the pin at `len-1`, but when the tail of the conversation is an
+    // assistant tool_use followed by its tool_result, `enforce_tool_result_adjacency`
+    // (control_pins.rs) deliberately MOVES it to after that run — a tool_result must sit
+    // immediately after the tool_use that issued it or the backend rejects the whole request.
+    // So the pin ends up LAST here, which is also where a plan reminder is most useful.
+    //
+    // This assertion said `len - 2` and had been failing since c680d20 added that adjacency fix
+    // on 2026-07-22; from 2026-07-25 it was invisible, because splitting gateway.rs broke
+    // `cargo test --workspace` compilation entirely.
     assert_eq!(
         pin_pos.unwrap(),
-        last_call.len() - 2,
-        "pin sits before the last message"
+        last_call.len() - 1,
+        "pin should be pinned at the TAIL after tool_result adjacency is enforced"
     );
 
     let duplicates = last_call.iter().filter(|m| matches!(

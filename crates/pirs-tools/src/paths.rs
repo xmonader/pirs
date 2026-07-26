@@ -179,10 +179,43 @@ pub fn resolve_contained(cwd: &Path, input: &str) -> anyhow::Result<PathBuf> {
     }))
 }
 
+/// Fold `.` and `..` away WITHOUT touching the filesystem.
+///
+/// `canonicalize_existing_prefix` can hand back a path that still contains `..` — when the peel
+/// reaches a `..` component, `Path::file_name()` is `None` and it bails out lexically. A
+/// component-wise `starts_with(root)` then accepts `<root>/ghost/../../outside/x`, because the
+/// first two components really are the root. Folding first makes the containment check see the
+/// path the filesystem would actually resolve to.
+fn fold_parent_dirs(p: &Path) -> PathBuf {
+    let mut out: Vec<std::ffi::OsString> = Vec::new();
+    let mut prefix = PathBuf::new();
+    for comp in p.components() {
+        match comp {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                // Popping past the start would let the path climb out of whatever it is
+                // anchored to, so keep the `..` and let the caller's containment check reject it.
+                if out.pop().is_none() {
+                    out.push(std::ffi::OsString::from(".."));
+                }
+            }
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {
+                prefix.push(comp.as_os_str());
+            }
+            std::path::Component::Normal(n) => out.push(n.to_os_string()),
+        }
+    }
+    let mut result = prefix;
+    for c in out {
+        result.push(c);
+    }
+    result
+}
+
 fn resolve_under_root(root: &Path, rel: &str) -> anyhow::Result<PathBuf> {
     let lexical = resolve(root, rel);
     let root_c = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let resolved = canonicalize_existing_prefix(&lexical);
+    let resolved = fold_parent_dirs(&canonicalize_existing_prefix(&lexical));
     if resolved.starts_with(&root_c) {
         Ok(resolved)
     } else {
@@ -381,6 +414,41 @@ mod tests {
         assert!(
             p.starts_with(std::fs::canonicalize(mine.path()).unwrap()),
             "path {p:?} not under mine"
+        );
+    }
+}
+
+#[cfg(test)]
+mod containment_escape_regression {
+    use super::*;
+
+    /// A non-existent component followed by `..` must NOT escape the root.
+    ///
+    /// `canonicalize_existing_prefix` peels components until one canonicalizes. When the peel
+    /// reaches a component that is `..`, `Path::file_name()` returns `None` and the `_` arm
+    /// returns the path LEXICALLY — with `..` still in it. `resolve_under_root` then does a
+    /// component-wise `starts_with(root)`, which `/root/ghost/../../outside/x` satisfies.
+    ///
+    /// This matters because `write`/`edit` are auto-approved at the DEFAULT tier while `bash` is
+    /// denied — so it converts "can edit files, cannot run shell" into host code execution via
+    /// ~/.bashrc or ~/.ssh/authorized_keys.
+    #[test]
+    fn a_nonexistent_component_then_dotdot_cannot_escape_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("workspace");
+        std::fs::create_dir_all(&root).unwrap();
+        let outside = tmp.path().join("OUTSIDE");
+        std::fs::create_dir_all(&outside).unwrap();
+
+        // `ghost` does not exist, so canonicalize fails and the peel reaches `..`.
+        let attack = "ghost/../../OUTSIDE/pwned.txt";
+        let got = resolve_under_root(&root, attack);
+
+        assert!(
+            got.is_err(),
+            "containment let `{attack}` through, resolving to {:?} — that is outside {:?}",
+            got.ok(),
+            root
         );
     }
 }

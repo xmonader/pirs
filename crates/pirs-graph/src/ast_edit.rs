@@ -510,19 +510,31 @@ fn full_item_span(func: tree_sitter::Node, source: &str, lang: Lang) -> (usize, 
 }
 
 fn move_function(src: &Path, dest: &Path, lang: Lang, name: &str) -> anyhow::Result<EditResult> {
-    // Same inode: write dest then strip src would delete the function (M-21).
+    // Same file: we write dest and then strip the function from src, so if they are the same
+    // file the net effect is DELETING the function (M-21).
+    //
+    // Path comparison alone is not enough. The comment here used to say "same inode" while
+    // comparing canonicalized PATHS — and `canonicalize` resolves symlinks but NOT hardlinks, so
+    // two hardlinks to one inode compare unequal and slipped straight through. (There was also a
+    // third clause that repeated the first verbatim, which clippy rejects as a logic bug — it was
+    // dead, and removing it is what surfaced that the real check was missing.)
     let src_c = std::fs::canonicalize(src).unwrap_or_else(|_| src.to_path_buf());
     let dest_c = if dest.exists() {
         std::fs::canonicalize(dest).unwrap_or_else(|_| dest.to_path_buf())
     } else {
         dest.to_path_buf()
     };
-    if src_c == dest_c
-        || (src.exists()
-            && dest.exists()
-            && src_c == dest_c)
-        || src == dest
-    {
+    #[cfg(unix)]
+    let same_inode = {
+        use std::os::unix::fs::MetadataExt;
+        match (std::fs::metadata(src), std::fs::metadata(dest)) {
+            (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+            _ => false,
+        }
+    };
+    #[cfg(not(unix))]
+    let same_inode = false;
+    if src_c == dest_c || src == dest || same_inode {
         bail!(
             "move_function: destination is the same file as source ({}); \
              refusing (would delete the function)",

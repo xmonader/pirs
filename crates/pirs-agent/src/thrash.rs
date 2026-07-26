@@ -26,7 +26,14 @@ fn compact_args(v: &serde_json::Value) -> String {
     if s.len() <= 400 {
         s
     } else {
-        format!("{}…", &s[..400])
+        // Snap to a char boundary. `s` is the MODEL's tool arguments serialized by serde_json,
+        // which emits raw UTF-8 rather than \uXXXX escapes — so a byte slice panics whenever a
+        // multi-byte character straddles byte 400. It panicked while holding the thrash mutex,
+        // poisoning it, which in a long-lived process (--serve / --mode rpc / ACP) made every
+        // SUBSEQUENT tool call panic at the same lock().unwrap(). Every other truncation in this
+        // crate is already char-safe; this was the outlier.
+        let cut = (0..=400).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
+        format!("{}…", &s[..cut])
     }
 }
 
@@ -261,5 +268,33 @@ mod tests {
         assert!(a.peek_stop().is_none());
         assert!(b.peek_stop().is_none());
         assert!(c.peek_stop().is_none());
+    }
+}
+
+#[cfg(test)]
+mod utf8_regression {
+    /// `compact_args` must not byte-slice model-authored arguments.
+    ///
+    /// The args come straight from the model as `serde_json::Value::to_string()`, and serde
+    /// emits raw UTF-8 rather than `\uXXXX` escapes — so any tool call over 400 bytes with a
+    /// multi-byte character straddling byte 400 panics. It panics while holding the thrash
+    /// mutex, poisoning it, so in a long-lived process (`--serve`, `--mode rpc`, ACP) every
+    /// subsequent tool call then panics at the same `lock().unwrap()`.
+    #[test]
+    fn compact_args_survives_a_multibyte_char_on_the_boundary() {
+        // Build a JSON arg whose byte 400 lands INSIDE a multi-byte character.
+        for pad in 380..400 {
+            let mut body = "x".repeat(pad);
+            body.push('é');
+            body.push_str(&"y".repeat(60));
+            let v = serde_json::json!({ "content": body });
+            let s = v.to_string();
+            if s.len() > 400 && !s.is_char_boundary(400) {
+                // This is the panicking shape.
+                let _ = super::compact_args(&v);
+                return;
+            }
+        }
+        panic!("test did not construct the boundary-straddling case");
     }
 }
