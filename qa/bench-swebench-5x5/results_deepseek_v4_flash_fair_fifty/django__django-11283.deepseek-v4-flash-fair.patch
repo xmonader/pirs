@@ -1,0 +1,27 @@
+diff --git a/django/contrib/auth/migrations/0011_update_proxy_permissions.py b/django/contrib/auth/migrations/0011_update_proxy_permissions.py
+index 0e66649695..8ed89f3b54 100644
+--- a/django/contrib/auth/migrations/0011_update_proxy_permissions.py
++++ b/django/contrib/auth/migrations/0011_update_proxy_permissions.py
+@@ -24,9 +24,23 @@ def update_proxy_model_permissions(apps, schema_editor, reverse=False):
+         proxy_content_type = ContentType.objects.get_for_model(Model, for_concrete_model=False)
+         old_content_type = proxy_content_type if reverse else concrete_content_type
+         new_content_type = concrete_content_type if reverse else proxy_content_type
+-        Permission.objects.filter(
++        # Check for existing permissions that would cause a conflict.
++        old_permissions = Permission.objects.filter(
+             permissions_query,
+             content_type=old_content_type,
++        )
++        conflicting_permissions = old_permissions.filter(
++            codename__in=Permission.objects.filter(
++                content_type=new_content_type,
++            ).values('codename'),
++        )
++        if conflicting_permissions.exists():
++            print('A problem arose migrating proxy model permissions for %s.%s. '
++                  'Permissions with these codenames already exist in the proxy '
++                  'model\'s content type. You may need to manually audit or '
++                  'remove these permissions.' % (opts.app_label, opts.model_name))
++        old_permissions.exclude(
++            pk__in=conflicting_permissions.values('pk'),
+         ).update(content_type=new_content_type)

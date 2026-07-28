@@ -10,7 +10,8 @@
 |------|----------------------|------------|-----------------|
 | **This dir (filtered)** | Yes | `looks_like_test_id` + test_patch recovery | **42/50** |
 | [RAW IDs](../results_deepseek_v4_flash_rawids_fifty/) | Yes | none (`PIRS_RAW_TEST_IDS=1`) | **46/50** |
-| Fair (`PIRS_FAIR=1` / `--hide-targets`) | **No** | filtered for grading only | (running / TBD) |
+| [Fair](../results_deepseek_v4_flash_fair_fifty/) (`--hide-targets`) | **No** | filtered for grading; **test_patch pre-applied** | **45/50** |
+| Strict (`PIRS_STRICT=1`) | **No** | grading only; **no test_patch for agent** | (running / TBD) |
 
 **Filtered is not gold cheating.** It still applies only `test_patch` and never gold `patch`.  
 **But it does spoon-feed** FAIL_TO_PASS ids into the agent prompt (same as RAW). The filter only drops docstring/prose “ids” that are not runnable.

@@ -1,0 +1,21 @@
+=== django__django-16046 (deepseek-v4-flash) start 1785273864.9069998 ===
+a5de88954bbb4fc1d5ff750c757e89b35a04354edc7983d59ee700a99a345f42
+head_sha=556061462602b1eb5b26309856098176f37ee902
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_empty (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_subclass (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_float_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_number (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_string (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_large_number (utils_tests.test_numberformat.TestNumberFormat) --issue-file=/tmp/issue.md --base-sha=556061462602b1eb5b26309856098176f37ee902 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=17 tools=17 [read:5 bash:3 grep:3 run_tests:2 find:1 git:1 ls:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=8337 cache_r=191232 cache_w=0 out=2406 reasoning=1293 total=201975 — $0.0183
+  TOTAL: in=8337 cache_r=191232 cache_w=0 out=2406 reasoning=1293 total=201975 — $0.0183
+timing (total 42.29s):
+  fix: 40.00s (95%)
+  baseline: 2.01s (5%)
+  rollback: 0.13s (0%)
+  discover: 0.09s (0%)
+  bootstrap: 0.05s (0%)
+  fix→tools: grep:0.50s find:0.19s git:0.19s bash:0.12s run_tests:0.03s read:0.00s project:0.00s ls:0.00s
+outcome: Failed(FixNoFlip)
+
+exit_code=1 elapsed_s=42.4

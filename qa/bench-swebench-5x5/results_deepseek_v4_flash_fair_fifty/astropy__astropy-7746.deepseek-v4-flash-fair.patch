@@ -1,0 +1,30 @@
+diff --git a/astropy/wcs/wcs.py b/astropy/wcs/wcs.py
+index d3a06f2b31..c11e18241c 100644
+--- a/astropy/wcs/wcs.py
++++ b/astropy/wcs/wcs.py
+@@ -1212,12 +1212,16 @@ reduce these to 2 dimensions using the naxis kwarg.
+         """
+ 
+         def _return_list_of_arrays(axes, origin):
++            orig_axes = axes[:]
+             try:
+                 axes = np.broadcast_arrays(*axes)
+             except ValueError:
+                 raise ValueError(
+                     "Coordinate arrays are not broadcastable to each other")
+ 
++            if axes[0].size == 0:
++                return [orig_ax.astype(np.float_) for orig_ax in orig_axes]
++
+             xy = np.hstack([x.reshape((x.size, 1)) for x in axes])
+ 
+             if ra_dec_order and sky == 'input':
+@@ -1235,6 +1239,8 @@ reduce these to 2 dimensions using the naxis kwarg.
+                 raise ValueError(
+                     "When providing two arguments, the array must be "
+                     "of shape (N, {0})".format(self.naxis))
++            if xy.shape[0] == 0:
++                return xy
+             if ra_dec_order and sky == 'input':
+                 xy = self._denormalize_sky(xy)
+             result = func(xy, origin)

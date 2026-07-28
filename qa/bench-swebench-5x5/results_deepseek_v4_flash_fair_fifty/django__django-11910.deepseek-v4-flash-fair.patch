@@ -1,0 +1,21 @@
+diff --git a/django/db/migrations/autodetector.py b/django/db/migrations/autodetector.py
+index 1c40161c7f..d01fafd7ad 100644
+--- a/django/db/migrations/autodetector.py
++++ b/django/db/migrations/autodetector.py
+@@ -927,7 +927,15 @@ class MigrationAutodetector:
+                 if remote_field_name:
+                     to_field_rename_key = rename_key + (remote_field_name,)
+                     if to_field_rename_key in self.renamed_fields:
+-                        new_field.remote_field.field_name = old_field.remote_field.field_name
++                        # If the old field_name was pointing to the old
++                        # related model's PK, don't revert it (the FK
++                        # doesn't specify an explicit to_field). The
++                        # deconstruct() method will compare it against
++                        # the new PK name, so keeping it as the new PK
++                        # name avoids a spurious to_field in the output.
++                        old_remote_field_name = old_field.remote_field.field_name
++                        if old_remote_field_name != old_field.remote_field.model._meta.pk.name:
++                            new_field.remote_field.field_name = old_remote_field_name
+                 # Handle ForeignObjects which can have multiple from_fields/to_fields.
+                 from_fields = getattr(new_field, 'from_fields', None)
+                 if from_fields:

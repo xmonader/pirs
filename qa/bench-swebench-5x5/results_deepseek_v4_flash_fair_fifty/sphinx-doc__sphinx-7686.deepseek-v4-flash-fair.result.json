@@ -1,0 +1,26 @@
+{
+  "id": "sphinx-doc__sphinx-7686",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-fair",
+  "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7686:latest",
+  "container": "pirsbench-sphinx-doc--sphinx-7686-deepseek-v4-flash-fair",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": true,
+  "exit_code": 1,
+  "elapsed_s": 272.0,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nsession: turns=56 tools=57 [bash:24 read:15 grep:7 ls:3 run_tests:3 edit:2 edit_block:2 find:1]\ntokens by model:\n  deepseek-v4-flash: in=37805 cache_r=1773440 cache_w=0 out=24090 reasoning=16730 total=1835335 \u2014 $0.1608\n  TOTAL: in=37805 cache_r=1773440 cache_w=0 out=24090 reasoning=16730 total=1835335 \u2014 $0.1608\ntiming (total 271.93s):\n  fix: 255.07s (94% n=2)\n  bootstrap: 6.44s (2%)\n  discover: 4.57s (2%)\n  baseline: 4.55s (2%)\n  verify: 1.26s (0%)\n  rollback: 0.05s (0%)\n  fix\u2192tools: bash:19.51s run_tests:7.56s edit:0.03s grep:0.03s find:0.02s ls:0.01s edit_block:0.01s read:0.01s\noutcome: Failed(FixNoFlip)",
+  "tokens": {
+    "in": 37805,
+    "cache_read": 1773440,
+    "cache_write": 0,
+    "out": 24090,
+    "reasoning": 16730,
+    "total": 1835335,
+    "cost_usd": 0.1608
+  },
+  "patch_copied": false
+}

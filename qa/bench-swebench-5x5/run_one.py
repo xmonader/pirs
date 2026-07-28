@@ -94,7 +94,8 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
                   base_url: str | None = None, plan_model: str | None = None,
                   strategy: str | None = None,
                   raw_test_ids: bool | None = None,
-                  hide_targets: bool | None = None):
+                  hide_targets: bool | None = None,
+                  strict: bool | None = None):
     """Run one instance.
 
     raw_test_ids: if True (or env PIRS_RAW_TEST_IDS=1), pass FAIL_TO_PASS /
@@ -104,7 +105,16 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
     hide_targets: if True (or env PIRS_FAIR=1 / PIRS_HIDE_TARGETS=1), pass
     --hide-targets so the agent prompt does NOT list FAIL_TO_PASS ids.
     Harness still grades with those ids (reproduce + verify). Fair mode.
+
+    strict: if True (or env PIRS_STRICT=1), official-ish issue-only setup:
+      1) agent runs on base commit with NO test_patch and --agent-only/--hide-targets
+      2) then test_patch is applied and the model patch is graded with --check-patch
+    Implies hide_targets; disables raw_test_ids spoon-feeding of any kind.
     """
+    if strict is None:
+        strict = os.environ.get("PIRS_STRICT", "").strip().lower() in (
+            "1", "true", "yes", "on",
+        )
     if raw_test_ids is None:
         raw_test_ids = os.environ.get("PIRS_RAW_TEST_IDS", "").strip().lower() in (
             "1", "true", "yes", "on",
@@ -115,6 +125,9 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             or os.environ.get("PIRS_HIDE_TARGETS", "").strip().lower()
             in ("1", "true", "yes", "on")
         )
+    if strict:
+        hide_targets = True
+        raw_test_ids = False
     inst = json.loads((BENCH_DIR / "instances" / f"{instance_id}.json").read_text())
     image = image_for(instance_id)
     tag = label or model
@@ -131,7 +144,8 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
         "strategy": strategy,
         "raw_test_ids": raw_test_ids,
         "hide_targets": hide_targets,
-        "fair": hide_targets,
+        "fair": hide_targets and not strict,
+        "strict": strict,
     }
 
     log = open(log_path, "w")
@@ -147,19 +161,19 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
         sh(["docker", "cp", BINARY, f"{cname}:/usr/local/bin/pirs-bench"], stdout=log, stderr=log)
         sh(["docker", "exec", cname, "chmod", "+x", "/usr/local/bin/pirs-bench"], stdout=log, stderr=log)
 
-        # Write + apply + commit the test patch so FAIL_TO_PASS tests exist.
-        test_patch_file = out_dir / f"{instance_id}.testpatch.diff"
-        test_patch_file.write_text(inst["test_patch"])
-        sh(["docker", "cp", str(test_patch_file), f"{cname}:/tmp/test.patch"], stdout=log, stderr=log)
+        # Always configure git; base_sha is the image checkout (pre test_patch).
         sh(["docker", "exec", cname, "bash", "-lc",
-            "cd /testbed && git config user.email b@b.com && git config user.name bench && "
-            "git apply --whitespace=fix /tmp/test.patch && git add -A && "
-            "git commit -q -m 'apply swebench test patch'"], stdout=log, stderr=log)
-        head_sha = subprocess.run(
+            "cd /testbed && git config user.email b@b.com && git config user.name bench"],
+           stdout=log, stderr=log)
+        base_sha = subprocess.run(
             ["docker", "exec", cname, "git", "-C", "/testbed", "rev-parse", "HEAD"],
             capture_output=True, text=True, check=True,
         ).stdout.strip()
-        logline(f"head_sha={head_sha}")
+        logline(f"base_sha={base_sha}")
+
+        test_patch_file = out_dir / f"{instance_id}.testpatch.diff"
+        test_patch_file.write_text(inst["test_patch"])
+        sh(["docker", "cp", str(test_patch_file), f"{cname}:/tmp/test.patch"], stdout=log, stderr=log)
 
         issue_file = out_dir / f"{instance_id}.issue.md"
         issue_file.write_text(inst["problem_statement"])
@@ -306,42 +320,6 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
         if strategy_script:
             sh(["docker", "cp", strategy_script, f"{cname}:/tmp/strategy.rhai"], stdout=log, stderr=log)
 
-        # Use --flag=value so keep-green / target ids that start with "-"
-        # (e.g. django docstring titles like "--squashed-name …") are not
-        # re-parsed as CLI flags by clap.
-        cmd = ["pirs-bench", "solve", "/testbed"]
-        for t in targets:
-            cmd.append(f"--target={t}")
-        for k in keep_green:
-            cmd.append(f"--keep-green={k}")
-        cmd += [
-            "--issue-file=/tmp/issue.md",
-            f"--base-sha={head_sha}",
-            f"--provider={provider}",
-            f"--model={model}",
-            f"--max-turns={max_turns}",
-            "--out=/tmp/out.patch",
-        ]
-        if hide_targets:
-            cmd.append("--hide-targets")
-            logline(
-                "fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; "
-                "harness still verifies against them"
-            )
-        if provider == "openai-compat":
-            if not base_url:
-                raise ValueError("base_url is required when provider='openai-compat'")
-            cmd.append(f"--base-url={base_url}")
-        if plan_model:
-            cmd.append(f"--plan-model={plan_model}")
-        if no_strategy:
-            cmd += ["--no-strategy"]
-        elif strategy_script:
-            cmd.append("--strategy-script=/tmp/strategy.rhai")
-        elif strategy:
-            cmd.append(f"--strategy={strategy}")
-        logline("cmd: " + " ".join(cmd))
-
         env_key_name = {
             "deepseek": "DEEPSEEK_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
@@ -349,33 +327,169 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
         }[provider]
         api_key = os.environ[env_key_name]
 
+        def docker_exec(cmd, timeout=timeout_s):
+            return subprocess.run(
+                ["docker", "exec",
+                 "-e", f"{env_key_name}={api_key}",
+                 "-e", f"PATH={TESTBED_PATH}",
+                 "-e", "RUST_LOG=warn",
+                 cname] + cmd,
+                capture_output=True, text=True, timeout=timeout,
+            )
+
         start = time.time()
-        proc = subprocess.run(
-            ["docker", "exec",
-             "-e", f"{env_key_name}={api_key}",
-             "-e", f"PATH={TESTBED_PATH}",
-             "-e", "RUST_LOG=warn",
-             cname] + cmd,
-            capture_output=True, text=True, timeout=timeout_s,
-        )
-        elapsed = time.time() - start
-        logline(proc.stdout)
-        logline(proc.stderr)
-        logline(f"exit_code={proc.returncode} elapsed_s={elapsed:.1f}")
 
-        result["exit_code"] = proc.returncode
-        result["elapsed_s"] = round(elapsed, 1)
-        result["solved"] = proc.returncode == 0
-        # Keep a longer tail so TOTAL token lines are not dropped on verbose runs.
-        result["stderr_tail"] = "\n".join(proc.stderr.splitlines()[-80:])
-        tokens = parse_token_stats(proc.stderr)
-        if tokens:
-            result["tokens"] = tokens
+        if strict:
+            # ── STRICT: agent never sees test_patch ──────────────────────────
+            # Phase 1: issue-only agent on base commit → model patch
+            logline(
+                "strict=1: agent-only on base (NO test_patch); "
+                "then apply test_patch + grade with --check-patch"
+            )
+            agent_cmd = [
+                "pirs-bench", "solve", "/testbed",
+                "--agent-only",
+                "--hide-targets",
+                "--issue-file=/tmp/issue.md",
+                f"--base-sha={base_sha}",
+                f"--provider={provider}",
+                f"--model={model}",
+                f"--max-turns={max_turns}",
+                "--out=/tmp/out.patch",
+            ]
+            if provider == "openai-compat":
+                if not base_url:
+                    raise ValueError("base_url is required when provider='openai-compat'")
+                agent_cmd.append(f"--base-url={base_url}")
+            if plan_model:
+                agent_cmd.append(f"--plan-model={plan_model}")
+            if no_strategy:
+                agent_cmd += ["--no-strategy"]
+            elif strategy_script:
+                agent_cmd.append("--strategy-script=/tmp/strategy.rhai")
+            elif strategy:
+                agent_cmd.append(f"--strategy={strategy}")
+            logline("agent_cmd: " + " ".join(agent_cmd))
+            proc_agent = docker_exec(agent_cmd)
+            logline(proc_agent.stdout)
+            logline(proc_agent.stderr)
+            logline(f"agent_exit={proc_agent.returncode}")
+            tokens = parse_token_stats(proc_agent.stderr)
+            if tokens:
+                result["tokens"] = tokens
+            result["stderr_tail"] = "\n".join(proc_agent.stderr.splitlines()[-80:])
 
-        cp = subprocess.run(["docker", "cp", f"{cname}:/tmp/out.patch", str(patch_out)], capture_output=True, text=True)
-        result["patch_copied"] = cp.returncode == 0
-        if cp.returncode == 0:
-            result["patch_bytes"] = patch_out.stat().st_size
+            cp = subprocess.run(
+                ["docker", "cp", f"{cname}:/tmp/out.patch", str(patch_out)],
+                capture_output=True, text=True,
+            )
+            result["patch_copied"] = (
+                cp.returncode == 0 and patch_out.exists() and patch_out.stat().st_size > 0
+            )
+            if result["patch_copied"]:
+                result["patch_bytes"] = patch_out.stat().st_size
+                # Ensure clean base, apply test_patch only, then grade model patch.
+                sh(["docker", "exec", cname, "git", "-C", "/testbed", "reset", "--hard", base_sha],
+                   stdout=log, stderr=log)
+                sh(["docker", "exec", cname, "bash", "-lc",
+                    "cd /testbed && git apply --whitespace=fix /tmp/test.patch && "
+                    "git add -A && git commit -q -m 'apply swebench test patch'"],
+                   stdout=log, stderr=log)
+                # Re-copy model patch into container (agent-only resets the tree)
+                sh(["docker", "cp", str(patch_out), f"{cname}:/tmp/out.patch"],
+                   stdout=log, stderr=log)
+
+                check_cmd = ["pirs-bench", "solve", "/testbed", "--check-patch=/tmp/out.patch"]
+                for t in targets:
+                    check_cmd.append(f"--target={t}")
+                for k in keep_green:
+                    check_cmd.append(f"--keep-green={k}")
+                logline("check_cmd: " + " ".join(check_cmd))
+                proc = docker_exec(check_cmd, timeout=max(600, timeout_s // 2))
+                logline(proc.stdout)
+                logline(proc.stderr)
+                logline(f"check_exit={proc.returncode}")
+                result["exit_code"] = proc.returncode
+                result["solved"] = proc.returncode == 0
+                result["stderr_tail"] = (
+                    result.get("stderr_tail", "")
+                    + "\n--- check ---\n"
+                    + "\n".join(proc.stderr.splitlines()[-40:])
+                )
+            else:
+                result["exit_code"] = proc_agent.returncode or 1
+                result["solved"] = False
+                result["error"] = "strict: agent produced no patch"
+                logline("strict: no agent patch — skip check")
+            result["elapsed_s"] = round(time.time() - start, 1)
+        else:
+            # ── Normal / fair: test_patch in tree before agent ────────────────
+            sh(["docker", "exec", cname, "bash", "-lc",
+                "cd /testbed && git apply --whitespace=fix /tmp/test.patch && "
+                "git add -A && git commit -q -m 'apply swebench test patch'"],
+               stdout=log, stderr=log)
+            head_sha = subprocess.run(
+                ["docker", "exec", cname, "git", "-C", "/testbed", "rev-parse", "HEAD"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            logline(f"head_sha={head_sha} (after test_patch)")
+
+            # Use --flag=value so keep-green / target ids that start with "-"
+            # are not re-parsed as CLI flags by clap.
+            cmd = ["pirs-bench", "solve", "/testbed"]
+            for t in targets:
+                cmd.append(f"--target={t}")
+            for k in keep_green:
+                cmd.append(f"--keep-green={k}")
+            cmd += [
+                "--issue-file=/tmp/issue.md",
+                f"--base-sha={head_sha}",
+                f"--provider={provider}",
+                f"--model={model}",
+                f"--max-turns={max_turns}",
+                "--out=/tmp/out.patch",
+            ]
+            if hide_targets:
+                cmd.append("--hide-targets")
+                logline(
+                    "fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; "
+                    "harness still verifies against them (test_patch pre-applied)"
+                )
+            if provider == "openai-compat":
+                if not base_url:
+                    raise ValueError("base_url is required when provider='openai-compat'")
+                cmd.append(f"--base-url={base_url}")
+            if plan_model:
+                cmd.append(f"--plan-model={plan_model}")
+            if no_strategy:
+                cmd += ["--no-strategy"]
+            elif strategy_script:
+                cmd.append("--strategy-script=/tmp/strategy.rhai")
+            elif strategy:
+                cmd.append(f"--strategy={strategy}")
+            logline("cmd: " + " ".join(cmd))
+
+            proc = docker_exec(cmd)
+            elapsed = time.time() - start
+            logline(proc.stdout)
+            logline(proc.stderr)
+            logline(f"exit_code={proc.returncode} elapsed_s={elapsed:.1f}")
+
+            result["exit_code"] = proc.returncode
+            result["elapsed_s"] = round(elapsed, 1)
+            result["solved"] = proc.returncode == 0
+            result["stderr_tail"] = "\n".join(proc.stderr.splitlines()[-80:])
+            tokens = parse_token_stats(proc.stderr)
+            if tokens:
+                result["tokens"] = tokens
+
+            cp = subprocess.run(
+                ["docker", "cp", f"{cname}:/tmp/out.patch", str(patch_out)],
+                capture_output=True, text=True,
+            )
+            result["patch_copied"] = cp.returncode == 0
+            if cp.returncode == 0 and patch_out.exists():
+                result["patch_bytes"] = patch_out.stat().st_size
 
     except subprocess.TimeoutExpired as e:
         result["exit_code"] = None

@@ -1,0 +1,25 @@
+=== django__django-11133 (deepseek-v4-flash) start 1785272569.9021635 ===
+d363ae916ba1c61eddf5cc5f80404898a849cfb443c1daed7e03a06f64003fcc
+head_sha=67d703d0052d90c2f8a407d98294f72ef6380525
+filtered non-test ids: targets 1->1 keep_green 64->56
+capped keep_green 64->40 (PIRS_MAX_KEEP_GREEN=40)
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_memoryview_content (httpwrappers.tests.HttpResponseTests) --keep-green=test_dict_behavior (httpwrappers.tests.HttpResponseTests) --keep-green=test_file_interface (httpwrappers.tests.HttpResponseTests) --keep-green=test_headers_type (httpwrappers.tests.HttpResponseTests) --keep-green=test_iter_content (httpwrappers.tests.HttpResponseTests) --keep-green=test_iterator_isnt_rewound (httpwrappers.tests.HttpResponseTests) --keep-green=test_lazy_content (httpwrappers.tests.HttpResponseTests) --keep-green=test_long_line (httpwrappers.tests.HttpResponseTests) --keep-green=test_newlines_in_headers (httpwrappers.tests.HttpResponseTests) --keep-green=test_non_string_content (httpwrappers.tests.HttpResponseTests) --keep-green=test_stream_interface (httpwrappers.tests.HttpResponseTests) --keep-green=test_unsafe_redirect (httpwrappers.tests.HttpResponseTests) --keep-green=test_basic_mutable_operations (httpwrappers.tests.QueryDictTests) --keep-green=test_cookie_edgecases (httpwrappers.tests.CookieTests) --keep-green=test_create_with_no_args (httpwrappers.tests.QueryDictTests) --keep-green=test_duplicates_in_fromkeys_iterable (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_empty_iterable (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_is_immutable_by_default (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_mutable_override (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_noniterable (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_with_nondefault_encoding (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_with_nonempty_value (httpwrappers.tests.QueryDictTests) --keep-green=test_httponly_after_load (httpwrappers.tests.CookieTests) --keep-green=test_immutability (httpwrappers.tests.QueryDictTests) --keep-green=test_immutable_basic_operations (httpwrappers.tests.QueryDictTests) --keep-green=test_immutable_get_with_default (httpwrappers.tests.QueryDictTests) --keep-green=test_invalid_cookies (httpwrappers.tests.CookieTests) --keep-green=test_invalid_redirect_repr (httpwrappers.tests.HttpResponseSubclassesTests) --keep-green=test_json_response_custom_encoder (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_list (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_non_ascii (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_passing_arguments_to_json_dumps (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_raises_type_error_with_default_setting (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_text (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_uuid (httpwrappers.tests.JsonResponseTests) --keep-green=test_load_dict (httpwrappers.tests.CookieTests) --keep-green=test_missing_key (httpwrappers.tests.QueryDictTests) --keep-green=test_mutable_delete (httpwrappers.tests.QueryDictTests) --keep-green=test_nonstandard_keys (httpwrappers.tests.CookieTests) --keep-green=test_not_allowed (httpwrappers.tests.HttpResponseSubclassesTests) --keep-green=test_not_allowed_repr (httpwrappers.tests.HttpResponseSubclassesTests) --issue-file=/tmp/issue.md --base-sha=67d703d0052d90c2f8a407d98294f72ef6380525 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=13 tools=13 [bash:5 edit_block:2 find:1 grep:1 ls:1 project:1 read:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=8892 cache_r=176256 cache_w=0 out=3622 reasoning=1658 total=188770 — $0.0187
+  TOTAL: in=8892 cache_r=176256 cache_w=0 out=3622 reasoning=1658 total=188770 — $0.0187
+timing (total 45.77s):
+  fix: 41.82s (91%)
+  baseline: 2.12s (5%)
+  verify: 1.55s (3% n=2)
+  discover: 0.14s (0%)
+  patch: 0.07s (0%)
+  bootstrap: 0.07s (0%)
+  fix→tools: bash:1.82s grep:0.70s find:0.24s run_tests:0.01s edit_block:0.01s project:0.00s read:0.00s ls:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1106 bytes)
+
+exit_code=0 elapsed_s=45.9

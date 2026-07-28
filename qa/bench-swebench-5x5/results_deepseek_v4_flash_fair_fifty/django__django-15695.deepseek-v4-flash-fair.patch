@@ -1,0 +1,34 @@
+diff --git a/django/db/backends/base/schema.py b/django/db/backends/base/schema.py
+index f2ca8c8df9..c745edc66f 100644
+--- a/django/db/backends/base/schema.py
++++ b/django/db/backends/base/schema.py
+@@ -494,6 +494,8 @@ class BaseDatabaseSchemaEditor:
+         self.execute(index.remove_sql(model, self))
+ 
+     def rename_index(self, model, old_index, new_index):
++        if old_index.name == new_index.name:
++            return
+         if self.connection.features.can_rename_index:
+             self.execute(
+                 self._rename_index_sql(model, old_index.name, new_index.name),
+diff --git a/django/db/migrations/operations/models.py b/django/db/migrations/operations/models.py
+index d17232e4ec..85203bfb05 100644
+--- a/django/db/migrations/operations/models.py
++++ b/django/db/migrations/operations/models.py
+@@ -957,12 +957,16 @@ class RenameIndex(IndexOperation):
+                 fields=self.old_fields,
+                 name=matching_index_name[0],
+             )
++            if old_index.name == self.new_name:
++                return
+         else:
+             from_model_state = from_state.models[app_label, self.model_name_lower]
+             old_index = from_model_state.get_index_by_name(self.old_name)
+ 
+         to_model_state = to_state.models[app_label, self.model_name_lower]
+         new_index = to_model_state.get_index_by_name(self.new_name)
++        if old_index.name == new_index.name:
++            return
+         schema_editor.rename_index(model, old_index, new_index)
+ 
+     def database_backwards(self, app_label, schema_editor, from_state, to_state):

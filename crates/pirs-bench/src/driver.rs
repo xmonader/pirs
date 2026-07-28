@@ -110,6 +110,27 @@ fn drive(
         return Ok(Outcome::Failed(FailBucket::ReproFailed));
     }
 
+    drive_with_red_targets(
+        &targets,
+        scope,
+        &baseline,
+        runner,
+        executor,
+        max_attempts,
+        timings,
+    )
+}
+
+/// Fix/verify loop when red targets are already known (shared with patch-check).
+pub fn drive_with_red_targets(
+    targets: &[TestId],
+    scope: &[TestId],
+    baseline: &Snapshot,
+    runner: &dyn TestRunner,
+    executor: &mut dyn Executor,
+    max_attempts: u32,
+    timings: &mut Timings,
+) -> anyhow::Result<Outcome> {
     // Concentric rings (cost control). Each refinement attempt verifies only the
     // Inner ring (the targets) — the cheap signal. The full regression ring runs
     // at most once *per flip*, only after the Inner ring goes green, so a failing
@@ -124,9 +145,9 @@ fn drive(
             break; // executor gave up
         }
         let inner = VerifyPlan {
-            targets: &targets,
-            scope: &targets,
-            baseline: &baseline,
+            targets,
+            scope: targets,
+            baseline,
         };
         let verdict = timings.time("verify", || verify(runner, &inner, Ring::Inner))?;
         if !verdict.is_done() {
@@ -138,9 +159,9 @@ fn drive(
         }
         // Targets flipped — now (and only now) pay for the regression ring.
         let scoped = VerifyPlan {
-            targets: &targets,
+            targets,
             scope,
-            baseline: &baseline,
+            baseline,
         };
         let scoped_verdict = timings.time("verify", || verify(runner, &scoped, Ring::Scoped))?;
         if scoped_verdict.is_done() {
@@ -156,6 +177,70 @@ fn drive(
         .and_then(Verdict::fail_bucket)
         .unwrap_or(FailBucket::FixNoFlip);
     Ok(Outcome::Failed(bucket))
+}
+
+/// Verify an already-written model patch: baseline on the current tree (expect
+/// FAIL_TO_PASS red after `test_patch`), apply `model_patch`, then gate.
+///
+/// Used by strict SWE-bench mode: agent never saw `test_patch`; grading applies
+/// it only here. `executor` is a no-op (patch is applied via git, not the agent).
+pub fn verify_model_patch(
+    spec: &TaskSpec,
+    runner: &dyn TestRunner,
+    model_patch: &str,
+    repo_root: &std::path::Path,
+    timings: &mut Timings,
+) -> anyhow::Result<Outcome> {
+    let scope = compute_scope(spec);
+    let baseline =
+        match timings.time("baseline", || capture_stable(runner, &scope, Ring::Scoped))? {
+            Some(b) => b,
+            None => return Ok(Outcome::Failed(FailBucket::BaselineUnusable)),
+        };
+    let targets = crate::baseline::red_targets_at_baseline(&baseline, &spec.targets);
+    if targets.is_empty() {
+        return Ok(Outcome::Failed(FailBucket::ReproFailed));
+    }
+
+    // Apply the agent patch onto the test_patch tree.
+    let mut child = std::process::Command::new("git")
+        .args(["apply", "--whitespace=nowarn", "-"])
+        .current_dir(repo_root)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("git apply: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        stdin.write_all(model_patch.as_bytes())?;
+    }
+    let out = child
+        .wait_with_output()
+        .map_err(|e| anyhow::anyhow!("git apply wait: {e}"))?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr);
+        tracing::warn!("git apply model patch failed: {err}");
+        return Ok(Outcome::Failed(FailBucket::FixNoFlip));
+    }
+
+    // No agent — executor reports "changed" once so drive runs verify only.
+    struct PatchAlreadyApplied;
+    impl Executor for PatchAlreadyApplied {
+        fn attempt(&mut self, attempt: u32, _last: Option<&Verdict>) -> anyhow::Result<bool> {
+            Ok(attempt == 1)
+        }
+    }
+    let mut exec = PatchAlreadyApplied;
+    drive_with_red_targets(
+        &targets,
+        &scope,
+        &baseline,
+        runner,
+        &mut exec,
+        1,
+        timings,
+    )
 }
 
 #[cfg(test)]

@@ -1,0 +1,23 @@
+=== django__django-12184 (deepseek-v4-flash) start 1785273585.992953 ===
+729bbb8e5372c5cc2f58c8053704916266f959620f7e4e308c083bfe744d5a95
+head_sha=3219eb0b751e7275cd33a60aa5dae024a132c60c
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_re_path_with_missing_optional_parameter (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_allows_non_ascii_but_valid_identifiers (urlpatterns.tests.ParameterRestrictionTests) --keep-green=test_non_identifier_parameter_name_causes_exception (urlpatterns.tests.ParameterRestrictionTests) --keep-green=test_matching_urls (urlpatterns.tests.ConverterTests) --keep-green=test_nonmatching_urls (urlpatterns.tests.ConverterTests) --keep-green=test_resolve_type_error_propagates (urlpatterns.tests.ConversionExceptionTests) --keep-green=test_resolve_value_error_means_no_match (urlpatterns.tests.ConversionExceptionTests) --keep-green=test_reverse_value_error_propagates (urlpatterns.tests.ConversionExceptionTests) --keep-green=test_converter_resolve (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_converter_reverse (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_converter_reverse_with_second_layer_instance_namespace (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_invalid_converter (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_inclusion_is_matchable (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_inclusion_is_reversible (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_lookup_with_double_inclusion (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_lookup_with_empty_string_inclusion (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_lookup_with_inclusion (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_lookup_with_multiple_parameters (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_lookup_with_typed_parameters (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_lookup_without_parameters (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_reverse_with_parameter (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_path_reverse_without_parameter (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_re_path (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_re_path_with_optional_parameter (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_space_in_route (urlpatterns.tests.SimplifiedURLTests) --keep-green=test_two_variable_at_start_of_path_pattern (urlpatterns.tests.SimplifiedURLTests) --issue-file=/tmp/issue.md --base-sha=3219eb0b751e7275cd33a60aa5dae024a132c60c --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=17 tools=17 [bash:6 read:5 grep:2 edit_block:1 find:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=11260 cache_r=234240 cache_w=0 out=6463 reasoning=3912 total=251963 — $0.0265
+  TOTAL: in=11260 cache_r=234240 cache_w=0 out=6463 reasoning=3912 total=251963 — $0.0265
+timing (total 78.61s):
+  fix: 75.52s (96%)
+  verify: 1.55s (2% n=2)
+  baseline: 1.39s (2%)
+  patch: 0.07s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:2.92s find:0.14s grep:0.10s run_tests:0.01s edit_block:0.00s ls:0.00s read:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (630 bytes)
+
+exit_code=0 elapsed_s=78.7

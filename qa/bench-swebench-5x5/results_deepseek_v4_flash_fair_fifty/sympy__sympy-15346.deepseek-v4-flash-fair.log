@@ -1,0 +1,23 @@
+=== sympy__sympy-15346 (deepseek-v4-flash) start 1785274956.40861 ===
+3158bbebdccca229cbcbdce0c457ea2a9d24f1abd204e97c53132d5fc6877004
+head_sha=da66b3acfb32dd707626946df4cf8fb562e22683
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_issue_15129_trigsimp_methods --keep-green=test_trigsimp1 --keep-green=test_trigsimp1a --keep-green=test_trigsimp2 --keep-green=test_issue_4373 --keep-green=test_trigsimp3 --keep-green=test_issue_4661 --keep-green=test_issue_4494 --keep-green=test_issue_5948 --keep-green=test_issue_4775 --keep-green=test_issue_4280 --keep-green=test_issue_3210 --keep-green=test_trigsimp_issues --keep-green=test_trigsimp_issue_2515 --keep-green=test_trigsimp_issue_3826 --keep-green=test_trigsimp_issue_4032 --keep-green=test_trigsimp_issue_7761 --keep-green=test_trigsimp_noncommutative --keep-green=test_hyperbolic_simp --keep-green=test_trigsimp_groebner --keep-green=test_issue_2827_trigsimp_methods --keep-green=test_exptrigsimp --keep-green=test_powsimp_on_numbers --issue-file=/tmp/issue.md --base-sha=da66b3acfb32dd707626946df4cf8fb562e22683 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=40 tools=40 [bash:15 read:13 grep:10 edit_block:1 todo:1]
+tokens by model:
+  deepseek-v4-flash: in=22419 cache_r=910720 cache_w=0 out=12418 reasoning=5366 total=945557 — $0.0835
+  TOTAL: in=22419 cache_r=910720 cache_w=0 out=12418 reasoning=5366 total=945557 — $0.0835
+timing (total 187.50s):
+  fix: 131.16s (70%)
+  baseline: 32.18s (17%)
+  verify: 21.06s (11% n=2)
+  discover: 2.48s (1%)
+  bootstrap: 0.59s (0%)
+  patch: 0.03s (0%)
+  fix→tools: bash:8.32s grep:0.11s edit_block:0.02s todo:0.01s read:0.01s
+outcome: Solved
+patch written to "/tmp/out.patch" (3727 bytes)
+
+exit_code=0 elapsed_s=187.6

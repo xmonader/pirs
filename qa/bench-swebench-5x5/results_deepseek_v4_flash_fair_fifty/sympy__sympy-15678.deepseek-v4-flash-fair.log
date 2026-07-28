@@ -1,0 +1,23 @@
+=== sympy__sympy-15678 (deepseek-v4-flash) start 1785275131.271079 ===
+f40b854e0919cd93e89aeca05226a07172e2323d41360a3df65ee0c612237df0
+head_sha=33ed0015e5080fe3b4fdd21c5c4030cdaf52577b
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_idiff --keep-green=test_intersection --keep-green=test_convex_hull --keep-green=test_centroid --issue-file=/tmp/issue.md --base-sha=33ed0015e5080fe3b4fdd21c5c4030cdaf52577b --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=39 tools=38 [bash:22 read:7 grep:4 edit:3 edit_block:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=12158 cache_r=694016 cache_w=0 out=11291 reasoning=6031 total=717465 — $0.0643
+  TOTAL: in=12158 cache_r=694016 cache_w=0 out=11291 reasoning=6031 total=717465 — $0.0643
+timing (total 214.03s):
+  fix: 199.39s (93%)
+  verify: 5.89s (3% n=2)
+  baseline: 5.68s (3%)
+  discover: 2.40s (1%)
+  bootstrap: 0.64s (0%)
+  patch: 0.02s (0%)
+  fix→tools: bash:86.90s grep:0.07s edit:0.04s run_tests:0.01s read:0.01s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (4331 bytes)
+
+exit_code=0 elapsed_s=214.2

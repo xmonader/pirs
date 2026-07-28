@@ -1,0 +1,206 @@
+diff --git a/django/forms/widgets.py b/django/forms/widgets.py
+index 02aa32b207..4850eb6fed 100644
+--- a/django/forms/widgets.py
++++ b/django/forms/widgets.py
+@@ -59,22 +59,22 @@ class Media:
+ 
+     @property
+     def _css(self):
+-        css = self._css_lists[0]
+-        # filter(None, ...) avoids calling merge with empty dicts.
+-        for obj in filter(None, self._css_lists[1:]):
+-            css = {
+-                medium: self.merge(css.get(medium, []), obj.get(medium, []))
+-                for medium in css.keys() | obj.keys()
+-            }
+-        return css
++        # Collect all lists for each medium type.
++        media_by_medium = {}
++        for css_dict in filter(None, self._css_lists):
++            for medium, path_list in css_dict.items():
++                if medium not in media_by_medium:
++                    media_by_medium[medium] = []
++                media_by_medium[medium].append(path_list)
++        # Merge all lists for each medium type.
++        return {
++            medium: self.merge(*lists)
++            for medium, lists in media_by_medium.items()
++        }
+ 
+     @property
+     def _js(self):
+-        js = self._js_lists[0]
+-        # filter(None, ...) avoids calling merge() with empty lists.
+-        for obj in filter(None, self._js_lists[1:]):
+-            js = self.merge(js, obj)
+-        return js
++        return self.merge(*[lst for lst in self._js_lists if lst])
+ 
+     def render(self):
+         return mark_safe('\n'.join(chain.from_iterable(getattr(self, 'render_' + name)() for name in MEDIA_TYPES)))
+@@ -115,9 +115,9 @@ class Media:
+         raise KeyError('Unknown media type "%s"' % name)
+ 
+     @staticmethod
+-    def merge(list_1, list_2):
++    def merge(*lists):
+         """
+-        Merge two lists while trying to keep the relative order of the elements.
++        Merge lists while trying to keep the relative order of the elements.
+         Warn if the lists have the same two elements in a different relative
+         order.
+ 
+@@ -125,29 +125,130 @@ class Media:
+         in a certain order. In JavaScript you may not be able to reference a
+         global or in CSS you might want to override a style.
+         """
+-        # Start with a copy of list_1.
+-        combined_list = list(list_1)
+-        last_insert_index = len(list_1)
+-        # Walk list_2 in reverse, inserting each element into combined_list if
+-        # it doesn't already exist.
+-        for path in reversed(list_2):
+-            try:
+-                # Does path already exist in the list?
+-                index = combined_list.index(path)
+-            except ValueError:
+-                # Add path to combined_list since it doesn't exist.
+-                combined_list.insert(last_insert_index, path)
+-            else:
+-                if index > last_insert_index:
+-                    warnings.warn(
+-                        'Detected duplicate Media files in an opposite order:\n'
+-                        '%s\n%s' % (combined_list[last_insert_index], combined_list[index]),
+-                        MediaOrderConflictWarning,
+-                    )
+-                # path already exists in the list. Update last_insert_index so
+-                # that the following elements are inserted in front of this one.
+-                last_insert_index = index
+-        return combined_list
++        if len(lists) <= 1:
++            # Deduplicate while preserving order.
++            result = list(lists[0]) if lists else []
++            seen = set()
++            deduped = []
++            for elem in result:
++                if elem not in seen:
++                    seen.add(elem)
++                    deduped.append(elem)
++            return deduped
++
++        # Collect all unique elements and build the constraint graph.
++        # Each list defines ordering constraints: if a appears before b in
++        # the same list, then a must come before b in the merged result.
++        all_elements = set()
++        for lst in lists:
++            all_elements.update(lst)
++
++        # Build adjacency list and in-degree counts for Kahn's algorithm.
++        children = {elem: [] for elem in all_elements}
++        in_degree = {elem: 0 for elem in all_elements}
++
++        for lst in lists:
++            for i in range(len(lst) - 1):
++                a, b = lst[i], lst[i + 1]
++                if a != b:
++                    children[a].append(b)
++                    in_degree[b] += 1
++
++        # Determine the minimum position and first list for each element,
++        # for deterministic tie-breaking.
++        first_pos = {}
++        first_list = {}
++        for li, lst in enumerate(lists):
++            for pi, elem in enumerate(lst):
++                if elem not in first_pos:
++                    first_pos[elem] = pi
++                    first_list[elem] = li
++
++        # Compute the scan order for each position: elements at that
++        # position in the order they first appear when scanning all
++        # lists left-to-right, top-to-bottom.
++        scan_order = []
++        seen_at_pos = {}
++        max_len = max(len(lst) for lst in lists)
++        for pi in range(max_len):
++            for li, lst in enumerate(lists):
++                if pi < len(lst):
++                    elem = lst[pi]
++                    pos = first_pos[elem]
++                    if pos == pi and elem not in seen_at_pos.get(pos, set()):
++                        if pos not in seen_at_pos:
++                            seen_at_pos[pos] = set()
++                        seen_at_pos[pos].add(elem)
++                        scan_order.append(elem)
++
++        # Collect elements by their minimum position.
++        max_pos = max(first_pos.values())
++        by_pos = {}
++        for elem, pos in first_pos.items():
++            by_pos.setdefault(pos, []).append(elem)
++
++        placed = set()
++        result = []
++
++        # Process positions in increasing order.
++        for pos in range(max_pos + 1):
++            # Within each position, do multiple passes to handle elements
++            # whose predecessors become available mid-position.
++            # In each pass, scan in the original list order and only place
++            # elements whose predecessors were already placed in previous
++            # passes. Elements that become eligible during the pass are
++            # deferred to the next pass.
++            pos_elements = by_pos.get(pos, [])
++            if not pos_elements:
++                continue
++            eligible_now = [e for e in pos_elements if e not in placed and in_degree[e] == 0]
++            while eligible_now:
++                # Place eligible elements in scan order.
++                to_place = sorted(eligible_now, key=lambda e: scan_order.index(e) if e in scan_order else 0)
++                for elem in to_place:
++                    result.append(elem)
++                    placed.add(elem)
++                    for neighbor in children[elem]:
++                        in_degree[neighbor] -= 1
++                # Determine which elements are newly eligible.
++                eligible_now = [e for e in pos_elements if e not in placed and in_degree[e] == 0]
++
++        # If there's a cycle (not all elements were processed), warn about it
++        # and include the remaining elements.
++        remaining = [e for e in all_elements if e not in placed]
++        if remaining:
++            # Find a pair of lists that have elements in opposite order and
++            # emit a warning showing the conflicting lists.
++            for i, lst_i in enumerate(lists):
++                for j, lst_j in enumerate(lists):
++                    if i >= j:
++                        continue
++                    common = [e for e in lst_i if e in lst_j]
++                    for a, b in zip(common[:-1], common[1:]):
++                        if a in lst_j and b in lst_j:
++                            if lst_j.index(b) < lst_j.index(a):
++                                warnings.warn(
++                                    'Detected duplicate Media files in an opposite order: '
++                                    '%s, %s' % (lst_i, lst_j),
++                                    MediaOrderConflictWarning,
++                                )
++                                break
++                    else:
++                        continue
++                    break
++                else:
++                    continue
++                break
++            result.extend(remaining)
++
++        # Deduplicate while preserving order.
++        seen = set()
++        deduped = []
++        for elem in result:
++            if elem not in seen:
++                seen.add(elem)
++                deduped.append(elem)
++        return deduped
+ 
+     def __add__(self, other):
+         combined = Media()

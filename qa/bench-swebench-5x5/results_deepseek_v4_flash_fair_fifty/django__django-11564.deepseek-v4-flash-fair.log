@@ -1,0 +1,25 @@
+=== django__django-11564 (deepseek-v4-flash) start 1785272719.794958 ===
+c4a603cd11ba9b37a607d589d98df6e73c871234df938bb47faa10f6b9c28a66
+head_sha=f50d6fa78756d2d1db17a56b554996756aa4a19a
+filtered non-test ids: targets 2->2 keep_green 174->166
+capped keep_green 174->40 (PIRS_MAX_KEEP_GREEN=40)
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_add_script_name_prefix (settings_tests.tests.MediaURLStaticURLPrefixTest) --target=test_not_prefixed (settings_tests.tests.MediaURLStaticURLPrefixTest) --keep-green=test_already_configured (settings_tests.tests.SettingsTests) --keep-green=test_class_decorator (settings_tests.tests.SettingsTests) --keep-green=test_configure (settings_tests.tests.IsOverriddenTest) --keep-green=test_context_manager (settings_tests.tests.SettingsTests) --keep-green=test_decorated_testcase_module (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_decorated_testcase_name (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_decorator (settings_tests.tests.SettingsTests) --keep-green=test_evaluated_lazysettings_repr (settings_tests.tests.IsOverriddenTest) --keep-green=test_incorrect_timezone (settings_tests.tests.SettingsTests) --keep-green=test_max_recursion_error (settings_tests.tests.ClassDecoratedTestCase) --keep-green=test_max_recursion_error (settings_tests.tests.ClassDecoratedTestCaseSuper) --keep-green=test_method_list_override (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_method_list_override_nested_order (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_method_list_override_no_ops (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_method_list_override_strings (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_method_override (settings_tests.tests.ClassDecoratedTestCase) --keep-green=test_method_override (settings_tests.tests.FullyDecoratedTestCase) --keep-green=test_method_override (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_module (settings_tests.tests.IsOverriddenTest) --keep-green=test_no_secret_key (settings_tests.tests.SettingsTests) --keep-green=test_no_settings_module (settings_tests.tests.SettingsTests) --keep-green=test_none (settings_tests.tests.SecureProxySslHeaderTest) --keep-green=test_nonupper_settings_ignored_in_default_settings (settings_tests.tests.SettingsTests) --keep-green=test_nonupper_settings_prohibited_in_configure (settings_tests.tests.SettingsTests) --keep-green=test_override (settings_tests.tests.ClassDecoratedTestCase) --keep-green=test_override (settings_tests.tests.FullyDecoratedTestCase) --keep-green=test_override (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_override (settings_tests.tests.IsOverriddenTest) --keep-green=test_override (settings_tests.tests.SettingsTests) --keep-green=test_override_change (settings_tests.tests.SettingsTests) --keep-green=test_override_doesnt_leak (settings_tests.tests.SettingsTests) --keep-green=test_override_settings_delete (settings_tests.tests.SettingsTests) --keep-green=test_override_settings_inheritance (settings_tests.tests.ChildDecoratedTestCase) --keep-green=test_override_settings_nested (settings_tests.tests.SettingsTests) --keep-green=test_override_settings_reusable_on_enter (settings_tests.tests.OverrideSettingsIsolationOnExceptionTests) --keep-green=test_set_with_xheader_right (settings_tests.tests.SecureProxySslHeaderTest) --keep-green=test_set_with_xheader_wrong (settings_tests.tests.SecureProxySslHeaderTest) --keep-green=test_set_without_xheader (settings_tests.tests.SecureProxySslHeaderTest) --keep-green=test_settings_delete (settings_tests.tests.SettingsTests) --keep-green=test_settings_delete_wrapped (settings_tests.tests.SettingsTests) --issue-file=/tmp/issue.md --base-sha=f50d6fa78756d2d1db17a56b554996756aa4a19a --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=40 tools=57 [read:19 bash:9 find:8 grep:8 ls:5 edit:3 todo:2 edit_block:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=37181 cache_r=1353472 cache_w=0 out=21924 reasoning=17105 total=1412577 — $0.1289
+  TOTAL: in=37181 cache_r=1353472 cache_w=0 out=21924 reasoning=17105 total=1412577 — $0.1289
+timing (total 213.00s):
+  fix: 209.33s (98%)
+  baseline: 1.75s (1%)
+  verify: 1.67s (1% n=2)
+  discover: 0.12s (0%)
+  patch: 0.08s (0%)
+  bootstrap: 0.06s (0%)
+  fix→tools: bash:2.34s grep:1.24s find:0.77s edit:0.05s todo:0.03s project:0.02s read:0.01s run_tests:0.00s ls:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1978 bytes)
+
+exit_code=0 elapsed_s=213.1

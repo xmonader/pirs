@@ -1,0 +1,24 @@
+=== astropy__astropy-7746 (deepseek-v4-flash) start 1785272109.3946173 ===
+c1e1cc2be2d1ce4f9807e3d6c0d7a5f2edebaf80174866709740824f5ff061f7
+head_sha=887bfedf751596dafdbfe37b7ac38cd43721df83
+capped keep_green 56->40 (PIRS_MAX_KEEP_GREEN=40)
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=astropy/wcs/tests/test_wcs.py::test_zero_size_input --keep-green=astropy/wcs/tests/test_wcs.py::TestMaps::test_consistency --keep-green=astropy/wcs/tests/test_wcs.py::TestMaps::test_maps --keep-green=astropy/wcs/tests/test_wcs.py::TestSpectra::test_consistency --keep-green=astropy/wcs/tests/test_wcs.py::TestSpectra::test_spectra --keep-green=astropy/wcs/tests/test_wcs.py::test_3d_shapes --keep-green=astropy/wcs/tests/test_wcs.py::test_all_world2pix --keep-green=astropy/wcs/tests/test_wcs.py::test_bounds_check --keep-green=astropy/wcs/tests/test_wcs.py::test_broadcasting --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_1 --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_2 --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_3 --keep-green=astropy/wcs/tests/test_wcs.py::test_crpix_maps_to_crval --keep-green=astropy/wcs/tests/test_wcs.py::test_dict_init --keep-green=astropy/wcs/tests/test_wcs.py::test_error_message --keep-green=astropy/wcs/tests/test_wcs.py::test_extra_kwarg --keep-green=astropy/wcs/tests/test_wcs.py::test_find_all_wcs_crash --keep-green=astropy/wcs/tests/test_wcs.py::test_fixes --keep-green=astropy/wcs/tests/test_wcs.py::test_fixes2 --keep-green=astropy/wcs/tests/test_wcs.py::test_footprint_to_file --keep-green=astropy/wcs/tests/test_wcs.py::test_hst_wcs --keep-green=astropy/wcs/tests/test_wcs.py::test_inconsistent_sip --keep-green=astropy/wcs/tests/test_wcs.py::test_invalid_shape --keep-green=astropy/wcs/tests/test_wcs.py::test_invalid_spherical --keep-green=astropy/wcs/tests/test_wcs.py::test_keyedsip --keep-green=astropy/wcs/tests/test_wcs.py::test_list_naxis --keep-green=astropy/wcs/tests/test_wcs.py::test_load_fits_path --keep-green=astropy/wcs/tests/test_wcs.py::test_naxis --keep-green=astropy/wcs/tests/test_wcs.py::test_no_comments_in_header --keep-green=astropy/wcs/tests/test_wcs.py::test_no_iteration --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval_p17 --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval_try2 --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_using_compare --keep-green=astropy/wcs/tests/test_wcs.py::test_out_of_bounds --keep-green=astropy/wcs/tests/test_wcs.py::test_outside_sky --keep-green=astropy/wcs/tests/test_wcs.py::test_passing_ImageHDU --keep-green=astropy/wcs/tests/test_wcs.py::test_pix2world --keep-green=astropy/wcs/tests/test_wcs.py::test_preserve_shape --keep-green=astropy/wcs/tests/test_wcs.py::test_printwcs --keep-green=astropy/wcs/tests/test_wcs.py::test_scamp_sip_distortion_parameters --issue-file=/tmp/issue.md --base-sha=887bfedf751596dafdbfe37b7ac38cd43721df83 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=36 tools=38 [read:8 run_tests:7 edit_block:6 grep:6 bash:4 code_map:2 edit:2 find:1 git:1 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=13385 cache_r=880768 cache_w=0 out=23019 reasoning=17130 total=917172 — $0.0906
+  TOTAL: in=13385 cache_r=880768 cache_w=0 out=23019 reasoning=17130 total=917172 — $0.0906
+timing (total 499.22s):
+  fix: 433.28s (87%)
+  discover: 33.20s (7%)
+  bootstrap: 24.52s (5%)
+  verify: 4.43s (1% n=2)
+  baseline: 3.76s (1%)
+  patch: 0.03s (0%)
+  fix→tools: run_tests:227.35s code_map:2.09s bash:1.09s grep:0.05s edit_block:0.04s edit:0.03s git:0.03s find:0.02s read:0.01s ls:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1202 bytes)
+
+exit_code=0 elapsed_s=499.4

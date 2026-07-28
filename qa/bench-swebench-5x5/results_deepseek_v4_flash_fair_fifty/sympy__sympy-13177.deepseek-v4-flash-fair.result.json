@@ -1,0 +1,27 @@
+{
+  "id": "sympy__sympy-13177",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-fair",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13177:latest",
+  "container": "pirsbench-sympy--sympy-13177-deepseek-v4-flash-fair",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": true,
+  "exit_code": 0,
+  "elapsed_s": 202.4,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=46 tools=46 [bash:26 git:5 grep:5 read:5 edit_block:2 find:2 ls:1]\ntokens by model:\n  deepseek-v4-flash: in=23173 cache_r=978688 cache_w=0 out=14984 reasoning=9095 total=1016845 \u2014 $0.0912\n  TOTAL: in=23173 cache_r=978688 cache_w=0 out=14984 reasoning=9095 total=1016845 \u2014 $0.0912\ntiming (total 202.26s):\n  fix: 184.31s (91% n=2)\n  baseline: 9.67s (5%)\n  verify: 5.48s (3% n=3)\n  discover: 2.14s (1%)\n  bootstrap: 0.62s (0%)\n  patch: 0.04s (0%)\n  fix\u2192tools: bash:28.35s grep:0.48s find:0.08s git:0.02s edit_block:0.02s read:0.00s ls:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (3674 bytes)",
+  "tokens": {
+    "in": 23173,
+    "cache_read": 978688,
+    "cache_write": 0,
+    "out": 14984,
+    "reasoning": 9095,
+    "total": 1016845,
+    "cost_usd": 0.0912
+  },
+  "patch_copied": true,
+  "patch_bytes": 3674
+}

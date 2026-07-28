@@ -1,0 +1,23 @@
+=== django__django-11049 (deepseek-v4-flash) start 1785272454.6093578 ===
+73561e84575233ed2496f0fe1f2044584116c3a0d0737558b0938c5e3f17f8b4
+head_sha=94ce82e2b1551b5e3bf088d50d493c93681a5cf5
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_invalid_string (model_fields.test_durationfield.TestValidation) --keep-green=test_dumping (model_fields.test_durationfield.TestSerialization) --keep-green=test_loading (model_fields.test_durationfield.TestSerialization) --keep-green=test_formfield (model_fields.test_durationfield.TestFormField) --keep-green=test_exact (model_fields.test_durationfield.TestQuerying) --keep-green=test_gt (model_fields.test_durationfield.TestQuerying) --keep-green=test_create_empty (model_fields.test_durationfield.TestSaveLoad) --keep-green=test_fractional_seconds (model_fields.test_durationfield.TestSaveLoad) --keep-green=test_simple_roundtrip (model_fields.test_durationfield.TestSaveLoad) --issue-file=/tmp/issue.md --base-sha=94ce82e2b1551b5e3bf088d50d493c93681a5cf5 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=28 tools=33 [grep:14 read:10 bash:4 ls:2 edit:1 find:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=22740 cache_r=540160 cache_w=0 out=3929 reasoning=1378 total=566829 — $0.0483
+  TOTAL: in=22740 cache_r=540160 cache_w=0 out=3929 reasoning=1378 total=566829 — $0.0483
+timing (total 68.69s):
+  fix: 62.27s (91%)
+  baseline: 3.15s (5%)
+  verify: 3.00s (4% n=2)
+  patch: 0.12s (0%)
+  discover: 0.10s (0%)
+  bootstrap: 0.05s (0%)
+  fix→tools: grep:4.44s bash:2.49s ls:0.16s find:0.15s project:0.03s edit:0.03s read:0.01s
+outcome: Solved
+patch written to "/tmp/out.patch" (564 bytes)
+
+exit_code=0 elapsed_s=68.9

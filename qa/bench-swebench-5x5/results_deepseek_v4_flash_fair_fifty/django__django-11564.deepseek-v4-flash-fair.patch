@@ -1,0 +1,51 @@
+diff --git a/django/conf/__init__.py b/django/conf/__init__.py
+index b32e56184d..f9db3ad4b8 100644
+--- a/django/conf/__init__.py
++++ b/django/conf/__init__.py
+@@ -12,6 +12,7 @@ import time
+ import traceback
+ import warnings
+ from pathlib import Path
++from urllib.parse import urlsplit
+ 
+ import django
+ from django.conf import global_settings
+@@ -27,6 +28,22 @@ PASSWORD_RESET_TIMEOUT_DAYS_DEPRECATED_MSG = (
+ )
+ 
+ 
++def _is_absolute_url(val):
++    """Return True if the value is a valid absolute URL with a scheme and netloc."""
++    if '://' not in val:
++        return False
++    try:
++        parsed = urlsplit(val)
++        # Only http, https, ftp, and ftps are recognized as valid URL schemes
++        # for the purpose of determining if a MEDIA_URL/STATIC_URL value is an
++        # absolute URL that should not be prefixed with SCRIPT_NAME.
++        if parsed.scheme.lower() not in ('http', 'https', 'ftp', 'ftps'):
++            return False
++        return bool(parsed.netloc)
++    except ValueError:
++        return False
++
++
+ class SettingsReference(str):
+     """
+     String subclass which references a current settings value. It's treated as
+@@ -75,6 +92,16 @@ class LazySettings(LazyObject):
+         if self._wrapped is empty:
+             self._setup(name)
+         val = getattr(self._wrapped, name)
++        if name in ('MEDIA_URL', 'STATIC_URL') and val is not None:
++            # Prepend the currently-active script prefix (SCRIPT_NAME) to
++            # relative paths so the resulting URL is correct even when Django
++            # is mounted at a sub-path.
++            from django.urls import get_script_prefix
++            prefix = get_script_prefix()
++            if not val.startswith('/') and not _is_absolute_url(val):
++                val = prefix.rstrip('/') + '/' + val.lstrip('/')
++                # Don't cache so the value can change with the script prefix.
++                return val
+         self.__dict__[name] = val
+         return val

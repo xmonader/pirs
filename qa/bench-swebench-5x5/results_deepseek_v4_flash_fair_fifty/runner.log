@@ -1,0 +1,150 @@
+START astropy__astropy-12907
+START astropy__astropy-14182
+START astropy__astropy-14365
+DONE astropy__astropy-14365 solved=True t=341.5
+START astropy__astropy-14995
+### WAVE 1/1 of 50
+DONE astropy__astropy-12907 solved=True t=393.0
+START astropy__astropy-6938
+### WAVE 2/2 of 50
+DONE astropy__astropy-14182 solved=True t=539.6
+START astropy__astropy-7746
+### WAVE 3/3 of 50
+DONE astropy__astropy-6938 solved=True t=172.7
+START django__django-10914
+### WAVE 4/4 of 50
+DONE astropy__astropy-14995 solved=True t=288.1
+START django__django-10924
+### WAVE 5/5 of 50
+DONE django__django-10914 solved=True t=145.2
+START django__django-11001
+### WAVE 6/6 of 50
+DONE django__django-10924 solved=True t=89.1
+START django__django-11019
+### WAVE 7/7 of 50
+DONE django__django-11001 solved=True t=100.3
+START django__django-11039
+### WAVE 8/8 of 50
+DONE django__django-11039 solved=True t=60.9
+START django__django-11049
+### WAVE 9/9 of 50
+DONE django__django-11049 solved=True t=68.9
+START django__django-11099
+### WAVE 10/10 of 50
+DONE django__django-11099 solved=True t=40.5
+START django__django-11133
+### WAVE 11/11 of 50
+DONE astropy__astropy-7746 solved=True t=499.4
+### WAVE 12/12 of 50
+START django__django-11179
+DONE django__django-11133 solved=True t=45.9
+### WAVE 13/13 of 50
+START django__django-11283
+DONE django__django-11179 solved=True t=69.1
+START django__django-11422
+### WAVE 14/14 of 50
+DONE django__django-11283 solved=True t=98.8
+START django__django-11564
+### WAVE 15/15 of 50
+DONE django__django-11422 solved=True t=110.3
+START django__django-11583
+### WAVE 16/16 of 50
+DONE django__django-11583 solved=True t=47.0
+### WAVE 17/17 of 50
+START django__django-11620
+DONE django__django-11564 solved=True t=213.1
+START django__django-11630
+### WAVE 18/18 of 50
+DONE django__django-11620 solved=True t=110.3
+START django__django-11742
+### WAVE 19/19 of 50
+DONE django__django-11630 solved=True t=54.3
+START django__django-11797
+### WAVE 20/20 of 50
+DONE django__django-11742 solved=True t=78.4
+START django__django-11815
+### WAVE 21/21 of 50
+DONE django__django-11815 solved=True t=74.7
+START django__django-11848
+### WAVE 22/22 of 50
+DONE django__django-11848 solved=True t=48.2
+START django__django-11905
+### WAVE 23/23 of 50
+DONE django__django-11019 solved=True t=996.9
+START django__django-11910
+### WAVE 24/24 of 50
+DONE django__django-11905 solved=True t=143.8
+START django__django-11964
+### WAVE 25/25 of 50
+DONE django__django-11797 solved=True t=465.4
+START django__django-11999
+### WAVE 26/26 of 50
+DONE django__django-11910 solved=True t=188.2
+### WAVE 27/27 of 50
+START django__django-12113
+DONE django__django-11999 solved=True t=57.6
+START django__django-12125
+### WAVE 28/28 of 50
+DONE django__django-12125 solved=True t=67.6
+### WAVE 29/29 of 50
+START django__django-12184
+DONE django__django-11964 solved=True t=316.6
+START django__django-12284
+### WAVE 30/30 of 50
+DONE django__django-12184 solved=True t=78.7
+START django__django-12286
+### WAVE 31/31 of 50
+DONE django__django-12286 solved=False t=19.5
+START django__django-14608
+### WAVE 31/32 of 50
+DONE django__django-12284 solved=True t=62.1
+START django__django-15213
+### WAVE 32/33 of 50
+DONE django__django-14608 solved=True t=100.2
+### WAVE 33/34 of 50
+START django__django-15695
+DONE django__django-15213 solved=True t=142.3
+START django__django-15781
+### WAVE 34/35 of 50
+DONE django__django-12113 solved=True t=380.4
+START django__django-16046
+### WAVE 35/36 of 50
+DONE django__django-16046 solved=False t=42.4
+START matplotlib__matplotlib-23562
+### WAVE 35/37 of 50
+DONE django__django-15781 solved=True t=276.8
+START matplotlib__matplotlib-26011
+### WAVE 36/38 of 50
+DONE django__django-15695 solved=True t=367.3
+START pytest-dev__pytest-5221
+### WAVE 37/39 of 50
+DONE matplotlib__matplotlib-23562 solved=True t=430.0
+START scikit-learn__scikit-learn-12471
+### WAVE 38/40 of 50
+DONE scikit-learn__scikit-learn-12471 solved=True t=135.1
+START scikit-learn__scikit-learn-25570
+### WAVE 39/41 of 50
+DONE pytest-dev__pytest-5221 solved=True t=518.4
+START sphinx-doc__sphinx-7686
+### WAVE 40/42 of 50
+DONE scikit-learn__scikit-learn-25570 solved=False t=437.2
+START sympy__sympy-13177
+### WAVE 40/43 of 50
+DONE matplotlib__matplotlib-26011 solved=True t=818.2
+START sympy__sympy-13647
+### WAVE 41/44 of 50
+DONE sphinx-doc__sphinx-7686 solved=False t=272.0
+START sympy__sympy-15346
+### WAVE 41/45 of 50
+DONE sympy__sympy-13177 solved=True t=202.4
+START sympy__sympy-15678
+### WAVE 42/46 of 50
+DONE sympy__sympy-15346 solved=True t=187.6
+START sympy__sympy-16106
+### WAVE 43/47 of 50
+DONE sympy__sympy-16106 solved=True t=158.8
+### WAVE 44/48 of 50
+DONE sympy__sympy-13647 solved=False t=374.9
+### WAVE 44/49 of 50
+DONE sympy__sympy-15678 solved=True t=214.2
+### WAVE 45/50 of 50

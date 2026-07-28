@@ -1,0 +1,26 @@
+{
+  "id": "scikit-learn__scikit-learn-25570",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-fair",
+  "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25570:latest",
+  "container": "pirsbench-scikit-learn--scikit-learn-25570-deepseek-v4-flash-fair",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": true,
+  "exit_code": 1,
+  "elapsed_s": 437.2,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nsession: turns=9 tools=10 [read:5 grep:3 find:1 ls:1]\ntokens by model:\n  deepseek-v4-flash: in=6711 cache_r=93312 cache_w=0 out=2037 reasoning=1311 total=102060 \u2014 $0.0106\n  TOTAL: in=6711 cache_r=93312 cache_w=0 out=2037 reasoning=1311 total=102060 \u2014 $0.0106\ntiming (total 437.08s):\n  bootstrap: 375.66s (86%)\n  discover: 28.23s (6%)\n  fix: 27.58s (6%)\n  baseline: 5.56s (1%)\n  rollback: 0.03s (0%)\n  fix\u2192tools: find:0.03s ls:0.01s grep:0.00s read:0.00s\noutcome: Failed(FixNoFlip)",
+  "tokens": {
+    "in": 6711,
+    "cache_read": 93312,
+    "cache_write": 0,
+    "out": 2037,
+    "reasoning": 1311,
+    "total": 102060,
+    "cost_usd": 0.0106
+  },
+  "patch_copied": false
+}

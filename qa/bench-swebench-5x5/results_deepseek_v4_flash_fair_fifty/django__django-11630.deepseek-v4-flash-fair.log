@@ -1,0 +1,23 @@
+=== django__django-11630 (deepseek-v4-flash) start 1785272935.1179307 ===
+52a4b8b4d86a0b00c9ac16029afb0855809c8542c0c7045d6f28179c687990d9
+head_sha=db92537b5857131ba7eefdcf69399cf0edcaaad0
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_collision_across_apps_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --target=test_collision_in_same_app_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_in_same_app (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_proxy_models (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_unmanaged_models (check_framework.test_model_checks.DuplicateDBTableTests) --issue-file=/tmp/issue.md --base-sha=db92537b5857131ba7eefdcf69399cf0edcaaad0 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=23 tools=25 [grep:7 bash:5 read:5 edit:2 find:2 run_tests:2 edit_block:1 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=10373 cache_r=325504 cache_w=0 out=3842 reasoning=1350 total=339719 — $0.0298
+  TOTAL: in=10373 cache_r=325504 cache_w=0 out=3842 reasoning=1350 total=339719 — $0.0298
+timing (total 54.25s):
+  fix: 50.68s (93%)
+  verify: 1.77s (3% n=2)
+  baseline: 1.64s (3%)
+  patch: 0.08s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:2.61s grep:0.98s find:0.36s edit:0.21s run_tests:0.02s ls:0.00s read:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (2182 bytes)
+
+exit_code=0 elapsed_s=54.3

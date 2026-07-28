@@ -239,6 +239,85 @@ pub fn run_instance(
     })
 }
 
+/// Grade a model patch without re-running the agent.
+///
+/// Precondition: `test_patch` is already applied on `inst.repo_root` (so
+/// FAIL_TO_PASS can be red at baseline). `model_patch` is the agent's source
+/// fix only. Used by strict SWE-bench mode after an issue-only agent phase.
+pub fn check_model_patch(
+    inst: &Instance,
+    host: &DetectorHost,
+    model_patch: &str,
+) -> anyhow::Result<InstanceReport> {
+    let mut timings = Timings::new();
+    let confirmed: Vec<RunnerSpec> = timings.time("discover", || -> anyhow::Result<_> {
+        let mut out = Vec::new();
+        for candidate in host.detect(&inst.repo_root) {
+            if probe(&candidate, &inst.repo_root)?.confirmed {
+                out.push(candidate);
+            }
+        }
+        Ok(out)
+    })?;
+    if confirmed.is_empty() {
+        return Ok(InstanceReport {
+            outcome: Outcome::Failed(FailBucket::RunnerUndetected),
+            patch: None,
+            timings,
+            used_undetected_fallback: false,
+        });
+    }
+    let mut ready: Vec<RunnerSpec> = Vec::new();
+    timings.time("bootstrap", || -> anyhow::Result<()> {
+        for candidate in confirmed {
+            if let Bootstrap::Ready(_) = bootstrap(&candidate, &inst.repo_root)? {
+                ready.push(candidate);
+            }
+        }
+        Ok(())
+    })?;
+    if ready.is_empty() {
+        return Ok(InstanceReport {
+            outcome: Outcome::Failed(FailBucket::EnvSetup),
+            patch: None,
+            timings,
+            used_undetected_fallback: false,
+        });
+    }
+    let task = TaskSpec {
+        targets: inst.targets.clone(),
+        keep_green: inst.keep_green.clone(),
+    };
+    let mut last = Outcome::Failed(FailBucket::ReproFailed);
+    for spec in &ready {
+        let runner: Box<dyn TestRunner> =
+            Box::new(CommandRunner::new(spec.clone(), inst.repo_root.clone()));
+        let o = crate::driver::verify_model_patch(
+            &task,
+            &*runner,
+            model_patch,
+            &inst.repo_root,
+            &mut timings,
+        )?;
+        last = o.clone();
+        if o.is_accepted()
+            || !matches!(
+                o,
+                Outcome::Failed(FailBucket::ReproFailed)
+                    | Outcome::Failed(FailBucket::BaselineUnusable)
+            )
+        {
+            break;
+        }
+    }
+    Ok(InstanceReport {
+        outcome: last,
+        patch: None,
+        timings,
+        used_undetected_fallback: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

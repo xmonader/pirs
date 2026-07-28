@@ -1,0 +1,23 @@
+=== django__django-12113 (deepseek-v4-flash) start 1785273482.7207315 ===
+a351e8dee815fb2cf3751038338f8b1ca5248195629548925a9e5ee5d7ddf3db
+head_sha=be0b5d9975982790c447cd933a919118c3c9d489
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_custom_test_name (backends.sqlite.test_creation.TestDbSignatureTests) --issue-file=/tmp/issue.md --base-sha=be0b5d9975982790c447cd933a919118c3c9d489 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=71 tools=73 [read:34 grep:17 bash:14 edit:3 todo:2 code_map:1 edit_block:1 git:1]
+tokens by model:
+  deepseek-v4-flash: in=42359 cache_r=3104000 cache_w=0 out=27017 reasoning=20023 total=3173376 — $0.2584
+  TOTAL: in=42359 cache_r=3104000 cache_w=0 out=27017 reasoning=20023 total=3173376 — $0.2584
+timing (total 380.32s):
+  fix: 377.16s (99% n=2)
+  verify: 1.58s (0% n=2)
+  baseline: 1.40s (0%)
+  patch: 0.10s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:66.19s code_map:3.29s edit:0.04s grep:0.03s todo:0.02s read:0.01s git:0.01s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (525 bytes)
+
+exit_code=0 elapsed_s=380.4

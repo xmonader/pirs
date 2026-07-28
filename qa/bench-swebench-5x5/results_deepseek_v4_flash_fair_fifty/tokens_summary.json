@@ -1,0 +1,816 @@
+{
+  "aggregate": {
+    "in": 1002826,
+    "cache_read": 44231936,
+    "cache_write": 0,
+    "out": 592027,
+    "reasoning": 381610,
+    "total": 45826789,
+    "cost_usd_sum": 4.0185,
+    "instances_with_cost": 50,
+    "instances": 50,
+    "solved": 45
+  },
+  "per_instance": [
+    {
+      "id": "astropy__astropy-12907",
+      "solved": true,
+      "elapsed_s": 393.0,
+      "tokens": {
+        "in": 8332,
+        "cache_read": 126208,
+        "cache_write": 0,
+        "out": 4011,
+        "reasoning": 2347,
+        "total": 138551,
+        "cost_usd": 0.0155
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "astropy__astropy-14182",
+      "solved": true,
+      "elapsed_s": 539.6,
+      "tokens": {
+        "in": 37598,
+        "cache_read": 1108480,
+        "cache_write": 0,
+        "out": 16019,
+        "reasoning": 10697,
+        "total": 1162097,
+        "cost_usd": 0.1054
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "astropy__astropy-14365",
+      "solved": true,
+      "elapsed_s": 341.5,
+      "tokens": {
+        "in": 15521,
+        "cache_read": 288128,
+        "cache_write": 0,
+        "out": 4013,
+        "reasoning": 1771,
+        "total": 307662,
+        "cost_usd": 0.0288
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "astropy__astropy-14995",
+      "solved": true,
+      "elapsed_s": 288.1,
+      "tokens": {
+        "in": 12092,
+        "cache_read": 236288,
+        "cache_write": 0,
+        "out": 4440,
+        "reasoning": 2008,
+        "total": 252820,
+        "cost_usd": 0.0247
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "astropy__astropy-6938",
+      "solved": true,
+      "elapsed_s": 172.7,
+      "tokens": {
+        "in": 11259,
+        "cache_read": 359552,
+        "cache_write": 0,
+        "out": 4722,
+        "reasoning": 1961,
+        "total": 375533,
+        "cost_usd": 0.0334
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "astropy__astropy-7746",
+      "solved": true,
+      "elapsed_s": 499.4,
+      "tokens": {
+        "in": 13385,
+        "cache_read": 880768,
+        "cache_write": 0,
+        "out": 23019,
+        "reasoning": 17130,
+        "total": 917172,
+        "cost_usd": 0.0906
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-10914",
+      "solved": true,
+      "elapsed_s": 145.2,
+      "tokens": {
+        "in": 11488,
+        "cache_read": 425728,
+        "cache_write": 0,
+        "out": 3969,
+        "reasoning": 1670,
+        "total": 441185,
+        "cost_usd": 0.0373
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-10924",
+      "solved": true,
+      "elapsed_s": 89.1,
+      "tokens": {
+        "in": 14693,
+        "cache_read": 542720,
+        "cache_write": 0,
+        "out": 7364,
+        "reasoning": 3477,
+        "total": 564777,
+        "cost_usd": 0.0501
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11001",
+      "solved": true,
+      "elapsed_s": 100.3,
+      "tokens": {
+        "in": 13903,
+        "cache_read": 649088,
+        "cache_write": 0,
+        "out": 8222,
+        "reasoning": 3593,
+        "total": 671213,
+        "cost_usd": 0.0582
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11019",
+      "solved": true,
+      "elapsed_s": 996.9,
+      "tokens": {
+        "in": 49971,
+        "cache_read": 7158144,
+        "cache_write": 0,
+        "out": 115447,
+        "reasoning": 92942,
+        "total": 7323562,
+        "cost_usd": 0.6416
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11039",
+      "solved": true,
+      "elapsed_s": 60.9,
+      "tokens": {
+        "in": 6792,
+        "cache_read": 232576,
+        "cache_write": 0,
+        "out": 3030,
+        "reasoning": 891,
+        "total": 242398,
+        "cost_usd": 0.0214
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11049",
+      "solved": true,
+      "elapsed_s": 68.9,
+      "tokens": {
+        "in": 22740,
+        "cache_read": 540160,
+        "cache_write": 0,
+        "out": 3929,
+        "reasoning": 1378,
+        "total": 566829,
+        "cost_usd": 0.0483
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11099",
+      "solved": true,
+      "elapsed_s": 40.5,
+      "tokens": {
+        "in": 3959,
+        "cache_read": 143232,
+        "cache_write": 0,
+        "out": 2087,
+        "reasoning": 471,
+        "total": 149278,
+        "cost_usd": 0.0134
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11133",
+      "solved": true,
+      "elapsed_s": 45.9,
+      "tokens": {
+        "in": 8892,
+        "cache_read": 176256,
+        "cache_write": 0,
+        "out": 3622,
+        "reasoning": 1658,
+        "total": 188770,
+        "cost_usd": 0.0187
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11179",
+      "solved": true,
+      "elapsed_s": 69.1,
+      "tokens": {
+        "in": 13188,
+        "cache_read": 315392,
+        "cache_write": 0,
+        "out": 3761,
+        "reasoning": 1495,
+        "total": 332341,
+        "cost_usd": 0.0298
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11283",
+      "solved": true,
+      "elapsed_s": 98.8,
+      "tokens": {
+        "in": 10915,
+        "cache_read": 393472,
+        "cache_write": 0,
+        "out": 5362,
+        "reasoning": 2395,
+        "total": 409749,
+        "cost_usd": 0.0364
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11422",
+      "solved": true,
+      "elapsed_s": 110.3,
+      "tokens": {
+        "in": 21980,
+        "cache_read": 665728,
+        "cache_write": 0,
+        "out": 9662,
+        "reasoning": 5771,
+        "total": 697370,
+        "cost_usd": 0.0632
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11564",
+      "solved": true,
+      "elapsed_s": 213.1,
+      "tokens": {
+        "in": 37181,
+        "cache_read": 1353472,
+        "cache_write": 0,
+        "out": 21924,
+        "reasoning": 17105,
+        "total": 1412577,
+        "cost_usd": 0.1289
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11583",
+      "solved": true,
+      "elapsed_s": 47.0,
+      "tokens": {
+        "in": 10933,
+        "cache_read": 255744,
+        "cache_write": 0,
+        "out": 3245,
+        "reasoning": 1359,
+        "total": 269922,
+        "cost_usd": 0.0244
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11620",
+      "solved": true,
+      "elapsed_s": 110.3,
+      "tokens": {
+        "in": 19259,
+        "cache_read": 700544,
+        "cache_write": 0,
+        "out": 8364,
+        "reasoning": 4992,
+        "total": 728167,
+        "cost_usd": 0.0634
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11630",
+      "solved": true,
+      "elapsed_s": 54.3,
+      "tokens": {
+        "in": 10373,
+        "cache_read": 325504,
+        "cache_write": 0,
+        "out": 3842,
+        "reasoning": 1350,
+        "total": 339719,
+        "cost_usd": 0.0298
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11742",
+      "solved": true,
+      "elapsed_s": 78.4,
+      "tokens": {
+        "in": 24493,
+        "cache_read": 703872,
+        "cache_write": 0,
+        "out": 5279,
+        "reasoning": 1826,
+        "total": 733644,
+        "cost_usd": 0.0617
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11797",
+      "solved": true,
+      "elapsed_s": 465.4,
+      "tokens": {
+        "in": 103489,
+        "cache_read": 4026240,
+        "cache_write": 0,
+        "out": 38067,
+        "reasoning": 26485,
+        "total": 4167796,
+        "cost_usd": 0.3517
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11815",
+      "solved": true,
+      "elapsed_s": 74.7,
+      "tokens": {
+        "in": 9404,
+        "cache_read": 345216,
+        "cache_write": 0,
+        "out": 4350,
+        "reasoning": 1745,
+        "total": 358970,
+        "cost_usd": 0.0315
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11848",
+      "solved": true,
+      "elapsed_s": 48.2,
+      "tokens": {
+        "in": 6462,
+        "cache_read": 178816,
+        "cache_write": 0,
+        "out": 3711,
+        "reasoning": 2191,
+        "total": 188989,
+        "cost_usd": 0.0183
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11905",
+      "solved": true,
+      "elapsed_s": 143.8,
+      "tokens": {
+        "in": 32682,
+        "cache_read": 975360,
+        "cache_write": 0,
+        "out": 10134,
+        "reasoning": 5040,
+        "total": 1018176,
+        "cost_usd": 0.0882
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11910",
+      "solved": true,
+      "elapsed_s": 188.2,
+      "tokens": {
+        "in": 29555,
+        "cache_read": 1253376,
+        "cache_write": 0,
+        "out": 16148,
+        "reasoning": 11990,
+        "total": 1299079,
+        "cost_usd": 0.1135
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11964",
+      "solved": true,
+      "elapsed_s": 316.6,
+      "tokens": {
+        "in": 41098,
+        "cache_read": 3047168,
+        "cache_write": 0,
+        "out": 22866,
+        "reasoning": 12273,
+        "total": 3111132,
+        "cost_usd": 0.2496
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-11999",
+      "solved": true,
+      "elapsed_s": 57.6,
+      "tokens": {
+        "in": 13862,
+        "cache_read": 317568,
+        "cache_write": 0,
+        "out": 3797,
+        "reasoning": 1809,
+        "total": 335227,
+        "cost_usd": 0.0301
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-12113",
+      "solved": true,
+      "elapsed_s": 380.4,
+      "tokens": {
+        "in": 42359,
+        "cache_read": 3104000,
+        "cache_write": 0,
+        "out": 27017,
+        "reasoning": 20023,
+        "total": 3173376,
+        "cost_usd": 0.2584
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-12125",
+      "solved": true,
+      "elapsed_s": 67.6,
+      "tokens": {
+        "in": 20867,
+        "cache_read": 467584,
+        "cache_write": 0,
+        "out": 4764,
+        "reasoning": 2329,
+        "total": 493215,
+        "cost_usd": 0.0436
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-12184",
+      "solved": true,
+      "elapsed_s": 78.7,
+      "tokens": {
+        "in": 11260,
+        "cache_read": 234240,
+        "cache_write": 0,
+        "out": 6463,
+        "reasoning": 3912,
+        "total": 251963,
+        "cost_usd": 0.0265
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-12284",
+      "solved": true,
+      "elapsed_s": 62.1,
+      "tokens": {
+        "in": 7696,
+        "cache_read": 266368,
+        "cache_write": 0,
+        "out": 3576,
+        "reasoning": 1131,
+        "total": 277640,
+        "cost_usd": 0.0247
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-12286",
+      "solved": false,
+      "elapsed_s": 19.5,
+      "tokens": {
+        "in": 4205,
+        "cache_read": 81920,
+        "cache_write": 0,
+        "out": 1084,
+        "reasoning": 441,
+        "total": 87209,
+        "cost_usd": 0.0081
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-14608",
+      "solved": true,
+      "elapsed_s": 100.2,
+      "tokens": {
+        "in": 17083,
+        "cache_read": 468096,
+        "cache_write": 0,
+        "out": 3970,
+        "reasoning": 1246,
+        "total": 489149,
+        "cost_usd": 0.0417
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-15213",
+      "solved": true,
+      "elapsed_s": 142.3,
+      "tokens": {
+        "in": 18568,
+        "cache_read": 801152,
+        "cache_write": 0,
+        "out": 11072,
+        "reasoning": 7198,
+        "total": 830792,
+        "cost_usd": 0.0733
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-15695",
+      "solved": true,
+      "elapsed_s": 367.3,
+      "tokens": {
+        "in": 22654,
+        "cache_read": 1631232,
+        "cache_write": 0,
+        "out": 34970,
+        "reasoning": 28221,
+        "total": 1688856,
+        "cost_usd": 0.1588
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-15781",
+      "solved": true,
+      "elapsed_s": 276.8,
+      "tokens": {
+        "in": 12023,
+        "cache_read": 600576,
+        "cache_write": 0,
+        "out": 11058,
+        "reasoning": 7135,
+        "total": 623657,
+        "cost_usd": 0.0575
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "django__django-16046",
+      "solved": false,
+      "elapsed_s": 42.4,
+      "tokens": {
+        "in": 8337,
+        "cache_read": 191232,
+        "cache_write": 0,
+        "out": 2406,
+        "reasoning": 1293,
+        "total": 201975,
+        "cost_usd": 0.0183
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "matplotlib__matplotlib-23562",
+      "solved": true,
+      "elapsed_s": 430.0,
+      "tokens": {
+        "in": 17351,
+        "cache_read": 389632,
+        "cache_write": 0,
+        "out": 6545,
+        "reasoning": 3805,
+        "total": 413528,
+        "cost_usd": 0.0392
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "matplotlib__matplotlib-26011",
+      "solved": true,
+      "elapsed_s": 818.2,
+      "tokens": {
+        "in": 10858,
+        "cache_read": 387072,
+        "cache_write": 0,
+        "out": 8969,
+        "reasoning": 6348,
+        "total": 406899,
+        "cost_usd": 0.0399
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "pytest-dev__pytest-5221",
+      "solved": true,
+      "elapsed_s": 518.4,
+      "tokens": {
+        "in": 37130,
+        "cache_read": 1516800,
+        "cache_write": 0,
+        "out": 13346,
+        "reasoning": 7391,
+        "total": 1567276,
+        "cost_usd": 0.1309
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "scikit-learn__scikit-learn-12471",
+      "solved": true,
+      "elapsed_s": 135.1,
+      "tokens": {
+        "in": 25019,
+        "cache_read": 657408,
+        "cache_write": 0,
+        "out": 9683,
+        "reasoning": 4601,
+        "total": 692110,
+        "cost_usd": 0.0634
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "scikit-learn__scikit-learn-25570",
+      "solved": false,
+      "elapsed_s": 437.2,
+      "tokens": {
+        "in": 6711,
+        "cache_read": 93312,
+        "cache_write": 0,
+        "out": 2037,
+        "reasoning": 1311,
+        "total": 102060,
+        "cost_usd": 0.0106
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "sphinx-doc__sphinx-7686",
+      "solved": false,
+      "elapsed_s": 272.0,
+      "tokens": {
+        "in": 37805,
+        "cache_read": 1773440,
+        "cache_write": 0,
+        "out": 24090,
+        "reasoning": 16730,
+        "total": 1835335,
+        "cost_usd": 0.1608
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "sympy__sympy-13177",
+      "solved": true,
+      "elapsed_s": 202.4,
+      "tokens": {
+        "in": 23173,
+        "cache_read": 978688,
+        "cache_write": 0,
+        "out": 14984,
+        "reasoning": 9095,
+        "total": 1016845,
+        "cost_usd": 0.0912
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "sympy__sympy-13647",
+      "solved": false,
+      "elapsed_s": 374.9,
+      "tokens": {
+        "in": 14678,
+        "cache_read": 468736,
+        "cache_write": 0,
+        "out": 8377,
+        "reasoning": 4156,
+        "total": 491791,
+        "cost_usd": 0.046
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "sympy__sympy-15346",
+      "solved": true,
+      "elapsed_s": 187.6,
+      "tokens": {
+        "in": 22419,
+        "cache_read": 910720,
+        "cache_write": 0,
+        "out": 12418,
+        "reasoning": 5366,
+        "total": 945557,
+        "cost_usd": 0.0835
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "sympy__sympy-15678",
+      "solved": true,
+      "elapsed_s": 214.2,
+      "tokens": {
+        "in": 12158,
+        "cache_read": 694016,
+        "cache_write": 0,
+        "out": 11291,
+        "reasoning": 6031,
+        "total": 717465,
+        "cost_usd": 0.0643
+      },
+      "hide_targets": true,
+      "fair": true
+    },
+    {
+      "id": "sympy__sympy-16106",
+      "solved": true,
+      "elapsed_s": 158.8,
+      "tokens": {
+        "in": 14973,
+        "cache_read": 790912,
+        "cache_write": 0,
+        "out": 9501,
+        "reasoning": 4027,
+        "total": 815386,
+        "cost_usd": 0.0699
+      },
+      "hide_targets": true,
+      "fair": true
+    }
+  ]
+}

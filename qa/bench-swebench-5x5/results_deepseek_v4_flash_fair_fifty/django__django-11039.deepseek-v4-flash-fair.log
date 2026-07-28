@@ -1,0 +1,25 @@
+=== django__django-11039 (deepseek-v4-flash) start 1785272390.8325794 ===
+de3ce268583ee9c4d3f11307cec3468e746acba5ee3ec2b65a50bd6e4be2d2f6
+head_sha=737fed3023a585f2702c7785a8f9685c35800e17
+filtered non-test ids: targets 1->1 keep_green 88->84
+capped keep_green 88->40 (PIRS_MAX_KEEP_GREEN=40)
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_sqlmigrate_for_non_transactional_databases (migrations.test_commands.MigrateTests) --keep-green=test_sqlmigrate_backwards (migrations.test_commands.MigrateTests) --keep-green=test_sqlmigrate_for_non_atomic_migration (migrations.test_commands.MigrateTests) --keep-green=test_sqlmigrate_forwards (migrations.test_commands.MigrateTests) --keep-green=test_ambigious_prefix (migrations.test_commands.MigrateTests) --keep-green=test_app_without_migrations (migrations.test_commands.MigrateTests) --keep-green=test_migrate (migrations.test_commands.MigrateTests) --keep-green=test_migrate_conflict_exit (migrations.test_commands.MigrateTests) --keep-green=test_migrate_fake_initial (migrations.test_commands.MigrateTests) --keep-green=test_migrate_fake_split_initial (migrations.test_commands.MigrateTests) --keep-green=test_migrate_inconsistent_history (migrations.test_commands.MigrateTests) --keep-green=test_migrate_initial_false (migrations.test_commands.MigrateTests) --keep-green=test_migrate_record_replaced (migrations.test_commands.MigrateTests) --keep-green=test_migrate_record_squashed (migrations.test_commands.MigrateTests) --keep-green=test_migrate_syncdb_app_label (migrations.test_commands.MigrateTests) --keep-green=test_migrate_syncdb_app_with_migrations (migrations.test_commands.MigrateTests) --keep-green=test_migrate_syncdb_deferred_sql_executed_with_schemaeditor (migrations.test_commands.MigrateTests) --keep-green=test_migrate_with_system_checks (migrations.test_commands.MigrateTests) --keep-green=test_regression_22823_unmigrated_fk_to_migrated_model (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_list (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_no_migrations (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_plan (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_plan_app_label_no_migrations (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_plan_multiple_app_labels (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_plan_no_migrations (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_plan_single_app_label (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_plan_squashed (migrations.test_commands.MigrateTests) --keep-green=test_showmigrations_unmigrated_app (migrations.test_commands.MigrateTests) --keep-green=test_unknown_prefix (migrations.test_commands.MigrateTests) --keep-green=test_sqlmigrate_app_name_specified_as_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_sqlmigrate_nonexistent_app_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_failing_migration (migrations.test_commands.MakeMigrationsTests) --keep-green=test_files_content (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigration_merge_dry_run (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigration_merge_dry_run_verbosity_3 (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_app_name_specified_as_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_makemigrations_auto_now_add_interactive (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_check (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_conflict_exit (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_consistency_checks_respect_routers (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_default_merge_name (migrations.test_commands.MakeMigrationsTests) --issue-file=/tmp/issue.md --base-sha=737fed3023a585f2702c7785a8f9685c35800e17 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=20 tools=25 [bash:6 grep:6 read:5 find:4 run_tests:2 edit:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=6792 cache_r=232576 cache_w=0 out=3030 reasoning=891 total=242398 — $0.0214
+  TOTAL: in=6792 cache_r=232576 cache_w=0 out=3030 reasoning=891 total=242398 — $0.0214
+timing (total 60.83s):
+  fix: 51.82s (85%)
+  verify: 4.58s (8% n=2)
+  baseline: 4.17s (7%)
+  patch: 0.14s (0%)
+  discover: 0.08s (0%)
+  bootstrap: 0.05s (0%)
+  fix→tools: bash:6.51s find:1.22s grep:0.82s edit:0.03s run_tests:0.02s project:0.00s read:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (658 bytes)
+
+exit_code=0 elapsed_s=60.9

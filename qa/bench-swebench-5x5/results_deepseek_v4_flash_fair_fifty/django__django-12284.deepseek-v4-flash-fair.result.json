@@ -1,0 +1,27 @@
+{
+  "id": "django__django-12284",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-fair",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-12284:latest",
+  "container": "pirsbench-django--django-12284-deepseek-v4-flash-fair",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": true,
+  "exit_code": 0,
+  "elapsed_s": 62.1,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=23 tools=24 [bash:9 read:6 grep:5 edit:1 find:1 ls:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=7696 cache_r=266368 cache_w=0 out=3576 reasoning=1131 total=277640 \u2014 $0.0247\n  TOTAL: in=7696 cache_r=266368 cache_w=0 out=3576 reasoning=1131 total=277640 \u2014 $0.0247\ntiming (total 62.06s):\n  fix: 56.84s (92%)\n  verify: 3.06s (5% n=2)\n  baseline: 1.94s (3%)\n  patch: 0.14s (0%)\n  discover: 0.05s (0%)\n  bootstrap: 0.03s (0%)\n  fix\u2192tools: bash:4.16s grep:0.47s run_tests:0.01s edit:0.01s find:0.01s read:0.00s ls:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (659 bytes)",
+  "tokens": {
+    "in": 7696,
+    "cache_read": 266368,
+    "cache_write": 0,
+    "out": 3576,
+    "reasoning": 1131,
+    "total": 277640,
+    "cost_usd": 0.0247
+  },
+  "patch_copied": true,
+  "patch_bytes": 659
+}

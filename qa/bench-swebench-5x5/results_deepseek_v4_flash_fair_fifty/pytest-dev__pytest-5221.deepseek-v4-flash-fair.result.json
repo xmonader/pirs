@@ -1,0 +1,27 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-fair",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirsbench-pytest-dev--pytest-5221-deepseek-v4-flash-fair",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": true,
+  "exit_code": 0,
+  "elapsed_s": 518.4,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=64 tools=63 [bash:14 run_tests:14 read:12 grep:9 edit_block:5 git:5 ls:3 project:1]\ntokens by model:\n  deepseek-v4-flash: in=37130 cache_r=1516800 cache_w=0 out=13346 reasoning=7391 total=1567276 \u2014 $0.1309\n  TOTAL: in=37130 cache_r=1516800 cache_w=0 out=13346 reasoning=7391 total=1567276 \u2014 $0.1309\ntiming (total 518.30s):\n  fix: 489.25s (94% n=2)\n  bootstrap: 10.99s (2%)\n  discover: 6.68s (1%)\n  verify: 5.80s (1% n=3)\n  baseline: 5.54s (1%)\n  patch: 0.03s (0%)\n  fix\u2192tools: bash:278.96s run_tests:46.61s grep:0.04s edit_block:0.03s git:0.02s project:0.01s read:0.01s ls:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (1008 bytes)",
+  "tokens": {
+    "in": 37130,
+    "cache_read": 1516800,
+    "cache_write": 0,
+    "out": 13346,
+    "reasoning": 7391,
+    "total": 1567276,
+    "cost_usd": 0.1309
+  },
+  "patch_copied": true,
+  "patch_bytes": 1008
+}

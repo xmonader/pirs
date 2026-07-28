@@ -1,0 +1,24 @@
+=== django__django-11848 (deepseek-v4-flash) start 1785273118.9575882 ===
+b385d3c0ae40578d8c6bee4cbf5ecbb9ca842f0cde5723dd5d1bc85a7b5302a4
+head_sha=93eb26a70ef7abd15b156106e88bf1a0c43bbd8b
+capped keep_green 43->40 (PIRS_MAX_KEEP_GREEN=40)
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_parsing_rfc850 (utils_tests.test_http.HttpDateProcessingTests) --target=test_parsing_year_less_than_70 (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing_asctime (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing_rfc1123 (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_http_date (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing (utils_tests.test_http.ETagProcessingTests) --keep-green=test (utils_tests.test_http.EscapeLeadingSlashesTests) --keep-green=test_allowed_hosts_str (utils_tests.test_http.IsSafeURLTests) --keep-green=test_bad (utils_tests.test_http.IsSameDomainTests) --keep-green=test_bad_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_basic_auth (utils_tests.test_http.IsSafeURLTests) --keep-green=test_custom_iterable_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_empty_sequence_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_sequence_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_sequence_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_tuple_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_bytearray (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_bytes_values (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_sequence_of_bytes (utils_tests.test_http.URLEncodeTests) --keep-green=test_generator (utils_tests.test_http.URLEncodeTests) --keep-green=test_good (utils_tests.test_http.IsSameDomainTests) --keep-green=test_good_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_input_too_large (utils_tests.test_http.Base36IntTests) --keep-green=test_invalid_literal (utils_tests.test_http.Base36IntTests) --keep-green=test_is_safe_url_deprecated (utils_tests.test_http.IsSafeURLTests) --keep-green=test_multivaluedict (utils_tests.test_http.URLEncodeTests) --keep-green=test_negative_input (utils_tests.test_http.Base36IntTests) --keep-green=test_no_allowed_hosts (utils_tests.test_http.IsSafeURLTests) --keep-green=test_none (utils_tests.test_http.URLEncodeTests) --keep-green=test_none_in_generator (utils_tests.test_http.URLEncodeTests) --keep-green=test_none_in_sequence (utils_tests.test_http.URLEncodeTests) --keep-green=test_quote (utils_tests.test_http.URLQuoteTests) --keep-green=test_quote_plus (utils_tests.test_http.URLQuoteTests) --keep-green=test_quoting (utils_tests.test_http.ETagProcessingTests) --keep-green=test_roundtrip (utils_tests.test_http.Base36IntTests) --keep-green=test_roundtrip (utils_tests.test_http.URLSafeBase64Tests) --keep-green=test_secure_param_https_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_secure_param_non_https_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_to_base36_errors (utils_tests.test_http.Base36IntTests) --keep-green=test_to_int_errors (utils_tests.test_http.Base36IntTests) --keep-green=test_tuples (utils_tests.test_http.URLEncodeTests) --issue-file=/tmp/issue.md --base-sha=93eb26a70ef7abd15b156106e88bf1a0c43bbd8b --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=15 tools=16 [bash:5 read:5 edit:1 edit_block:1 find:1 grep:1 job_wait:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=6462 cache_r=178816 cache_w=0 out=3711 reasoning=2191 total=188989 — $0.0183
+  TOTAL: in=6462 cache_r=178816 cache_w=0 out=3711 reasoning=2191 total=188989 — $0.0183
+timing (total 48.08s):
+  fix: 43.68s (91%)
+  baseline: 2.51s (5%)
+  verify: 1.61s (3% n=2)
+  discover: 0.13s (0%)
+  bootstrap: 0.08s (0%)
+  patch: 0.07s (0%)
+  fix→tools: bash:1.28s find:0.44s grep:0.32s run_tests:0.02s edit:0.01s read:0.00s job_wait:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (660 bytes)
+
+exit_code=0 elapsed_s=48.2

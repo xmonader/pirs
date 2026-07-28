@@ -1,0 +1,23 @@
+=== django__django-11964 (deepseek-v4-flash) start 1785273317.8790364 ===
+f90ade0588b1089618479f17d1a1c8c1f56d7eec953b315d734dbfb8ef9851b8
+head_sha=edbdb7f5c9b748b1e0395cd9e021f31594305401
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_str (model_enums.tests.ChoicesTests) --target=test_textchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_invalid_definition (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_blank_value (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_bool_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_labels_valid (model_enums.tests.CustomChoicesTests) --keep-green=test_timezone_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_uuid_unsupported (model_enums.tests.CustomChoicesTests) --issue-file=/tmp/issue.md --base-sha=edbdb7f5c9b748b1e0395cd9e021f31594305401 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=80 tools=90 [bash:32 grep:19 read:18 edit_block:12 find:2 git:2 ls:2 code_map:1 import:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=41098 cache_r=3047168 cache_w=0 out=22866 reasoning=12273 total=3111132 — $0.2496
+  TOTAL: in=41098 cache_r=3047168 cache_w=0 out=22866 reasoning=12273 total=3111132 — $0.2496
+timing (total 316.44s):
+  fix: 312.18s (99% n=2)
+  baseline: 2.07s (1%)
+  verify: 1.95s (1% n=3)
+  discover: 0.11s (0%)
+  patch: 0.08s (0%)
+  bootstrap: 0.06s (0%)
+  fix→tools: bash:27.24s code_map:5.70s grep:1.70s find:0.30s edit_block:0.04s git:0.02s run_tests:0.02s ls:0.01s read:0.01s import:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (2284 bytes)
+
+exit_code=0 elapsed_s=316.6

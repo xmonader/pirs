@@ -1,0 +1,23 @@
+=== django__django-10924 (deepseek-v4-flash) start 1785272201.1571186 ===
+2faaeb2aaaf7e83fdee475c49a482508d9ede9ac658ad2824139eefef5fb96b3
+head_sha=0a24a7531f817c5c0e6d84b04b206c6718d6cff6
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_callable_path (model_fields.test_filepathfield.FilePathFieldTests) --keep-green=test_path (model_fields.test_filepathfield.FilePathFieldTests) --issue-file=/tmp/issue.md --base-sha=0a24a7531f817c5c0e6d84b04b206c6718d6cff6 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=30 tools=34 [read:13 bash:9 grep:7 edit:3 edit_block:1 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=14693 cache_r=542720 cache_w=0 out=7364 reasoning=3477 total=564777 — $0.0501
+  TOTAL: in=14693 cache_r=542720 cache_w=0 out=7364 reasoning=3477 total=564777 — $0.0501
+timing (total 89.02s):
+  fix: 85.44s (96%)
+  verify: 2.07s (2% n=2)
+  baseline: 1.35s (2%)
+  patch: 0.08s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:8.02s grep:0.26s edit:0.04s read:0.01s ls:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1623 bytes)
+
+exit_code=0 elapsed_s=89.1

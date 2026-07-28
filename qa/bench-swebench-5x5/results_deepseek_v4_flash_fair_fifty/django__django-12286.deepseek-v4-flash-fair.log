@@ -1,0 +1,21 @@
+=== django__django-12286 (deepseek-v4-flash) start 1785273666.1780705 ===
+28f493218f49f4ace5519c0575e86d9b3afb126f0cacdcbeb9b0c3e4e75b2d4f
+head_sha=7cee65851a3121486c04736f53abb7c71ff789d6
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_valid_variant_consistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_inconsistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --issue-file=/tmp/issue.md --base-sha=7cee65851a3121486c04736f53abb7c71ff789d6 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=10 tools=9 [grep:4 read:3 ls:2]
+tokens by model:
+  deepseek-v4-flash: in=4205 cache_r=81920 cache_w=0 out=1084 reasoning=441 total=87209 — $0.0081
+  TOTAL: in=4205 cache_r=81920 cache_w=0 out=1084 reasoning=441 total=87209 — $0.0081
+timing (total 19.43s):
+  fix: 17.85s (92%)
+  baseline: 1.40s (7%)
+  rollback: 0.10s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: grep:0.19s ls:0.00s read:0.00s
+outcome: Failed(FixNoFlip)
+
+exit_code=1 elapsed_s=19.5

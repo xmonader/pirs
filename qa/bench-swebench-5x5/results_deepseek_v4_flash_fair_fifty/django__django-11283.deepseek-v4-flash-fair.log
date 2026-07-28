@@ -1,0 +1,23 @@
+=== django__django-11283 (deepseek-v4-flash) start 1785272618.1513824 ===
+02c6a55239de3775154a0fb4212f59a4e532df383e5fdca3faddabf5b8da1f97
+head_sha=763fe5d1d8471c4bfb23ec9e01e9f63c1cd12cd4
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=test_migrate_with_existing_target_permission (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_has_now_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_still_has_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --issue-file=/tmp/issue.md --base-sha=763fe5d1d8471c4bfb23ec9e01e9f63c1cd12cd4 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=28 tools=27 [bash:11 read:8 find:2 git:2 grep:2 edit_block:1 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=10915 cache_r=393472 cache_w=0 out=5362 reasoning=2395 total=409749 — $0.0364
+  TOTAL: in=10915 cache_r=393472 cache_w=0 out=5362 reasoning=2395 total=409749 — $0.0364
+timing (total 98.73s):
+  fix: 92.30s (93%)
+  verify: 3.81s (4% n=2)
+  baseline: 2.40s (2%)
+  patch: 0.12s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:23.53s git:0.80s find:0.27s grep:0.18s edit_block:0.02s read:0.01s ls:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1646 bytes)
+
+exit_code=0 elapsed_s=98.8

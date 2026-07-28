@@ -1,0 +1,24 @@
+=== matplotlib__matplotlib-23562 (deepseek-v4-flash) start 1785273912.1601791 ===
+1d483badd4ac7f0e62ccd05881769a41b2e61f2976118fc57f7fc1df27bc7bc3
+head_sha=e3375b61c995be1e450a33629724d4951886d5ad
+capped keep_green 136->40 (PIRS_MAX_KEEP_GREEN=40)
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=lib/mpl_toolkits/tests/test_mplot3d.py::test_Poly3DCollection_get_facecolor --target=lib/mpl_toolkits/tests/test_mplot3d.py::test_Poly3DCollection_get_edgecolor --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_alpha[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_calling_conventions --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_edge_style[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_named_colors[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_rgb_data[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_simple[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_xyz[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_add_collection3d_zs_array[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_add_collection3d_zs_scalar[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_aspects[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_autoscale --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_ax3d_tickcolour --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_cla[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_focal_length[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_focal_length_checks --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_isometric[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_labelpad[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_ortho[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_repr --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_rotated[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_colors --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_lightsource --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_notshaded[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_shaded[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_colorbar_pos --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_computed_zorder[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d_1d_input --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d_extend3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-both-levels0] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-max-levels2] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-min-levels1] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_fill[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_equal_box_aspect[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_errorbar3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_errorbar3d_errorevery[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_format_coord --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_get_axis_position --issue-file=/tmp/issue.md --base-sha=e3375b61c995be1e450a33629724d4951886d5ad --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=21 tools=20 [read:7 bash:4 grep:3 edit:2 find:2 run_tests:2]
+tokens by model:
+  deepseek-v4-flash: in=17351 cache_r=389632 cache_w=0 out=6545 reasoning=3805 total=413528 — $0.0392
+  TOTAL: in=17351 cache_r=389632 cache_w=0 out=6545 reasoning=3805 total=413528 — $0.0392
+timing (total 429.89s):
+  bootstrap: 277.18s (64%)
+  fix: 110.21s (26%)
+  discover: 16.32s (4%)
+  baseline: 14.83s (3%)
+  verify: 11.33s (3% n=2)
+  patch: 0.03s (0%)
+  fix→tools: run_tests:24.83s bash:16.77s find:0.07s edit:0.02s grep:0.01s read:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1128 bytes)
+
+exit_code=0 elapsed_s=430.0

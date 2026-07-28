@@ -21,8 +21,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use pirs_agent::profile::{Profile, ToolPolicy};
 use pirs_agent::trace::Recorder;
 use pirs_bench::{
-    is_git_repo, run_instance, Attribution, BaselineCache, DetectorHost, GitWorkspace, Instance,
-    InstanceReport, TestRunner,
+    check_model_patch, is_git_repo, run_instance, Attribution, BaselineCache, DetectorHost,
+    Executor, GitWorkspace, Instance, InstanceReport, TestRunner,
 };
 use pirs_bench_runner::agent_runner::AgentDiscoveredRunner;
 use pirs_bench_runner::{build_provider, selftest, AgentConfig, AgentExecutor, Provider, Strategy};
@@ -106,6 +106,11 @@ struct Common {
     /// uses `--target` / `--keep-green` for reproduce + verify (fair grading).
     #[arg(long, global = true)]
     hide_targets: bool,
+    /// Run the agent only (issue → patch). Skip baseline/reproduce/verify.
+    /// Used as phase 1 of strict SWE-bench (`PIRS_STRICT`): no test_patch in tree.
+    /// Targets are optional; exit 0 if a non-empty patch is produced.
+    #[arg(long, global = true)]
+    agent_only: bool,
 }
 
 impl Common {
@@ -236,7 +241,8 @@ struct SolveArgs {
     /// Path to the repository, already checked out at the base commit.
     repo: PathBuf,
     /// Failing test id to fix (repeatable). The FAIL_TO_PASS targets.
-    #[arg(short = 't', long = "target", required = true)]
+    /// Optional with `--agent-only` (strict phase 1 has no harness targets).
+    #[arg(short = 't', long = "target")]
     targets: Vec<String>,
     /// Test that must stay green (repeatable). The PASS_TO_PASS regression set.
     #[arg(short = 'k', long = "keep-green")]
@@ -256,6 +262,10 @@ struct SolveArgs {
     /// Don't extract a patch or roll back — just report the outcome.
     #[arg(long)]
     no_patch: bool,
+    /// Grade an existing model patch (no agent). Tree must already have
+    /// `test_patch` applied so FAIL_TO_PASS can fail at baseline.
+    #[arg(long = "check-patch")]
+    check_patch: Option<PathBuf>,
     #[command(flatten)]
     common: Common,
 }
@@ -480,6 +490,30 @@ fn solve_one(
 }
 
 fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
+    // --- Phase 2 of strict mode: grade an existing model patch (no agent) ---
+    if let Some(patch_path) = &a.check_patch {
+        if a.targets.is_empty() {
+            bail!("--check-patch requires at least one --target");
+        }
+        let host = DetectorHost::with_bundled().context("load detectors")?;
+        let repo = a
+            .repo
+            .canonicalize()
+            .with_context(|| format!("repo path {:?}", a.repo))?;
+        let model_patch =
+            std::fs::read_to_string(patch_path).with_context(|| format!("read {patch_path:?}"))?;
+        let inst = Instance {
+            repo_root: repo,
+            targets: a.targets,
+            keep_green: a.keep_green,
+            base_sha: a.base_sha,
+        };
+        let report = check_model_patch(&inst, &host, &model_patch)?;
+        eprintln!("outcome: {:?}", report.outcome);
+        eprintln!("{}", report.timings.report());
+        return Ok(report.outcome.is_accepted());
+    }
+
     let strategy = a.common.strategy()?;
     eprintln!("strategy: {}", strategy.name);
     let (provider, key) = a.common.resolve_provider()?;
@@ -488,6 +522,78 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
         (None, Some(f)) => std::fs::read_to_string(&f).with_context(|| format!("read {f:?}"))?,
         (None, None) => bail!("provide --issue or --issue-file"),
     };
+
+    // --- Phase 1 of strict mode: agent only, no harness gates ---
+    if a.common.agent_only {
+        eprintln!("mode: agent-only (no baseline/reproduce/verify)");
+        let repo = a
+            .repo
+            .canonicalize()
+            .with_context(|| format!("repo path {:?}", a.repo))?;
+        if !is_git_repo(&repo) {
+            bail!("agent-only requires a git repo at {repo:?}");
+        }
+        let ws = GitWorkspace::new(repo.clone());
+        let mut executor = AgentExecutor::new(
+            repo,
+            issue,
+            a.targets.clone(),
+            a.keep_green.clone(),
+            AgentConfig {
+                model: a.common.model.clone(),
+                api_key: key,
+                max_turns_per_attempt: a.common.max_turns,
+                provider: build_provider(&provider),
+                strategy,
+                naive: a.common.no_strategy,
+                tool_policy: a.common.tool_policy()?,
+                recorder: a.common.make_recorder()?,
+                steering: None,
+                // Strict issue-only: never spoon-feed targets even if passed.
+                hide_targets: true,
+            },
+        )
+        .context("build agent executor")?;
+
+        let mut changed = false;
+        for attempt in 1..=a.common.max_attempts {
+            if executor.attempt(attempt, None)? {
+                changed = true;
+                // Keep going for remaining attempts only if still failing self-check;
+                // agent-only has no verify — one productive attempt is enough.
+                break;
+            }
+        }
+        let stats = executor.session_stats();
+        eprintln!("session: {}", stats.summary());
+        eprintln!("{}", executor.session_usage().report());
+        let patch = if changed {
+            ws.diff().unwrap_or_default()
+        } else {
+            String::new()
+        };
+        // Always roll back the tree so the host can apply test_patch cleanly.
+        let _ = ws.reset();
+        if patch.trim().is_empty() {
+            eprintln!("outcome: Failed(no patch produced)");
+            return Ok(false);
+        }
+        match &a.out {
+            Some(path) => {
+                std::fs::write(path, &patch)
+                    .with_context(|| format!("write patch to {path:?}"))?;
+                eprintln!("patch written to {path:?} ({} bytes)", patch.len());
+            }
+            None => println!("{patch}"),
+        }
+        eprintln!("outcome: AgentPatch (ungraded)");
+        return Ok(true);
+    }
+
+    if a.targets.is_empty() {
+        bail!("provide at least one --target (or use --agent-only / --check-patch)");
+    }
+
     let host = DetectorHost::with_bundled().context("load detectors")?;
     let mut cache = BaselineCache::in_memory();
     let recorder = a.common.make_recorder()?;

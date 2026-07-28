@@ -1,0 +1,68 @@
+diff --git a/django/db/models/enums.py b/django/db/models/enums.py
+index bbe362a6ab..7a3ae04c5a 100644
+--- a/django/db/models/enums.py
++++ b/django/db/models/enums.py
+@@ -65,7 +65,9 @@ class Choices(enum.Enum, metaclass=ChoicesMeta):
+ 
+ class IntegerChoices(int, Choices):
+     """Class for creating enumerated integer choices."""
+-    pass
++
++    def __str__(self):
++        return str(self.value)
+ 
+ 
+ class TextChoices(str, Choices):
+@@ -73,3 +75,6 @@ class TextChoices(str, Choices):
+ 
+     def _generate_next_value_(name, start, count, last_values):
+         return name
++
++    def __str__(self):
++        return str(self.value)
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index d610dc86f0..6f7c50effa 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -2,6 +2,7 @@ import collections.abc
+ import copy
+ import datetime
+ import decimal
++import enum
+ import operator
+ import uuid
+ import warnings
+@@ -792,7 +793,7 @@ class Field(RegisterLookupMixin):
+         """Perform preliminary non-db specific value checks and conversions."""
+         if isinstance(value, Promise):
+             value = value._proxy____cast()
+-        return value
++        return value.value if isinstance(value, enum.Enum) else value
+ 
+     def get_db_prep_value(self, value, connection, prepared=False):
+         """
+diff --git a/django/db/models/query_utils.py b/django/db/models/query_utils.py
+index 189fb4fa44..85bb6ab9aa 100644
+--- a/django/db/models/query_utils.py
++++ b/django/db/models/query_utils.py
+@@ -6,6 +6,7 @@ large and/or so that they can be used by other modules without getting into
+ circular import difficulties.
+ """
+ import copy
++import enum
+ import functools
+ import inspect
+ from collections import namedtuple
+@@ -119,6 +120,12 @@ class DeferredAttribute:
+     def __init__(self, field):
+         self.field = field
+ 
++    def __set__(self, instance, value):
++        instance.__dict__[self.field.attname] = value.value if isinstance(value, enum.Enum) else value
++
++    def __delete__(self, instance):
++        instance.__dict__.pop(self.field.attname, None)
++
+     def __get__(self, instance, cls=None):
+         """
+         Retrieve and caches the value from the datastore on the first lookup.

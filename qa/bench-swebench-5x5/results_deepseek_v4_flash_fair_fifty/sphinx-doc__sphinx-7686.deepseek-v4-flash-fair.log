@@ -1,0 +1,22 @@
+=== sphinx-doc__sphinx-7686 (deepseek-v4-flash) start 1785274682.3644428 ===
+d4b9f875f1b379e856941372694b77dd350cd7b14d292359a52d27b7d78c24de
+head_sha=f660b78e9c4783a540a81e5ad4e98f323c7030d2
+fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; harness still verifies against them
+cmd: pirs-bench solve /testbed --target=tests/test_ext_autosummary.py::test_autosummary_generate_content_for_module --target=tests/test_ext_autosummary.py::test_autosummary_generate_content_for_module_skipped --keep-green=tests/test_ext_autosummary.py::test_mangle_signature --keep-green=tests/test_ext_autosummary.py::test_escaping --keep-green=tests/test_ext_autosummary.py::test_autosummary_generate --keep-green=tests/test_ext_autosummary.py::test_autosummary_generate_overwrite1 --keep-green=tests/test_ext_autosummary.py::test_autosummary_generate_overwrite2 --keep-green=tests/test_ext_autosummary.py::test_autosummary_recursive --keep-green=tests/test_ext_autosummary.py::test_autosummary_latex_table_colspec --keep-green=tests/test_ext_autosummary.py::test_import_by_name --keep-green=tests/test_ext_autosummary.py::test_autosummary_imported_members --keep-green=tests/test_ext_autosummary.py::test_generate_autosummary_docs_property --keep-green=tests/test_ext_autosummary.py::test_autosummary_skip_member --keep-green=tests/test_ext_autosummary.py::test_autosummary_template --keep-green=tests/test_ext_autosummary.py::test_empty_autosummary_generate --keep-green=tests/test_ext_autosummary.py::test_invalid_autosummary_generate --keep-green=tests/test_ext_autosummary.py::test_autogen --issue-file=/tmp/issue.md --base-sha=f660b78e9c4783a540a81e5ad4e98f323c7030d2 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --hide-targets --strategy=monolithic
+
+strategy: monolithic
+session: turns=56 tools=57 [bash:24 read:15 grep:7 ls:3 run_tests:3 edit:2 edit_block:2 find:1]
+tokens by model:
+  deepseek-v4-flash: in=37805 cache_r=1773440 cache_w=0 out=24090 reasoning=16730 total=1835335 — $0.1608
+  TOTAL: in=37805 cache_r=1773440 cache_w=0 out=24090 reasoning=16730 total=1835335 — $0.1608
+timing (total 271.93s):
+  fix: 255.07s (94% n=2)
+  bootstrap: 6.44s (2%)
+  discover: 4.57s (2%)
+  baseline: 4.55s (2%)
+  verify: 1.26s (0%)
+  rollback: 0.05s (0%)
+  fix→tools: bash:19.51s run_tests:7.56s edit:0.03s grep:0.03s find:0.02s ls:0.01s edit_block:0.01s read:0.01s
+outcome: Failed(FixNoFlip)
+
+exit_code=1 elapsed_s=272.0
