@@ -31,13 +31,35 @@ impl UseTool {
         })
     }
 
+    /// Tool names always offered under `--tool-diet` / `--weak` (when registered).
+    ///
+    /// Diet still hides the long tail (browser, fleet, office, …) so weak models
+    /// do not thrash a 40+ tool schema. Navigation and project checks stay
+    /// visible: forcing `use_tool("lsp")` first was a common silent failure
+    /// when language servers were installed but not in this allowlist.
+    pub const DIET_VISIBLE: &[&str] = &[
+        // Core mutate loop
+        "bash",
+        "read",
+        "edit",
+        "edit_block",
+        "write",
+        "use_tool",
+        // IDE / search (only present in the schema if main registered them)
+        "lsp",
+        "rename_symbol",
+        "code_search",
+        "code_map",
+        "grep",
+        // Structured verify — prefer over inventing shell for weak models
+        "project",
+        "run_tests",
+    ];
+
     pub fn default_visible() -> std::collections::HashSet<String> {
         // edit_block is visible by default: weak models match SEARCH/REPLACE
         // more reliably than nested oldText/newText JSON (aider lesson).
-        ["bash", "read", "edit", "edit_block", "write", "use_tool"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
+        Self::DIET_VISIBLE.iter().map(|s| s.to_string()).collect()
     }
 }
 
@@ -48,7 +70,9 @@ impl AgentTool for UseTool {
     }
 
     fn description(&self) -> &str {
-        "Load an additional tool into this session. Use when you need a tool that is not currently available (e.g. grep, find, ls, or extension tools). Returns the tool's schema."
+        "Load an additional tool into this session. Use when you need a tool that is not currently available (e.g. find, ls, browser, or extension tools). \
+         Navigation tools (lsp, code_search, code_map, grep, project) are already visible under tool-diet/weak when registered — you do not need use_tool for those. \
+         Returns the tool's schema."
     }
 
     fn parameters(&self) -> Value {
@@ -62,7 +86,7 @@ impl AgentTool for UseTool {
     }
 
     fn prompt_snippet(&self) -> Option<&str> {
-        Some("use_tool: load a hidden tool by name (grep, find, ls, ...)")
+        Some("use_tool: load a hidden tool by name (find, ls, browser, … — not lsp/code_search)")
     }
 
     fn execution_mode(&self) -> crate::tool::ExecutionMode {
@@ -159,5 +183,29 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.to_string().contains("Available tools: grep"));
+    }
+
+    #[test]
+    fn diet_visible_includes_lsp_and_nav_without_use_tool() {
+        let v = UseTool::default_visible();
+        for name in [
+            "lsp",
+            "rename_symbol",
+            "code_search",
+            "code_map",
+            "grep",
+            "project",
+            "run_tests",
+            "edit_block",
+            "use_tool",
+        ] {
+            assert!(
+                v.contains(name),
+                "tool-diet/weak must expose {name} when registered"
+            );
+        }
+        // Still a diet: long-tail tools stay opt-in.
+        assert!(!v.contains("browser_navigate"));
+        assert!(!v.contains("fleet"));
     }
 }

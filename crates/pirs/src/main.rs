@@ -1363,6 +1363,22 @@ async fn main() -> anyhow::Result<()> {
         let set: pirs_agent::agent_loop::VisibleTools = std::sync::Arc::new(std::sync::Mutex::new(
             pirs_agent::use_tool::UseTool::default_visible(),
         ));
+        // Log which diet tools are actually registered (e.g. lsp only when
+        // project + language server present). Names in the allowlist but not
+        // in `tools` never appear in the model schema.
+        {
+            let registered: Vec<&str> = tools.iter().map(|t| t.name()).collect();
+            let live: Vec<&str> = pirs_agent::use_tool::UseTool::DIET_VISIBLE
+                .iter()
+                .copied()
+                .filter(|n| *n != "use_tool" && registered.iter().any(|r| r == n))
+                .collect();
+            eprintln!(
+                "[tool_diet: {} core+nav tools visible — {}]",
+                live.len(),
+                live.join(", ")
+            );
+        }
         let use_tool = pirs_agent::use_tool::UseTool::new(&set, &tools);
         tools.push(use_tool);
         (Some(set), tools)
