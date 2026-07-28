@@ -10,5 +10,14 @@
   "elapsed_s": 163.7,
   "solved": false,
   "stderr_tail": "strategy: monolithic\nsession: turns=40 tools=42 [bash:15 read:13 grep:12 ls:1 todo:1]\ntokens by model:\n  deepseek-v4-flash: in=18135 cache_r=796288 cache_w=0 out=14328 reasoning=6739 total=828751 \u2014 $0.0764\n  TOTAL: in=18135 cache_r=796288 cache_w=0 out=14328 reasoning=6739 total=828751 \u2014 $0.0764\ntiming (total 163.66s):\n  fix: 140.44s (86%)\n  baseline: 21.15s (13%)\n  discover: 1.63s (1%)\n  bootstrap: 0.43s (0%)\n  rollback: 0.02s (0%)\n  fix\u2192tools: bash:5.98s grep:0.22s todo:0.01s read:0.01s ls:0.00s\noutcome: Failed(FixNoFlip)",
-  "patch_copied": false
+  "patch_copied": false,
+  "tokens": {
+    "in": 18135,
+    "cache_read": 796288,
+    "cache_write": 0,
+    "out": 14328,
+    "reasoning": 6739,
+    "total": 828751,
+    "cost_usd": 0.0764
+  }
 }

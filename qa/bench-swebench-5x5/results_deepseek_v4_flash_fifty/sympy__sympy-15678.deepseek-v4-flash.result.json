@@ -11,5 +11,14 @@
   "solved": true,
   "stderr_tail": "strategy: monolithic\nsession: turns=34 tools=34 [bash:18 read:9 edit_block:3 grep:2 project:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=13374 cache_r=694656 cache_w=0 out=12197 reasoning=7199 total=720227 \u2014 $0.0657\n  TOTAL: in=13374 cache_r=694656 cache_w=0 out=12197 reasoning=7199 total=720227 \u2014 $0.0657\ntiming (total 145.04s):\n  fix: 134.05s (92%)\n  verify: 5.80s (4% n=2)\n  baseline: 3.17s (2%)\n  discover: 1.39s (1%)\n  bootstrap: 0.41s (0%)\n  patch: 0.22s (0%)\n  fix\u2192tools: bash:10.26s grep:0.11s run_tests:0.02s edit_block:0.01s read:0.01s project:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (4295 bytes)",
   "patch_copied": true,
-  "patch_bytes": 4295
+  "patch_bytes": 4295,
+  "tokens": {
+    "in": 13374,
+    "cache_read": 694656,
+    "cache_write": 0,
+    "out": 12197,
+    "reasoning": 7199,
+    "total": 720227,
+    "cost_usd": 0.0657
+  }
 }

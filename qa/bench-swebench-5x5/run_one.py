@@ -37,6 +37,57 @@ def sh(cmd, **kw):
     return subprocess.run(cmd, check=True, **kw)
 
 
+def parse_token_stats(stderr: str) -> dict | None:
+    """Extract in / cache_r / cache_w / out / reasoning / total from pirs-bench stderr.
+
+    Looks for a TOTAL line like:
+      TOTAL: in=12946 cache_r=106752 cache_w=0 out=1784 reasoning=490 total=121482 — $0.0129
+    Falls back to the first model line with the same shape.
+    """
+    if not stderr:
+        return None
+    # Prefer TOTAL aggregate
+    for line in stderr.splitlines():
+        if "TOTAL:" not in line and not line.strip().startswith("TOTAL"):
+            continue
+        m = re.search(
+            r"in=(\d+)\s+cache_r=(\d+)\s+cache_w=(\d+)\s+out=(\d+)\s+reasoning=(\d+)\s+total=(\d+)"
+            r"(?:\s*[—\-]\s*\$([0-9.]+))?",
+            line,
+        )
+        if m:
+            cost = float(m.group(7)) if m.group(7) else None
+            return {
+                "in": int(m.group(1)),
+                "cache_read": int(m.group(2)),
+                "cache_write": int(m.group(3)),
+                "out": int(m.group(4)),
+                "reasoning": int(m.group(5)),
+                "total": int(m.group(6)),
+                "cost_usd": cost,
+            }
+    for line in stderr.splitlines():
+        if "in=" not in line or "cache_r=" not in line:
+            continue
+        m = re.search(
+            r"in=(\d+)\s+cache_r=(\d+)\s+cache_w=(\d+)\s+out=(\d+)\s+reasoning=(\d+)\s+total=(\d+)"
+            r"(?:\s*[—\-]\s*\$([0-9.]+))?",
+            line,
+        )
+        if m:
+            cost = float(m.group(7)) if m.group(7) else None
+            return {
+                "in": int(m.group(1)),
+                "cache_read": int(m.group(2)),
+                "cache_write": int(m.group(3)),
+                "out": int(m.group(4)),
+                "reasoning": int(m.group(5)),
+                "total": int(m.group(6)),
+                "cost_usd": cost,
+            }
+    return None
+
+
 def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, out_dir: Path,
                   strategy_script: str | None = None, label: str | None = None,
                   no_strategy: bool = False, provider: str = "deepseek",
@@ -277,7 +328,11 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
         result["exit_code"] = proc.returncode
         result["elapsed_s"] = round(elapsed, 1)
         result["solved"] = proc.returncode == 0
-        result["stderr_tail"] = "\n".join(proc.stderr.splitlines()[-40:])
+        # Keep a longer tail so TOTAL token lines are not dropped on verbose runs.
+        result["stderr_tail"] = "\n".join(proc.stderr.splitlines()[-80:])
+        tokens = parse_token_stats(proc.stderr)
+        if tokens:
+            result["tokens"] = tokens
 
         cp = subprocess.run(["docker", "cp", f"{cname}:/tmp/out.patch", str(patch_out)], capture_output=True, text=True)
         result["patch_copied"] = cp.returncode == 0

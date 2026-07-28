@@ -23,6 +23,25 @@
 | Failed | 8 |
 | Total wall-clock (sum of instance elapsed) | 8008s |
 
+
+## Token usage (from pirs-bench session stats)
+
+Parsed from each run's `stderr_tail` TOTAL line (`in` / `cache_r` / `cache_w` / `out` / `reasoning` / `total`).
+
+| Metric | Aggregate |
+|---|---:|
+| **input (in)** | 838,945 |
+| **cache read (cache_r)** | 29,740,672 |
+| **cache write (cache_w)** | 0 |
+| **output (out)** | 400,484 |
+| **reasoning** | 228,786 |
+| **total (reported)** | 30,980,101 |
+| **cost sum (priced models)** | $2.7489 (50 instances with $) |
+
+Note: `total` from the harness includes cache-read tokens in its accounting; do not sum in+out+reasoning alone if you want the same total.
+
+Per-instance breakdown: [`tokens_summary.json`](tokens_summary.json). Structured `tokens` object also added to each `*.result.json`.
+
 ## Failures
 
 - `django__django-11019` (t=67.9s, exit=1)
