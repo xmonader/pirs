@@ -114,12 +114,14 @@ pub use checkpoint::{
     create_checkpoint, list_checkpoints, maybe_auto_checkpoint, restore_checkpoint, CheckpointTool,
 };
 pub use code_review::{
-    attach_finding_slices, build_rubric, enrich_units, filter_precision, format_report_json,
-    format_report_text, format_reviewer_context, host_review_report, is_noise_path,
-    is_safe_repo_rel_path, partition_units, plan_fingerprint, review_tool_allowed, review_tool_diet,
-    run_review, select_changed_files, unit_content_hash, unit_risk_score, Finding, FindingSeverity,
-    ReviewReport, ReviewRubric, ReviewSelectOpts, ReviewUnit, HYSTERESIS_MS,
-    LLM_RESIDUAL_RISK_THRESHOLD, REVIEW_ALLOWED_TOOLS, REVIEW_DENIED_TOOLS,
+    attach_finding_slices, build_rubric, decide_gate_action, enrich_units, filter_dismissed,
+    filter_precision, finding_dismiss_key, format_report_json, format_report_text,
+    format_reviewer_context, host_review_report, is_noise_path, is_safe_repo_rel_path,
+    load_dismissed_keys, merge_llm_verdicts, partition_units, plan_fingerprint, review_tool_allowed,
+    review_tool_diet, run_review, scan_added_line, select_changed_files, unit_content_hash,
+    unit_risk_score, Finding, FindingSeverity, GateAction, ReviewReport, ReviewRubric,
+    ReviewSelectOpts, ReviewUnit, HYSTERESIS_MS, LLM_RESIDUAL_RISK_THRESHOLD, REVIEW_ALLOWED_TOOLS,
+    REVIEW_DENIED_TOOLS,
 };
 pub use doctor::{doctor_report, DoctorTool};
 pub use fleet::fleet_tools;

@@ -63,6 +63,8 @@ pub struct ReviewSelectOpts {
     pub to: Option<String>,
     pub include_untracked: bool,
     pub max_file_bytes: u64,
+    /// When true (or `PIRS_REVIEW_CARGO=1`), run `cargo check` if `Cargo.toml` exists.
+    pub run_cargo_check: bool,
 }
 
 impl ReviewSelectOpts {
@@ -72,6 +74,9 @@ impl ReviewSelectOpts {
             to: None,
             include_untracked: true,
             max_file_bytes: DEFAULT_MAX_FILE_BYTES,
+            run_cargo_check: std::env::var("PIRS_REVIEW_CARGO")
+                .map(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+                .unwrap_or(false),
         }
     }
 
@@ -81,8 +86,94 @@ impl ReviewSelectOpts {
             to: Some(to.into()),
             include_untracked: false,
             max_file_bytes: DEFAULT_MAX_FILE_BYTES,
+            run_cargo_check: std::env::var("PIRS_REVIEW_CARGO")
+                .map(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+                .unwrap_or(false),
         }
     }
+}
+
+/// Gate action for review-gate / hosts (pure; no Rhai).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GateAction {
+    /// No files / nothing to do.
+    PassEmpty,
+    /// Structured error findings — block without LLM.
+    AutoBlock,
+    /// Same plan fingerprint recently reviewed.
+    SkipHysteresis,
+    /// Residual risk below threshold — skip expensive LLM.
+    SkipLlmLowRisk,
+    /// Run adversarial LLM subagent.
+    NeedsLlm,
+}
+
+/// Decide what the session gate should do with a finished report.
+pub fn decide_gate_action(report: &ReviewReport) -> GateAction {
+    if report.files.is_empty() {
+        return GateAction::PassEmpty;
+    }
+    if report.findings.iter().any(|f| f.is_blocking()) {
+        return GateAction::AutoBlock;
+    }
+    if report.rubric.hysteresis_skip {
+        return GateAction::SkipHysteresis;
+    }
+    if report.rubric.needs_llm {
+        GateAction::NeedsLlm
+    } else {
+        GateAction::SkipLlmLowRisk
+    }
+}
+
+/// Merge two independent LLM verdicts: CRITICAL only if **both** say CRITICAL
+/// (self-consistency for precision).
+pub fn merge_llm_verdicts(a: &str, b: &str) -> &'static str {
+    let a_c = first_verdict_line(a).starts_with("CRITICAL");
+    let b_c = first_verdict_line(b).starts_with("CRITICAL");
+    if a_c && b_c {
+        "CRITICAL"
+    } else {
+        "SOUND"
+    }
+}
+
+fn first_verdict_line(s: &str) -> String {
+    s.lines()
+        .map(|l| l.trim().trim_start_matches('#').trim().trim_matches('*').to_ascii_uppercase())
+        .find(|l| !l.is_empty())
+        .unwrap_or_default()
+}
+
+/// Stable key for dismiss / FP memory.
+pub fn finding_dismiss_key(f: &Finding) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        f.kind,
+        f.path,
+        f.line.unwrap_or(0),
+        f.message.chars().take(80).collect::<String>()
+    )
+}
+
+/// Load dismissed finding keys from `{repo}/.pirs/review-dismissed.json`.
+pub fn load_dismissed_keys(repo: &Path) -> BTreeSet<String> {
+    let path = repo.join(".pirs").join("review-dismissed.json");
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return BTreeSet::new();
+    };
+    serde_json::from_str::<Vec<String>>(&text)
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
+
+/// Drop findings whose dismiss key is in the set.
+pub fn filter_dismissed(findings: Vec<Finding>, dismissed: &BTreeSet<String>) -> Vec<Finding> {
+    findings
+        .into_iter()
+        .filter(|f| !dismissed.contains(&finding_dismiss_key(f)))
+        .collect()
 }
 
 /// One isolated review unit (related paths share a unit).
@@ -417,10 +508,11 @@ fn unit_hash_cache() -> &'static std::sync::Mutex<BTreeMap<String, u64>> {
     CACHE.get_or_init(|| std::sync::Mutex::new(BTreeMap::new()))
 }
 
-fn last_plan_slot() -> &'static std::sync::Mutex<Option<(String, std::time::Instant)>> {
-    static SLOT: std::sync::OnceLock<std::sync::Mutex<Option<(String, std::time::Instant)>>> =
+/// Per-fingerprint last-seen times so concurrent reviews/tests don't stomp each other.
+fn last_plan_map() -> &'static std::sync::Mutex<BTreeMap<String, std::time::Instant>> {
+    static MAP: std::sync::OnceLock<std::sync::Mutex<BTreeMap<String, std::time::Instant>>> =
         std::sync::OnceLock::new();
-    SLOT.get_or_init(|| std::sync::Mutex::new(None))
+    MAP.get_or_init(|| std::sync::Mutex::new(BTreeMap::new()))
 }
 
 /// Mark unit hashes as reviewed now; returns how many were already cached (unchanged).
@@ -491,14 +583,24 @@ pub fn hysteresis_should_skip(fingerprint: &str, window_ms: u64) -> bool {
     if fingerprint.is_empty() {
         return false;
     }
-    let mut slot = last_plan_slot().lock().unwrap();
+    let mut map = last_plan_map().lock().unwrap();
     let now = std::time::Instant::now();
-    if let Some((prev, t0)) = slot.as_ref() {
-        if prev == fingerprint && t0.elapsed().as_millis() as u64 <= window_ms {
+    // Drop expired entries
+    map.retain(|_, t| t.elapsed().as_millis() as u64 <= window_ms.saturating_mul(2));
+    if let Some(t0) = map.get(fingerprint) {
+        if t0.elapsed().as_millis() as u64 <= window_ms {
             return true;
         }
     }
-    *slot = Some((fingerprint.to_string(), now));
+    map.insert(fingerprint.to_string(), now);
+    if map.len() > 256 {
+        // drop oldest
+        let mut pairs: Vec<_> = map.iter().map(|(k, t)| (*t, k.clone())).collect();
+        pairs.sort_by_key(|(t, _)| *t);
+        for (_, k) in pairs.into_iter().take(map.len().saturating_sub(128)) {
+            map.remove(&k);
+        }
+    }
     false
 }
 
@@ -514,15 +616,25 @@ pub fn build_rubric(
     let mut test_gaming = 0u8;
     for f in findings {
         match f.kind.as_str() {
-            "unwrap" => correctness = correctness.saturating_add(1).min(3),
-            "todo" => correctness = correctness.saturating_add(0), // nits don't raise axis
-            "unsafe" | "dynamic_exec" => security = security.saturating_add(2).min(3),
+            "unwrap" | "panic" | "todo_macro" => {
+                correctness = correctness.saturating_add(1).min(3)
+            }
+            "todo" => {}
+            "unsafe" | "dynamic_exec" | "shell_injection" | "secret" => {
+                security = security.saturating_add(2).min(3)
+            }
             "test_gaming" => test_gaming = test_gaming.saturating_add(3).min(3),
+            k if k.starts_with("cargo_error") => correctness = 3,
+            k if k.starts_with("cargo_") => correctness = correctness.saturating_add(1).min(3),
             _ => {}
         }
         match f.severity {
             FindingSeverity::Error => {
-                correctness = 3;
+                if f.kind == "secret" || f.kind == "shell_injection" {
+                    security = 3;
+                } else {
+                    correctness = 3;
+                }
             }
             FindingSeverity::Warning => {
                 correctness = correctness.saturating_add(1).min(3);
@@ -862,59 +974,265 @@ pub fn heuristic_findings(repo: &Path, opts: &ReviewSelectOpts) -> anyhow::Resul
         if is_noise_path(&rel) || !is_safe_repo_rel_path(&rel) {
             continue;
         }
-        let trimmed = line.trim();
-        // Skip pure comment-only TODO in non-source? still flag as nit.
-        if contains_todo_marker(trimmed) {
-            findings.push(Finding {
-                path: rel.clone(),
-                line: Some(n),
-                severity: FindingSeverity::Nit,
-                kind: "todo".into(),
-                message: format!("unresolved marker: {}", truncate_msg(trimmed, 120)),
-                slice: None,
-            });
-        }
-        if rel.ends_with(".rs") && !is_likely_test_path(&rel) {
-            if trimmed.contains(".unwrap()") && !trimmed.starts_with("//") {
-                findings.push(Finding {
-                    path: rel.clone(),
-                    line: Some(n),
-                    severity: FindingSeverity::Warning,
-                    kind: "unwrap".into(),
-                    message: "`.unwrap()` may panic; prefer `?` or explicit error handling".into(),
-                    slice: None,
-                });
-            }
-            if (trimmed.contains("unsafe ") || trimmed.starts_with("unsafe "))
-                && !trimmed.starts_with("//")
-            {
-                findings.push(Finding {
-                    path: rel.clone(),
-                    line: Some(n),
-                    severity: FindingSeverity::Info,
-                    kind: "unsafe".into(),
-                    message: "unsafe block/fn — confirm invariants are documented".into(),
-                    slice: None,
-                });
-            }
-        }
-        if is_script_path(&rel)
-            && (trimmed.contains("eval(") || trimmed.contains("exec("))
-            && !trimmed.starts_with('#')
-            && !trimmed.starts_with("//")
-        {
-            findings.push(Finding {
-                path: rel.clone(),
-                line: Some(n),
-                severity: FindingSeverity::Warning,
-                kind: "dynamic_exec".into(),
-                message: "dynamic code execution — verify inputs are not attacker-controlled"
-                    .into(),
-                slice: None,
-            });
-        }
+        findings.extend(scan_added_line(&rel, n, &line));
     }
     Ok(filter_precision(findings))
+}
+
+/// Scan one added line for structured findings (unit-testable pure logic).
+pub fn scan_added_line(rel: &str, n: u32, line: &str) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') {
+        // still allow TODO in comments
+        if contains_todo_marker(trimmed) {
+            findings.push(finding(
+                rel,
+                n,
+                FindingSeverity::Nit,
+                "todo",
+                format!("unresolved marker: {}", truncate_msg(trimmed, 120)),
+            ));
+        }
+        return findings;
+    }
+
+    if contains_todo_marker(trimmed) {
+        findings.push(finding(
+            rel,
+            n,
+            FindingSeverity::Nit,
+            "todo",
+            format!("unresolved marker: {}", truncate_msg(trimmed, 120)),
+        ));
+    }
+
+    if let Some(msg) = looks_like_hardcoded_secret(trimmed) {
+        findings.push(finding(rel, n, FindingSeverity::Error, "secret", msg));
+    }
+
+    if looks_like_shell_injection(trimmed) {
+        findings.push(finding(
+            rel,
+            n,
+            FindingSeverity::Error,
+            "shell_injection",
+            "shell invocation with string command — prefer argv arrays, no `sh -c`".into(),
+        ));
+    }
+
+    if looks_like_panic(trimmed) {
+        findings.push(finding(
+            rel,
+            n,
+            FindingSeverity::Warning,
+            "panic",
+            "explicit panic — prefer Result / recoverable error for library code".into(),
+        ));
+    }
+
+    if is_script_path(rel)
+        && (trimmed.contains("eval(") || trimmed.contains("exec(") || trimmed.contains("Function("))
+    {
+        findings.push(finding(
+            rel,
+            n,
+            FindingSeverity::Warning,
+            "dynamic_exec",
+            "dynamic code execution — verify inputs are not attacker-controlled".into(),
+        ));
+    }
+
+    if (rel.ends_with(".rs") || rel.ends_with(".go")) && !is_likely_test_path(rel) {
+        if trimmed.contains(".unwrap()") || trimmed.contains(".expect(") {
+            findings.push(finding(
+                rel,
+                n,
+                FindingSeverity::Warning,
+                "unwrap",
+                "`.unwrap()`/`.expect()` may panic; prefer `?` or explicit error handling".into(),
+            ));
+        }
+        if trimmed.contains("unsafe ") || trimmed.starts_with("unsafe ") {
+            findings.push(finding(
+                rel,
+                n,
+                FindingSeverity::Info,
+                "unsafe",
+                "unsafe block/fn — confirm invariants are documented".into(),
+            ));
+        }
+        if trimmed.contains("todo!(") || trimmed.contains("unimplemented!(") {
+            findings.push(finding(
+                rel,
+                n,
+                FindingSeverity::Warning,
+                "todo_macro",
+                "todo!/unimplemented! will panic if hit at runtime".into(),
+            ));
+        }
+    }
+
+    findings
+}
+
+fn finding(path: &str, line: u32, sev: FindingSeverity, kind: &str, message: String) -> Finding {
+    Finding {
+        path: path.to_string(),
+        line: Some(line),
+        severity: sev,
+        kind: kind.into(),
+        message,
+        slice: None,
+    }
+}
+
+fn looks_like_hardcoded_secret(line: &str) -> Option<String> {
+    let lower = line.to_ascii_lowercase();
+    // assignment-ish secrets in source
+    let keys = [
+        "password",
+        "passwd",
+        "secret",
+        "api_key",
+        "apikey",
+        "access_key",
+        "private_key",
+        "auth_token",
+        "client_secret",
+    ];
+    let has_key = keys.iter().any(|k| lower.contains(k));
+    if !has_key {
+        // sk-… style tokens
+        if line.contains("sk-") && line.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').count() > 20
+        {
+            return Some("possible API key literal in source".into());
+        }
+        return None;
+    }
+    // string literal on the line
+    if line.contains('"') || line.contains('\'') {
+        // skip obvious placeholders
+        if lower.contains("env")
+            || lower.contains("getenv")
+            || lower.contains("std::env")
+            || lower.contains("placeholder")
+            || lower.contains("example")
+            || lower.contains("changeme")
+            || lower.contains("***")
+        {
+            return None;
+        }
+        return Some(format!(
+            "possible hardcoded secret: {}",
+            truncate_msg(line.trim(), 100)
+        ));
+    }
+    None
+}
+
+fn looks_like_shell_injection(line: &str) -> bool {
+    let l = line.replace(' ', "");
+    line.contains("sh\").arg(\"-c\")")
+        || line.contains("sh').arg('-c')")
+        || line.contains("Command::new(\"sh\")")
+        || line.contains("Command::new(\"bash\")")
+        || line.contains("Command::new(\"cmd\")")
+        || line.contains("std::process::Command::new(\"sh\")")
+        || line.contains("shell=True")
+        || line.contains("subprocess.call(") && line.contains("shell=True")
+        || line.contains("os.system(")
+        || l.contains("new(\"sh\")") && line.contains("-c")
+        || line.contains("bash -c")
+        || line.contains("sh -c")
+}
+
+fn looks_like_panic(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with("panic!(")
+        || t.contains(" panic!(")
+        || t.starts_with("unreachable!(")
+        || (t.contains("assert!(") && t.contains("false"))
+}
+
+/// Optional `cargo check` diagnostics as structured findings (Rust workspaces).
+pub fn cargo_check_findings(repo: &Path) -> Vec<Finding> {
+    if !repo.join("Cargo.toml").exists() {
+        return Vec::new();
+    }
+    let out = Command::new("cargo")
+        .args(["check", "--message-format=json", "--quiet"])
+        .current_dir(repo)
+        .output();
+    let Ok(out) = out else {
+        return Vec::new();
+    };
+    let mut findings = Vec::new();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for line in stdout.lines() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if v.get("reason").and_then(|r| r.as_str()) != Some("compiler-message") {
+            continue;
+        }
+        let msg = match v.get("message") {
+            Some(m) => m,
+            None => continue,
+        };
+        let level = msg.get("level").and_then(|l| l.as_str()).unwrap_or("");
+        if level != "error" && level != "warning" {
+            continue;
+        }
+        let message = msg
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("")
+            .to_string();
+        let spans = msg
+            .get("spans")
+            .and_then(|s| s.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let primary = spans.iter().find(|s| {
+            s.get("is_primary")
+                .and_then(|p| p.as_bool())
+                .unwrap_or(false)
+        });
+        let (path, line_no) = if let Some(sp) = primary {
+            let p = sp
+                .get("file_name")
+                .and_then(|f| f.as_str())
+                .unwrap_or("")
+                .to_string();
+            let ln = sp.get("line_start").and_then(|l| l.as_u64()).unwrap_or(0) as u32;
+            (p, ln)
+        } else {
+            (String::new(), 0)
+        };
+        if path.is_empty() || line_no == 0 {
+            continue;
+        }
+        // Prefer repo-relative paths
+        let path = path
+            .strip_prefix(&format!("{}/", repo.display()))
+            .unwrap_or(&path)
+            .to_string();
+        let sev = if level == "error" {
+            FindingSeverity::Error
+        } else {
+            FindingSeverity::Warning
+        };
+        findings.push(Finding {
+            path,
+            line: Some(line_no),
+            severity: sev,
+            kind: format!("cargo_{level}"),
+            message: truncate_msg(&message, 200),
+            slice: None,
+        });
+    }
+    filter_precision(findings)
 }
 
 fn contains_todo_marker(s: &str) -> bool {
@@ -958,6 +1276,11 @@ pub fn run_review(repo: &Path, opts: &ReviewSelectOpts) -> anyhow::Result<Review
     enrich_units(repo, &mut units);
     let skipped_cached = apply_unit_cache(&units);
     let mut findings = heuristic_findings(repo, opts)?;
+    if opts.run_cargo_check {
+        findings.extend(cargo_check_findings(repo));
+    }
+    let dismissed = load_dismissed_keys(repo);
+    findings = filter_dismissed(findings, &dismissed);
     attach_finding_slices(repo, &mut findings);
     let rubric = build_rubric(&files, &units, &findings, skipped_cached);
     let mode = match (&opts.from, &opts.to) {
@@ -1085,6 +1408,26 @@ pub fn format_reviewer_context(
         top_paths
     };
     parts.push(String::new());
+    parts.push("## full files (top-risk units, capped each)".into());
+    const MAX_FILE_CHARS: usize = 8_000;
+    for p in &diff_paths {
+        let full = repo.join(p);
+        match std::fs::read_to_string(&full) {
+            Ok(body) => {
+                let body = if body.chars().count() > MAX_FILE_CHARS {
+                    format!(
+                        "{}…\n[truncated at {MAX_FILE_CHARS} chars]",
+                        body.chars().take(MAX_FILE_CHARS).collect::<String>()
+                    )
+                } else {
+                    body
+                };
+                parts.push(format!("### file: {p}\n```\n{body}\n```"));
+            }
+            Err(_) => parts.push(format!("### file: {p}\n(missing or deleted)")),
+        }
+    }
+    parts.push(String::new());
     parts.push(format!(
         "## unified diff (capped, top-risk units only, {} files)",
         diff_paths.len()
@@ -1106,6 +1449,8 @@ pub fn format_reviewer_context(
         diff
     };
     parts.push(capped);
+    parts.push(String::new());
+    parts.push(format!("## gate_action: {:?}", decide_gate_action(report)));
     parts.join("\n")
 }
 
@@ -1190,6 +1535,10 @@ pub fn parse_review_cli_args(args: &[&str]) -> ReviewSelectOpts {
             }
             "--no-untracked" => {
                 opts.include_untracked = false;
+                i += 1;
+            }
+            "--cargo-check" => {
+                opts.run_cargo_check = true;
                 i += 1;
             }
             "--json" => i += 1,
@@ -1582,5 +1931,184 @@ mod tests {
             report2.rubric
         );
         assert!(!report2.rubric.needs_llm, "hysteresis implies skip_llm");
+    }
+
+    #[test]
+    fn scan_line_matrix_secret_shell_panic_unwrap_clean() {
+        let secret = scan_added_line("src/a.rs", 1, r#"let secret = "hunter2";"#);
+        assert!(
+            secret.iter().any(|f| f.kind == "secret" && f.is_blocking()),
+            "{secret:?}"
+        );
+        let shell = scan_added_line(
+            "src/a.rs",
+            2,
+            r#"std::process::Command::new("sh").arg("-c").arg(cmd);"#,
+        );
+        assert!(
+            shell.iter().any(|f| f.kind == "shell_injection"),
+            "{shell:?}"
+        );
+        let pan = scan_added_line("src/a.rs", 3, r#"panic!("nope");"#);
+        assert!(pan.iter().any(|f| f.kind == "panic"), "{pan:?}");
+        let un = scan_added_line("src/a.rs", 4, "s.parse().unwrap()");
+        assert!(un.iter().any(|f| f.kind == "unwrap"), "{un:?}");
+        let clean = scan_added_line("src/a.rs", 5, "let x = password_from_env()?;");
+        assert!(
+            !clean.iter().any(|f| f.kind == "secret"),
+            "env password should not flag: {clean:?}"
+        );
+    }
+
+    #[test]
+    fn fixture_matrix_bad_code_auto_blocks() {
+        let dir = init_repo();
+        std::fs::write(
+            dir.path().join("src/lib.rs"),
+            r#"
+pub fn authenticate(user: &str, password: &str) -> bool {
+    let secret = "hunter2";
+    if password == secret { true } else { panic!("bad {}", user); }
+}
+pub fn parse_port(s: &str) -> u16 { s.parse().unwrap() }
+pub fn run_cmd(cmd: &str) {
+    let _ = std::process::Command::new("sh").arg("-c").arg(cmd).output().unwrap();
+}
+"#,
+        )
+        .unwrap();
+        let report = run_review(dir.path(), &ReviewSelectOpts::dirty_default()).unwrap();
+        assert!(!report.files.is_empty());
+        assert!(
+            report.findings.iter().any(|f| f.kind == "secret"),
+            "secret: {:?}",
+            report.findings
+        );
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.kind == "shell_injection" || f.kind == "unwrap"),
+            "{:?}",
+            report.findings
+        );
+        let action = decide_gate_action(&report);
+        // secret is Error → AutoBlock
+        assert_eq!(action, GateAction::AutoBlock, "rubric={:?}", report.rubric);
+        let ctx = format_reviewer_context(
+            dir.path(),
+            &report,
+            &ReviewSelectOpts::dirty_default(),
+            12_000,
+        );
+        assert!(ctx.contains("### file:"), "full file context missing: {ctx}");
+        assert!(ctx.contains("AUTO_BLOCK") || ctx.contains("gate_action"));
+    }
+
+    #[test]
+    fn fixture_matrix_clean_and_empty() {
+        let dir = init_repo();
+        // clean: only whitespace-safe edit
+        std::fs::write(
+            dir.path().join("src/lib.rs"),
+            "pub fn ok() -> i32 {\n    let password = std::env::var(\"PW\").unwrap_or_default();\n    password.len() as i32\n}\n",
+        )
+        .unwrap();
+        // commit so dirty is only if we change - actually this is dirty vs init which had different content
+        let report = run_review(dir.path(), &ReviewSelectOpts::dirty_default()).unwrap();
+        assert!(!report.files.is_empty());
+        // env-based password should not create secret findings
+        assert!(
+            !report.findings.iter().any(|f| f.kind == "secret"),
+            "{:?}",
+            report.findings
+        );
+        // empty: commit clean
+        let run = |args: &[&str]| {
+            assert!(Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .status()
+                .unwrap()
+                .success());
+        };
+        run(&["add", "-A"]);
+        run(&["commit", "-m", "clean"]);
+        let empty = run_review(dir.path(), &ReviewSelectOpts::dirty_default()).unwrap();
+        assert!(empty.files.is_empty(), "{:?}", empty.files);
+        assert_eq!(decide_gate_action(&empty), GateAction::PassEmpty);
+    }
+
+    #[test]
+    fn gate_actions_hysteresis_and_skip_llm() {
+        let dir = init_repo();
+        std::fs::write(dir.path().join("src/lib.rs"), "pub fn n() { 1 }\n").unwrap();
+        let r1 = run_review(dir.path(), &ReviewSelectOpts::dirty_default()).unwrap();
+        let a1 = decide_gate_action(&r1);
+        // low risk nit-free change may be SkipLlm or NeedsLlm depending on residual
+        assert!(
+            matches!(
+                a1,
+                GateAction::SkipLlmLowRisk | GateAction::NeedsLlm | GateAction::PassEmpty
+            ),
+            "{a1:?} {:?}",
+            r1.rubric
+        );
+        let r2 = run_review(dir.path(), &ReviewSelectOpts::dirty_default()).unwrap();
+        assert_eq!(decide_gate_action(&r2), GateAction::SkipHysteresis);
+    }
+
+    #[test]
+    fn merge_verdicts_requires_both_critical() {
+        assert_eq!(merge_llm_verdicts("CRITICAL\n- x", "CRITICAL\n- y"), "CRITICAL");
+        assert_eq!(merge_llm_verdicts("CRITICAL\n- x", "SOUND\n- ok"), "SOUND");
+        assert_eq!(merge_llm_verdicts("SOUND", "SOUND"), "SOUND");
+        assert_eq!(
+            merge_llm_verdicts("## **CRITICAL**\nfoo", "CRITICAL"),
+            "CRITICAL"
+        );
+    }
+
+    #[test]
+    fn dismissed_findings_filtered() {
+        let f = Finding {
+            path: "a.rs".into(),
+            line: Some(1),
+            severity: FindingSeverity::Warning,
+            kind: "unwrap".into(),
+            message: "x".into(),
+            slice: None,
+        };
+        let key = finding_dismiss_key(&f);
+        let mut set = BTreeSet::new();
+        set.insert(key);
+        let kept = filter_dismissed(vec![f], &set);
+        assert!(kept.is_empty());
+    }
+
+    #[test]
+    fn rename_appears_in_selection() {
+        let dir = init_repo();
+        let run = |args: &[&str]| {
+            assert!(Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .status()
+                .unwrap()
+                .success());
+        };
+        run(&["mv", "src/lib.rs", "src/moved.rs"]);
+        run(&["add", "-A"]);
+        run(&["commit", "-m", "rename"]);
+        // dirty empty after commit
+        let empty = select_changed_files(dir.path(), &ReviewSelectOpts::dirty_default()).unwrap();
+        assert!(empty.is_empty());
+        // range should see rename target
+        let files =
+            select_changed_files(dir.path(), &ReviewSelectOpts::range("HEAD~1", "HEAD")).unwrap();
+        assert!(
+            files.iter().any(|f| f.contains("moved.rs")),
+            "rename target missing: {files:?}"
+        );
     }
 }

@@ -60,35 +60,40 @@ fn on_follow_up() {
     }
     let ctx = if lines.len() > 1 { `${lines[1]}` } else { head };
 
-    // Structured error findings — always block (precision path).
-    if ctx.contains("AUTO_BLOCK:") {
+    // Prefer explicit gate_action marker when present; fall back to string flags.
+    if ctx.contains("gate_action: AutoBlock") || ctx.contains("AUTO_BLOCK:") {
         state_set("review_blocked", ctx);
         return `REVIEW BLOCKED — structured review found error-severity issues:\n${ctx}\n\nYou MUST fix the flagged issues and re-verify. The run cannot finish while the review is failing.`;
     }
 
-    if ctx.contains("files: 0") {
+    if ctx.contains("files: 0") || ctx.contains("gate_action: PassEmpty") {
         state_del("review_blocked");
         return ();
     }
 
-    // Same plan fingerprint within hysteresis window — skip re-review thrash.
-    if ctx.contains("HYSTERESIS:skip") {
+    if ctx.contains("HYSTERESIS:skip") || ctx.contains("gate_action: SkipHysteresis") {
         return ();
     }
 
-    // Cascade: low residual risk → no LLM (cheap path).
-    if ctx.contains("CASCADE:skip_llm") {
+    if ctx.contains("CASCADE:skip_llm") || ctx.contains("gate_action: SkipLlmLowRisk") {
         state_del("review_blocked");
         return ();
     }
 
     let request = state_get("first_request") ?? "(unspecified task)";
     let model = state_get("reviewer_model") ?? "";
-    let verdict = run_subagent(
+    // Self-consistency: two independent passes; CRITICAL only if both agree.
+    let v1 = run_subagent(
         `${REVIEW_PROMPT}\n\nUSER REQUEST:\n${request}\n\n${ctx}`,
         model
     );
-    if verdict.contains("CRITICAL") {
+    let v2 = run_subagent(
+        `${REVIEW_PROMPT}\n\nUSER REQUEST:\n${request}\n\n${ctx}\n\n(Second independent pass — be strict.)`,
+        model
+    );
+    let both_critical = v1.contains("CRITICAL") && v2.contains("CRITICAL");
+    if both_critical {
+        let verdict = `CRITICAL (consistent)\n--- pass1 ---\n${v1}\n--- pass2 ---\n${v2}`;
         state_set("review_blocked", verdict);
         return `REVIEW BLOCKED — the independent reviewer rejected this change:\n${verdict}\n\nYou MUST fix the flagged issues and re-verify. The run cannot finish while the review is failing.`;
     }

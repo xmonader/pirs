@@ -514,10 +514,11 @@ async fn main() -> anyhow::Result<()> {
             .collect();
         if rest.iter().any(|a| *a == "-h" || *a == "--help") {
             println!(
-                "usage: pirs review [--json] [--from REV] [--to REV] [--no-untracked]\n\
+                "usage: pirs review [--json] [--from REV] [--to REV] [--no-untracked] [--cargo-check]\n\
                  \n\
                  Deterministic review plan over git changes (model does not choose files).\n\
-                 Emits structured findings (JSON with --json). Read-only tool diet only."
+                 Emits structured findings (JSON with --json). Read-only tool diet only.\n\
+                 --cargo-check runs cargo check (JSON) when Cargo.toml is present."
             );
             return Ok(());
         }
