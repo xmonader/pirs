@@ -1183,7 +1183,9 @@ async fn main() -> anyhow::Result<()> {
         })
     };
     if let Some(ref m) = repo_map {
-        eprintln!("[repo_map: {} chars]", m.len());
+        if crate::system_prompt::map_inject_is_material(Some(m.as_str())) {
+            eprintln!("[repo_map: {} chars]", m.len());
+        }
     }
 
     // Publish inspectable runtime snapshot *before* system prompt so the LLM
@@ -1242,8 +1244,30 @@ async fn main() -> anyhow::Result<()> {
         pack_names.len()
     );
 
-    let mut system =
-        crate::system_prompt::build_system_prompt_with_map(&cwd, &tools, repo_map.as_deref(), cli.weak);
+    // Memory before prefix so auto-recall can inject without a `recall` tool call.
+    if let Err(e) = pirs_agent::memory::init_global(&cwd.join(".pirs").join("memory.db")) {
+        eprintln!("[memory disabled: {e}]");
+    }
+    let prompt_query = cli.prompt.join(" ");
+    let auto_recall = pirs_agent::memory::global().and_then(|store| {
+        let section = store.auto_recall_section(&prompt_query, &[], 5);
+        if section.trim().is_empty() {
+            None
+        } else {
+            Some(section)
+        }
+    });
+    if let Some(ref r) = auto_recall {
+        eprintln!("[auto_recall: {} chars]", r.len());
+    }
+
+    let mut system = crate::system_prompt::build_system_prompt_full(
+        &cwd,
+        &tools,
+        repo_map.as_deref(),
+        cli.weak,
+        auto_recall.as_deref(),
+    );
     // Progressive agentskills index (shared with pirs-claw) via discovery helper.
     if let Some(block) = crate::discovery::skills_prompt_block(&skills) {
         system.push_str(&block);
@@ -1442,11 +1466,14 @@ async fn main() -> anyhow::Result<()> {
         }
         None => None,
     };
-    if let Err(e) = pirs_agent::memory::init_global(&cwd.join(".pirs").join("memory.db")) {
-        eprintln!("[memory disabled: {e}]");
-    } else {
-        // Scope recall to this session so it doesn't surface stale hits from
-        // unrelated past tasks in the same repo.
+    // Memory may already be open for auto-recall inject; re-scope to this session
+    // so tool-time `recall` stays session-local (prefix used cross-session pool).
+    if pirs_agent::memory::global().is_none() {
+        if let Err(e) = pirs_agent::memory::init_global(&cwd.join(".pirs").join("memory.db")) {
+            eprintln!("[memory disabled: {e}]");
+        }
+    }
+    if pirs_agent::memory::global().is_some() {
         pirs_agent::memory::set_session(
             &session_path
                 .file_stem()

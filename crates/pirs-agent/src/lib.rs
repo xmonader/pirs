@@ -38,3 +38,7 @@ pub use thrash::{
     LoopDetectionTracker, MistakeTracker, ThrashGuard, ToolSignature,
 };
 pub use tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext, ToolOutput};
+pub use memory::{
+    format_auto_recall_section, global as memory_global, init_global as memory_init_global,
+    rank_auto_recall, set_session as memory_set_session, MemoryHit, MemoryStore,
+};

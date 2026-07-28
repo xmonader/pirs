@@ -743,21 +743,231 @@ pub fn detect_project_command_hint(command: &str) -> Option<String> {
 /// Returns a short ecosystem id (rust/go/node/python/…) for callers that branch on it.
 pub fn detect_verify_from_profile(root: &Path) -> Option<(String, String)> {
     let p = detect_profile(root);
+    let eco = ecosystem_label(&p);
     let cmd = p.test?;
-    let eco = match p.toolchain.as_deref().unwrap_or("") {
-        s if s.contains("rust") || s.contains("cargo") => "rust",
-        s if s.starts_with("go") => "go",
+    Some((eco, cmd))
+}
+
+fn ecosystem_label(p: &ProjectProfile) -> String {
+    match p.toolchain.as_deref().unwrap_or("") {
+        s if s.contains("rust") || s.contains("cargo") => "rust".into(),
+        s if s.starts_with("go") => "go".into(),
         s if s.contains("python") || s.contains("uv") || s.contains("poetry") || s.contains("pip") => {
-            "python"
+            "python".into()
         }
-        "bun" | "deno" | "pnpm" | "yarn" | "npm" => "node",
-        "make" => "make",
-        other if !other.is_empty() => {
-            return Some((other.to_string(), cmd));
+        "bun" | "deno" | "pnpm" | "yarn" | "npm" => "node".into(),
+        "make" => "make".into(),
+        other if !other.is_empty() => other.to_string(),
+        _ => "project".into(),
+    }
+}
+
+/// Prefer typecheck → lint → test for post-edit gates (fast signal first).
+pub fn preferred_verify_action(profile: &ProjectProfile) -> Option<(&'static str, String)> {
+    if let Some(c) = &profile.typecheck {
+        return Some(("typecheck", c.clone()));
+    }
+    if let Some(c) = &profile.lint {
+        return Some(("lint", c.clone()));
+    }
+    if let Some(c) = &profile.test {
+        return Some(("test", c.clone()));
+    }
+    None
+}
+
+/// Structured outcome of a post-edit / project check (no model-invented shell).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifyOutcome {
+    pub ecosystem: String,
+    /// typecheck | lint | test | (empty when skipped)
+    pub action: String,
+    pub command: String,
+    pub passed: bool,
+    pub skipped: bool,
+    pub skip_reason: Option<String>,
+    pub exit_code: Option<i32>,
+    /// Short tail of combined stdout/stderr for the agent.
+    pub summary: String,
+}
+
+impl VerifyOutcome {
+    pub fn skipped(reason: impl Into<String>) -> Self {
+        Self {
+            ecosystem: String::new(),
+            action: String::new(),
+            command: String::new(),
+            passed: false,
+            skipped: true,
+            skip_reason: Some(reason.into()),
+            exit_code: None,
+            summary: String::new(),
         }
-        _ => "project",
+    }
+
+    /// One-line status for logs / tool details.
+    pub fn status_line(&self) -> String {
+        if self.skipped {
+            return format!(
+                "VERIFY SKIP: {}",
+                self.skip_reason.as_deref().unwrap_or("unknown")
+            );
+        }
+        let v = if self.passed { "PASS" } else { "FAIL" };
+        format!(
+            "VERIFY {v} [{} {}] `{}` exit={:?}",
+            self.ecosystem, self.action, self.command, self.exit_code
+        )
+    }
+}
+
+/// Run the best auto-detected check after a successful edit.
+///
+/// Uses the project profile (typecheck preferred) so the model never invents
+/// cargo/npm/go commands. On missing toolchain binary, returns `skipped` with
+/// an honest reason (tests assert this path when cargo is unavailable).
+pub fn post_edit_verify(root: &Path, timeout_secs: u64) -> VerifyOutcome {
+    let profile = detect_profile(root);
+    if profile.is_empty() {
+        return VerifyOutcome::skipped("no project toolchain detected");
+    }
+    let eco = ecosystem_label(&profile);
+    let Some((action, cmd)) = preferred_verify_action(&profile) else {
+        return VerifyOutcome {
+            ecosystem: eco,
+            action: String::new(),
+            command: String::new(),
+            passed: false,
+            skipped: true,
+            skip_reason: Some("profile has no typecheck/lint/test command".into()),
+            exit_code: None,
+            summary: String::new(),
+        };
     };
-    Some((eco.into(), cmd))
+
+    // Prefer first token as binary for existence check (e.g. "cargo check").
+    let bin = cmd
+        .split_whitespace()
+        .next()
+        .unwrap_or(cmd.as_str())
+        .to_string();
+    if which_bin(&bin).is_none() {
+        return VerifyOutcome {
+            ecosystem: eco,
+            action: action.into(),
+            command: cmd,
+            passed: false,
+            skipped: true,
+            skip_reason: Some(format!("{bin} not found on PATH")),
+            exit_code: None,
+            summary: String::new(),
+        };
+    }
+
+    let timeout = Duration::from_secs(timeout_secs.max(1));
+    let mut child = match std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .current_dir(root)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return VerifyOutcome {
+                ecosystem: eco,
+                action: action.into(),
+                command: cmd,
+                passed: false,
+                skipped: true,
+                skip_reason: Some(format!("spawn failed: {e}")),
+                exit_code: None,
+                summary: String::new(),
+            };
+        }
+    };
+
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let stdout = {
+                    let mut s = String::new();
+                    if let Some(mut out) = child.stdout.take() {
+                        use std::io::Read;
+                        let _ = out.read_to_string(&mut s);
+                    }
+                    s
+                };
+                let stderr = {
+                    let mut s = String::new();
+                    if let Some(mut err) = child.stderr.take() {
+                        use std::io::Read;
+                        let _ = err.read_to_string(&mut s);
+                    }
+                    s
+                };
+                let combined = format!("{stdout}{stderr}");
+                let code = status.code();
+                let passed = status.success();
+                return VerifyOutcome {
+                    ecosystem: eco,
+                    action: action.into(),
+                    command: cmd,
+                    passed,
+                    skipped: false,
+                    skip_reason: None,
+                    exit_code: code,
+                    summary: tail_lines(&combined, 40),
+                };
+            }
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return VerifyOutcome {
+                        ecosystem: eco,
+                        action: action.into(),
+                        command: cmd,
+                        passed: false,
+                        skipped: false,
+                        skip_reason: Some(format!("timeout after {timeout_secs}s")),
+                        exit_code: None,
+                        summary: "TIMEOUT".into(),
+                    };
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => {
+                return VerifyOutcome {
+                    ecosystem: eco,
+                    action: action.into(),
+                    command: cmd,
+                    passed: false,
+                    skipped: true,
+                    skip_reason: Some(format!("wait failed: {e}")),
+                    exit_code: None,
+                    summary: String::new(),
+                };
+            }
+        }
+    }
+}
+
+fn which_bin(name: &str) -> Option<PathBuf> {
+    if name.contains('/') {
+        let p = PathBuf::from(name);
+        return if p.exists() { Some(p) } else { None };
+    }
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 pub struct ProjectTool {
@@ -1034,6 +1244,62 @@ mod tests {
         let (eco, cmd) = detect_verify_from_profile(dir.path()).unwrap();
         assert!(eco.contains("rust") || eco.contains("cargo"));
         assert_eq!(cmd, "cargo test");
+    }
+
+    #[test]
+    fn preferred_verify_prefers_typecheck() {
+        let p = ProjectProfile {
+            toolchain: Some("cargo (rust)".into()),
+            test: Some("cargo test".into()),
+            typecheck: Some("cargo check".into()),
+            lint: Some("cargo clippy".into()),
+            ..Default::default()
+        };
+        let (action, cmd) = preferred_verify_action(&p).unwrap();
+        assert_eq!(action, "typecheck");
+        assert_eq!(cmd, "cargo check");
+    }
+
+    #[test]
+    fn post_edit_verify_empty_dir_skips() {
+        let dir = tempfile::tempdir().unwrap();
+        let o = post_edit_verify(dir.path(), 5);
+        assert!(o.skipped);
+        assert!(o.skip_reason.as_deref().unwrap_or("").contains("no project"));
+    }
+
+    #[test]
+    fn post_edit_verify_rust_fixture_structured() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname=\"spine_verify_fix\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join("src")).unwrap();
+        fs::write(dir.path().join("src/lib.rs"), "pub fn ok() -> i32 { 1 }\n").unwrap();
+
+        let o = post_edit_verify(dir.path(), 120);
+        // Structured fields always present.
+        assert_eq!(o.ecosystem, "rust");
+        assert_eq!(o.action, "typecheck");
+        assert!(o.command.contains("cargo check"), "{}", o.command);
+        if o.skipped {
+            // Honest skip when cargo missing (CI/sandbox without toolchain).
+            let reason = o.skip_reason.as_deref().unwrap_or("");
+            assert!(
+                reason.contains("not found") || reason.contains("spawn"),
+                "unexpected skip: {reason}"
+            );
+        } else {
+            assert!(
+                o.passed,
+                "cargo check should pass on trivial lib: {}",
+                o.summary
+            );
+            assert_eq!(o.exit_code, Some(0));
+            assert!(o.status_line().contains("PASS"));
+        }
     }
 
     #[test]

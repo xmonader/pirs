@@ -96,6 +96,89 @@ pub struct MemoryHit {
     pub ts: i64,
 }
 
+/// Rank memory hits for automatic session injection (no tool call).
+///
+/// Scoring: keyword overlap with `query` + bonus when `active_paths` appear in
+/// the snippet/name (path binding). Pure helper — unit-tested on fixtures.
+pub fn rank_auto_recall(
+    hits: &[MemoryHit],
+    query: &str,
+    active_paths: &[String],
+    limit: usize,
+) -> Vec<MemoryHit> {
+    if limit == 0 || hits.is_empty() {
+        return Vec::new();
+    }
+    let q_tokens: Vec<String> = query
+        .split_whitespace()
+        .filter(|t| t.len() > 1)
+        .map(|t| t.to_ascii_lowercase())
+        .collect();
+    let path_needles: Vec<String> = active_paths
+        .iter()
+        .flat_map(|p| {
+            let p = p.replace('\\', "/");
+            let mut v = vec![p.to_ascii_lowercase()];
+            if let Some(name) = Path::new(&p)
+                .file_name()
+                .and_then(|s| s.to_str())
+            {
+                v.push(name.to_ascii_lowercase());
+            }
+            v
+        })
+        .collect();
+
+    let mut scored: Vec<(i32, usize)> = hits
+        .iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let blob = format!("{} {} {}", h.kind, h.name, h.snippet).to_ascii_lowercase();
+            let mut score = 0i32;
+            for t in &q_tokens {
+                if blob.contains(t) {
+                    score += 3;
+                }
+            }
+            for n in &path_needles {
+                if !n.is_empty() && blob.contains(n) {
+                    score += 10;
+                }
+            }
+            // Prefer prefs/gotchas over raw tool dumps when scores tie.
+            score += match h.kind.as_str() {
+                "pref" | "gotcha" | "decision" => 2,
+                "user" => 1,
+                _ => 0,
+            };
+            (score, i)
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    scored
+        .into_iter()
+        .filter(|(s, _)| *s > 0 || q_tokens.is_empty())
+        .take(limit)
+        .map(|(_, i)| hits[i].clone())
+        .collect()
+}
+
+/// Render auto-recalled memories for the system/prefix prompt.
+pub fn format_auto_recall_section(hits: &[MemoryHit]) -> String {
+    if hits.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("<session_memory>\n");
+    out.push_str("# Auto-recalled (no tool call). Prefer these over re-discovering.\n");
+    for h in hits {
+        let snip = h.snippet.replace('\n', " ");
+        let snip: String = snip.chars().take(200).collect();
+        out.push_str(&format!("- [{}] {}: {}\n", h.kind, h.name, snip));
+    }
+    out.push_str("</session_memory>\n");
+    out
+}
+
 impl MemoryStore {
     pub fn open(path: &Path) -> Result<Arc<Self>, rusqlite::Error> {
         Self::open_with_limits(path, Self::env_max_rows(), Self::env_max_semantic_scan())
@@ -244,6 +327,39 @@ impl MemoryStore {
     /// user input containing FTS operators can't error or inject.
     pub fn search(&self, query: &str, limit: usize) -> Vec<MemoryHit> {
         self.search_scoped(query, limit, false)
+    }
+
+    /// Auto-recall for session prefix: rank lexical hits (and optional path
+    /// binding) and format a small top-k block — no mandatory `recall` tool call.
+    ///
+    /// Uses cross-session search so prefs/gotchas from prior work in this repo
+    /// inject on a fresh coding session (session-scoped tool `recall` remains
+    /// available for in-turn queries).
+    pub fn auto_recall_section(
+        &self,
+        query: &str,
+        active_paths: &[String],
+        limit: usize,
+    ) -> String {
+        let pool_limit = limit.saturating_mul(4).max(limit);
+        let hits = if query.trim().is_empty() {
+            // No query: soft token from active paths or common memory kinds.
+            let q = active_paths
+                .first()
+                .map(|p| {
+                    Path::new(p)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("pref")
+                        .to_string()
+                })
+                .unwrap_or_else(|| "pref".into());
+            self.search_all(&q, pool_limit)
+        } else {
+            self.search_all(query, pool_limit)
+        };
+        let ranked = rank_auto_recall(&hits, query, active_paths, limit);
+        format_auto_recall_section(&ranked)
     }
 
     /// Search across every session, regardless of the current one.
@@ -640,6 +756,79 @@ mod tests {
             timestamp: 0,
         })]);
         assert_eq!(store.search("unique_tool_output_xyz", 5).len(), 0);
+    }
+
+    #[test]
+    fn rank_auto_recall_prefers_path_and_kind() {
+        let hits = vec![
+            MemoryHit {
+                kind: "tool_result".into(),
+                name: "bash".into(),
+                snippet: "unrelated noise about weather".into(),
+                ts: 1,
+            },
+            MemoryHit {
+                kind: "gotcha".into(),
+                name: "containment".into(),
+                snippet: "path resolve_contained must fold .. in crates/pirs-tools".into(),
+                ts: 2,
+            },
+            MemoryHit {
+                kind: "pref".into(),
+                name: "style".into(),
+                snippet: "prefer edit_block for contiguous patches".into(),
+                ts: 3,
+            },
+        ];
+        let ranked = rank_auto_recall(
+            &hits,
+            "path containment resolve",
+            &["crates/pirs-tools/src/paths.rs".into()],
+            2,
+        );
+        assert_eq!(ranked.len(), 2);
+        assert_eq!(ranked[0].kind, "gotcha");
+        assert!(ranked[0].snippet.contains("resolve_contained"));
+    }
+
+    #[test]
+    fn format_auto_recall_section_wraps() {
+        let hits = vec![MemoryHit {
+            kind: "gotcha".into(),
+            name: "utf8".into(),
+            snippet: "thrash compact must not split mid-codepoint".into(),
+            ts: 1,
+        }];
+        let s = format_auto_recall_section(&hits);
+        assert!(s.contains("<session_memory>"));
+        assert!(s.contains("utf8"));
+        assert!(s.contains("</session_memory>"));
+        assert!(format_auto_recall_section(&[]).is_empty());
+    }
+
+    #[test]
+    fn auto_recall_section_from_store_no_tool_required() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = MemoryStore::open(&tmp.path().join("m.db")).unwrap();
+        store.set_session("old");
+        store.add(
+            "gotcha",
+            "filelock",
+            "use process filelock before concurrent writes to same path",
+        );
+        store.add("pref", "rust", "run cargo check after edits");
+        // Fresh session id — auto-recall still sees prior gotchas via search_all.
+        store.set_session("new-coding");
+        let section = store.auto_recall_section("filelock", &[], 3);
+        assert!(
+            section.contains("<session_memory>") && section.contains("filelock"),
+            "auto-recall empty or missing: {section}"
+        );
+        // Ranking still works when FTS returns a pool.
+        let hits = store.search_all("filelock", 5);
+        assert!(!hits.is_empty());
+        let ranked = rank_auto_recall(&hits, "filelock", &[], 2);
+        assert!(!ranked.is_empty());
     }
 
     // ── Embeddings / MMR / consolidation ─────────────────────────────────

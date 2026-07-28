@@ -3,6 +3,11 @@ use std::sync::Arc;
 
 use pirs_agent::AgentTool;
 
+/// Always-on tool protocol: no filler narration between tool calls.
+pub const SILENT_TOOLS_RULE: &str = "Do not narrate what you are about to do. Either issue tool \
+calls or state your conclusion. Speech between tool calls (\"let me search…\", \"now I'll \
+read…\") is wasted — submit tools silently, then answer.";
+
 pub fn build_system_prompt(cwd: &Path, tools: &[Arc<dyn AgentTool>]) -> String {
     build_system_prompt_with_map(cwd, tools, None, false)
 }
@@ -14,6 +19,17 @@ pub fn build_system_prompt_with_map(
     tools: &[Arc<dyn AgentTool>],
     repo_map: Option<&str>,
     weak: bool,
+) -> String {
+    build_system_prompt_full(cwd, tools, repo_map, weak, None)
+}
+
+/// Full coding prompt: map + optional auto-recall block (no mandatory recall tool).
+pub fn build_system_prompt_full(
+    cwd: &Path,
+    tools: &[Arc<dyn AgentTool>],
+    repo_map: Option<&str>,
+    weak: bool,
+    auto_recall: Option<&str>,
 ) -> String {
     let mut prompt = String::new();
     prompt.push_str("You are an expert coding assistant operating inside pirs, a Rust port of the pi agent harness.\n\n");
@@ -37,6 +53,9 @@ pub fn build_system_prompt_with_map(
         - Show file paths when referencing code.\n\
         - Use read to inspect files, edit to make targeted changes, write for new files.\n",
     );
+    prompt.push_str("- ");
+    prompt.push_str(SILENT_TOOLS_RULE);
+    prompt.push('\n');
     if has_edit_block {
         prompt.push_str(
             "- Prefer edit_block (SEARCH/REPLACE) when the change is a clear contiguous block; \
@@ -104,12 +123,27 @@ pub fn build_system_prompt_with_map(
         }
     }
 
+    if let Some(recall) = auto_recall {
+        if !recall.trim().is_empty() {
+            prompt.push('\n');
+            prompt.push_str(recall);
+            if !recall.ends_with('\n') {
+                prompt.push('\n');
+            }
+        }
+    }
+
     // Live harness features (autonomy, strategy, packs, caps) — not only tools.
     if let Some(rt) = crate::runtime_features::live() {
         prompt.push_str(&rt.format_llm());
     }
 
     prompt
+}
+
+/// Pure helper: non-empty map string means structural inject is ready for the session prefix.
+pub fn map_inject_is_material(repo_map: Option<&str>) -> bool {
+    repo_map.map(|m| !m.trim().is_empty() && m.contains("<repo_map>")).unwrap_or(false)
 }
 
 pub fn read_project_context(cwd: &Path) -> Option<String> {
@@ -140,14 +174,36 @@ mod tests {
     }
 
     #[test]
-    fn repo_map_appended() {
-        let p = build_system_prompt_with_map(
-            Path::new("."),
-            &[],
-            Some("<repo_map>\nsrc/a.rs:\n  fn foo\n</repo_map>\n"),
-            false,
+    fn silent_tools_rule_in_coding_prompt() {
+        let p = build_system_prompt_with_map(Path::new("."), &[], None, false);
+        assert!(
+            p.contains(SILENT_TOOLS_RULE) || p.contains("Do not narrate what you are about to do"),
+            "silent-tool rule missing from prompt: {p}"
         );
+        assert!(p.contains("Speech between tool calls") || p.contains("wasted"));
+    }
+
+    #[test]
+    fn repo_map_appended() {
+        let map = "<repo_map>\nsrc/a.rs:\n  fn foo\n</repo_map>\n";
+        assert!(map_inject_is_material(Some(map)));
+        assert!(!map_inject_is_material(None));
+        assert!(!map_inject_is_material(Some("   ")));
+        assert!(!map_inject_is_material(Some("not a map tag")));
+        let p = build_system_prompt_with_map(Path::new("."), &[], Some(map), false);
         assert!(p.contains("<repo_map>"));
         assert!(p.contains("fn foo"));
+        // Coding path uses full builder with map + optional recall.
+        let full = build_system_prompt_full(Path::new("."), &[], Some(map), false, None);
+        assert!(map_inject_is_material(Some(map)));
+        assert!(full.contains("<repo_map>") && full.contains(SILENT_TOOLS_RULE));
+    }
+
+    #[test]
+    fn auto_recall_block_appended_when_provided() {
+        let recall = "<session_memory>\n- gotcha: path containment\n</session_memory>\n";
+        let p = build_system_prompt_full(Path::new("."), &[], None, false, Some(recall));
+        assert!(p.contains("<session_memory>"));
+        assert!(p.contains("path containment"));
     }
 }

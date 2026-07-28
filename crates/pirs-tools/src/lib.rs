@@ -96,8 +96,9 @@ pub use office_write::{
 pub use read::ReadTool;
 pub use recall::RecallTool;
 pub use project::{
-    detect_native_checks, detect_profile, detect_toolchain_label, discover_packages,
-    ProjectProfile, ProjectTool,
+    detect_native_checks, detect_profile, detect_toolchain_label, detect_verify_from_profile,
+    discover_packages, post_edit_verify, preferred_verify_action, ProjectProfile, ProjectTool,
+    VerifyOutcome,
 };
 pub use run_tests::RunTestsTool;
 pub use safety_profile::{
