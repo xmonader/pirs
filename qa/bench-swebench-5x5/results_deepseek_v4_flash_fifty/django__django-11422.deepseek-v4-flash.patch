@@ -1,0 +1,15 @@
+diff --git a/django/utils/autoreload.py b/django/utils/autoreload.py
+index 7ca0d68fae..2cdcad3e0c 100644
+--- a/django/utils/autoreload.py
++++ b/django/utils/autoreload.py
+@@ -115,6 +115,10 @@ def iter_modules_and_files(modules, extra_files):
+         # are added to sys.modules, however they are types not modules and so
+         # cause issues here.
+         if not isinstance(module, ModuleType) or getattr(module, '__spec__', None) is None:
++            # The __main__ module doesn't have a __spec__ when run as a
++            # script (e.g., python manage.py). Use __file__ instead.
++            if getattr(module, '__file__', None) is not None:
++                sys_file_paths.append(module.__file__)
+             continue
+         spec = module.__spec__
+         # Modules could be loaded from places without a concrete location. If

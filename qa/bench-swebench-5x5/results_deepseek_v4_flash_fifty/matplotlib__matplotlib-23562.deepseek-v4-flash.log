@@ -1,0 +1,23 @@
+=== matplotlib__matplotlib-23562 (deepseek-v4-flash) start 1785261370.7230499 ===
+86ee222920d27c3b14b27299111493a01ec7a9940c5971b955f1ac726e665a58
+head_sha=3d819bb6375ee0c39052eb3c02970efef1a024af
+capped keep_green 136->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=lib/mpl_toolkits/tests/test_mplot3d.py::test_Poly3DCollection_get_facecolor --target=lib/mpl_toolkits/tests/test_mplot3d.py::test_Poly3DCollection_get_edgecolor --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_alpha[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_calling_conventions --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_edge_style[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_named_colors[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_rgb_data[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_simple[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_xyz[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_add_collection3d_zs_array[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_add_collection3d_zs_scalar[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_aspects[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_autoscale --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_ax3d_tickcolour --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_cla[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_focal_length[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_focal_length_checks --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_isometric[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_labelpad[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_ortho[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_repr --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_rotated[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_colors --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_lightsource --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_notshaded[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_shaded[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_colorbar_pos --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_computed_zorder[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d_1d_input --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d_extend3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-both-levels0] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-max-levels2] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-min-levels1] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_fill[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_equal_box_aspect[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_errorbar3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_errorbar3d_errorevery[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_format_coord --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_get_axis_position --issue-file=/tmp/issue.md --base-sha=3d819bb6375ee0c39052eb3c02970efef1a024af --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=17 tools=17 [grep:6 read:6 run_tests:2 edit_block:1 find:1 git:1]
+tokens by model:
+  deepseek-v4-flash: in=8054 cache_r=202880 cache_w=0 out=3119 reasoning=1416 total=214053 — $0.0198
+  TOTAL: in=8054 cache_r=202880 cache_w=0 out=3119 reasoning=1416 total=214053 — $0.0198
+timing (total 568.85s):
+  bootstrap: 432.40s (76%)
+  fix: 77.17s (14%)
+  discover: 24.94s (4%)
+  baseline: 20.17s (4%)
+  verify: 14.14s (2% n=2)
+  patch: 0.03s (0%)
+  fix→tools: run_tests:38.49s grep:0.52s git:0.01s edit_block:0.01s read:0.01s find:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (553 bytes)
+
+exit_code=0 elapsed_s=569.0

@@ -1,0 +1,53 @@
+diff --git a/sphinx/ext/autosummary/generate.py b/sphinx/ext/autosummary/generate.py
+index a57c73fb7..934168357 100644
+--- a/sphinx/ext/autosummary/generate.py
++++ b/sphinx/ext/autosummary/generate.py
+@@ -18,6 +18,7 @@
+ """
+ 
+ import argparse
++import inspect
+ import locale
+ import os
+ import pkgutil
+@@ -173,6 +174,19 @@ class AutosummaryRenderer:
+         return template.render(context)
+ 
+ 
++def _is_imported_member(obj: Any, member_name: str, member_value: Any) -> bool:
++    """Check if a member is imported from other module."""
++    try:
++        module_name = getattr(member_value, '__module__', None)
++    except Exception:
++        module_name = None
++    if module_name is not None and module_name != obj.__name__:
++        return True
++    if inspect.ismodule(member_value):
++        return True
++    return False
++
++
+ # -- Generating output ---------------------------------------------------------
+ 
+ 
+@@ -246,7 +260,19 @@ def generate_autosummary_content(name: str, obj: Any, parent: Any,
+     ns.update(context)
+ 
+     if doc.objtype == 'module':
+-        ns['members'] = dir(obj)
++        ns['members'] = []
++        for m in dir(obj):
++            try:
++                value = safe_getattr(obj, m)
++            except AttributeError:
++                continue
++            if _is_imported_member(obj, m, value) and not imported_members:
++                continue
++            documenter = get_documenter(app, value, obj)
++            skipped = skip_member(value, m, documenter.objtype)
++            if skipped is True:
++                continue
++            ns['members'].append(m)
+         ns['functions'], ns['all_functions'] = \
+             get_members(obj, {'function'}, imported=imported_members)
+         ns['classes'], ns['all_classes'] = \

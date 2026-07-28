@@ -1,0 +1,26 @@
+diff --git a/astropy/wcs/wcs.py b/astropy/wcs/wcs.py
+index d3a06f2b31..945cb5e564 100644
+--- a/astropy/wcs/wcs.py
++++ b/astropy/wcs/wcs.py
+@@ -1212,6 +1212,12 @@ reduce these to 2 dimensions using the naxis kwarg.
+         """
+ 
+         def _return_list_of_arrays(axes, origin):
++            # Check for empty input before broadcasting, and return the
++            # original axes if any of them have zero size, since wcslib
++            # cannot handle empty arrays.
++            if any(x.size == 0 for x in axes):
++                return [np.asarray(x).ravel() for x in axes]
++
+             try:
+                 axes = np.broadcast_arrays(*axes)
+             except ValueError:
+@@ -1235,6 +1241,8 @@ reduce these to 2 dimensions using the naxis kwarg.
+                 raise ValueError(
+                     "When providing two arguments, the array must be "
+                     "of shape (N, {0})".format(self.naxis))
++            if xy.size == 0:
++                return xy
+             if ra_dec_order and sky == 'input':
+                 xy = self._denormalize_sky(xy)
+             result = func(xy, origin)

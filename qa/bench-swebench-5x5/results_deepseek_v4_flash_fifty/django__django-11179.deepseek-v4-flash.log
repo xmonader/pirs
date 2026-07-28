@@ -1,0 +1,22 @@
+=== django__django-11179 (deepseek-v4-flash) start 1785260177.2856092 ===
+e597c7e67d2bb35b8c7ae3ef79bf49d88914037059b9a8c7adea19194c599007
+head_sha=99ec4dccbfe7f10364ffe22f587384eff7cbb00d
+cmd: pirs-bench solve /testbed --target=test_fast_delete_instance_set_pk_none (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_empty_no_update_can_self_select (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_fk (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_inheritance (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_joined_qs (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_large_batch (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_m2m (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_qs (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_revm2m (delete.tests.FastDeleteTests) --keep-green=test_auto (delete.tests.OnDeleteTests) --keep-green=test_auto_nullable (delete.tests.OnDeleteTests) --keep-green=test_cascade (delete.tests.OnDeleteTests) --keep-green=test_cascade_from_child (delete.tests.OnDeleteTests) --keep-green=test_cascade_from_parent (delete.tests.OnDeleteTests) --keep-green=test_cascade_nullable (delete.tests.OnDeleteTests) --keep-green=test_do_nothing (delete.tests.OnDeleteTests) --keep-green=test_do_nothing_qscount (delete.tests.OnDeleteTests) --keep-green=test_inheritance_cascade_down (delete.tests.OnDeleteTests) --keep-green=test_inheritance_cascade_up (delete.tests.OnDeleteTests) --keep-green=test_o2o_setnull (delete.tests.OnDeleteTests) --keep-green=test_protect (delete.tests.OnDeleteTests) --keep-green=test_setdefault (delete.tests.OnDeleteTests) --keep-green=test_setdefault_none (delete.tests.OnDeleteTests) --keep-green=test_setnull (delete.tests.OnDeleteTests) --keep-green=test_setnull_from_child (delete.tests.OnDeleteTests) --keep-green=test_setnull_from_parent (delete.tests.OnDeleteTests) --keep-green=test_setvalue (delete.tests.OnDeleteTests) --keep-green=test_bulk (delete.tests.DeletionTests) --keep-green=test_can_defer_constraint_checks (delete.tests.DeletionTests) --keep-green=test_delete_with_keeping_parents (delete.tests.DeletionTests) --keep-green=test_delete_with_keeping_parents_relationships (delete.tests.DeletionTests) --keep-green=test_deletion_order (delete.tests.DeletionTests) --keep-green=test_hidden_related (delete.tests.DeletionTests) --keep-green=test_instance_update (delete.tests.DeletionTests) --keep-green=test_large_delete (delete.tests.DeletionTests) --keep-green=test_large_delete_related (delete.tests.DeletionTests) --keep-green=test_m2m (delete.tests.DeletionTests) --keep-green=test_model_delete_returns_num_rows (delete.tests.DeletionTests) --keep-green=test_proxied_model_duplicate_queries (delete.tests.DeletionTests) --keep-green=test_queryset_delete_returns_num_rows (delete.tests.DeletionTests) --keep-green=test_relational_post_delete_signals_happen_before_parent_object (delete.tests.DeletionTests) --issue-file=/tmp/issue.md --base-sha=99ec4dccbfe7f10364ffe22f587384eff7cbb00d --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=12 tools=13 [read:5 bash:3 edit:1 grep:1 ls:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=12946 cache_r=106752 cache_w=0 out=1784 reasoning=490 total=121482 — $0.0129
+  TOTAL: in=12946 cache_r=106752 cache_w=0 out=1784 reasoning=490 total=121482 — $0.0129
+timing (total 38.53s):
+  fix: 28.66s (74%)
+  baseline: 5.07s (13%)
+  verify: 4.52s (12% n=2)
+  patch: 0.12s (0%)
+  discover: 0.10s (0%)
+  bootstrap: 0.06s (0%)
+  fix→tools: bash:2.62s grep:0.51s run_tests:0.03s edit:0.03s read:0.01s project:0.01s ls:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (614 bytes)
+
+exit_code=0 elapsed_s=38.6

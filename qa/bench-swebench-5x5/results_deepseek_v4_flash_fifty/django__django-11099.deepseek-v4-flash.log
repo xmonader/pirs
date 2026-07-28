@@ -1,0 +1,22 @@
+=== django__django-11099 (deepseek-v4-flash) start 1785263015.2930248 ===
+823168b78a8973fd08fff4c7848b4e5bcf69d4bee40d9f1562d732d31ed7fd14
+head_sha=be8b710d10aab49395d8be49e546d3ea577c2e29
+cmd: pirs-bench solve /testbed --target=test_ascii_validator (auth_tests.test_validators.UsernameValidatorsTests) --target=test_unicode_validator (auth_tests.test_validators.UsernameValidatorsTests) --target=test_help_text (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_help_text (auth_tests.test_validators.MinimumLengthValidatorTest) --keep-green=test_validate (auth_tests.test_validators.MinimumLengthValidatorTest) --keep-green=test_help_text (auth_tests.test_validators.NumericPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.NumericPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_validate_property (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_empty_password_validator_help_text_html (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_get_default_password_validators (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_get_password_validators_custom (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_changed (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_changed_with_custom_validator (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_text_html (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_text_html_escaping (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_texts (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_validate_password (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_help_text (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate_custom_list (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate_django_supplied_file (auth_tests.test_validators.CommonPasswordValidatorTest) --issue-file=/tmp/issue.md --base-sha=be8b710d10aab49395d8be49e546d3ea577c2e29 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=19 tools=18 [bash:6 grep:4 edit_block:2 read:2 edit:1 find:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=5377 cache_r=180608 cache_w=0 out=2986 reasoning=1215 total=188971 — $0.0174
+  TOTAL: in=5377 cache_r=180608 cache_w=0 out=2986 reasoning=1215 total=188971 — $0.0174
+timing (total 44.12s):
+  fix: 39.84s (90%)
+  baseline: 2.25s (5%)
+  verify: 1.87s (4% n=2)
+  patch: 0.06s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.04s (0%)
+  fix→tools: bash:1.60s grep:0.59s run_tests:0.02s edit_block:0.02s find:0.01s edit:0.00s project:0.00s read:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (901 bytes)
+
+exit_code=0 elapsed_s=44.2

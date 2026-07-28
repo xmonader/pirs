@@ -1,0 +1,136 @@
+diff --git a/.pirs_sympy_run.py b/.pirs_sympy_run.py
+new file mode 100644
+index 0000000000..acbae06d38
+--- /dev/null
++++ b/.pirs_sympy_run.py
+@@ -0,0 +1,87 @@
++import re,sys,xml.etree.ElementTree as ET,os,pathlib,importlib.util,traceback
++
++def resolve_files(tid):
++    tid=tid.strip()
++    if "/" in tid or tid.endswith(".py"):
++        return [tid]
++    hits=[]
++    root=pathlib.Path("sympy") if pathlib.Path("sympy").is_dir() else pathlib.Path(".")
++    for p in root.rglob("test_*.py"):
++        try:
++            text=p.read_text(errors="ignore")
++        except Exception:
++            continue
++        if re.search(r"^def %s\s*\(" % re.escape(tid), text, re.M):
++            hits.append(str(p).replace("\\","/"))
++    return hits
++
++def run_one(path, func_name):
++    path=os.path.abspath(path)
++    mod_name="pirs_sympy_t_%s" % (abs(hash(path)) % (10**12))
++    try:
++        if "" not in sys.path:
++            sys.path.insert(0, "")
++        cwd=os.getcwd()
++        if cwd not in sys.path:
++            sys.path.insert(0, cwd)
++        spec=importlib.util.spec_from_file_location(mod_name, path)
++        mod=importlib.util.module_from_spec(spec)
++        spec.loader.exec_module(mod)
++    except Exception as e:
++        return "error", "import %s: %s" % (path, e)
++    fn=getattr(mod, func_name, None)
++    if fn is None or not callable(fn):
++        return "error", "no callable %s in %s" % (func_name, path)
++    try:
++        fn()
++        return "pass", ""
++    except AssertionError:
++        return "fail", traceback.format_exc()
++    except Exception as e:
++        name=type(e).__name__
++        if name in ("Skipped","SkipTest","XFail"):
++            return "skip", str(e)
++        return "error", traceback.format_exc()
++
++def rank(p):
++    score=0
++    if "/core/" in p: score -= 10
++    if "/printing/" in p: score += 5
++    if "numpy" in p or "scipy" in p: score += 5
++    return (score, len(p), p)
++
++ids=sys.argv[1:-1]
++junit=sys.argv[-1]
++if not ids:
++    open(junit,"wb").write(b'<testsuite name="sympy"/>')
++    sys.exit(0)
++
++root=ET.Element("testsuite",name="sympy")
++for tid in ids:
++    leaf=tid.rsplit("::",1)[-1].rsplit(".",1)[-1].split("[")[0]
++    tc=ET.SubElement(root,"testcase",classname="",name=leaf)
++    if "/" in tid and "::" in tid:
++        path,leaf2=tid.split("::",1)
++        files=[path]
++        leaf=leaf2
++    else:
++        files=sorted(resolve_files(leaf), key=rank)
++    if not files:
++        ET.SubElement(tc,"error").text="could not resolve %r to test_*.py (is test_patch applied?)" % tid
++        continue
++    st,detail="skip",""
++    for f in files:
++        st,detail=run_one(f, leaf)
++        if st in ("pass","fail","error"):
++            break
++    if st=="pass":
++        pass
++    elif st=="fail":
++        ET.SubElement(tc,"failure").text=(detail or tid)[-4000:]
++    elif st=="error":
++        ET.SubElement(tc,"error").text=(detail or tid)[-4000:]
++    else:
++        ET.SubElement(tc,"skipped").text=detail or tid
++
++ET.ElementTree(root).write(junit, encoding="utf-8", xml_declaration=True)
++sys.exit(0)
+diff --git a/sympy/printing/mathml.py b/sympy/printing/mathml.py
+index 1aa0ee01a2..f65a44014d 100644
+--- a/sympy/printing/mathml.py
++++ b/sympy/printing/mathml.py
+@@ -449,6 +449,16 @@ def _print_Basic(self, e):
+             x.appendChild(self._print(arg))
+         return x
+ 
++    def _print_IndexedBase(self, expr):
++        return self._print(expr.label)
++
++    def _print_Indexed(self, expr):
++        x = self.dom.createElement('apply')
++        x.appendChild(self._print(expr.base))
++        for index in expr.indices:
++            x.appendChild(self._print(index))
++        return x
++
+     def _print_AssocOp(self, e):
+         x = self.dom.createElement('apply')
+         x_1 = self.dom.createElement(self.mathml_tag(e))
+@@ -848,6 +858,21 @@ def _print_MatrixSymbol(self, sym):
+ 
+     _print_RandomSymbol = _print_Symbol
+ 
++    def _print_IndexedBase(self, expr):
++        return self._print(expr.label)
++
++    def _print_Indexed(self, expr):
++        x = self.dom.createElement('msub')
++        x.appendChild(self._print(expr.base))
++        if len(expr.indices) == 1:
++            x.appendChild(self._print(expr.indices[0]))
++        else:
++            mfenced = self.dom.createElement('mfenced')
++            for index in expr.indices:
++                mfenced.appendChild(self._print(index))
++            x.appendChild(mfenced)
++        return x
++
+     def _print_conjugate(self, expr):
+         enc = self.dom.createElement('menclose')
+         enc.setAttribute('notation', 'top')

@@ -1,0 +1,15 @@
+{
+  "id": "astropy__astropy-14365",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14365:latest",
+  "container": "pirsbench-astropy--astropy-14365-deepseek-v4-flash",
+  "strategy": "monolithic",
+  "exit_code": 0,
+  "elapsed_s": 230.0,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=13 tools=13 [bash:4 read:3 edit:2 find:2 grep:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=17478 cache_r=232704 cache_w=0 out=3443 reasoning=1847 total=253625 \u2014 $0.0248\n  TOTAL: in=17478 cache_r=232704 cache_w=0 out=3443 reasoning=1847 total=253625 \u2014 $0.0248\ntiming (total 229.90s):\n  bootstrap: 125.09s (54%)\n  fix: 54.91s (24%)\n  discover: 43.67s (19%)\n  verify: 4.16s (2% n=2)\n  baseline: 2.05s (1%)\n  patch: 0.02s (0%)\n  fix\u2192tools: run_tests:12.74s bash:3.75s find:0.07s edit:0.02s read:0.00s grep:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (997 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 997
+}

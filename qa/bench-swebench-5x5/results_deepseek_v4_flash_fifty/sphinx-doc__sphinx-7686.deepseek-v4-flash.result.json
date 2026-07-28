@@ -1,0 +1,15 @@
+{
+  "id": "sphinx-doc__sphinx-7686",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash",
+  "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7686:latest",
+  "container": "pirsbench-sphinx-doc--sphinx-7686-deepseek-v4-flash",
+  "strategy": "monolithic",
+  "exit_code": 0,
+  "elapsed_s": 257.3,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=69 tools=69 [bash:26 read:17 grep:11 edit_block:7 git:3 find:2 ls:1 project:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=43788 cache_r=2045184 cache_w=0 out=21003 reasoning=13506 total=2109975 \u2014 $0.1781\n  TOTAL: in=43788 cache_r=2045184 cache_w=0 out=21003 reasoning=13506 total=2109975 \u2014 $0.1781\ntiming (total 257.21s):\n  fix: 237.02s (92% n=2)\n  bootstrap: 6.16s (2%)\n  verify: 5.29s (2% n=3)\n  baseline: 4.45s (2%)\n  discover: 4.27s (2%)\n  patch: 0.02s (0%)\n  fix\u2192tools: bash:14.53s grep:0.12s find:0.05s edit_block:0.02s git:0.02s project:0.01s read:0.01s ls:0.00s run_tests:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (1768 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 1768
+}

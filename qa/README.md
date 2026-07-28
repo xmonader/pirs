@@ -129,6 +129,9 @@ embeddings send code off-machine: fine for a public repo, weigh for private.)
 
 ## Strategy comparison benchmark (SWE-bench-lite)
 
+**2026-07-28 deepseek-v4-flash fifty:** **42/50 (84%)** — [`bench-swebench-5x5/results_deepseek_v4_flash_fifty/`](bench-swebench-5x5/results_deepseek_v4_flash_fifty/).
+
+
 A live, real-API comparison of all 5 execution modes (`no-strategy`,
 `monolithic`, `plan-exec`, `plan-critic-exec`, `wide-plan-exec`) against 10
 SWE-bench-lite instances inside the official eval docker images —

@@ -1,0 +1,28 @@
+diff --git a/django/db/migrations/autodetector.py b/django/db/migrations/autodetector.py
+index 1c40161c7f..49a9bd32d4 100644
+--- a/django/db/migrations/autodetector.py
++++ b/django/db/migrations/autodetector.py
+@@ -912,6 +912,7 @@ class MigrationAutodetector:
+             old_field_name = self.renamed_fields.get((app_label, model_name, field_name), field_name)
+             old_field = self.old_apps.get_model(app_label, old_model_name)._meta.get_field(old_field_name)
+             new_field = self.new_apps.get_model(app_label, model_name)._meta.get_field(field_name)
++
+             dependencies = []
+             # Implement any model renames on relations; these are handled by RenameModel
+             # so we need to exclude them from the comparison
+@@ -928,6 +929,15 @@ class MigrationAutodetector:
+                     to_field_rename_key = rename_key + (remote_field_name,)
+                     if to_field_rename_key in self.renamed_fields:
+                         new_field.remote_field.field_name = old_field.remote_field.field_name
++                        # If the ForeignKey was implicit (pointing to the
++                        # related model's PK), update to the new PK name so
++                        # that the deconstruction doesn't include a to_field
++                        # parameter.
++                        if (old_field.remote_field.field_name ==
++                                old_field.remote_field.model._meta.pk.name):
++                            new_field.remote_field.field_name = (
++                                new_field.remote_field.model._meta.pk.name
++                            )
+                 # Handle ForeignObjects which can have multiple from_fields/to_fields.
+                 from_fields = getattr(new_field, 'from_fields', None)
+                 if from_fields:

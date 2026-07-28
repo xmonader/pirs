@@ -1,0 +1,22 @@
+=== django__django-12113 (deepseek-v4-flash) start 1785263564.4890692 ===
+837f4200f02196a85eab536f3ea21b3429a99fa3b8bab880c285e3aff944cb10
+head_sha=0e8d4308a90464f9a0a73dffc8c9876931f1b9d9
+cmd: pirs-bench solve /testbed --target=test_custom_test_name (backends.sqlite.test_creation.TestDbSignatureTests) --issue-file=/tmp/issue.md --base-sha=0e8d4308a90464f9a0a73dffc8c9876931f1b9d9 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=26 tools=28 [bash:14 read:8 todo:2 edit_block:1 find:1 grep:1 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=11068 cache_r=411008 cache_w=0 out=6336 reasoning=3490 total=428412 — $0.0387
+  TOTAL: in=11068 cache_r=411008 cache_w=0 out=6336 reasoning=3490 total=428412 — $0.0387
+timing (total 84.32s):
+  fix: 82.04s (97%)
+  baseline: 1.34s (2%)
+  verify: 0.77s (1%)
+  patch: 0.08s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:8.19s grep:0.27s find:0.12s todo:0.02s edit_block:0.01s read:0.00s ls:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (525 bytes)
+
+exit_code=0 elapsed_s=84.4

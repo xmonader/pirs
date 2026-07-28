@@ -1,5 +1,12 @@
 # Strategy benchmark — 5 SWE-bench-lite instances × 5 execution modes
 
+
+## Latest campaign: deepseek-v4-flash fifty (2026-07-28)
+
+**Score: 42/50 (84%)** — honest harness (no gold patch), `monolithic` strategy, concurrency 3 after first 8.
+
+Artifacts: [`results_deepseek_v4_flash_fifty/`](results_deepseek_v4_flash_fifty/) (`README.md`, per-instance `.result.json`, logs, patches).
+
 A live, real-API comparative study of pirs's execution strategies against real
 SWE-bench-lite tasks, run inside the official `swebench/sweb.eval.*` docker
 images. Every number below is pulled directly from a captured `.result.json` /

@@ -1,0 +1,15 @@
+{
+  "id": "django__django-12286",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-12286:latest",
+  "container": "pirsbench-django--django-12286-deepseek-v4-flash",
+  "strategy": "monolithic",
+  "exit_code": 0,
+  "elapsed_s": 36.5,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=14 tools=15 [read:5 grep:3 bash:2 edit:1 edit_block:1 find:1 project:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=5775 cache_r=153216 cache_w=0 out=2607 reasoning=834 total=161598 \u2014 $0.0152\n  TOTAL: in=5775 cache_r=153216 cache_w=0 out=2607 reasoning=834 total=161598 \u2014 $0.0152\ntiming (total 36.40s):\n  fix: 33.25s (91%)\n  verify: 1.69s (5% n=2)\n  baseline: 1.29s (4%)\n  patch: 0.08s (0%)\n  discover: 0.05s (0%)\n  bootstrap: 0.03s (0%)\n  fix\u2192tools: bash:0.70s grep:0.42s find:0.15s run_tests:0.03s edit:0.02s project:0.00s read:0.00s edit_block:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (794 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 794
+}

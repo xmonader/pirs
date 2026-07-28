@@ -1,0 +1,23 @@
+=== sympy__sympy-16106 (deepseek-v4-flash) start 1785264318.5029316 ===
+a64541201059f9f78c852fd39367a4337a9583976b8cc2a9668fb50c02be09be
+head_sha=3446170df05c72af0c819a931652772ec2789443
+capped keep_green 55->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=test_print_IndexedBase --keep-green=test_print_AssocOp --keep-green=test_print_Lambda --keep-green=test_print_basic --keep-green=test_print_conjugate --keep-green=test_print_derivative --keep-green=test_print_domains --keep-green=test_print_expression_with_minus --keep-green=test_print_factorials --keep-green=test_print_lerchphi --keep-green=test_print_logic --keep-green=test_print_matrix_symbol --keep-green=test_print_polylog --keep-green=test_print_random_symbol --keep-green=test_print_re_im --keep-green=test_print_tuples --keep-green=test_content_mathml_Rational --keep-green=test_content_mathml_add --keep-green=test_content_mathml_constants --keep-green=test_content_mathml_core --keep-green=test_content_mathml_functions --keep-green=test_content_mathml_greek --keep-green=test_content_mathml_integrals --keep-green=test_content_mathml_limits --keep-green=test_content_mathml_matrices --keep-green=test_content_mathml_order --keep-green=test_content_mathml_relational --keep-green=test_content_mathml_sums --keep-green=test_content_mathml_trig --keep-green=test_content_mathml_tuples --keep-green=test_content_printmethod --keep-green=test_content_settings --keep-green=test_content_symbol --keep-green=test_fold_frac_powers_print --keep-green=test_fold_short_frac_print --keep-green=test_ln_notation_print --keep-green=test_mathml_printer --keep-green=test_mul_symbol_print --keep-green=test_presentation_mathml_Rational --keep-green=test_presentation_mathml_add --keep-green=test_presentation_mathml_constants --issue-file=/tmp/issue.md --base-sha=3446170df05c72af0c819a931652772ec2789443 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=40 tools=42 [read:17 bash:13 grep:7 edit_block:2 find:1 git:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=22649 cache_r=1001088 cache_w=0 out=11488 reasoning=7151 total=1035225 — $0.0888
+  TOTAL: in=22649 cache_r=1001088 cache_w=0 out=11488 reasoning=7151 total=1035225 — $0.0888
+timing (total 153.68s):
+  fix: 132.61s (86%)
+  baseline: 11.53s (8%)
+  verify: 7.56s (5% n=2)
+  discover: 1.50s (1%)
+  bootstrap: 0.43s (0%)
+  patch: 0.04s (0%)
+  fix→tools: bash:10.13s grep:0.13s find:0.03s run_tests:0.02s edit_block:0.01s read:0.01s git:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (4573 bytes)
+
+exit_code=0 elapsed_s=153.8

@@ -1,0 +1,15 @@
+{
+  "id": "sympy__sympy-16106",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-16106:latest",
+  "container": "pirsbench-sympy--sympy-16106-deepseek-v4-flash",
+  "strategy": "monolithic",
+  "exit_code": 0,
+  "elapsed_s": 153.8,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=40 tools=42 [read:17 bash:13 grep:7 edit_block:2 find:1 git:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=22649 cache_r=1001088 cache_w=0 out=11488 reasoning=7151 total=1035225 \u2014 $0.0888\n  TOTAL: in=22649 cache_r=1001088 cache_w=0 out=11488 reasoning=7151 total=1035225 \u2014 $0.0888\ntiming (total 153.68s):\n  fix: 132.61s (86%)\n  baseline: 11.53s (8%)\n  verify: 7.56s (5% n=2)\n  discover: 1.50s (1%)\n  bootstrap: 0.43s (0%)\n  patch: 0.04s (0%)\n  fix\u2192tools: bash:10.13s grep:0.13s find:0.03s run_tests:0.02s edit_block:0.01s read:0.01s git:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (4573 bytes)",
+  "patch_copied": true,
+  "patch_bytes": 4573
+}

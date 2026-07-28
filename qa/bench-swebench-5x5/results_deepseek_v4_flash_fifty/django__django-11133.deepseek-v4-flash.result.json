@@ -1,0 +1,14 @@
+{
+  "id": "django__django-11133",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11133:latest",
+  "container": "pirsbench-django--django-11133-deepseek-v4-flash",
+  "strategy": "monolithic",
+  "exit_code": 1,
+  "elapsed_s": 10.2,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nsession: turns=3 tools=3 [find:1 grep:1 read:1]\ntokens by model:\n  deepseek-v4-flash: in=1812 cache_r=15232 cache_w=0 out=228 reasoning=86 total=17272 \u2014 $0.0018\n  TOTAL: in=1812 cache_r=15232 cache_w=0 out=228 reasoning=86 total=17272 \u2014 $0.0018\ntiming (total 10.14s):\n  fix: 8.33s (82%)\n  baseline: 1.65s (16%)\n  rollback: 0.07s (1%)\n  discover: 0.06s (1%)\n  bootstrap: 0.03s (0%)\n  fix\u2192tools: grep:0.48s find:0.16s read:0.00s\noutcome: Failed(FixNoFlip)",
+  "patch_copied": false
+}

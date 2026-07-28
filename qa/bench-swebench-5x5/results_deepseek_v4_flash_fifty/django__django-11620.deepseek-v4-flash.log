@@ -1,0 +1,24 @@
+=== django__django-11620 (deepseek-v4-flash) start 1785263160.3922322 ===
+b6e7784320e8c7d4413969c62834e1b35057d3934ed8f35be2eb1d768a8199df
+head_sha=16f5211e3bec781852bdeecb0324fb1e06682996
+filtered non-test ids: targets 1->1 keep_green 66->55
+capped keep_green 66->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=test_technical_404_converter_raise_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_technical_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_400 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_403 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_403_template (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404_empty_path_not_in_urls (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404_not_in_urls (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_classbased_technical_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_default_urlconf_template (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_files (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_no_template_source_loaders (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_non_l10ned_numeric_ids (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_regression_21530 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_template_encoding (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_template_exceptions (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_400 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_403 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_404 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_ajax_response_encoding (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_callable_settings (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_callable_settings_forbidding_to_set_attributes (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_cleanse_setting_basic (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_cleanse_setting_ignore_case (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_cleanse_setting_recurses_in_dictionary (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_custom_exception_reporter_filter (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_custom_exception_reporter_filter (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_dict_setting_with_non_str_key (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_encoding_error (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_exception_fetching_user (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_handle_db_exception (view_tests.tests.test_debug.DebugViewQueriesAllowedTests) --keep-green=test_ignore_traceback_evaluation_exceptions (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_message_only (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_message_only (view_tests.tests.test_debug.PlainTextReportTests) --keep-green=test_multivalue_dict_key_error (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_non_sensitive_request (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_non_sensitive_request (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_paranoid_request (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_paranoid_request (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_reporting_frames_for_cyclic_reference (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_reporting_frames_without_source (view_tests.tests.test_debug.ExceptionReporterTests) --issue-file=/tmp/issue.md --base-sha=16f5211e3bec781852bdeecb0324fb1e06682996 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=30 tools=35 [read:14 bash:8 grep:8 edit_block:2 find:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=11479 cache_r=435456 cache_w=0 out=6399 reasoning=3228 total=453334 — $0.0406
+  TOTAL: in=11479 cache_r=435456 cache_w=0 out=6399 reasoning=3228 total=453334 — $0.0406
+timing (total 87.76s):
+  fix: 80.27s (91%)
+  baseline: 4.42s (5%)
+  verify: 2.90s (3% n=2)
+  patch: 0.07s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:3.35s grep:0.43s find:0.15s run_tests:0.02s edit_block:0.01s read:0.00s ls:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (719 bytes)
+
+exit_code=0 elapsed_s=87.8

@@ -1,0 +1,20 @@
+diff --git a/django/urls/resolvers.py b/django/urls/resolvers.py
+index 2154a46320..91aed5a42b 100644
+--- a/django/urls/resolvers.py
++++ b/django/urls/resolvers.py
+@@ -25,6 +25,7 @@ from django.utils.translation import get_language
+ 
+ from .converters import get_converter
+ from .exceptions import NoReverseMatch, Resolver404
++from django.http import Http404
+ from .utils import get_callable
+ 
+ 
+@@ -260,6 +261,8 @@ class RoutePattern(CheckURLMixin):
+                     kwargs[key] = converter.to_python(value)
+                 except ValueError:
+                     return None
++                except Http404:
++                    return None
+             return path[match.end():], (), kwargs
+         return None

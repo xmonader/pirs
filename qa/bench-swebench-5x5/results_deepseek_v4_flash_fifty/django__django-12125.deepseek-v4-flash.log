@@ -1,0 +1,22 @@
+=== django__django-12125 (deepseek-v4-flash) start 1785263610.5460744 ===
+f4cb8fc976db2d16cad3deb60ca4838dedd645e0d5cf18aaed4f5414f7f15adb
+head_sha=c2d03fbf2bed070a0025c124ea3d3ac2257651ba
+filtered non-test ids: targets 2->2 keep_green 45->43
+capped keep_green 45->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=test_serialize_nested_class (migrations.test_writer.WriterTests) --target=test_serialize_numbers (migrations.test_writer.WriterTests) --keep-green=test_serialize_builtin_types (migrations.test_writer.WriterTests) --keep-green=test_serialize_builtins (migrations.test_writer.WriterTests) --keep-green=test_serialize_choices (migrations.test_writer.WriterTests) --keep-green=test_serialize_class_based_validators (migrations.test_writer.WriterTests) --keep-green=test_serialize_collections (migrations.test_writer.WriterTests) --keep-green=test_serialize_compiled_regex (migrations.test_writer.WriterTests) --keep-green=test_serialize_constants (migrations.test_writer.WriterTests) --keep-green=test_serialize_datetime (migrations.test_writer.WriterTests) --keep-green=test_serialize_empty_nonempty_tuple (migrations.test_writer.WriterTests) --keep-green=test_serialize_enums (migrations.test_writer.WriterTests) --keep-green=test_serialize_fields (migrations.test_writer.WriterTests) --keep-green=test_serialize_frozensets (migrations.test_writer.WriterTests) --keep-green=test_serialize_functions (migrations.test_writer.WriterTests) --keep-green=test_serialize_functools_partial (migrations.test_writer.WriterTests) --keep-green=test_serialize_functools_partialmethod (migrations.test_writer.WriterTests) --keep-green=test_serialize_iterators (migrations.test_writer.WriterTests) --keep-green=test_serialize_lazy_objects (migrations.test_writer.WriterTests) --keep-green=test_serialize_managers (migrations.test_writer.WriterTests) --keep-green=test_serialize_multiline_strings (migrations.test_writer.WriterTests) --keep-green=test_serialize_range (migrations.test_writer.WriterTests) --keep-green=test_serialize_set (migrations.test_writer.WriterTests) --keep-green=test_serialize_settings (migrations.test_writer.WriterTests) --keep-green=test_serialize_strings (migrations.test_writer.WriterTests) --keep-green=test_serialize_timedelta (migrations.test_writer.WriterTests) --keep-green=test_serialize_type_none (migrations.test_writer.WriterTests) --keep-green=test_serialize_uuid (migrations.test_writer.WriterTests) --keep-green=test_custom_operation (migrations.test_writer.WriterTests) --keep-green=test_deconstruct_class_arguments (migrations.test_writer.WriterTests) --keep-green=test_migration_file_header_comments (migrations.test_writer.WriterTests) --keep-green=test_migration_path (migrations.test_writer.WriterTests) --keep-green=test_models_import_omitted (migrations.test_writer.WriterTests) --keep-green=test_register_non_serializer (migrations.test_writer.WriterTests) --keep-green=test_register_serializer (migrations.test_writer.WriterTests) --keep-green=test_simple_migration (migrations.test_writer.WriterTests) --keep-green=test_sorted_imports (migrations.test_writer.WriterTests) --keep-green=test_args_kwargs_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_empty_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_expand_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_kwargs_signature (migrations.test_writer.OperationWriterTests) --issue-file=/tmp/issue.md --base-sha=c2d03fbf2bed070a0025c124ea3d3ac2257651ba --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=20 tools=23 [bash:6 grep:6 read:5 find:3 run_tests:2 project:1]
+tokens by model:
+  deepseek-v4-flash: in=13751 cache_r=345216 cache_w=0 out=4311 reasoning=2662 total=363278 — $0.0326
+  TOTAL: in=13751 cache_r=345216 cache_w=0 out=4311 reasoning=2662 total=363278 — $0.0326
+timing (total 51.00s):
+  fix: 49.34s (97%)
+  baseline: 1.50s (3%)
+  rollback: 0.08s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: find:0.52s bash:0.49s run_tests:0.02s grep:0.00s read:0.00s project:0.00s
+outcome: Failed(FixNoFlip)
+
+exit_code=1 elapsed_s=51.1

@@ -1,0 +1,22 @@
+=== astropy__astropy-6938 (deepseek-v4-flash) start 1785262731.4118817 ===
+fdc324753f9cd4505e4220e8a9274b26be677703bbd9574098a45b1abececcf5
+head_sha=255e17d48c2ccc3d9910457926ee407b29c492fd
+cmd: pirs-bench solve /testbed --target=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_ascii_table_data --target=astropy/io/fits/tests/test_table.py::TestTableFunctions::test_ascii_table --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_sample_file --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_image_create --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data_auto_rescale --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_uint16_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_groups_hdu_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_open_with_no_keywords --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_writeto_convenience --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_hdu_writeto --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_datasum_only --keep-green=astropy/io/fits/tests/test_table.py::test_regression_scalar_indexing --issue-file=/tmp/issue.md --base-sha=255e17d48c2ccc3d9910457926ee407b29c492fd --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=18 tools=22 [read:8 grep:6 bash:5 run_tests:2 edit:1]
+tokens by model:
+  deepseek-v4-flash: in=7070 cache_r=205440 cache_w=0 out=4035 reasoning=1906 total=216545 — $0.0207
+  TOTAL: in=7070 cache_r=205440 cache_w=0 out=4035 reasoning=1906 total=216545 — $0.0207
+timing (total 103.14s):
+  fix: 71.14s (69%)
+  discover: 15.61s (15%)
+  bootstrap: 9.33s (9%)
+  verify: 4.44s (4% n=2)
+  baseline: 2.57s (2%)
+  patch: 0.05s (0%)
+  fix→tools: run_tests:13.89s bash:12.24s grep:0.25s edit:0.02s read:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (528 bytes)
+
+exit_code=0 elapsed_s=103.2

@@ -1,0 +1,18 @@
+diff --git a/sklearn/preprocessing/_encoders.py b/sklearn/preprocessing/_encoders.py
+index 1e05aba59..22f1c25e8 100644
+--- a/sklearn/preprocessing/_encoders.py
++++ b/sklearn/preprocessing/_encoders.py
+@@ -111,6 +111,13 @@ class _BaseEncoder(BaseEstimator, TransformerMixin):
+                     # removed later.
+                     X_mask[:, i] = valid_mask
+                     Xi = Xi.copy()
++                    # Convert Xi to object dtype to avoid truncation when
++                    # assigning a category value with a longer string length
++                    # than the current dtype can hold (e.g. when known
++                    # categories are strings longer than the unknown strings
++                    # in the input).
++                    if Xi.dtype.kind in ('U', 'S'):
++                        Xi = Xi.astype(object)
+                     Xi[~valid_mask] = self.categories_[i][0]
+             _, encoded = _encode(Xi, self.categories_[i], encode=True)
+             X_int[:, i] = encoded

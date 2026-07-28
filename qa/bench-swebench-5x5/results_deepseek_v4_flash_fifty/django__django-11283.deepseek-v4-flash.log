@@ -1,0 +1,22 @@
+=== django__django-11283 (deepseek-v4-flash) start 1785263061.7365334 ===
+1d61e94a9794d05c31f8bcefbfff6d163f86d55cf761ccbe66296e34d3d2bc0b
+head_sha=feaac8792ba51beedc81f7b27303ae21d28252d7
+cmd: pirs-bench solve /testbed --target=test_migrate_with_existing_target_permission (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_has_now_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_still_has_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --issue-file=/tmp/issue.md --base-sha=feaac8792ba51beedc81f7b27303ae21d28252d7 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=27 tools=29 [read:11 bash:6 find:3 ls:3 grep:2 edit:1 edit_block:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=13326 cache_r=373632 cache_w=0 out=6843 reasoning=3046 total=393801 — $0.0373
+  TOTAL: in=13326 cache_r=373632 cache_w=0 out=6843 reasoning=3046 total=393801 — $0.0373
+timing (total 93.95s):
+  fix: 87.11s (93%)
+  verify: 4.16s (4% n=2)
+  baseline: 2.52s (3%)
+  patch: 0.07s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:14.11s find:0.51s edit:0.02s project:0.01s grep:0.01s ls:0.00s run_tests:0.00s read:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1925 bytes)
+
+exit_code=0 elapsed_s=94.0

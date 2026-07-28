@@ -1,0 +1,22 @@
+=== django__django-12286 (deepseek-v4-flash) start 1785263684.074712 ===
+e74cc84ee9b54c7c9f0fa8b260a15e8c8e7e8ebc6a2aae45bb32c327c2057cc8
+head_sha=5cd67a2d8d5135fe16c8d14ecd89adc83bf7748e
+cmd: pirs-bench solve /testbed --target=test_valid_variant_consistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_inconsistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --issue-file=/tmp/issue.md --base-sha=5cd67a2d8d5135fe16c8d14ecd89adc83bf7748e --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=14 tools=15 [read:5 grep:3 bash:2 edit:1 edit_block:1 find:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=5775 cache_r=153216 cache_w=0 out=2607 reasoning=834 total=161598 — $0.0152
+  TOTAL: in=5775 cache_r=153216 cache_w=0 out=2607 reasoning=834 total=161598 — $0.0152
+timing (total 36.40s):
+  fix: 33.25s (91%)
+  verify: 1.69s (5% n=2)
+  baseline: 1.29s (4%)
+  patch: 0.08s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:0.70s grep:0.42s find:0.15s run_tests:0.03s edit:0.02s project:0.00s read:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (794 bytes)
+
+exit_code=0 elapsed_s=36.5

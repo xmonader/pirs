@@ -1,0 +1,36 @@
+diff --git a/django/contrib/auth/migrations/0011_update_proxy_permissions.py b/django/contrib/auth/migrations/0011_update_proxy_permissions.py
+index 0e66649695..ab4900d6c2 100644
+--- a/django/contrib/auth/migrations/0011_update_proxy_permissions.py
++++ b/django/contrib/auth/migrations/0011_update_proxy_permissions.py
+@@ -24,6 +24,31 @@ def update_proxy_model_permissions(apps, schema_editor, reverse=False):
+         proxy_content_type = ContentType.objects.get_for_model(Model, for_concrete_model=False)
+         old_content_type = proxy_content_type if reverse else concrete_content_type
+         new_content_type = concrete_content_type if reverse else proxy_content_type
++        # Permissions with the same codename may already exist with the new
++        # content type. Delete the old permissions that would create
++        # duplicates and warn the user. Then update the remaining old
++        # permissions to the new content type.
++        old_perms = Permission.objects.filter(
++            permissions_query,
++            content_type=old_content_type,
++        )
++        old_codenames = set(old_perms.values_list('codename', flat=True))
++        new_codenames = set(
++            Permission.objects.filter(
++                permissions_query,
++                content_type=new_content_type,
++            ).values_list('codename', flat=True)
++        )
++        duplicate_codenames = old_codenames & new_codenames
++        if duplicate_codenames:
++            Permission.objects.filter(
++                permissions_query,
++                content_type=old_content_type,
++                codename__in=duplicate_codenames,
++            ).delete()
++            print('A problem arose migrating proxy model permissions for %s.%s.' % (
++                opts.app_label, opts.model_name,
++            ))
+         Permission.objects.filter(
+             permissions_query,
+             content_type=old_content_type,
