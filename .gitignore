@@ -33,3 +33,7 @@ __pycache__/
 !qa/bench-swebench-5x5/results_qwen_monolithic_remaining/*.log
 !qa/bench-swebench-5x5/results_deepseek_v4_flash_fifty/
 !qa/bench-swebench-5x5/results_deepseek_v4_flash_fifty/*.log
+!qa/bench-swebench-5x5/results_deepseek_v4_flash_rawids_fifty/
+!qa/bench-swebench-5x5/results_deepseek_v4_flash_rawids_fifty/*.log
+!qa/bench-swebench-5x5/results_deepseek_v4_flash_fair_fifty/
+!qa/bench-swebench-5x5/results_deepseek_v4_flash_fair_fifty/*.log

@@ -1,0 +1,23 @@
+=== astropy__astropy-14182 (deepseek-v4-flash) start 1785268104.5593686 ===
+25673cc82c976473ae16038dabf352eb328598bbda03edeebff12f52cd57f1ba
+head_sha=2d4dffe6a0450bdb330a8b2ec7fd2f1fbbacd501
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=9)
+cmd: pirs-bench solve /testbed --target=astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_names --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_names_include --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_exclude --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column_header --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_right_indented_table --keep-green=astropy/io/ascii/tests/test_rst.py::test_trailing_spaces_in_row_definition --keep-green=astropy/io/ascii/tests/test_rst.py::test_write_normal --issue-file=/tmp/issue.md --base-sha=2d4dffe6a0450bdb330a8b2ec7fd2f1fbbacd501 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=20 tools=23 [bash:7 read:6 grep:5 find:2 edit:1 edit_block:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=25820 cache_r=466432 cache_w=0 out=11545 reasoning=8736 total=503797 — $0.0523
+  TOTAL: in=25820 cache_r=466432 cache_w=0 out=11545 reasoning=8736 total=503797 — $0.0523
+timing (total 400.55s):
+  bootstrap: 192.84s (48%)
+  fix: 130.60s (33%)
+  discover: 70.33s (18%)
+  verify: 3.82s (1% n=2)
+  baseline: 2.93s (1%)
+  patch: 0.03s (0%)
+  fix→tools: run_tests:22.92s bash:6.26s grep:0.18s find:0.13s edit:0.01s read:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (885 bytes)
+
+exit_code=0 elapsed_s=400.6

@@ -1,0 +1,24 @@
+=== matplotlib__matplotlib-26011 (deepseek-v4-flash) start 1785269709.3342698 ===
+1ecaa988b35fd51791d33d661e6d0bacc80e4d88f2ff50e5dfe9e74e730b606a
+head_sha=c65742a2302f310655428ff7e03113bba95c0078
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=817)
+capped keep_green 817->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=lib/matplotlib/tests/test_axes.py::test_xylim_changed_shared --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_2D[png] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[0.5-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[None-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case1-conversion] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case10-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case11-shape] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case12-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case13-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case14-conversion] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case15-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case16-shape] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case17-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case18-shape] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case19-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case20-shape] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case21-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case22-shape] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case23-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case24-shape] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case25-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case26-shape] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case27-conversion] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case28-conversion] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case29-conversion] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case5-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case7-conversion] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case8-conversion] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[c_case9-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[jaune-conversion] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[none-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_c[red-None] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_color --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_color_warning[kwargs0] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_color_warning[kwargs1] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_color_warning[kwargs2] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_color_warning[kwargs3] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_decimal[png] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_different_shapes[png] --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_edgecolor_RGB --keep-green=lib/matplotlib/tests/test_axes.py::TestScatter::test_scatter_invalid_color[png] --issue-file=/tmp/issue.md --base-sha=c65742a2302f310655428ff7e03113bba95c0078 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=16 tools=17 [read:7 grep:6 run_tests:3 edit_block:1]
+tokens by model:
+  deepseek-v4-flash: in=8369 cache_r=198912 cache_w=0 out=4807 reasoning=2784 total=212088 — $0.0215
+  TOTAL: in=8369 cache_r=198912 cache_w=0 out=4807 reasoning=2784 total=212088 — $0.0215
+timing (total 841.70s):
+  bootstrap: 596.39s (71%)
+  fix: 216.20s (26%)
+  discover: 15.58s (2%)
+  verify: 8.57s (1% n=2)
+  baseline: 4.78s (1%)
+  patch: 0.17s (0%)
+  fix→tools: run_tests:162.42s grep:0.03s edit_block:0.01s read:0.01s
+outcome: Solved
+patch written to "/tmp/out.patch" (497 bytes)
+
+exit_code=0 elapsed_s=841.8

@@ -92,7 +92,29 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
                   strategy_script: str | None = None, label: str | None = None,
                   no_strategy: bool = False, provider: str = "deepseek",
                   base_url: str | None = None, plan_model: str | None = None,
-                  strategy: str | None = None):
+                  strategy: str | None = None,
+                  raw_test_ids: bool | None = None,
+                  hide_targets: bool | None = None):
+    """Run one instance.
+
+    raw_test_ids: if True (or env PIRS_RAW_TEST_IDS=1), pass FAIL_TO_PASS /
+    PASS_TO_PASS through unchanged — no looks_like_test_id filter and no
+    test_patch name recovery. Default keeps the hygiene filter.
+
+    hide_targets: if True (or env PIRS_FAIR=1 / PIRS_HIDE_TARGETS=1), pass
+    --hide-targets so the agent prompt does NOT list FAIL_TO_PASS ids.
+    Harness still grades with those ids (reproduce + verify). Fair mode.
+    """
+    if raw_test_ids is None:
+        raw_test_ids = os.environ.get("PIRS_RAW_TEST_IDS", "").strip().lower() in (
+            "1", "true", "yes", "on",
+        )
+    if hide_targets is None:
+        hide_targets = (
+            os.environ.get("PIRS_FAIR", "").strip().lower() in ("1", "true", "yes", "on")
+            or os.environ.get("PIRS_HIDE_TARGETS", "").strip().lower()
+            in ("1", "true", "yes", "on")
+        )
     inst = json.loads((BENCH_DIR / "instances" / f"{instance_id}.json").read_text())
     image = image_for(instance_id)
     tag = label or model
@@ -107,6 +129,9 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
         "image": image,
         "container": cname,
         "strategy": strategy,
+        "raw_test_ids": raw_test_ids,
+        "hide_targets": hide_targets,
+        "fair": hide_targets,
     }
 
     log = open(log_path, "w")
@@ -145,100 +170,107 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
 
         targets = as_list(inst["FAIL_TO_PASS"])
         keep_green = as_list(inst["PASS_TO_PASS"])
-
-        # SWE-bench PASS_TO_PASS / FAIL_TO_PASS often include unittest *docstrings*
-        # (e.g. "Tests the AddField operation.") which are not runnable ids and
-        # bloat agent-discovery (django-14608: 211/394 keep-green were docstrings,
-        # baseline alone 432s). Keep only ids that look like real test selectors.
-        def looks_like_test_id(s: str) -> bool:
-            s = s.strip()
-            if not s or len(s) > 200:
-                return False
-            if "::" in s:  # pytest node id
-                return True
-            if s.startswith("test_") or ".test_" in s:
-                return True
-            # django/unittest label: "test_foo (module.Class)"
-            if s.startswith("test_") or (s.startswith("test") and " (" in s):
-                return True
-            if re.match(r"^test\w* \(.*\)$", s):
-                return True
-            # bare sympy-style: test_mod
-            if re.match(r"^test_[\w\[\],\-\.]+$", s):
-                return True
-            return False
-
         n_tg, n_kg = len(targets), len(keep_green)
-        targets = [t for t in targets if looks_like_test_id(t)]
-        keep_green = [t for t in keep_green if looks_like_test_id(t)]
-        if len(targets) < n_tg or len(keep_green) < n_kg:
+
+        if raw_test_ids:
+            # Ablation: no looks_like_test_id, no test_patch recovery.
             logline(
-                f"filtered non-test ids: targets {n_tg}->{len(targets)} "
-                f"keep_green {n_kg}->{len(keep_green)}"
+                f"raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is "
+                f"(targets={n_tg} keep_green={n_kg})"
             )
-        if not targets:
-            # FAIL_TO_PASS is sometimes a unittest *docstring* title (django-15781:
-            # "BaseCommand.create_parser() passes kwargs...") not a runnable id.
-            # Recover real test_* names from the test_patch instead of re-injecting
-            # the docstring (which always ReproFailed with turns=0).
-            def targets_from_test_patch(diff: str) -> list[str]:
-                """Pull test_* names the patch actually touches.
+        else:
+            # SWE-bench PASS_TO_PASS / FAIL_TO_PASS often include unittest *docstrings*
+            # (e.g. "Tests the AddField operation.") which are not runnable ids and
+            # bloat agent-discovery (django-14608: 211/394 keep-green were docstrings,
+            # baseline alone 432s). Keep only ids that look like real test selectors.
+            def looks_like_test_id(s: str) -> bool:
+                s = s.strip()
+                if not s or len(s) > 200:
+                    return False
+                if "::" in s:  # pytest node id
+                    return True
+                if s.startswith("test_") or ".test_" in s:
+                    return True
+                # django/unittest label: "test_foo (module.Class)"
+                if s.startswith("test_") or (s.startswith("test") and " (" in s):
+                    return True
+                if re.match(r"^test\w* \(.*\)$", s):
+                    return True
+                # bare sympy-style: test_mod
+                if re.match(r"^test_[\w\[\],\-\.]+$", s):
+                    return True
+                return False
 
-                Keep a def only if a `+` body line appears before the next def,
-                so we do not grab the following untouched test as FAIL_TO_PASS.
-                """
-                out: list[str] = []
-                cur_file = ""
-                lines = diff.splitlines()
-                i = 0
-                while i < len(lines):
-                    line = lines[i]
-                    if line.startswith("+++ b/"):
-                        cur_file = line[6:].strip()
-                        i += 1
-                        continue
-                    m = re.match(r"^[+ ]\s*def (test_\w+)\s*\(", line)
-                    if not m:
-                        i += 1
-                        continue
-                    name = m.group(1)
-                    touched = line.startswith("+")
-                    j = i + 1
-                    while j < len(lines):
-                        nxt = lines[j]
-                        if re.match(r"^[+ ]\s*def (test_\w+)\s*\(", nxt):
-                            break
-                        if nxt.startswith("+++ b/") or nxt.startswith("diff --git"):
-                            break
-                        if nxt.startswith("+") and not nxt.startswith("+++"):
-                            touched = True
-                            break
-                        j += 1
-                    if touched:
-                        tid = (
-                            f"{cur_file}::{name}"
-                            if cur_file.endswith(".py")
-                            else name
-                        )
-                        if tid not in out:
-                            out.append(tid)
-                    i += 1
-                return out
+            targets = [t for t in targets if looks_like_test_id(t)]
+            keep_green = [t for t in keep_green if looks_like_test_id(t)]
+            if len(targets) < n_tg or len(keep_green) < n_kg:
+                logline(
+                    f"filtered non-test ids: targets {n_tg}->{len(targets)} "
+                    f"keep_green {n_kg}->{len(keep_green)}"
+                )
+            if not targets:
+                # FAIL_TO_PASS is sometimes a unittest *docstring* title (django-15781:
+                # "BaseCommand.create_parser() passes kwargs...") not a runnable id.
+                # Recover real test_* names from the test_patch instead of re-injecting
+                # the docstring (which always ReproFailed with turns=0).
+                def targets_from_test_patch(diff: str) -> list[str]:
+                    """Pull test_* names the patch actually touches.
 
-            tp = inst.get("test_patch") or ""
-            recovered = targets_from_test_patch(tp)
-            if recovered:
-                targets = recovered
-                logline(
-                    f"WARNING: FAIL_TO_PASS had no runnable ids; "
-                    f"recovered {len(targets)} from test_patch: {targets[:5]}"
-                )
-            else:
-                targets = as_list(inst["FAIL_TO_PASS"])
-                logline(
-                    "WARNING: test-id filter removed all targets and test_patch "
-                    "had no def test_*; using original FAIL_TO_PASS"
-                )
+                    Keep a def only if a `+` body line appears before the next def,
+                    so we do not grab the following untouched test as FAIL_TO_PASS.
+                    """
+                    out: list[str] = []
+                    cur_file = ""
+                    lines = diff.splitlines()
+                    i = 0
+                    while i < len(lines):
+                        line = lines[i]
+                        if line.startswith("+++ b/"):
+                            cur_file = line[6:].strip()
+                            i += 1
+                            continue
+                        m = re.match(r"^[+ ]\s*def (test_\w+)\s*\(", line)
+                        if not m:
+                            i += 1
+                            continue
+                        name = m.group(1)
+                        touched = line.startswith("+")
+                        j = i + 1
+                        while j < len(lines):
+                            nxt = lines[j]
+                            if re.match(r"^[+ ]\s*def (test_\w+)\s*\(", nxt):
+                                break
+                            if nxt.startswith("+++ b/") or nxt.startswith("diff --git"):
+                                break
+                            if nxt.startswith("+") and not nxt.startswith("+++"):
+                                touched = True
+                                break
+                            j += 1
+                        if touched:
+                            tid = (
+                                f"{cur_file}::{name}"
+                                if cur_file.endswith(".py")
+                                else name
+                            )
+                            if tid not in out:
+                                out.append(tid)
+                        i += 1
+                    return out
+
+                tp = inst.get("test_patch") or ""
+                recovered = targets_from_test_patch(tp)
+                if recovered:
+                    targets = recovered
+                    logline(
+                        f"WARNING: FAIL_TO_PASS had no runnable ids; "
+                        f"recovered {len(targets)} from test_patch: {targets[:5]}"
+                    )
+                else:
+                    targets = as_list(inst["FAIL_TO_PASS"])
+                    logline(
+                        "WARNING: test-id filter removed all targets and test_patch "
+                        "had no def test_*; using original FAIL_TO_PASS"
+                    )
 
         # Cap keep-green size. Huge PASS_TO_PASS lists (django-11019: 16 targets
         # + large media suite) burned the full 1800s agent timeout before a
@@ -290,6 +322,12 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             f"--max-turns={max_turns}",
             "--out=/tmp/out.patch",
         ]
+        if hide_targets:
+            cmd.append("--hide-targets")
+            logline(
+                "fair/hide_targets=1: agent prompt omits FAIL_TO_PASS ids; "
+                "harness still verifies against them"
+            )
         if provider == "openai-compat":
             if not base_url:
                 raise ValueError("base_url is required when provider='openai-compat'")

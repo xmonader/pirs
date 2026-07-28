@@ -1,0 +1,23 @@
+=== django__django-11964 (deepseek-v4-flash) start 1785269268.5784147 ===
+eabe5c282d8b8d6b32f677474b7a5334cbfe9b785d6e71f56f27cbd3560b0f29
+head_sha=34f29fb086d6aced2e50131257ffcea3e563689a
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=2 keep_green=15)
+cmd: pirs-bench solve /testbed --target=test_str (model_enums.tests.ChoicesTests) --target=test_textchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_invalid_definition (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_blank_value (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_bool_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_labels_valid (model_enums.tests.CustomChoicesTests) --keep-green=test_timezone_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_uuid_unsupported (model_enums.tests.CustomChoicesTests) --issue-file=/tmp/issue.md --base-sha=34f29fb086d6aced2e50131257ffcea3e563689a --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=33 tools=38 [bash:12 read:7 grep:6 find:5 edit:3 ls:2 run_tests:2 edit_block:1]
+tokens by model:
+  deepseek-v4-flash: in=17537 cache_r=694528 cache_w=0 out=14237 reasoning=9357 total=726302 — $0.0690
+  TOTAL: in=17537 cache_r=694528 cache_w=0 out=14237 reasoning=9357 total=726302 — $0.0690
+timing (total 148.54s):
+  fix: 143.63s (97%)
+  verify: 2.95s (2% n=2)
+  baseline: 1.66s (1%)
+  patch: 0.20s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:3.87s find:1.22s grep:1.09s edit:0.03s run_tests:0.02s ls:0.01s read:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1070 bytes)
+
+exit_code=0 elapsed_s=148.6

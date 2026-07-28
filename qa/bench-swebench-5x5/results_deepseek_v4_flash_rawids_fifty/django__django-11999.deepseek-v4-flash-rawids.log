@@ -1,0 +1,23 @@
+=== django__django-11999 (deepseek-v4-flash) start 1785269372.1329186 ===
+65e3a57b169705c184662f3e388041b7221a4812410a0a5070b46174d202d1e7
+head_sha=4dfc55c859fa2ca38077f75ec8ee01dd95f5fae7
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=30)
+cmd: pirs-bench solve /testbed --target=test_overriding_FIELD_display (model_fields.tests.GetFieldDisplayTests) --keep-green=test_blank_in_choices (model_fields.tests.GetChoicesTests) --keep-green=test_blank_in_grouped_choices (model_fields.tests.GetChoicesTests) --keep-green=test_empty_choices (model_fields.tests.GetChoicesTests) --keep-green=test_lazy_strings_not_evaluated (model_fields.tests.GetChoicesTests) --keep-green=test_check (model_fields.tests.ChoicesTests) --keep-green=test_choices (model_fields.tests.ChoicesTests) --keep-green=test_flatchoices (model_fields.tests.ChoicesTests) --keep-green=test_formfield (model_fields.tests.ChoicesTests) --keep-green=test_invalid_choice (model_fields.tests.ChoicesTests) --keep-green=Can supply a custom choices form class to Field.formfield() --keep-green=deconstruct() uses __qualname__ for nested class support. --keep-green=Field instances can be pickled. --keep-green=test_field_name (model_fields.tests.BasicFieldTests) --keep-green=Fields are ordered based on their creation. --keep-green=test_field_repr (model_fields.tests.BasicFieldTests) --keep-green=__repr__() uses __qualname__ for nested class support. --keep-green=test_field_str (model_fields.tests.BasicFieldTests) --keep-green=test_field_verbose_name (model_fields.tests.BasicFieldTests) --keep-green=Field.formfield() sets disabled for fields with choices. --keep-green=test_show_hidden_initial (model_fields.tests.BasicFieldTests) --keep-green=test_choices_and_field_display (model_fields.tests.GetFieldDisplayTests) --keep-green=test_empty_iterator_choices (model_fields.tests.GetFieldDisplayTests) --keep-green=A translated display value is coerced to str. --keep-green=test_iterator_choices (model_fields.tests.GetFieldDisplayTests) --keep-green=test_get_choices (model_fields.tests.GetChoicesLimitChoicesToTests) --keep-green=test_get_choices_reverse_related_field (model_fields.tests.GetChoicesLimitChoicesToTests) --keep-green=test_get_choices (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_default_ordering (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_reverse_related_field (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_reverse_related_field_default_ordering (model_fields.tests.GetChoicesOrderingTests) --issue-file=/tmp/issue.md --base-sha=4dfc55c859fa2ca38077f75ec8ee01dd95f5fae7 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=13 tools=13 [bash:4 read:4 grep:2 edit_block:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=3722 cache_r=123392 cache_w=0 out=2420 reasoning=1088 total=129534 — $0.0123
+  TOTAL: in=3722 cache_r=123392 cache_w=0 out=2420 reasoning=1088 total=129534 — $0.0123
+timing (total 39.60s):
+  fix: 33.26s (84%)
+  verify: 3.13s (8% n=2)
+  baseline: 2.95s (7%)
+  patch: 0.15s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.05s (0%)
+  fix→tools: bash:3.52s grep:0.13s run_tests:0.02s read:0.01s edit_block:0.01s ls:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (724 bytes)
+
+exit_code=0 elapsed_s=39.7

@@ -1,0 +1,23 @@
+=== django__django-16046 (deepseek-v4-flash) start 1785269665.5321329 ===
+1cde955eaa12b855f4625b337d9e2fee01a20dffce402aabe4cd9581739084bb
+head_sha=7cf00d851181c5288ba2a4da26d6be2f580d77fe
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=6)
+cmd: pirs-bench solve /testbed --target=test_empty (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_subclass (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_float_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_number (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_string (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_large_number (utils_tests.test_numberformat.TestNumberFormat) --issue-file=/tmp/issue.md --base-sha=7cf00d851181c5288ba2a4da26d6be2f580d77fe --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=14 tools=15 [bash:4 read:4 edit_block:2 find:2 run_tests:2 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=7768 cache_r=169600 cache_w=0 out=2634 reasoning=1253 total=180002 — $0.0169
+  TOTAL: in=7768 cache_r=169600 cache_w=0 out=2634 reasoning=1253 total=180002 — $0.0169
+timing (total 39.37s):
+  fix: 34.86s (89%)
+  verify: 2.26s (6% n=2)
+  baseline: 1.95s (5%)
+  patch: 0.14s (0%)
+  discover: 0.11s (0%)
+  bootstrap: 0.05s (0%)
+  fix→tools: bash:1.46s find:0.54s run_tests:0.03s edit_block:0.01s read:0.00s ls:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (432 bytes)
+
+exit_code=0 elapsed_s=39.5

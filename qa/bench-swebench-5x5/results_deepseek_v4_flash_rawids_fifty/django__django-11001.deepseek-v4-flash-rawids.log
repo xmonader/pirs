@@ -1,0 +1,24 @@
+=== django__django-11001 (deepseek-v4-flash) start 1785268740.3703754 ===
+423536016dcb7868844db3ddcfd9b51e4777898094759c1f344469de9c7f617c
+head_sha=6b53c90660a52ee074d58c9a3ca95d7d3a45a688
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=2 keep_green=118)
+capped keep_green 118->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=test_order_by_multiline_sql (expressions.tests.BasicExpressionsTests) --target=test_order_of_operations (expressions.tests.BasicExpressionsTests) --keep-green=test_order_by_exists (expressions.tests.BasicExpressionsTests) --keep-green=test_aggregate_subquery_annotation (expressions.tests.BasicExpressionsTests) --keep-green=test_annotate_values_aggregate (expressions.tests.BasicExpressionsTests) --keep-green=test_annotate_values_count (expressions.tests.BasicExpressionsTests) --keep-green=test_annotate_values_filter (expressions.tests.BasicExpressionsTests) --keep-green=test_annotation_with_outerref (expressions.tests.BasicExpressionsTests) --keep-green=test_annotations_within_subquery (expressions.tests.BasicExpressionsTests) --keep-green=test_arithmetic (expressions.tests.BasicExpressionsTests) --keep-green=test_exist_single_field_output_field (expressions.tests.BasicExpressionsTests) --keep-green=test_explicit_output_field (expressions.tests.BasicExpressionsTests) --keep-green=test_filter_inter_attribute (expressions.tests.BasicExpressionsTests) --keep-green=test_filter_with_join (expressions.tests.BasicExpressionsTests) --keep-green=test_filtering_on_annotate_that_uses_q (expressions.tests.BasicExpressionsTests) --keep-green=test_in_subquery (expressions.tests.BasicExpressionsTests) --keep-green=test_incorrect_field_in_F_expression (expressions.tests.BasicExpressionsTests) --keep-green=test_incorrect_joined_field_in_F_expression (expressions.tests.BasicExpressionsTests) --keep-green=test_nested_subquery (expressions.tests.BasicExpressionsTests) --keep-green=test_nested_subquery_outer_ref_2 (expressions.tests.BasicExpressionsTests) --keep-green=test_nested_subquery_outer_ref_with_autofield (expressions.tests.BasicExpressionsTests) --keep-green=test_new_object_create (expressions.tests.BasicExpressionsTests) --keep-green=test_new_object_save (expressions.tests.BasicExpressionsTests) --keep-green=test_object_create_with_aggregate (expressions.tests.BasicExpressionsTests) --keep-green=test_object_update (expressions.tests.BasicExpressionsTests) --keep-green=test_object_update_fk (expressions.tests.BasicExpressionsTests) --keep-green=test_object_update_unsaved_objects (expressions.tests.BasicExpressionsTests) --keep-green=test_outerref (expressions.tests.BasicExpressionsTests) --keep-green=test_outerref_mixed_case_table_name (expressions.tests.BasicExpressionsTests) --keep-green=test_outerref_with_operator (expressions.tests.BasicExpressionsTests) --keep-green=test_parenthesis_priority (expressions.tests.BasicExpressionsTests) --keep-green=test_pickle_expression (expressions.tests.BasicExpressionsTests) --keep-green=test_subquery (expressions.tests.BasicExpressionsTests) --keep-green=test_subquery_filter_by_aggregate (expressions.tests.BasicExpressionsTests) --keep-green=test_subquery_references_joined_table_twice (expressions.tests.BasicExpressionsTests) --keep-green=test_ticket_11722_iexact_lookup (expressions.tests.BasicExpressionsTests) --keep-green=test_ticket_16731_startswith_lookup (expressions.tests.BasicExpressionsTests) --keep-green=test_ticket_18375_chained_filters (expressions.tests.BasicExpressionsTests) --keep-green=test_ticket_18375_join_reuse (expressions.tests.BasicExpressionsTests) --keep-green=test_ticket_18375_kwarg_ordering (expressions.tests.BasicExpressionsTests) --keep-green=test_ticket_18375_kwarg_ordering_2 (expressions.tests.BasicExpressionsTests) --keep-green=test_update (expressions.tests.BasicExpressionsTests) --issue-file=/tmp/issue.md --base-sha=6b53c90660a52ee074d58c9a3ca95d7d3a45a688 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=19 tools=19 [bash:5 read:5 grep:4 edit_block:3 edit:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=5116 cache_r=262144 cache_w=0 out=6153 reasoning=4042 total=273413 — $0.0265
+  TOTAL: in=5116 cache_r=262144 cache_w=0 out=6153 reasoning=4042 total=273413 — $0.0265
+timing (total 73.45s):
+  fix: 69.31s (94%)
+  verify: 2.00s (3% n=2)
+  baseline: 1.98s (3%)
+  patch: 0.07s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:2.30s grep:1.21s run_tests:0.01s edit_block:0.01s edit:0.01s read:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1368 bytes)
+
+exit_code=0 elapsed_s=73.5

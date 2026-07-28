@@ -1,0 +1,43 @@
+diff --git a/astropy/wcs/wcs.py b/astropy/wcs/wcs.py
+index d3a06f2b31..59a05f6f14 100644
+--- a/astropy/wcs/wcs.py
++++ b/astropy/wcs/wcs.py
+@@ -1213,21 +1213,24 @@ reduce these to 2 dimensions using the naxis kwarg.
+ 
+         def _return_list_of_arrays(axes, origin):
+             try:
+-                axes = np.broadcast_arrays(*axes)
++                broadcasted = np.broadcast_arrays(*axes)
+             except ValueError:
+                 raise ValueError(
+                     "Coordinate arrays are not broadcastable to each other")
+ 
+-            xy = np.hstack([x.reshape((x.size, 1)) for x in axes])
++            xy = np.hstack([x.reshape((x.size, 1)) for x in broadcasted])
++
++            if xy.size == 0:
++                return [np.asarray(x) for x in axes]
+ 
+             if ra_dec_order and sky == 'input':
+                 xy = self._denormalize_sky(xy)
+             output = func(xy, origin)
+             if ra_dec_order and sky == 'output':
+                 output = self._normalize_sky(output)
+-                return (output[:, 0].reshape(axes[0].shape),
+-                        output[:, 1].reshape(axes[0].shape))
+-            return [output[:, i].reshape(axes[0].shape)
++                return (output[:, 0].reshape(broadcasted[0].shape),
++                        output[:, 1].reshape(broadcasted[0].shape))
++            return [output[:, i].reshape(broadcasted[0].shape)
+                     for i in range(output.shape[1])]
+ 
+         def _return_single_array(xy, origin):
+@@ -1235,6 +1238,8 @@ reduce these to 2 dimensions using the naxis kwarg.
+                 raise ValueError(
+                     "When providing two arguments, the array must be "
+                     "of shape (N, {0})".format(self.naxis))
++            if xy.size == 0:
++                return xy
+             if ra_dec_order and sky == 'input':
+                 xy = self._denormalize_sky(xy)
+             result = func(xy, origin)

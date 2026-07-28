@@ -408,6 +408,7 @@ pub fn run_selftest(
                         tool_policy: tool_policy.clone(),
                         recorder: recorder.cloned(),
                         steering: None,
+                        hide_targets: false,
                     },
                 )?);
             }

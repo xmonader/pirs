@@ -1,0 +1,21 @@
+=== django__django-11283 (deepseek-v4-flash) start 1785268903.1586149 ===
+ad237ab218c3a494a69d6d0b41a6f642ab3686fd8e2374760c1e9b80a3d77c3c
+head_sha=28c6943bffdc451e2a15d31172527ca5916e1a44
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=8)
+cmd: pirs-bench solve /testbed --target=test_migrate_with_existing_target_permission (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_has_now_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_still_has_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --issue-file=/tmp/issue.md --base-sha=28c6943bffdc451e2a15d31172527ca5916e1a44 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=8 tools=9 [read:3 find:2 ls:2 git:1 grep:1]
+tokens by model:
+  deepseek-v4-flash: in=3480 cache_r=57088 cache_w=0 out=1283 reasoning=760 total=61851 — $0.0063
+  TOTAL: in=3480 cache_r=57088 cache_w=0 out=1283 reasoning=760 total=61851 — $0.0063
+timing (total 22.45s):
+  fix: 19.92s (89%)
+  baseline: 2.34s (10%)
+  rollback: 0.09s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.04s (0%)
+  fix→tools: find:0.45s git:0.31s read:0.01s ls:0.00s grep:0.00s
+outcome: Failed(FixNoFlip)
+
+exit_code=1 elapsed_s=22.5

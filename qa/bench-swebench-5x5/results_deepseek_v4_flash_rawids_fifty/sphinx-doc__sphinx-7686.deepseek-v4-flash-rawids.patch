@@ -1,0 +1,54 @@
+diff --git a/sphinx/ext/autosummary/generate.py b/sphinx/ext/autosummary/generate.py
+index a57c73fb7..7881f58c6 100644
+--- a/sphinx/ext/autosummary/generate.py
++++ b/sphinx/ext/autosummary/generate.py
+@@ -18,6 +18,7 @@
+ """
+ 
+ import argparse
++import inspect
+ import locale
+ import os
+ import pkgutil
+@@ -176,6 +177,18 @@ class AutosummaryRenderer:
+ # -- Generating output ---------------------------------------------------------
+ 
+ 
++def _is_imported_member(obj: Any, name: str) -> bool:
++    """Check if a member of a module is imported from another module."""
++    try:
++        value = safe_getattr(obj, name)
++    except AttributeError:
++        return False
++    modname = getattr(value, '__module__', None)
++    if modname:
++        return modname != obj.__name__
++    return inspect.ismodule(value)
++
++
+ def generate_autosummary_content(name: str, obj: Any, parent: Any,
+                                  template: AutosummaryRenderer, template_name: str,
+                                  imported_members: bool, app: Any,
+@@ -246,7 +259,21 @@ def generate_autosummary_content(name: str, obj: Any, parent: Any,
+     ns.update(context)
+ 
+     if doc.objtype == 'module':
+-        ns['members'] = dir(obj)
++        # Build the members list, filtering out imported members if needed
++        # and also respecting the autodoc-skip-member event
++        ns['members'] = []
++        for member_name in dir(obj):
++            try:
++                value = safe_getattr(obj, member_name)
++            except AttributeError:
++                continue
++            if not imported_members and _is_imported_member(obj, member_name):
++                continue
++            documenter = get_documenter(app, value, obj)
++            skipped = skip_member(value, member_name, documenter.objtype)
++            if skipped is True:
++                continue
++            ns['members'].append(member_name)
+         ns['functions'], ns['all_functions'] = \
+             get_members(obj, {'function'}, imported=imported_members)
+         ns['classes'], ns['all_classes'] = \

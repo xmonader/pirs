@@ -1,0 +1,23 @@
+=== astropy__astropy-14365 (deepseek-v4-flash) start 1785268104.5598526 ===
+39a2d09e87bae07d45c2a06822c002019b194a96f145d8b2add3495163522f5c
+head_sha=9b3be4589729fa9012dc2dc5b833c6a0d99375d0
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=8)
+cmd: pirs-bench solve /testbed --target=astropy/io/ascii/tests/test_qdp.py::test_roundtrip[True] --keep-green=astropy/io/ascii/tests/test_qdp.py::test_get_tables_from_qdp_file --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip[False] --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_example --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip_example --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip_example_comma --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_write_simple --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_write_simple_specify_name --keep-green=astropy/io/ascii/tests/test_qdp.py::test_get_lines_from_qdp --issue-file=/tmp/issue.md --base-sha=9b3be4589729fa9012dc2dc5b833c6a0d99375d0 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=23 tools=23 [bash:7 read:6 edit:5 grep:2 run_tests:2 find:1]
+tokens by model:
+  deepseek-v4-flash: in=30330 cache_r=499072 cache_w=0 out=5993 reasoning=2558 total=535395 — $0.0497
+  TOTAL: in=30330 cache_r=499072 cache_w=0 out=5993 reasoning=2558 total=535395 — $0.0497
+timing (total 328.46s):
+  bootstrap: 138.43s (42%)
+  fix: 112.81s (34%)
+  discover: 69.57s (21%)
+  verify: 5.46s (2% n=2)
+  baseline: 2.15s (1%)
+  patch: 0.04s (0%)
+  fix→tools: run_tests:37.65s bash:10.33s find:0.16s grep:0.15s edit:0.10s read:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (989 bytes)
+
+exit_code=0 elapsed_s=328.6

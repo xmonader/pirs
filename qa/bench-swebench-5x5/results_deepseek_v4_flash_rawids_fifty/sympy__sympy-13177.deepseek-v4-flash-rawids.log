@@ -1,0 +1,24 @@
+=== sympy__sympy-13177 (deepseek-v4-flash) start 1785270557.6195776 ===
+7d82b1857955fc0b413f825331e940833054193374faa2cde16009f9164bdf63
+head_sha=08eea465ba4b1ddbda4e7fe8a6812a423d299958
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=2 keep_green=76)
+capped keep_green 76->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=test_mod --target=test_mod_inverse --keep-green=test_Catalan_EulerGamma_prec --keep-green=test_Div_By_Zero --keep-green=test_Float --keep-green=test_Float_RealElement --keep-green=test_Float_default_to_highprec_from_str --keep-green=test_Float_eq --keep-green=test_Float_eval --keep-green=test_Float_gcd_lcm_cofactors --keep-green=test_Float_idempotence --keep-green=test_Float_issue_2107 --keep-green=test_GoldenRatio_expand --keep-green=test_Infinity --keep-green=test_Infinity_2 --keep-green=test_Infinity_inequations --keep-green=test_IntegerInteger --keep-green=test_Integer_as_index --keep-green=test_Integer_factors --keep-green=test_Integer_new --keep-green=test_Mul_Infinity_Zero --keep-green=test_NaN --keep-green=test_Number_new --keep-green=test_Rational_cmp --keep-green=test_Rational_factors --keep-green=test_Rational_gcd_lcm_cofactors --keep-green=test_Rational_int --keep-green=test_Rational_new --keep-green=test_abs1 --keep-green=test_accept_int --keep-green=test_as_content_primitive --keep-green=test_bug_sqrt --keep-green=test_comp --keep-green=test_comparisons_with_unknown_type --keep-green=test_conversion_to_mpmath --keep-green=test_divmod --keep-green=test_dont_accept_str --keep-green=test_float_mpf --keep-green=test_golden_ratio_rewrite_as_sqrt --keep-green=test_hashing_sympy_integers --keep-green=test_igcd --keep-green=test_igcd2 --issue-file=/tmp/issue.md --base-sha=08eea465ba4b1ddbda4e7fe8a6812a423d299958 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=27 tools=26 [bash:14 read:4 grep:2 run_tests:2 edit:1 edit_block:1 find:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=11889 cache_r=397312 cache_w=0 out=8177 reasoning=5213 total=417378 — $0.0400
+  TOTAL: in=11889 cache_r=397312 cache_w=0 out=8177 reasoning=5213 total=417378 — $0.0400
+timing (total 146.89s):
+  fix: 124.65s (85%)
+  baseline: 12.04s (8%)
+  verify: 6.63s (5% n=2)
+  discover: 2.71s (2%)
+  bootstrap: 0.80s (1%)
+  patch: 0.05s (0%)
+  fix→tools: bash:29.21s grep:0.34s run_tests:0.05s find:0.04s edit:0.02s edit_block:0.01s read:0.00s project:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (3670 bytes)
+
+exit_code=0 elapsed_s=147.0

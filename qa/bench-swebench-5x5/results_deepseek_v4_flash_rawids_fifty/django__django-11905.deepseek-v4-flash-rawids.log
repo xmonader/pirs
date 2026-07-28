@@ -1,0 +1,23 @@
+=== django__django-11905 (deepseek-v4-flash) start 1785269260.886801 ===
+785be0c4f4e2d1838514c04167e1c8432e2e55afe169b29749311f5150950f34
+head_sha=c77e435c2e57ff903305931eceab52381352cf1f
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=2 keep_green=38)
+cmd: pirs-bench solve /testbed --target=test_isnull_non_boolean_value (lookup.tests.LookupTests) --target=test_iterator (lookup.tests.LookupTests) --keep-green=test_chain_date_time_lookups (lookup.tests.LookupTests) --keep-green=test_count (lookup.tests.LookupTests) --keep-green=test_custom_field_none_rhs (lookup.tests.LookupTests) --keep-green=Lookup.can_use_none_as_rhs=True allows None as a lookup value. --keep-green=test_error_messages (lookup.tests.LookupTests) --keep-green=test_escaping (lookup.tests.LookupTests) --keep-green=test_exact_exists (lookup.tests.LookupTests) --keep-green=Transforms are used for __exact=None. --keep-green=test_exact_query_rhs_with_selected_columns (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one_offset (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_not_limited_to_one (lookup.tests.LookupTests) --keep-green=test_exclude (lookup.tests.LookupTests) --keep-green=test_exists (lookup.tests.LookupTests) --keep-green=test_get_next_previous_by (lookup.tests.LookupTests) --keep-green=test_in (lookup.tests.LookupTests) --keep-green=test_in_bulk (lookup.tests.LookupTests) --keep-green=test_in_bulk_lots_of_ids (lookup.tests.LookupTests) --keep-green=test_in_bulk_non_unique_field (lookup.tests.LookupTests) --keep-green=test_in_bulk_with_field (lookup.tests.LookupTests) --keep-green=test_in_different_database (lookup.tests.LookupTests) --keep-green=test_in_keeps_value_ordering (lookup.tests.LookupTests) --keep-green=test_lookup_collision (lookup.tests.LookupTests) --keep-green=test_lookup_date_as_str (lookup.tests.LookupTests) --keep-green=test_lookup_int_as_str (lookup.tests.LookupTests) --keep-green=test_nested_outerref_lhs (lookup.tests.LookupTests) --keep-green=test_none (lookup.tests.LookupTests) --keep-green=test_nonfield_lookups (lookup.tests.LookupTests) --keep-green=test_pattern_lookups_with_substr (lookup.tests.LookupTests) --keep-green=test_regex (lookup.tests.LookupTests) --keep-green=test_regex_backreferencing (lookup.tests.LookupTests) --keep-green=test_regex_non_ascii (lookup.tests.LookupTests) --keep-green=test_regex_non_string (lookup.tests.LookupTests) --keep-green=test_regex_null (lookup.tests.LookupTests) --keep-green=test_relation_nested_lookup_error (lookup.tests.LookupTests) --keep-green=test_unsupported_lookups (lookup.tests.LookupTests) --keep-green=test_values (lookup.tests.LookupTests) --keep-green=test_values_list (lookup.tests.LookupTests) --issue-file=/tmp/issue.md --base-sha=c77e435c2e57ff903305931eceab52381352cf1f --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=40 tools=42 [read:16 bash:11 grep:8 edit:2 run_tests:2 edit_block:1 ls:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=14508 cache_r=674304 cache_w=0 out=7201 reasoning=3646 total=696013 — $0.0590
+  TOTAL: in=14508 cache_r=674304 cache_w=0 out=7201 reasoning=3646 total=696013 — $0.0590
+timing (total 107.93s):
+  fix: 100.71s (93%)
+  verify: 3.80s (4% n=2)
+  baseline: 3.25s (3%)
+  patch: 0.09s (0%)
+  discover: 0.06s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:8.50s grep:0.50s edit:0.04s run_tests:0.02s ls:0.01s read:0.01s project:0.00s edit_block:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1100 bytes)
+
+exit_code=0 elapsed_s=108.0

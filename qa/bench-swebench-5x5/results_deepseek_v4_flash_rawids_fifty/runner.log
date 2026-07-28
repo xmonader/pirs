@@ -1,0 +1,212 @@
+raw_test_ids=1 key_len=35
+queue 50 instances
+START astropy__astropy-12907
+START astropy__astropy-14182
+START astropy__astropy-14365
+DONE astropy__astropy-12907 solved=True t=317.4
+START astropy__astropy-14995### WAVE 1/1 of 50
+
+DONE astropy__astropy-14365 solved=True t=328.6
+START astropy__astropy-6938
+### WAVE 2/2 of 50
+DONE astropy__astropy-14182 solved=True t=400.6
+START astropy__astropy-7746
+### WAVE 3/3 of 50
+DONE astropy__astropy-6938 solved=True t=91.0
+START django__django-10914
+### WAVE 4/4 of 50
+DONE django__django-10914 solved=True t=198.5
+START django__django-10924### WAVE 5/5 of 50
+
+DONE astropy__astropy-7746 solved=True t=229.6
+START django__django-11001
+### WAVE 6/6 of 50
+DONE astropy__astropy-14995 solved=True t=323.0
+START django__django-11019
+### WAVE 7/7 of 50
+DONE django__django-10924 solved=True t=56.3
+START django__django-11039
+### WAVE 8/8 of 50
+DONE django__django-11001 solved=True t=73.5
+START django__django-11049### WAVE 9/9 of 50
+
+DONE django__django-11039 solved=True t=42.4
+START django__django-11099
+### WAVE 10/10 of 50
+DONE django__django-11049 solved=True t=47.6
+START django__django-11133
+### WAVE 11/11 of 50
+DONE django__django-11099 solved=True t=34.0
+START django__django-11179
+### WAVE 12/12 of 50
+DONE django__django-11133 solved=True t=31.4
+START django__django-11283
+### WAVE 13/13 of 50
+DONE django__django-11179 solved=True t=32.2
+START django__django-11422### WAVE 14/14 of 50
+
+DONE django__django-11283 solved=False t=22.5
+START django__django-11564### WAVE 14/15 of 50
+
+DONE django__django-11422 solved=True t=111.8
+START django__django-11583
+### WAVE 15/16 of 50
+DONE django__django-11583 solved=True t=39.1
+START django__django-11620
+### WAVE 16/17 of 50
+DONE django__django-11019 solved=True t=351.7
+START django__django-11630
+### WAVE 17/18 of 50
+DONE django__django-11564 solved=True t=181.2
+START django__django-11742
+### WAVE 18/19 of 50
+DONE django__django-11630 solved=True t=51.5
+START django__django-11797
+### WAVE 19/20 of 50
+DONE django__django-11620 solved=True t=135.5
+START django__django-11815
+### WAVE 20/21 of 50
+DONE django__django-11742 solved=True t=101.5
+START django__django-11848
+### WAVE 21/22 of 50
+DONE django__django-11797 solved=False t=96.2
+START django__django-11905
+### WAVE 21/23 of 50
+DONE django__django-11815 solved=True t=56.2
+START django__django-11910### WAVE 22/24 of 50
+
+DONE django__django-11848 solved=True t=44.5
+START django__django-11964
+### WAVE 23/25 of 50
+DONE django__django-11905 solved=True t=108.0
+START django__django-11999
+### WAVE 24/26 of 50
+DONE django__django-11999 solved=True t=39.7
+START django__django-12113
+### WAVE 25/27 of 50
+DONE django__django-11964 solved=True t=148.6
+START django__django-12125
+### WAVE 26/28 of 50
+DONE django__django-11910 solved=True t=180.5
+START django__django-12184### WAVE 27/29 of 50
+
+DONE django__django-12125 solved=True t=48.5
+START django__django-12284
+### WAVE 28/30 of 50
+DONE django__django-12184 solved=True t=57.5
+START django__django-12286
+### WAVE 29/31 of 50
+DONE django__django-12284 solved=True t=57.0
+START django__django-14608
+### WAVE 30/32 of 50
+DONE django__django-12113 solved=True t=143.4
+START django__django-15213
+### WAVE 31/33 of 50
+DONE django__django-12286 solved=True t=55.3
+START django__django-15695
+### WAVE 32/34 of 50
+DONE django__django-14608 solved=True t=113.3
+START django__django-15781
+### WAVE 33/35 of 50
+DONE django__django-15695 solved=False t=91.1
+START django__django-16046
+### WAVE 33/36 of 50
+DONE django__django-15213 solved=True t=119.6
+START matplotlib__matplotlib-23562### WAVE 34/37 of 50
+
+DONE django__django-16046 solved=True t=39.5
+START matplotlib__matplotlib-26011### WAVE 35/38 of 50
+
+DONE django__django-15781 solved=True t=412.3
+START pytest-dev__pytest-5221
+### WAVE 36/39 of 50
+DONE matplotlib__matplotlib-23562 solved=True t=451.4
+START scikit-learn__scikit-learn-12471
+### WAVE 37/40 of 50
+DONE scikit-learn__scikit-learn-12471 solved=True t=99.2
+START scikit-learn__scikit-learn-25570
+### WAVE 38/41 of 50
+DONE pytest-dev__pytest-5221 solved=True t=354.9
+START sphinx-doc__sphinx-7686
+### WAVE 39/42 of 50
+DONE matplotlib__matplotlib-26011 solved=True t=841.8
+START sympy__sympy-13177
+### WAVE 40/43 of 50
+DONE sympy__sympy-13177 solved=True t=147.0
+START sympy__sympy-13647
+### WAVE 41/44 of 50
+DONE sphinx-doc__sphinx-7686 solved=True t=336.7
+START sympy__sympy-15346
+### WAVE 42/45 of 50
+DONE sympy__sympy-15346 solved=True t=223.3
+START sympy__sympy-15678
+### WAVE 43/46 of 50
+DONE sympy__sympy-13647 solved=True t=340.9
+START sympy__sympy-16106
+### WAVE 44/47 of 50
+DONE sympy__sympy-15678 solved=True t=123.7
+### WAVE 45/48 of 50
+DONE scikit-learn__scikit-learn-25570 solved=True t=877.7
+### WAVE 46/49 of 50
+DONE sympy__sympy-16106 solved=False t=120.0
+### WAVE 46/50 of 50
+FINAL 46/50
+# SWE-bench Lite — deepseek-v4-flash RAW test ids
+
+**Score: 46/50**
+
+Ablation: `PIRS_RAW_TEST_IDS=1` — no `looks_like_test_id`, no test_patch recovery.
+
+| Instance | Solved | Time (s) | Exit | raw_test_ids |
+|---|---|---|---|---|
+| `astropy__astropy-12907` | True | 317.4 | 0 | True |
+| `astropy__astropy-14182` | True | 400.6 | 0 | True |
+| `astropy__astropy-14365` | True | 328.6 | 0 | True |
+| `astropy__astropy-14995` | True | 323.0 | 0 | True |
+| `astropy__astropy-6938` | True | 91.0 | 0 | True |
+| `astropy__astropy-7746` | True | 229.6 | 0 | True |
+| `django__django-10914` | True | 198.5 | 0 | True |
+| `django__django-10924` | True | 56.3 | 0 | True |
+| `django__django-11001` | True | 73.5 | 0 | True |
+| `django__django-11019` | True | 351.7 | 0 | True |
+| `django__django-11039` | True | 42.4 | 0 | True |
+| `django__django-11049` | True | 47.6 | 0 | True |
+| `django__django-11099` | True | 34.0 | 0 | True |
+| `django__django-11133` | True | 31.4 | 0 | True |
+| `django__django-11179` | True | 32.2 | 0 | True |
+| `django__django-11283` | False | 22.5 | 1 | True |
+| `django__django-11422` | True | 111.8 | 0 | True |
+| `django__django-11564` | True | 181.2 | 0 | True |
+| `django__django-11583` | True | 39.1 | 0 | True |
+| `django__django-11620` | True | 135.5 | 0 | True |
+| `django__django-11630` | True | 51.5 | 0 | True |
+| `django__django-11742` | True | 101.5 | 0 | True |
+| `django__django-11797` | False | 96.2 | 1 | True |
+| `django__django-11815` | True | 56.2 | 0 | True |
+| `django__django-11848` | True | 44.5 | 0 | True |
+| `django__django-11905` | True | 108.0 | 0 | True |
+| `django__django-11910` | True | 180.5 | 0 | True |
+| `django__django-11964` | True | 148.6 | 0 | True |
+| `django__django-11999` | True | 39.7 | 0 | True |
+| `django__django-12113` | True | 143.4 | 0 | True |
+| `django__django-12125` | True | 48.5 | 0 | True |
+| `django__django-12184` | True | 57.5 | 0 | True |
+| `django__django-12284` | True | 57.0 | 0 | True |
+| `django__django-12286` | True | 55.3 | 0 | True |
+| `django__django-14608` | True | 113.3 | 0 | True |
+| `django__django-15213` | True | 119.6 | 0 | True |
+| `django__django-15695` | False | 91.1 | 1 | True |
+| `django__django-15781` | True | 412.3 | 0 | True |
+| `django__django-16046` | True | 39.5 | 0 | True |
+| `matplotlib__matplotlib-23562` | True | 451.4 | 0 | True |
+| `matplotlib__matplotlib-26011` | True | 841.8 | 0 | True |
+| `pytest-dev__pytest-5221` | True | 354.9 | 0 | True |
+| `scikit-learn__scikit-learn-12471` | True | 99.2 | 0 | True |
+| `scikit-learn__scikit-learn-25570` | True | 877.7 | 0 | True |
+| `sphinx-doc__sphinx-7686` | True | 336.7 | 0 | True |
+| `sympy__sympy-13177` | True | 147.0 | 0 | True |
+| `sympy__sympy-13647` | True | 340.9 | 0 | True |
+| `sympy__sympy-15346` | True | 223.3 | 0 | True |
+| `sympy__sympy-15678` | True | 123.7 | 0 | True |
+| `sympy__sympy-16106` | False | 120.0 | 1 | True |
+

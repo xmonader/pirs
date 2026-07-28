@@ -1,0 +1,25 @@
+{
+  "id": "astropy__astropy-14995",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-rawids",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14995:latest",
+  "container": "pirsbench-astropy--astropy-14995-deepseek-v4-flash-rawids",
+  "strategy": "monolithic",
+  "raw_test_ids": true,
+  "exit_code": 0,
+  "elapsed_s": 323.0,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=16 tools=15 [read:6 run_tests:4 todo:2 edit_block:1 find:1 grep:1]\ntokens by model:\n  deepseek-v4-flash: in=15189 cache_r=253952 cache_w=0 out=4608 reasoning=2559 total=273749 \u2014 $0.0269\n  TOTAL: in=15189 cache_r=253952 cache_w=0 out=4608 reasoning=2559 total=273749 \u2014 $0.0269\ntiming (total 322.86s):\n  bootstrap: 158.52s (49%)\n  fix: 102.13s (32%)\n  discover: 54.37s (17%)\n  verify: 4.47s (1% n=2)\n  baseline: 3.36s (1%)\n  patch: 0.02s (0%)\n  fix\u2192tools: run_tests:54.52s find:0.02s todo:0.01s edit_block:0.01s read:0.00s grep:0.00s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (669 bytes)",
+  "tokens": {
+    "in": 15189,
+    "cache_read": 253952,
+    "cache_write": 0,
+    "out": 4608,
+    "reasoning": 2559,
+    "total": 273749,
+    "cost_usd": 0.0269
+  },
+  "patch_copied": true,
+  "patch_bytes": 669
+}

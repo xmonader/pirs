@@ -96,6 +96,10 @@ pub struct AgentConfig {
     /// Optional shared steering queue. When set, callers holding a clone can inject
     /// messages mid-run; when `None`, a private empty queue is used (no steering).
     pub steering: Option<SteeringQueue>,
+    /// When true, the agent prompt does **not** list FAIL_TO_PASS target ids.
+    /// The harness still uses `targets` / `keep_green` for reproduce + verify
+    /// (honest grading). Fair SWE-bench style: issue + repo only for the agent.
+    pub hide_targets: bool,
 }
 
 /// The agent-backed executor and a [`PhaseDriver`]: it holds the assembled tools,
@@ -129,6 +133,8 @@ pub struct AgentExecutor {
     ws: GitWorkspace,
     issue: String,
     targets: Vec<String>,
+    /// When true, agent prompts omit target ids (harness still verifies them).
+    hide_targets: bool,
     /// Test files (derived from targets + keep_green) restored to base after each
     /// attempt so a fix can never pass by editing the tests.
     protected: Vec<String>,
@@ -211,11 +217,33 @@ impl AgentExecutor {
             ws: GitWorkspace::new(repo_root),
             issue,
             targets,
+            hide_targets: config.hide_targets,
             protected,
             usage: UsageByModel::default(),
             stats: Arc::new(Mutex::new(SessionStats::default())),
             steering: config.steering.unwrap_or_default(),
         })
+    }
+
+    /// Text the agent sees for "tests that must pass". Empty / placeholder when
+    /// `hide_targets` is set so the agent cannot be spoon-fed FAIL_TO_PASS ids.
+    fn agent_targets_text(&self) -> String {
+        if self.hide_targets {
+            "(not provided — diagnose from the issue statement and the repository; \
+             the harness verifies your fix independently against hidden tests)"
+                .to_string()
+        } else {
+            self.targets.join("\n")
+        }
+    }
+
+    /// Targets vector handed to strategy templates (`{targets}`). Empty when hidden.
+    fn agent_targets_list(&self) -> Vec<String> {
+        if self.hide_targets {
+            Vec::new()
+        } else {
+            self.targets.clone()
+        }
     }
 
     /// This session's per-model token usage so far.
@@ -430,7 +458,7 @@ impl AgentExecutor {
         let prompt = format!(
             "{verdict_note}Fix the following issue in this repository.\n\n## Issue\n{}\n\n## Tests that must pass after your fix\n{}\n",
             self.issue,
-            self.targets.join("\n"),
+            self.agent_targets_text(),
         );
 
         if !self.phase_contexts.contains_key(PHASE_ID) {
@@ -604,7 +632,7 @@ impl Executor for AgentExecutor {
             let strategy = self.strategy.clone();
             let task = strategy::Task {
                 issue: self.issue.clone(),
-                targets: self.targets.clone(),
+                targets: self.agent_targets_list(),
                 verdict: last.map(|v| format!("{v:?}")),
             };
             strategy::run_strategy(&strategy, self, &task)?;
@@ -650,6 +678,7 @@ mod tests {
                 tool_policy: ToolPolicy::allow_all(),
                 recorder: None,
                 steering: None,
+                hide_targets: false,
             },
         )
         .unwrap()
@@ -671,6 +700,7 @@ mod tests {
                 tool_policy: policy,
                 recorder: None,
                 steering: None,
+                hide_targets: false,
             },
         )
         .unwrap()
@@ -693,6 +723,7 @@ mod tests {
                 tool_policy: ToolPolicy::allow_all(),
                 recorder: None,
                 steering: None,
+                hide_targets: false,
             },
         )
         .unwrap();

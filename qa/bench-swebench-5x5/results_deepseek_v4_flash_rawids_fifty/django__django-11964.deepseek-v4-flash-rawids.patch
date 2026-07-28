@@ -1,0 +1,27 @@
+diff --git a/django/db/models/enums.py b/django/db/models/enums.py
+index bbe362a6ab..308dcd1edf 100644
+--- a/django/db/models/enums.py
++++ b/django/db/models/enums.py
+@@ -31,6 +31,11 @@ class ChoicesMeta(enum.EnumMeta):
+         # that is passed in as "self" as the value to use when looking up the
+         # label in the choices.
+         cls.label = property(lambda self: cls._value2label_map_.get(self.value))
++        # Ensure __str__ returns the value (the enum member's str() should
++        # return the value, not the enum name). Python's EnumMeta.__new__
++        # replaces __str__ with Enum.__str__ which returns e.g.
++        # 'MyChoice.FIRST_CHOICE'. Override it back.
++        cls.__str__ = lambda self: str(self.value)
+         return enum.unique(cls)
+ 
+     def __contains__(cls, member):
+@@ -60,7 +65,9 @@ class ChoicesMeta(enum.EnumMeta):
+ 
+ class Choices(enum.Enum, metaclass=ChoicesMeta):
+     """Class for creating enumerated choices."""
+-    pass
++
++    def __str__(self):
++        return str(self.value)
+ 
+ 
+ class IntegerChoices(int, Choices):

@@ -1,0 +1,32 @@
+diff --git a/sklearn/compose/_column_transformer.py b/sklearn/compose/_column_transformer.py
+index a26145117..7b1a37669 100644
+--- a/sklearn/compose/_column_transformer.py
++++ b/sklearn/compose/_column_transformer.py
+@@ -391,7 +391,8 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+                     ).set_output(transform=output_config["dense"])
+                 elif trans == "drop":
+                     continue
+-                elif _is_empty_column_selection(columns):
++
++                if _is_empty_column_selection(columns):
+                     continue
+ 
+             if column_as_strings:
+@@ -587,6 +588,8 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+         for name, old, column, _ in self._iter():
+             if old == "drop":
+                 trans = "drop"
++            elif _is_empty_column_selection(column):
++                trans = old
+             elif old == "passthrough":
+                 # FunctionTransformer is present in list of transformers,
+                 # so get next transformer, but save original string
+@@ -596,8 +599,6 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+                 # The fitted FunctionTransformer is saved in another attribute,
+                 # so it can be used during transform for set_output.
+                 self._name_to_fitted_passthrough[name] = func_transformer
+-            elif _is_empty_column_selection(column):
+-                trans = old
+             else:
+                 trans = next(fitted_transformers)
+             transformers_.append((name, trans, column))

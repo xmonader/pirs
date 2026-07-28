@@ -1,0 +1,25 @@
+{
+  "id": "matplotlib__matplotlib-26011",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-rawids",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-26011:latest",
+  "container": "pirsbench-matplotlib--matplotlib-26011-deepseek-v4-flash-rawids",
+  "strategy": "monolithic",
+  "raw_test_ids": true,
+  "exit_code": 0,
+  "elapsed_s": 841.8,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=16 tools=17 [read:7 grep:6 run_tests:3 edit_block:1]\ntokens by model:\n  deepseek-v4-flash: in=8369 cache_r=198912 cache_w=0 out=4807 reasoning=2784 total=212088 \u2014 $0.0215\n  TOTAL: in=8369 cache_r=198912 cache_w=0 out=4807 reasoning=2784 total=212088 \u2014 $0.0215\ntiming (total 841.70s):\n  bootstrap: 596.39s (71%)\n  fix: 216.20s (26%)\n  discover: 15.58s (2%)\n  verify: 8.57s (1% n=2)\n  baseline: 4.78s (1%)\n  patch: 0.17s (0%)\n  fix\u2192tools: run_tests:162.42s grep:0.03s edit_block:0.01s read:0.01s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (497 bytes)",
+  "tokens": {
+    "in": 8369,
+    "cache_read": 198912,
+    "cache_write": 0,
+    "out": 4807,
+    "reasoning": 2784,
+    "total": 212088,
+    "cost_usd": 0.0215
+  },
+  "patch_copied": true,
+  "patch_bytes": 497
+}

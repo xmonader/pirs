@@ -1,0 +1,23 @@
+=== astropy__astropy-12907 (deepseek-v4-flash) start 1785268104.5581806 ===
+c944e276c830e22ea633f952c37bbf586e5e323e9b48725d966b4f2cde6c371d
+head_sha=a856009cfc2c1b069ccab34523ab9ac63e0d6abd
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=2 keep_green=13)
+cmd: pirs-bench solve /testbed --target=astropy/modeling/tests/test_separable.py::test_separable[compound_model6-result6] --target=astropy/modeling/tests/test_separable.py::test_separable[compound_model9-result9] --keep-green=astropy/modeling/tests/test_separable.py::test_coord_matrix --keep-green=astropy/modeling/tests/test_separable.py::test_cdot --keep-green=astropy/modeling/tests/test_separable.py::test_cstack --keep-green=astropy/modeling/tests/test_separable.py::test_arith_oper --keep-green=astropy/modeling/tests/test_separable.py::test_separable[compound_model0-result0] --keep-green=astropy/modeling/tests/test_separable.py::test_separable[compound_model1-result1] --keep-green=astropy/modeling/tests/test_separable.py::test_separable[compound_model2-result2] --keep-green=astropy/modeling/tests/test_separable.py::test_separable[compound_model3-result3] --keep-green=astropy/modeling/tests/test_separable.py::test_separable[compound_model4-result4] --keep-green=astropy/modeling/tests/test_separable.py::test_separable[compound_model5-result5] --keep-green=astropy/modeling/tests/test_separable.py::test_separable[compound_model7-result7] --keep-green=astropy/modeling/tests/test_separable.py::test_separable[compound_model8-result8] --keep-green=astropy/modeling/tests/test_separable.py::test_custom_model_separable --issue-file=/tmp/issue.md --base-sha=a856009cfc2c1b069ccab34523ab9ac63e0d6abd --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=12 tools=12 [read:5 bash:3 edit_block:2 grep:2]
+tokens by model:
+  deepseek-v4-flash: in=8503 cache_r=164224 cache_w=0 out=3302 reasoning=1886 total=176029 — $0.0174
+  TOTAL: in=8503 cache_r=164224 cache_w=0 out=3302 reasoning=1886 total=176029 — $0.0174
+timing (total 317.29s):
+  bootstrap: 196.56s (62%)
+  discover: 73.59s (23%)
+  fix: 37.67s (12%)
+  verify: 6.18s (2% n=2)
+  baseline: 3.25s (1%)
+  patch: 0.04s (0%)
+  fix→tools: bash:4.24s edit_block:0.01s read:0.01s grep:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (502 bytes)
+
+exit_code=0 elapsed_s=317.4

@@ -1,0 +1,24 @@
+{
+  "id": "sympy__sympy-16106",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-rawids",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-16106:latest",
+  "container": "pirsbench-sympy--sympy-16106-deepseek-v4-flash-rawids",
+  "strategy": "monolithic",
+  "raw_test_ids": true,
+  "exit_code": 1,
+  "elapsed_s": 120.0,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nsession: turns=40 tools=44 [read:16 bash:14 grep:9 edit:2 edit_block:1 git:1 project:1]\ntokens by model:\n  deepseek-v4-flash: in=18447 cache_r=811904 cache_w=0 out=7190 reasoning=3104 total=837541 \u2014 $0.0697\n  TOTAL: in=18447 cache_r=811904 cache_w=0 out=7190 reasoning=3104 total=837541 \u2014 $0.0697\ntiming (total 119.77s):\n  fix: 101.08s (84%)\n  baseline: 14.94s (12%)\n  discover: 2.99s (2%)\n  bootstrap: 0.70s (1%)\n  rollback: 0.05s (0%)\n  fix\u2192tools: bash:15.14s grep:0.58s project:0.03s edit:0.01s read:0.01s git:0.01s edit_block:0.00s\noutcome: Failed(FixNoFlip)",
+  "tokens": {
+    "in": 18447,
+    "cache_read": 811904,
+    "cache_write": 0,
+    "out": 7190,
+    "reasoning": 3104,
+    "total": 837541,
+    "cost_usd": 0.0697
+  },
+  "patch_copied": false
+}

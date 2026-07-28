@@ -1,0 +1,25 @@
+{
+  "id": "scikit-learn__scikit-learn-25570",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-rawids",
+  "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25570:latest",
+  "container": "pirsbench-scikit-learn--scikit-learn-25570-deepseek-v4-flash-rawids",
+  "strategy": "monolithic",
+  "raw_test_ids": true,
+  "exit_code": 0,
+  "elapsed_s": 877.7,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nsession: turns=35 tools=38 [read:14 bash:10 grep:8 edit_block:2 find:2 run_tests:2]\ntokens by model:\n  deepseek-v4-flash: in=19452 cache_r=778240 cache_w=0 out=15740 reasoning=9587 total=813432 \u2014 $0.0770\n  TOTAL: in=19452 cache_r=778240 cache_w=0 out=15740 reasoning=9587 total=813432 \u2014 $0.0770\ntiming (total 877.52s):\n  bootstrap: 616.51s (70%)\n  fix: 203.87s (23%)\n  discover: 43.85s (5%)\n  verify: 7.69s (1% n=2)\n  baseline: 5.53s (1%)\n  patch: 0.06s (0%)\n  fix\u2192tools: run_tests:37.39s bash:15.83s find:0.13s read:0.02s grep:0.02s edit_block:0.02s\noutcome: Solved\npatch written to \"/tmp/out.patch\" (1599 bytes)",
+  "tokens": {
+    "in": 19452,
+    "cache_read": 778240,
+    "cache_write": 0,
+    "out": 15740,
+    "reasoning": 9587,
+    "total": 813432,
+    "cost_usd": 0.077
+  },
+  "patch_copied": true,
+  "patch_bytes": 1599
+}

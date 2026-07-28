@@ -1,0 +1,23 @@
+=== sympy__sympy-15678 (deepseek-v4-flash) start 1785270990.227857 ===
+e8d760150565e4860ae57d479271c1108126b7a8fda07d8267ce80e3048c3fbc
+head_sha=e6815c1f624c4e026eaa47c53a3d6b8870ca8ab7
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=3)
+cmd: pirs-bench solve /testbed --target=test_idiff --keep-green=test_intersection --keep-green=test_convex_hull --keep-green=test_centroid --issue-file=/tmp/issue.md --base-sha=e6815c1f624c4e026eaa47c53a3d6b8870ca8ab7 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=26 tools=25 [bash:13 read:7 grep:2 edit:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=9215 cache_r=421632 cache_w=0 out=9234 reasoning=4638 total=440081 — $0.0422
+  TOTAL: in=9215 cache_r=421632 cache_w=0 out=9234 reasoning=4638 total=440081 — $0.0422
+timing (total 123.45s):
+  fix: 102.35s (83%)
+  verify: 9.65s (8% n=2)
+  baseline: 6.66s (5%)
+  discover: 3.77s (3%)
+  bootstrap: 0.93s (1%)
+  patch: 0.10s (0%)
+  fix→tools: bash:12.52s run_tests:0.05s edit:0.02s read:0.02s grep:0.01s project:0.01s
+outcome: Solved
+patch written to "/tmp/out.patch" (4337 bytes)
+
+exit_code=0 elapsed_s=123.7

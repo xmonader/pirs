@@ -1,8 +1,21 @@
-# SWE-bench Lite — deepseek-v4-flash campaign
+# SWE-bench Lite — deepseek-v4-flash campaign (**filtered** test ids)
 
 **Date:** 2026-07-28 (UTC)
 
 **Score: 42/50 (84%)**
+
+## How this differs from RAW / Fair
+
+| Mode | Agent sees F2P names? | Id hygiene | Score (same 50) |
+|------|----------------------|------------|-----------------|
+| **This dir (filtered)** | Yes | `looks_like_test_id` + test_patch recovery | **42/50** |
+| [RAW IDs](../results_deepseek_v4_flash_rawids_fifty/) | Yes | none (`PIRS_RAW_TEST_IDS=1`) | **46/50** |
+| Fair (`PIRS_FAIR=1` / `--hide-targets`) | **No** | filtered for grading only | (running / TBD) |
+
+**Filtered is not gold cheating.** It still applies only `test_patch` and never gold `patch`.  
+**But it does spoon-feed** FAIL_TO_PASS ids into the agent prompt (same as RAW). The filter only drops docstring/prose “ids” that are not runnable.
+
+See [rawids README](../results_deepseek_v4_flash_rawids_fifty/README.md) for why RAW can score higher (filter under-count, not gold).
 
 ## Setup (honest / no gold-patch cheat)
 
@@ -11,6 +24,7 @@
 - Harness: `pirs-bench solve` inside official `swebench/sweb.eval.*` images
 - Runner: `qa/bench-swebench-5x5/run_one.py`
 - Applies **only** `test_patch` (not gold `patch`); agent gets `problem_statement`
+- **Agent also gets FAIL_TO_PASS names** (filtered) as “tests that must pass”
 - Success = FAIL_TO_PASS red→green + keep-green; test-file edits reverted
 - First 8 sequential, then remaining 42 with **concurrency 3**
 - Binary: `pirs-bench` musl release (`pirs-bench-runner`)

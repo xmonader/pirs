@@ -1,0 +1,22 @@
+=== sympy__sympy-16106 (deepseek-v4-flash) start 1785271052.2817757 ===
+f601f1ec930c83466545bc79f28daf2f804c32f59780017c78c7ec3e7398be61
+head_sha=301d7e8a8429c7b7ed61db79966bb56283e6de1e
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=55)
+capped keep_green 55->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=test_print_IndexedBase --keep-green=test_print_AssocOp --keep-green=test_print_Lambda --keep-green=test_print_basic --keep-green=test_print_conjugate --keep-green=test_print_derivative --keep-green=test_print_domains --keep-green=test_print_expression_with_minus --keep-green=test_print_factorials --keep-green=test_print_lerchphi --keep-green=test_print_logic --keep-green=test_print_matrix_symbol --keep-green=test_print_polylog --keep-green=test_print_random_symbol --keep-green=test_print_re_im --keep-green=test_print_tuples --keep-green=test_content_mathml_Rational --keep-green=test_content_mathml_add --keep-green=test_content_mathml_constants --keep-green=test_content_mathml_core --keep-green=test_content_mathml_functions --keep-green=test_content_mathml_greek --keep-green=test_content_mathml_integrals --keep-green=test_content_mathml_limits --keep-green=test_content_mathml_matrices --keep-green=test_content_mathml_order --keep-green=test_content_mathml_relational --keep-green=test_content_mathml_sums --keep-green=test_content_mathml_trig --keep-green=test_content_mathml_tuples --keep-green=test_content_printmethod --keep-green=test_content_settings --keep-green=test_content_symbol --keep-green=test_fold_frac_powers_print --keep-green=test_fold_short_frac_print --keep-green=test_ln_notation_print --keep-green=test_mathml_printer --keep-green=test_mul_symbol_print --keep-green=test_presentation_mathml_Rational --keep-green=test_presentation_mathml_add --keep-green=test_presentation_mathml_constants --issue-file=/tmp/issue.md --base-sha=301d7e8a8429c7b7ed61db79966bb56283e6de1e --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=40 tools=44 [read:16 bash:14 grep:9 edit:2 edit_block:1 git:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=18447 cache_r=811904 cache_w=0 out=7190 reasoning=3104 total=837541 — $0.0697
+  TOTAL: in=18447 cache_r=811904 cache_w=0 out=7190 reasoning=3104 total=837541 — $0.0697
+timing (total 119.77s):
+  fix: 101.08s (84%)
+  baseline: 14.94s (12%)
+  discover: 2.99s (2%)
+  bootstrap: 0.70s (1%)
+  rollback: 0.05s (0%)
+  fix→tools: bash:15.14s grep:0.58s project:0.03s edit:0.01s read:0.01s git:0.01s edit_block:0.00s
+outcome: Failed(FixNoFlip)
+
+exit_code=1 elapsed_s=120.0

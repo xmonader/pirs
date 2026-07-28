@@ -102,6 +102,10 @@ struct Common {
     /// outcome) to this file — the flight recorder for long sessions.
     #[arg(long, global = true)]
     trace: Option<PathBuf>,
+    /// Do not list FAIL_TO_PASS target ids in the agent prompt. Harness still
+    /// uses `--target` / `--keep-green` for reproduce + verify (fair grading).
+    #[arg(long, global = true)]
+    hide_targets: bool,
 }
 
 impl Common {
@@ -393,6 +397,7 @@ fn solve_one(
             tool_policy: ctx.tool_policy.clone(),
             recorder: ctx.recorder.clone(),
             steering: None,
+            hide_targets: ctx.common.hide_targets,
         },
     )
     .context("build agent executor")?;

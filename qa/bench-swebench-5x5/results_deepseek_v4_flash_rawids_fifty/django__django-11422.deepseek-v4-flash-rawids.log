@@ -1,0 +1,24 @@
+=== django__django-11422 (deepseek-v4-flash) start 1785268908.599922 ===
+06ee2b31bedde394e3f7302b18c3c6f76a72c6c4c192c29109247a8f0c955230
+head_sha=af5ead2e39338ad0b6cf4e6cdb9255af10d8ce8b
+raw_test_ids=1: using FAIL_TO_PASS/PASS_TO_PASS as-is (targets=1 keep_green=46)
+capped keep_green 46->40 (PIRS_MAX_KEEP_GREEN=40)
+cmd: pirs-bench solve /testbed --target=test_main_module_is_resolved (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_check_errors (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_check_errors_catches_all_exceptions (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_file_added (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_module_without_spec (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_paths_are_pathlib_instances (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_zip_reload (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_calls_start_django (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_calls_sys_exit (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_check_errors_called (utils_tests.test_autoreload.StartDjangoTests) --keep-green=test_common_roots (utils_tests.test_autoreload.TestCommonRoots) --keep-green=test_echo_on_called (utils_tests.test_autoreload.StartDjangoTests) --keep-green=test_file (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_glob (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_manage_py (utils_tests.test_autoreload.RestartWithReloaderTests) --keep-green=test_multiple_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_multiple_recursive_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_mutates_error_files (utils_tests.test_autoreload.TestCheckErrors) --keep-green=test_nested_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_no_exception (utils_tests.test_autoreload.TestRaiseLastException) --keep-green=test_overlapping_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_overlapping_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_python_m_django (utils_tests.test_autoreload.RestartWithReloaderTests) --keep-green=test_raises_exception (utils_tests.test_autoreload.TestRaiseLastException) --keep-green=test_run_loop_catches_stopiteration (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_run_loop_stop_and_return (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_snapshot_files_ignores_missing_files (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_snapshot_files_updates (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_snapshot_files_with_duplicates (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_starts_thread_with_args (utils_tests.test_autoreload.StartDjangoTests) --keep-green=test_swallows_keyboard_interrupt (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_sys_paths_absolute (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_directories (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_non_existing (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_with_directories (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_wait_for_apps_ready_checks_for_exception (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_wait_for_apps_ready_without_exception (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_files_with_recursive_glob (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_with_glob (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_with_single_file (utils_tests.test_autoreload.BaseReloaderTests) --issue-file=/tmp/issue.md --base-sha=af5ead2e39338ad0b6cf4e6cdb9255af10d8ce8b --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+session: turns=33 tools=34 [bash:24 read:4 find:2 run_tests:2 edit_block:1 grep:1]
+tokens by model:
+  deepseek-v4-flash: in=50916 cache_r=1212160 cache_w=0 out=8276 reasoning=3404 total=1271352 — $0.1077
+  TOTAL: in=50916 cache_r=1212160 cache_w=0 out=8276 reasoning=3404 total=1271352 — $0.1077
+timing (total 111.72s):
+  fix: 106.82s (96%)
+  verify: 2.35s (2% n=2)
+  baseline: 2.35s (2%)
+  patch: 0.10s (0%)
+  discover: 0.05s (0%)
+  bootstrap: 0.03s (0%)
+  fix→tools: bash:8.25s find:0.48s grep:0.41s run_tests:0.02s edit_block:0.01s read:0.00s
+outcome: Solved
+patch written to "/tmp/out.patch" (1059 bytes)
+
+exit_code=0 elapsed_s=111.8
