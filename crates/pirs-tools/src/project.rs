@@ -821,18 +821,59 @@ impl VerifyOutcome {
     }
 }
 
+/// Whether post-edit verify should run in the agent (default on).
+/// Set `PIRS_POST_EDIT_VERIFY=0` / `false` / `off` to disable.
+pub fn post_edit_verify_enabled() -> bool {
+    match std::env::var("PIRS_POST_EDIT_VERIFY") {
+        Ok(v) => {
+            let t = v.trim().to_ascii_lowercase();
+            !(t == "0" || t == "false" || t == "off" || t == "no")
+        }
+        Err(_) => true,
+    }
+}
+
+/// Mutating file tools that should trigger post-edit verify.
+pub fn is_post_edit_verify_tool(name: &str) -> bool {
+    matches!(name, "edit" | "edit_block" | "write" | "ast_edit")
+}
+
+/// Format a verify outcome for appending to a tool result (agent-visible).
+pub fn format_verify_for_tool_result(o: &VerifyOutcome) -> String {
+    let mut s = o.status_line();
+    if o.skipped {
+        return s;
+    }
+    if !o.passed && !o.summary.is_empty() {
+        let tail: String = o.summary.chars().take(1_200).collect();
+        s.push_str("\n");
+        s.push_str(&tail);
+    }
+    s
+}
+
 /// Run the best auto-detected check after a successful edit.
 ///
 /// Uses the project profile (typecheck preferred) so the model never invents
 /// cargo/npm/go commands. On missing toolchain binary, returns `skipped` with
 /// an honest reason (tests assert this path when cargo is unavailable).
 pub fn post_edit_verify(root: &Path, timeout_secs: u64) -> VerifyOutcome {
+    post_edit_verify_for_path(root, None, timeout_secs)
+}
+
+/// Like [`post_edit_verify`], but scopes Rust checks to `cargo check -p <crate>`
+/// when `edited` lives under `crates/<name>/`.
+pub fn post_edit_verify_for_path(
+    root: &Path,
+    edited: Option<&Path>,
+    timeout_secs: u64,
+) -> VerifyOutcome {
     let profile = detect_profile(root);
     if profile.is_empty() {
         return VerifyOutcome::skipped("no project toolchain detected");
     }
     let eco = ecosystem_label(&profile);
-    let Some((action, cmd)) = preferred_verify_action(&profile) else {
+    let Some((action, mut cmd)) = preferred_verify_action(&profile) else {
         return VerifyOutcome {
             ecosystem: eco,
             action: String::new(),
@@ -844,6 +885,12 @@ pub fn post_edit_verify(root: &Path, timeout_secs: u64) -> VerifyOutcome {
             summary: String::new(),
         };
     };
+
+    if eco == "rust" && cmd.trim() == "cargo check" {
+        if let Some(pkg) = edited.and_then(|p| rust_workspace_package(root, p)) {
+            cmd = format!("cargo check -p {pkg}");
+        }
+    }
 
     // Prefer first token as binary for existence check (e.g. "cargo check").
     let bin = cmd
@@ -952,6 +999,30 @@ pub fn post_edit_verify(root: &Path, timeout_secs: u64) -> VerifyOutcome {
                 };
             }
         }
+    }
+}
+
+/// `crates/<pkg>/...` → package name when that crate has a Cargo.toml.
+pub fn rust_workspace_package(root: &Path, edited: &Path) -> Option<String> {
+    let abs = if edited.is_absolute() {
+        edited.to_path_buf()
+    } else {
+        root.join(edited)
+    };
+    let rel = abs.strip_prefix(root).ok()?;
+    let mut comps = rel.components();
+    let first = comps.next()?;
+    if first.as_os_str() != "crates" {
+        return None;
+    }
+    let pkg = comps.next()?.as_os_str().to_str()?.to_string();
+    if pkg.is_empty() || pkg.contains('/') {
+        return None;
+    }
+    if root.join("crates").join(&pkg).join("Cargo.toml").is_file() {
+        Some(pkg)
+    } else {
+        None
     }
 }
 
@@ -1300,6 +1371,25 @@ mod tests {
             assert_eq!(o.exit_code, Some(0));
             assert!(o.status_line().contains("PASS"));
         }
+    }
+
+    #[test]
+    fn rust_workspace_package_from_path() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("crates/foo")).unwrap();
+        fs::write(
+            dir.path().join("crates/foo/Cargo.toml"),
+            "[package]\nname=\"foo\"\nversion=\"0.1.0\"\n",
+        )
+        .unwrap();
+        let edited = dir.path().join("crates/foo/src/lib.rs");
+        assert_eq!(
+            rust_workspace_package(dir.path(), &edited).as_deref(),
+            Some("foo")
+        );
+        assert!(rust_workspace_package(dir.path(), &dir.path().join("src/main.rs")).is_none());
+        assert!(is_post_edit_verify_tool("edit"));
+        assert!(!is_post_edit_verify_tool("read"));
     }
 
     #[test]

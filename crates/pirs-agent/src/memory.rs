@@ -100,6 +100,10 @@ pub struct MemoryHit {
 ///
 /// Scoring: keyword overlap with `query` + bonus when `active_paths` appear in
 /// the snippet/name (path binding). Pure helper — unit-tested on fixtures.
+///
+/// Empty query: still ranks by kind quality + recency so REPL/session start
+/// injects *something* useful instead of searching the token `"pref"` and
+/// getting nothing.
 pub fn rank_auto_recall(
     hits: &[MemoryHit],
     query: &str,
@@ -129,11 +133,17 @@ pub fn rank_auto_recall(
         })
         .collect();
 
+    let max_ts = hits.iter().map(|h| h.ts).max().unwrap_or(0);
+
     let mut scored: Vec<(i32, usize)> = hits
         .iter()
         .enumerate()
         .map(|(i, h)| {
             let blob = format!("{} {} {}", h.kind, h.name, h.snippet).to_ascii_lowercase();
+            // Skip thrash / autonomy denials — never auto-inject those.
+            if blob.contains("tool call blocked") || blob.contains("blocked by autonomy") {
+                return (i32::MIN / 4, i);
+            }
             let mut score = 0i32;
             for t in &q_tokens {
                 if blob.contains(t) {
@@ -145,19 +155,32 @@ pub fn rank_auto_recall(
                     score += 10;
                 }
             }
-            // Prefer prefs/gotchas over raw tool dumps when scores tie.
+            // Prefer prefs/gotchas over raw tool dumps.
             score += match h.kind.as_str() {
-                "pref" | "gotcha" | "decision" => 2,
-                "user" => 1,
+                "pref" | "gotcha" | "decision" => 8,
+                "user" => 4,
+                "assistant" => 2,
+                "tool_result" => -3,
                 _ => 0,
             };
+            // Mild recency bias so empty-query pools surface latest work.
+            if max_ts > 0 && h.ts + 86_400 >= max_ts {
+                score += 1;
+            }
             (score, i)
         })
         .collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
     scored
         .into_iter()
-        .filter(|(s, _)| *s > 0 || q_tokens.is_empty())
+        // Empty query: keep any non-trash score (including 0 from neutral kinds).
+        // With a query: require positive score so unrelated dumps stay out.
+        .filter(|(s, _)| {
+            if *s <= i32::MIN / 8 {
+                return false;
+            }
+            *s > 0 || q_tokens.is_empty()
+        })
         .take(limit)
         .map(|(_, i)| hits[i].clone())
         .collect()
@@ -329,35 +352,92 @@ impl MemoryStore {
         self.search_scoped(query, limit, false)
     }
 
+    /// Recent rows without FTS (REPL / empty prompt). Newest first.
+    pub fn recent_hits(&self, limit: usize, all_sessions: bool) -> Vec<MemoryHit> {
+        if limit == 0 {
+            return Vec::new();
+        }
+        let session = self.session.lock().unwrap().clone();
+        let scoped = !all_sessions && !session.is_empty();
+        let conn = self.conn.lock().unwrap();
+        let sql = if scoped {
+            "SELECT kind, name, text, ts FROM mem WHERE session = ?2 \
+             ORDER BY ts DESC, rowid DESC LIMIT ?1"
+        } else {
+            "SELECT kind, name, text, ts FROM mem ORDER BY ts DESC, rowid DESC LIMIT ?1"
+        };
+        let mut stmt = match conn.prepare(sql) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let map = |r: &rusqlite::Row| {
+            Ok(MemoryHit {
+                kind: r.get(0)?,
+                name: r.get(1)?,
+                snippet: r.get(2)?,
+                ts: r.get(3)?,
+            })
+        };
+        let rows = if scoped {
+            stmt.query_map(rusqlite::params![limit as i64, session], map)
+        } else {
+            stmt.query_map(rusqlite::params![limit as i64], map)
+        };
+        match rows {
+            Ok(rows) => rows.flatten().collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
     /// Auto-recall for session prefix: rank lexical hits (and optional path
     /// binding) and format a small top-k block — no mandatory `recall` tool call.
     ///
     /// Uses cross-session search so prefs/gotchas from prior work in this repo
     /// inject on a fresh coding session (session-scoped tool `recall` remains
-    /// available for in-turn queries).
+    /// available for in-turn queries). Empty query uses recent rows so REPL
+    /// startup still injects when the DB has content.
     pub fn auto_recall_section(
         &self,
         query: &str,
         active_paths: &[String],
         limit: usize,
     ) -> String {
-        let pool_limit = limit.saturating_mul(4).max(limit);
-        let hits = if query.trim().is_empty() {
-            // No query: soft token from active paths or common memory kinds.
-            let q = active_paths
-                .first()
-                .map(|p| {
-                    Path::new(p)
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("pref")
-                        .to_string()
-                })
-                .unwrap_or_else(|| "pref".into());
-            self.search_all(&q, pool_limit)
+        let pool_limit = limit.saturating_mul(6).max(limit.max(8));
+        let mut hits = if query.trim().is_empty() {
+            // Prefer recent durable kinds; fall back to any recent row.
+            let mut v = self.recent_hits(pool_limit, true);
+            if v.is_empty() {
+                // Soft FTS only as last resort (path stem / pref).
+                let q = active_paths
+                    .first()
+                    .map(|p| {
+                        Path::new(p)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("pref")
+                            .to_string()
+                    })
+                    .unwrap_or_else(|| "pref".into());
+                v = self.search_all(&q, pool_limit);
+            }
+            v
         } else {
-            self.search_all(query, pool_limit)
+            let mut v = self.search_all(query, pool_limit);
+            // If FTS misses (common with short prompts), blend in recent rows.
+            if v.len() < limit {
+                let recent = self.recent_hits(pool_limit, true);
+                for h in recent {
+                    if !v.iter().any(|x| {
+                        x.kind == h.kind && x.name == h.name && x.snippet == h.snippet
+                    }) {
+                        v.push(h);
+                    }
+                }
+            }
+            v
         };
+        // Cap pool size before rank.
+        hits.truncate(pool_limit);
         let ranked = rank_auto_recall(&hits, query, active_paths, limit);
         format_auto_recall_section(&ranked)
     }
@@ -829,6 +909,29 @@ mod tests {
         assert!(!hits.is_empty());
         let ranked = rank_auto_recall(&hits, "filelock", &[], 2);
         assert!(!ranked.is_empty());
+    }
+
+    #[test]
+    fn auto_recall_empty_query_uses_recent_rows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = MemoryStore::open(&tmp.path().join("m.db")).unwrap();
+        store.add("tool_result", "bash", "Tool call blocked: tool `bash` blocked by autonomy");
+        store.add(
+            "tool_result",
+            "code_search",
+            "Top hits for backends flag parsing in crates/pirs",
+        );
+        // REPL-style empty prompt must still inject something non-empty.
+        let section = store.auto_recall_section("", &[], 3);
+        assert!(
+            section.contains("<session_memory>"),
+            "empty-query auto-recall should use recent hits: {section:?}"
+        );
+        // Blocked thrash must not win the rank.
+        assert!(
+            !section.contains("Tool call blocked"),
+            "blocked thrash leaked into auto-recall: {section}"
+        );
     }
 
     // ── Embeddings / MMR / consolidation ─────────────────────────────────

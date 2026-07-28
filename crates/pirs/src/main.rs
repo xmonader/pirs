@@ -40,8 +40,8 @@ mod weak_compose;
 
 use cli::Cli;
 use gates::{
-    chain_gate_with_extensions, install_gate_if_absent, install_profile_under_yolo_if_needed,
-    summarize_args,
+    chain_gate_with_extensions, install_gate_if_absent, install_post_edit_verify_hook,
+    install_profile_under_yolo_if_needed, summarize_args,
 };
 use login::parse_login_request;
 use printer::Printer;
@@ -275,7 +275,17 @@ async fn main() -> anyhow::Result<()> {
     // user to remember every flag. Pure rules live in weak_compose (unit-tested).
     if cli.weak {
         let detected = if cli.verify.is_none() && !cli.prompt.is_empty() {
-            pirs_tools::run_tests::detect_verify_command(&cwd)
+            // Prefer typecheck (cargo check) over full test suite for weak gates.
+            let profile = pirs_tools::detect_profile(&cwd);
+            pirs_tools::preferred_verify_action(&profile)
+                .map(|(action, cmd)| {
+                    let eco = profile
+                        .toolchain
+                        .clone()
+                        .unwrap_or_else(|| action.to_string());
+                    (eco, cmd)
+                })
+                .or_else(|| pirs_tools::run_tests::detect_verify_command(&cwd))
         } else {
             None
         };
@@ -1096,6 +1106,11 @@ async fn main() -> anyhow::Result<()> {
     install_gate_if_absent(&mut hooks, &gate_hook, &cli.approval);
     // yolo + --agent-profile plan (etc.) with no extensions: still enforce denials.
     install_profile_under_yolo_if_needed(&mut hooks, &gate_hook, &cli.approval, safety);
+
+    // Always-on post-edit verify: after successful file mutations, run the
+    // auto-detected typecheck/lint/test and append a structured note so the
+    // model does not invent shell commands. Opt out: PIRS_POST_EDIT_VERIFY=0.
+    install_post_edit_verify_hook(&mut hooks, &cwd);
 
     // Subagents must inherit profile/approval even when --no-extensions left
     // policy_slot empty (previously only filled inside the extensions branch).
