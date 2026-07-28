@@ -194,6 +194,77 @@ pub fn register_core_host_apis() {
             .map(|m| format!("{}|{}|{}", m.id, m.kind, m.label))
             .collect()
     });
+    // Deterministic review plan + reviewer context for review-gate and packs.
+    // Arg: "" | "cwd" | "cwd|from|to". Returns [json_report, reviewer_context] or [error:…].
+    register_query_fn("review_report", |arg| pirs_tools::host_review_report(arg));
+}
+
+#[cfg(test)]
+mod review_host_tests {
+    use super::*;
+
+    #[test]
+    fn review_report_host_fn_is_registered() {
+        register_core_host_apis();
+        let names: Vec<String> = QUERY_FNS
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "review_report"),
+            "review_report missing from host APIs: {names:?}"
+        );
+    }
+
+    #[test]
+    fn review_report_query_returns_json_on_temp_repo() {
+        register_core_host_apis();
+        let dir = tempfile::tempdir().unwrap();
+        let run = |args: &[&str]| {
+            assert!(std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .status()
+                .unwrap()
+                .success());
+        };
+        run(&["init"]);
+        run(&["config", "user.email", "t@e.com"]);
+        run(&["config", "user.name", "t"]);
+        std::fs::write(dir.path().join("a.rs"), "fn a(){}\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-m", "i"]);
+        std::fs::write(dir.path().join("a.rs"), "fn a(){ x.unwrap(); }\n").unwrap();
+
+        let f = QUERY_FNS
+            .read()
+            .unwrap()
+            .iter()
+            .find(|(n, _)| n == "review_report")
+            .map(|(_, f)| f.clone())
+            .expect("review_report registered");
+        let lines = f(&dir.path().display().to_string());
+        assert!(!lines.is_empty());
+        assert!(
+            !lines[0].starts_with("error:"),
+            "unexpected error: {:?}",
+            lines[0]
+        );
+        let v: serde_json::Value = serde_json::from_str(&lines[0]).unwrap();
+        assert!(v.get("tool_diet").is_some());
+        assert_eq!(
+            v["tool_diet"]["mutation_allowed"],
+            serde_json::Value::Bool(false)
+        );
+        assert!(lines.len() >= 2);
+        assert!(
+            lines[1].contains("DENIED") || lines[1].contains("denied") || lines[1].contains("write"),
+            "context missing diet: {}",
+            lines[1]
+        );
+    }
 }
 
 /// Parse `label` or `label|/abs/cwd` for checkpoint host APIs.

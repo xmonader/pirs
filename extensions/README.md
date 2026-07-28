@@ -76,7 +76,9 @@ collisions.
 
 Host APIs (after `register_core_host_apis()`): `project_profile(cwd)`,
 `project_packages(cwd)`, `skills_index(_)`, `agent_profile(_)` (active
-`PIRS_AGENT_PROFILE` name).
+`PIRS_AGENT_PROFILE` name), `checkpoint_create` / `checkpoint_restore` /
+`checkpoint_list`, `review_report` (deterministic review plan + context for
+`review-gate.rhai` / `pirs review`).
 
 ## Composition hazards (last-wins / pin channels)
 
