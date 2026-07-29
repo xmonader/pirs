@@ -409,6 +409,7 @@ pub fn run_selftest(
                         recorder: recorder.cloned(),
                         steering: None,
                         hide_targets: false,
+                        opaque_verdicts: false,
                     },
                 )?);
             }

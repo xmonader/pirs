@@ -100,6 +100,9 @@ pub struct AgentConfig {
     /// The harness still uses `targets` / `keep_green` for reproduce + verify
     /// (honest grading). Fair SWE-bench style: issue + repo only for the agent.
     pub hide_targets: bool,
+    /// When true, prior-attempt verdict feedback omits concrete test ids
+    /// (opaque "still failing" / "regression" messages). Used with shadow verify.
+    pub opaque_verdicts: bool,
 }
 
 /// The agent-backed executor and a [`PhaseDriver`]: it holds the assembled tools,
@@ -135,6 +138,8 @@ pub struct AgentExecutor {
     targets: Vec<String>,
     /// When true, agent prompts omit target ids (harness still verifies them).
     hide_targets: bool,
+    /// Opaque multi-attempt feedback (no test id leakage).
+    opaque_verdicts: bool,
     /// Test files (derived from targets + keep_green) restored to base after each
     /// attempt so a fix can never pass by editing the tests.
     protected: Vec<String>,
@@ -218,6 +223,7 @@ impl AgentExecutor {
             issue,
             targets,
             hide_targets: config.hide_targets,
+            opaque_verdicts: config.opaque_verdicts,
             protected,
             usage: UsageByModel::default(),
             stats: Arc::new(Mutex::new(SessionStats::default())),
@@ -243,6 +249,37 @@ impl AgentExecutor {
             Vec::new()
         } else {
             self.targets.clone()
+        }
+    }
+
+    /// Format a prior verdict for the agent prompt. Opaque mode never names tests.
+    fn format_verdict_for_agent(&self, v: &pirs_bench::Verdict) -> String {
+        if !self.opaque_verdicts {
+            return format!("{v:?}");
+        }
+        use pirs_bench::Verdict;
+        match v {
+            Verdict::Done => "verification passed — required tests are green".into(),
+            Verdict::NotYet(_) => {
+                "previous attempt incomplete: some required tests still fail \
+                 (test names withheld — re-diagnose from the issue and repository)"
+                    .into()
+            }
+            Verdict::Regressed(_) => {
+                "previous attempt regressed something that must stay green \
+                 (test names withheld)"
+                    .into()
+            }
+            Verdict::TargetNotCollected(_) => {
+                "previous attempt: harness could not collect a required test \
+                 (test names withheld)"
+                    .into()
+            }
+            Verdict::Flaky(_) => {
+                "previous attempt looked fixed once but did not reconfirm \
+                 (test names withheld)"
+                    .into()
+            }
         }
     }
 
@@ -453,7 +490,12 @@ impl AgentExecutor {
         const PHASE_ID: &str = "naive";
 
         let verdict_note = last
-            .map(|v| format!("Your previous attempt did not pass verification: {v:?}\n\n"))
+            .map(|v| {
+                format!(
+                    "Your previous attempt did not pass verification: {}\n\n",
+                    self.format_verdict_for_agent(v)
+                )
+            })
             .unwrap_or_default();
         let prompt = format!(
             "{verdict_note}Fix the following issue in this repository.\n\n## Issue\n{}\n\n## Tests that must pass after your fix\n{}\n",
@@ -633,7 +675,7 @@ impl Executor for AgentExecutor {
             let task = strategy::Task {
                 issue: self.issue.clone(),
                 targets: self.agent_targets_list(),
-                verdict: last.map(|v| format!("{v:?}")),
+                verdict: last.map(|v| self.format_verdict_for_agent(v)),
             };
             strategy::run_strategy(&strategy, self, &task)?;
         }
@@ -679,6 +721,7 @@ mod tests {
                 recorder: None,
                 steering: None,
                 hide_targets: false,
+                opaque_verdicts: false,
             },
         )
         .unwrap()
@@ -701,6 +744,7 @@ mod tests {
                 recorder: None,
                 steering: None,
                 hide_targets: false,
+                opaque_verdicts: false,
             },
         )
         .unwrap()
@@ -724,6 +768,7 @@ mod tests {
                 recorder: None,
                 steering: None,
                 hide_targets: false,
+                opaque_verdicts: false,
             },
         )
         .unwrap();

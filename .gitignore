@@ -39,3 +39,5 @@ __pycache__/
 !qa/bench-swebench-5x5/results_deepseek_v4_flash_fair_fifty/*.log
 !qa/bench-swebench-5x5/results_deepseek_v4_flash_strict_fifty/
 !qa/bench-swebench-5x5/results_deepseek_v4_flash_strict_fifty/*.log
+!qa/bench-swebench-5x5/results_deepseek_v4_flash_strict_verify_fifty/
+!qa/bench-swebench-5x5/results_deepseek_v4_flash_strict_verify_fifty/*.log

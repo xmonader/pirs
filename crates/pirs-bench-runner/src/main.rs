@@ -22,7 +22,7 @@ use pirs_agent::profile::{Profile, ToolPolicy};
 use pirs_agent::trace::Recorder;
 use pirs_bench::{
     check_model_patch, is_git_repo, run_instance, Attribution, BaselineCache, DetectorHost,
-    Executor, GitWorkspace, Instance, InstanceReport, TestRunner,
+    Executor, FailBucket, GitWorkspace, Instance, InstanceReport, Outcome, TestRunner, Verdict,
 };
 use pirs_bench_runner::agent_runner::AgentDiscoveredRunner;
 use pirs_bench_runner::{build_provider, selftest, AgentConfig, AgentExecutor, Provider, Strategy};
@@ -266,6 +266,13 @@ struct SolveArgs {
     /// `test_patch` applied so FAIL_TO_PASS can fail at baseline.
     #[arg(long = "check-patch")]
     check_patch: Option<PathBuf>,
+    /// Shadow-verify mode: agent works on the **base** tree (never sees this
+    /// patch). After each agent attempt, harness grades in a detached git
+    /// worktree: apply this test_patch + agent diff, run baseline/verify, and
+    /// feed an **opaque** multi-attempt verdict back (no test ids). Isolates
+    /// test-visibility while keeping the verify stack (`PIRS_STRICT_VERIFY`).
+    #[arg(long = "shadow-test-patch")]
+    shadow_test_patch: Option<PathBuf>,
     #[command(flatten)]
     common: Common,
 }
@@ -408,6 +415,7 @@ fn solve_one(
             recorder: ctx.recorder.clone(),
             steering: None,
             hide_targets: ctx.common.hide_targets,
+            opaque_verdicts: false,
         },
     )
     .context("build agent executor")?;
@@ -489,6 +497,230 @@ fn solve_one(
     Ok(report)
 }
 
+/// Map a harness [`Outcome`] to a prior [`Verdict`] for multi-attempt feedback.
+/// Concrete test ids are never embedded — AgentConfig.opaque_verdicts redacts them.
+fn outcome_to_feedback_verdict(o: &Outcome) -> Verdict {
+    match o {
+        Outcome::Solved | Outcome::AcceptedScopedOnly => Verdict::Done,
+        Outcome::Failed(FailBucket::Regressed) => Verdict::Regressed("hidden".into()),
+        Outcome::Failed(FailBucket::Flaky) => Verdict::Flaky("hidden".into()),
+        Outcome::Failed(FailBucket::ReproFailed) => {
+            Verdict::NotYet("required tests not red at baseline".into())
+        }
+        Outcome::Failed(_) => Verdict::NotYet("required tests still failing".into()),
+    }
+}
+
+/// Agent on base tree; after each attempt grade in a detached worktree with
+/// `test_patch` applied (never visible in the agent's workspace).
+fn run_shadow_verify_solve(a: SolveArgs) -> anyhow::Result<bool> {
+    let shadow_path = a
+        .shadow_test_patch
+        .as_ref()
+        .expect("shadow path checked by caller");
+    if a.targets.is_empty() {
+        bail!("--shadow-test-patch requires at least one --target for grading");
+    }
+    let test_patch = std::fs::read_to_string(shadow_path)
+        .with_context(|| format!("read shadow test patch {shadow_path:?}"))?;
+
+    let strategy = a.common.strategy()?;
+    eprintln!("strategy: {}", strategy.name);
+    eprintln!(
+        "mode: shadow-verify (agent on base; test_patch only in worktree; opaque verdicts)"
+    );
+    let (provider, key) = a.common.resolve_provider()?;
+    let issue = match (a.issue, a.issue_file) {
+        (Some(s), _) => s,
+        (None, Some(f)) => std::fs::read_to_string(&f).with_context(|| format!("read {f:?}"))?,
+        (None, None) => bail!("provide --issue or --issue-file"),
+    };
+    let repo = a
+        .repo
+        .canonicalize()
+        .with_context(|| format!("repo path {:?}", a.repo))?;
+    if !is_git_repo(&repo) {
+        bail!("shadow-verify requires a git repo at {repo:?}");
+    }
+    let ws = GitWorkspace::new(repo.clone());
+    let base_sha = match a.base_sha {
+        Some(s) => s,
+        None => ws.head_sha().context("resolve base sha")?,
+    };
+
+    let host = DetectorHost::with_bundled().context("load detectors")?;
+    let mut executor = AgentExecutor::new(
+        repo.clone(),
+        issue,
+        a.targets.clone(),
+        a.keep_green.clone(),
+        AgentConfig {
+            model: a.common.model.clone(),
+            api_key: key,
+            max_turns_per_attempt: a.common.max_turns,
+            provider: build_provider(&provider),
+            strategy,
+            naive: a.common.no_strategy,
+            tool_policy: a.common.tool_policy()?,
+            recorder: a.common.make_recorder()?,
+            steering: None,
+            hide_targets: true,
+            opaque_verdicts: true,
+        },
+    )
+    .context("build agent executor")?;
+
+    let mut last: Option<Verdict> = None;
+    let mut best_patch = String::new();
+    let mut accepted = false;
+
+    for attempt in 1..=a.common.max_attempts {
+        eprintln!("shadow-verify attempt {attempt}/{}", a.common.max_attempts);
+        if !executor.attempt(attempt, last.as_ref())? {
+            eprintln!("agent produced no further edits; stopping");
+            break;
+        }
+        let model_patch = ws.diff().unwrap_or_default();
+        if model_patch.trim().is_empty() {
+            eprintln!("empty patch after attempt {attempt}");
+            last = Some(Verdict::NotYet("no source changes".into()));
+            continue;
+        }
+        best_patch = model_patch.clone();
+
+        // Detached worktree at base: apply test_patch, then grade model patch.
+        let shadow_dir = std::env::temp_dir().join(format!(
+            "pirs-shadow-{}-{}",
+            std::process::id(),
+            attempt
+        ));
+        let _ = std::fs::remove_dir_all(&shadow_dir);
+        let add = std::process::Command::new("git")
+            .args([
+                "worktree",
+                "add",
+                "--detach",
+                shadow_dir.to_str().unwrap(),
+                &base_sha,
+            ])
+            .current_dir(&repo)
+            .output()
+            .context("git worktree add")?;
+        if !add.status.success() {
+            bail!(
+                "git worktree add failed: {}",
+                String::from_utf8_lossy(&add.stderr)
+            );
+        }
+
+        // Apply official test_patch in the shadow only.
+        let mut child = std::process::Command::new("git")
+            .args(["apply", "--whitespace=nowarn", "-"])
+            .current_dir(&shadow_dir)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .context("spawn git apply test_patch")?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(test_patch.as_bytes())?;
+        }
+        let out = child.wait_with_output().context("git apply test_patch")?;
+        if !out.status.success() {
+            eprintln!(
+                "shadow: test_patch apply failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let _ = std::process::Command::new("git")
+                .args(["worktree", "remove", "--force", shadow_dir.to_str().unwrap()])
+                .current_dir(&repo)
+                .status();
+            last = Some(Verdict::NotYet("harness could not apply hidden tests".into()));
+            continue;
+        }
+        // Commit so HEAD is the test_patch tree (baseline for red→green).
+        let sd = shadow_dir.to_str().unwrap();
+        let _ = std::process::Command::new("git")
+            .args(["-C", sd, "config", "user.email", "b@b.com"])
+            .status();
+        let _ = std::process::Command::new("git")
+            .args(["-C", sd, "config", "user.name", "bench"])
+            .status();
+        let _ = std::process::Command::new("git")
+            .args(["-C", sd, "add", "-A"])
+            .status();
+        let commit = std::process::Command::new("git")
+            .args(["-C", sd, "commit", "-m", "shadow: apply test_patch"])
+            .output()
+            .context("commit test_patch in shadow")?;
+        if !commit.status.success() {
+            eprintln!(
+                "shadow: commit test_patch failed: {}",
+                String::from_utf8_lossy(&commit.stderr)
+            );
+        }
+
+        let inst = Instance {
+            repo_root: shadow_dir.clone(),
+            targets: a.targets.clone(),
+            keep_green: a.keep_green.clone(),
+            base_sha: None, // fresh baseline on test_patch tree
+        };
+        let report = check_model_patch(&inst, &host, &model_patch)?;
+        eprintln!(
+            "shadow attempt {attempt}: outcome={:?} timing={}",
+            report.outcome,
+            report.timings.report().lines().next().unwrap_or("")
+        );
+
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force", shadow_dir.to_str().unwrap()])
+            .current_dir(&repo)
+            .status();
+        let _ = std::fs::remove_dir_all(&shadow_dir);
+
+        if report.outcome.is_accepted() {
+            accepted = true;
+            break;
+        }
+        last = Some(outcome_to_feedback_verdict(&report.outcome));
+    }
+
+    let stats = executor.session_stats();
+    eprintln!("session: {}", stats.summary());
+    eprintln!("{}", executor.session_usage().report());
+
+    // Leave agent tree clean; deliverable is the base-relative patch.
+    let _ = ws.reset();
+    if accepted && !best_patch.trim().is_empty() {
+        match &a.out {
+            Some(path) => {
+                std::fs::write(path, &best_patch)
+                    .with_context(|| format!("write patch to {path:?}"))?;
+                eprintln!("patch written to {path:?} ({} bytes)", best_patch.len());
+            }
+            None => println!("{best_patch}"),
+        }
+        eprintln!("outcome: Solved (shadow-verify)");
+        Ok(true)
+    } else if !best_patch.trim().is_empty() {
+        // Still emit best effort patch for analysis.
+        if let Some(path) = &a.out {
+            let _ = std::fs::write(path, &best_patch);
+            eprintln!(
+                "patch written (ungraded/failed) to {path:?} ({} bytes)",
+                best_patch.len()
+            );
+        }
+        eprintln!("outcome: Failed(shadow-verify)");
+        Ok(false)
+    } else {
+        eprintln!("outcome: Failed(no patch)");
+        Ok(false)
+    }
+}
+
 fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
     // --- Phase 2 of strict mode: grade an existing model patch (no agent) ---
     if let Some(patch_path) = &a.check_patch {
@@ -512,6 +744,14 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
         eprintln!("outcome: {:?}", report.outcome);
         eprintln!("{}", report.timings.report());
         return Ok(report.outcome.is_accepted());
+    }
+
+    // --- Shadow-verify: blind tests + full multi-attempt gate in a worktree ---
+    if a.shadow_test_patch.is_some() {
+        if a.common.agent_only {
+            bail!("--shadow-test-patch conflicts with --agent-only");
+        }
+        return run_shadow_verify_solve(a);
     }
 
     let strategy = a.common.strategy()?;
@@ -551,6 +791,7 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
                 steering: None,
                 // Strict issue-only: never spoon-feed targets even if passed.
                 hide_targets: true,
+                opaque_verdicts: false,
             },
         )
         .context("build agent executor")?;

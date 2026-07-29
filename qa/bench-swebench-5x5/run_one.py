@@ -95,7 +95,8 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
                   strategy: str | None = None,
                   raw_test_ids: bool | None = None,
                   hide_targets: bool | None = None,
-                  strict: bool | None = None):
+                  strict: bool | None = None,
+                  strict_verify: bool | None = None):
     """Run one instance.
 
     raw_test_ids: if True (or env PIRS_RAW_TEST_IDS=1), pass FAIL_TO_PASS /
@@ -110,9 +111,18 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
       1) agent runs on base commit with NO test_patch and --agent-only/--hide-targets
       2) then test_patch is applied and the model patch is graded with --check-patch
     Implies hide_targets; disables raw_test_ids spoon-feeding of any kind.
+
+    strict_verify: if True (or env PIRS_STRICT_VERIFY=1), agent on base with no
+      test_patch in workspace, but multi-attempt baseline/verify runs in a
+      shadow worktree with test_patch (--shadow-test-patch). Opaque verdicts.
+      Preferred over plain strict when both are set.
     """
     if strict is None:
         strict = os.environ.get("PIRS_STRICT", "").strip().lower() in (
+            "1", "true", "yes", "on",
+        )
+    if strict_verify is None:
+        strict_verify = os.environ.get("PIRS_STRICT_VERIFY", "").strip().lower() in (
             "1", "true", "yes", "on",
         )
     if raw_test_ids is None:
@@ -125,6 +135,10 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             or os.environ.get("PIRS_HIDE_TARGETS", "").strip().lower()
             in ("1", "true", "yes", "on")
         )
+    if strict_verify:
+        strict = False  # shadow-verify replaces agent-only strict
+        hide_targets = True
+        raw_test_ids = False
     if strict:
         hide_targets = True
         raw_test_ids = False
@@ -144,8 +158,9 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
         "strategy": strategy,
         "raw_test_ids": raw_test_ids,
         "hide_targets": hide_targets,
-        "fair": hide_targets and not strict,
+        "fair": hide_targets and not strict and not strict_verify,
         "strict": strict,
+        "strict_verify": strict_verify,
     }
 
     log = open(log_path, "w")
@@ -339,7 +354,62 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
 
         start = time.time()
 
-        if strict:
+        if strict_verify:
+            # ── STRICT+VERIFY: blind tests, shadow worktree multi-attempt gate ─
+            logline(
+                "strict_verify=1: agent on base (NO test_patch in workspace); "
+                "after each attempt grade in worktree via --shadow-test-patch "
+                "(opaque verdicts, full baseline/verify stack)"
+            )
+            cmd = [
+                "pirs-bench", "solve", "/testbed",
+                "--shadow-test-patch=/tmp/test.patch",
+                "--hide-targets",
+                "--issue-file=/tmp/issue.md",
+                f"--base-sha={base_sha}",
+                f"--provider={provider}",
+                f"--model={model}",
+                f"--max-turns={max_turns}",
+                "--out=/tmp/out.patch",
+            ]
+            for t in targets:
+                cmd.append(f"--target={t}")
+            for k in keep_green:
+                cmd.append(f"--keep-green={k}")
+            if provider == "openai-compat":
+                if not base_url:
+                    raise ValueError("base_url is required when provider='openai-compat'")
+                cmd.append(f"--base-url={base_url}")
+            if plan_model:
+                cmd.append(f"--plan-model={plan_model}")
+            if no_strategy:
+                cmd += ["--no-strategy"]
+            elif strategy_script:
+                cmd.append("--strategy-script=/tmp/strategy.rhai")
+            elif strategy:
+                cmd.append(f"--strategy={strategy}")
+            logline("shadow_cmd: " + " ".join(cmd))
+            proc = docker_exec(cmd)
+            elapsed = time.time() - start
+            logline(proc.stdout)
+            logline(proc.stderr)
+            logline(f"exit_code={proc.returncode} elapsed_s={elapsed:.1f}")
+            result["exit_code"] = proc.returncode
+            result["elapsed_s"] = round(elapsed, 1)
+            result["solved"] = proc.returncode == 0
+            result["stderr_tail"] = "\n".join(proc.stderr.splitlines()[-100:])
+            tokens = parse_token_stats(proc.stderr)
+            if tokens:
+                result["tokens"] = tokens
+            cp = subprocess.run(
+                ["docker", "cp", f"{cname}:/tmp/out.patch", str(patch_out)],
+                capture_output=True, text=True,
+            )
+            result["patch_copied"] = cp.returncode == 0 and patch_out.exists()
+            if result["patch_copied"] and patch_out.exists():
+                result["patch_bytes"] = patch_out.stat().st_size
+
+        elif strict:
             # ── STRICT: agent never sees test_patch ──────────────────────────
             # Phase 1: issue-only agent on base commit → model patch
             logline(
