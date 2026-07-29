@@ -504,15 +504,108 @@ fn outcome_to_feedback_verdict(o: &Outcome) -> Verdict {
         Outcome::Solved | Outcome::AcceptedScopedOnly => Verdict::Done,
         Outcome::Failed(FailBucket::Regressed) => Verdict::Regressed("hidden".into()),
         Outcome::Failed(FailBucket::Flaky) => Verdict::Flaky("hidden".into()),
-        Outcome::Failed(FailBucket::ReproFailed) => {
-            Verdict::NotYet("required tests not red at baseline".into())
+        // Harness/env noise — not "your fix is wrong". Opaque so the agent
+        // re-diagnoses rather than thrashing on a false "still red".
+        Outcome::Failed(FailBucket::ReproFailed)
+        | Outcome::Failed(FailBucket::BaselineUnusable)
+        | Outcome::Failed(FailBucket::RunnerUndetected)
+        | Outcome::Failed(FailBucket::EnvSetup) => {
+            Verdict::NotYet("harness could not grade this attempt; re-check your source fix".into())
         }
         Outcome::Failed(_) => Verdict::NotYet("required tests still failing".into()),
     }
 }
 
-/// Agent on base tree; after each attempt grade in a detached worktree with
-/// `test_patch` applied (never visible in the agent's workspace).
+/// `git apply --whitespace=nowarn -` with `patch` on stdin in `dir`.
+fn git_apply_stdin(dir: &std::path::Path, patch: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    let mut child = std::process::Command::new("git")
+        .args(["apply", "--whitespace=nowarn", "-"])
+        .current_dir(dir)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("spawn git apply")?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(patch.as_bytes())?;
+    }
+    let out = child.wait_with_output().context("git apply wait")?;
+    if !out.status.success() {
+        bail!(
+            "git apply failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
+/// Reset repo to `base_sha` (hard) and drop untracked files.
+fn git_reset_to(dir: &std::path::Path, base_sha: &str) -> anyhow::Result<()> {
+    let st = std::process::Command::new("git")
+        .args(["reset", "--hard", base_sha])
+        .current_dir(dir)
+        .output()
+        .context("git reset --hard")?;
+    if !st.status.success() {
+        bail!(
+            "git reset --hard failed: {}",
+            String::from_utf8_lossy(&st.stderr)
+        );
+    }
+    let st = std::process::Command::new("git")
+        .args(["clean", "-fdq"])
+        .current_dir(dir)
+        .output()
+        .context("git clean")?;
+    if !st.status.success() {
+        bail!(
+            "git clean failed: {}",
+            String::from_utf8_lossy(&st.stderr)
+        );
+    }
+    Ok(())
+}
+
+/// Apply + commit `test_patch` so HEAD is the red baseline tree.
+fn commit_test_patch(dir: &std::path::Path, test_patch: &str) -> anyhow::Result<()> {
+    git_apply_stdin(dir, test_patch).context("apply test_patch")?;
+    let _ = std::process::Command::new("git")
+        .args(["config", "user.email", "bench@pirs.local"])
+        .current_dir(dir)
+        .status();
+    let _ = std::process::Command::new("git")
+        .args(["config", "user.name", "pirs-bench"])
+        .current_dir(dir)
+        .status();
+    let _ = std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(dir)
+        .status();
+    let commit = std::process::Command::new("git")
+        .args(["commit", "-m", "shadow: apply test_patch"])
+        .current_dir(dir)
+        .output()
+        .context("commit test_patch")?;
+    if !commit.status.success() {
+        // Empty commit (already applied) is fine; real failures surface later.
+        let err = String::from_utf8_lossy(&commit.stderr);
+        if !err.contains("nothing to commit") && !err.contains("no changes added") {
+            eprintln!("shadow: commit test_patch warning: {err}");
+        }
+    }
+    Ok(())
+}
+
+/// Agent on base tree; after each attempt **grade on the same repo** with
+/// `test_patch` applied (never left in the tree for the next agent turn).
+///
+/// We deliberately do **not** use a detached worktree under `/tmp`: SWE-bench
+/// images install the package editable from `/testbed` (e.g. Django via
+/// `.pth`). Grading in a side worktree still imports `/testbed` source, so a
+/// partial agent fix on `/testbed` makes FAIL_TO_PASS look green at baseline
+/// → spurious `ReproFailed` in ~2s. Save model patch → reset → test_patch →
+/// grade → restore model patch for the next attempt instead.
 fn run_shadow_verify_solve(a: SolveArgs) -> anyhow::Result<bool> {
     let shadow_path = a
         .shadow_test_patch
@@ -527,7 +620,7 @@ fn run_shadow_verify_solve(a: SolveArgs) -> anyhow::Result<bool> {
     let strategy = a.common.strategy()?;
     eprintln!("strategy: {}", strategy.name);
     eprintln!(
-        "mode: shadow-verify (agent on base; test_patch only in worktree; opaque verdicts)"
+        "mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)"
     );
     let (provider, key) = a.common.resolve_provider()?;
     let issue = match (a.issue, a.issue_file) {
@@ -576,109 +669,54 @@ fn run_shadow_verify_solve(a: SolveArgs) -> anyhow::Result<bool> {
 
     for attempt in 1..=a.common.max_attempts {
         eprintln!("shadow-verify attempt {attempt}/{}", a.common.max_attempts);
+        // Ensure agent always sees base (no test_patch) before editing.
+        git_reset_to(&repo, &base_sha).context("reset to base before agent attempt")?;
+        if !best_patch.trim().is_empty() && attempt > 1 {
+            // Restore prior model patch so the agent iterates, not restarts cold.
+            if let Err(e) = git_apply_stdin(&repo, &best_patch) {
+                eprintln!("shadow: re-apply prior patch failed ({e}); agent continues from base");
+            }
+        }
+
         if !executor.attempt(attempt, last.as_ref())? {
-            eprintln!("agent produced no further edits; stopping");
-            break;
-        }
-        let model_patch = ws.diff().unwrap_or_default();
-        if model_patch.trim().is_empty() {
-            eprintln!("empty patch after attempt {attempt}");
-            last = Some(Verdict::NotYet("no source changes".into()));
-            continue;
-        }
-        best_patch = model_patch.clone();
-
-        // Detached worktree at base: apply test_patch, then grade model patch.
-        let shadow_dir = std::env::temp_dir().join(format!(
-            "pirs-shadow-{}-{}",
-            std::process::id(),
-            attempt
-        ));
-        let _ = std::fs::remove_dir_all(&shadow_dir);
-        let add = std::process::Command::new("git")
-            .args([
-                "worktree",
-                "add",
-                "--detach",
-                shadow_dir.to_str().unwrap(),
-                &base_sha,
-            ])
-            .current_dir(&repo)
-            .output()
-            .context("git worktree add")?;
-        if !add.status.success() {
-            bail!(
-                "git worktree add failed: {}",
-                String::from_utf8_lossy(&add.stderr)
-            );
+            // No new edits this turn — still allow grade of best_patch if any.
+            if best_patch.trim().is_empty() {
+                eprintln!("agent produced no further edits; stopping");
+                break;
+            }
+            eprintln!("agent produced no further edits; re-grading best patch");
+        } else {
+            let model_patch = ws.diff().unwrap_or_default();
+            if model_patch.trim().is_empty() {
+                eprintln!("empty patch after attempt {attempt}");
+                last = Some(Verdict::NotYet("no source changes".into()));
+                continue;
+            }
+            best_patch = model_patch;
         }
 
-        // Apply official test_patch in the shadow only.
-        let mut child = std::process::Command::new("git")
-            .args(["apply", "--whitespace=nowarn", "-"])
-            .current_dir(&shadow_dir)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .context("spawn git apply test_patch")?;
-        if let Some(mut stdin) = child.stdin.take() {
-            use std::io::Write;
-            stdin.write_all(test_patch.as_bytes())?;
-        }
-        let out = child.wait_with_output().context("git apply test_patch")?;
-        if !out.status.success() {
-            eprintln!(
-                "shadow: test_patch apply failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-            let _ = std::process::Command::new("git")
-                .args(["worktree", "remove", "--force", shadow_dir.to_str().unwrap()])
-                .current_dir(&repo)
-                .status();
-            last = Some(Verdict::NotYet("harness could not apply hidden tests".into()));
+        // Grade on the real package root: base → test_patch → model_patch.
+        git_reset_to(&repo, &base_sha).context("reset before shadow grade")?;
+        if let Err(e) = commit_test_patch(&repo, &test_patch) {
+            eprintln!("shadow: test_patch setup failed: {e:#}");
+            last = Some(Verdict::NotYet(
+                "harness could not apply hidden tests".into(),
+            ));
             continue;
-        }
-        // Commit so HEAD is the test_patch tree (baseline for red→green).
-        let sd = shadow_dir.to_str().unwrap();
-        let _ = std::process::Command::new("git")
-            .args(["-C", sd, "config", "user.email", "b@b.com"])
-            .status();
-        let _ = std::process::Command::new("git")
-            .args(["-C", sd, "config", "user.name", "bench"])
-            .status();
-        let _ = std::process::Command::new("git")
-            .args(["-C", sd, "add", "-A"])
-            .status();
-        let commit = std::process::Command::new("git")
-            .args(["-C", sd, "commit", "-m", "shadow: apply test_patch"])
-            .output()
-            .context("commit test_patch in shadow")?;
-        if !commit.status.success() {
-            eprintln!(
-                "shadow: commit test_patch failed: {}",
-                String::from_utf8_lossy(&commit.stderr)
-            );
         }
 
         let inst = Instance {
-            repo_root: shadow_dir.clone(),
+            repo_root: repo.clone(),
             targets: a.targets.clone(),
             keep_green: a.keep_green.clone(),
-            base_sha: None, // fresh baseline on test_patch tree
+            base_sha: None, // baseline is current HEAD (post test_patch)
         };
-        let report = check_model_patch(&inst, &host, &model_patch)?;
+        let report = check_model_patch(&inst, &host, &best_patch)?;
         eprintln!(
             "shadow attempt {attempt}: outcome={:?} timing={}",
             report.outcome,
             report.timings.report().lines().next().unwrap_or("")
         );
-
-        let _ = std::process::Command::new("git")
-            .args(["worktree", "remove", "--force", shadow_dir.to_str().unwrap()])
-            .current_dir(&repo)
-            .status();
-        let _ = std::fs::remove_dir_all(&shadow_dir);
 
         if report.outcome.is_accepted() {
             accepted = true;
@@ -692,7 +730,7 @@ fn run_shadow_verify_solve(a: SolveArgs) -> anyhow::Result<bool> {
     eprintln!("{}", executor.session_usage().report());
 
     // Leave agent tree clean; deliverable is the base-relative patch.
-    let _ = ws.reset();
+    let _ = git_reset_to(&repo, &base_sha);
     if accepted && !best_patch.trim().is_empty() {
         match &a.out {
             Some(path) => {
