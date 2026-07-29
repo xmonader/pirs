@@ -220,6 +220,10 @@ enum StrategyKind {
     PlanCriticExec,
     /// N read-only planners explore in parallel → merged plan → fresh executor.
     WidePlanExec,
+    /// soulrs dual-mode analogue: parallel spark explorers → ember code agent.
+    /// CLI aliases: `dual`, `soul-dual` (clap rename below).
+    #[value(alias = "dual", alias = "soul-dual", alias = "soulrs-dual")]
+    SparkEmber,
 }
 
 impl From<StrategyKind> for Strategy {
@@ -230,6 +234,7 @@ impl From<StrategyKind> for Strategy {
             StrategyKind::PlanExec => "plan-exec",
             StrategyKind::PlanCriticExec => "plan-critic-exec",
             StrategyKind::WidePlanExec => "wide-plan-exec",
+            StrategyKind::SparkEmber => "spark-ember",
         };
         pirs_rhai::builtins::builtin(name)
             .unwrap_or_else(|| panic!("built-in strategy {name:?} missing"))
