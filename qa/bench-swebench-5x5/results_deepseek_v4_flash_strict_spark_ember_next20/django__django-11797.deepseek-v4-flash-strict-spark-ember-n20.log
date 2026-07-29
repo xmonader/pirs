@@ -1,0 +1,29 @@
+=== django__django-11797 (deepseek-v4-flash) start 1785338155.6750247 ===
+87fe033a9f44c4399ac80ce59ec463c08e07b8df14229b5a0680c1b61b43ff68
+base_sha=3346b78a8a872286a245d1e77ef4718fc5e6be1a
+filtered non-test ids: targets 1->1 keep_green 38->36
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=3346b78a8a872286a245d1e77ef4718fc5e6be1a --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=spark-ember
+
+strategy: spark-ember
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=120 tools=129 [grep:59 read:49 bash:11 find:4 ls:4 code_map:1 edit_block:1]
+tokens by model:
+  deepseek-v4-flash: in=75285 cache_r=2737408 cache_w=0 out=32720 reasoning=20192 total=2845413 — $0.2479
+  TOTAL: in=75285 cache_r=2737408 cache_w=0 out=32720 reasoning=20192 total=2845413 — $0.2479
+patch written to "/tmp/out.patch" (825 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 3346b78a8a Fixed #30786 -- Used CONVERT_TZ to check if the time zone definitions are installed on MySQL.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_exact_query_rhs_with_selected_columns (lookup.tests.LookupTests) --keep-green=test_chain_date_time_lookups (lookup.tests.LookupTests) --keep-green=test_count (lookup.tests.LookupTests) --keep-green=test_custom_field_none_rhs (lookup.tests.LookupTests) --keep-green=test_error_messages (lookup.tests.LookupTests) --keep-green=test_escaping (lookup.tests.LookupTests) --keep-green=test_exact_exists (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one_offset (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_not_limited_to_one (lookup.tests.LookupTests) --keep-green=test_exclude (lookup.tests.LookupTests) --keep-green=test_exists (lookup.tests.LookupTests) --keep-green=test_get_next_previous_by (lookup.tests.LookupTests) --keep-green=test_in (lookup.tests.LookupTests) --keep-green=test_in_bulk (lookup.tests.LookupTests) --keep-green=test_in_bulk_lots_of_ids (lookup.tests.LookupTests) --keep-green=test_in_bulk_non_unique_field (lookup.tests.LookupTests) --keep-green=test_in_bulk_with_field (lookup.tests.LookupTests) --keep-green=test_in_different_database (lookup.tests.LookupTests) --keep-green=test_in_keeps_value_ordering (lookup.tests.LookupTests) --keep-green=test_iterator (lookup.tests.LookupTests) --keep-green=test_lookup_collision (lookup.tests.LookupTests) --keep-green=test_lookup_date_as_str (lookup.tests.LookupTests) --keep-green=test_lookup_int_as_str (lookup.tests.LookupTests) --keep-green=test_nested_outerref_lhs (lookup.tests.LookupTests) --keep-green=test_none (lookup.tests.LookupTests) --keep-green=test_nonfield_lookups (lookup.tests.LookupTests) --keep-green=test_pattern_lookups_with_substr (lookup.tests.LookupTests) --keep-green=test_regex (lookup.tests.LookupTests) --keep-green=test_regex_backreferencing (lookup.tests.LookupTests) --keep-green=test_regex_non_ascii (lookup.tests.LookupTests) --keep-green=test_regex_non_string (lookup.tests.LookupTests) --keep-green=test_regex_null (lookup.tests.LookupTests) --keep-green=test_relation_nested_lookup_error (lookup.tests.LookupTests) --keep-green=test_unsupported_lookups (lookup.tests.LookupTests) --keep-green=test_values (lookup.tests.LookupTests) --keep-green=test_values_list (lookup.tests.LookupTests)
+
+outcome: Solved
+timing (total 6.08s):
+  verify: 3.60s (59% n=2)
+  baseline: 2.36s (39%)
+  discover: 0.09s (1%)
+  bootstrap: 0.04s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

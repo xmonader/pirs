@@ -1,0 +1,28 @@
+=== astropy__astropy-6938 (deepseek-v4-flash) start 1785337004.6830459 ===
+039541ca9c25647a7a98a7379bf625b0b380220703d1191dd83f975857b5924c
+base_sha=c76af9ed6bb89bfba45b9f5bc1e635188278e2fa
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=c76af9ed6bb89bfba45b9f5bc1e635188278e2fa --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=spark-ember
+
+strategy: spark-ember
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=86 tools=99 [grep:34 read:25 bash:21 code_map:5 find:4 edit:3 git:2 project:2 python:1 web_fetch:1 web_search:1]
+tokens by model:
+  deepseek-v4-flash: in=51924 cache_r=1441664 cache_w=0 out=22051 reasoning=8441 total=1515639 — $0.1392
+  TOTAL: in=51924 cache_r=1441664 cache_w=0 out=22051 reasoning=8441 total=1515639 — $0.1392
+patch written to "/tmp/out.patch" (519 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at c76af9ed6b Merge pull request #6981 from mhvk/iers-b-for-3.0
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_ascii_table_data --target=astropy/io/fits/tests/test_table.py::TestTableFunctions::test_ascii_table --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_sample_file --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_image_create --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data_auto_rescale --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_uint16_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_groups_hdu_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_open_with_no_keywords --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_writeto_convenience --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_hdu_writeto --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_datasum_only --keep-green=astropy/io/fits/tests/test_table.py::test_regression_scalar_indexing
+
+outcome: Solved
+timing (total 29.14s):
+  discover: 13.31s (46%)
+  bootstrap: 9.88s (34%)
+  verify: 3.63s (12% n=2)
+  baseline: 2.33s (8%)
+  fix: 0.00s (0%)
+
+check_exit=0

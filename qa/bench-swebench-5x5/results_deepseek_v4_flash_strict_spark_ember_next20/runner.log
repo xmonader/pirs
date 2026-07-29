@@ -1,0 +1,82 @@
+START astropy__astropy-12907
+START astropy__astropy-14182
+START astropy__astropy-14365
+START astropy__astropy-12907
+START astropy__astropy-14182
+START astropy__astropy-14365
+DONE astropy__astropy-14365 solved=False t=388.1
+### WAVE 0/1 of 20
+START astropy__astropy-6938
+DONE astropy__astropy-12907 solved=True t=449.7
+### WAVE 1/2 of 20
+START astropy__astropy-7746
+DONE astropy__astropy-14182 solved=False t=486.1
+### WAVE 1/3 of 20
+START django__django-10914
+DONE django__django-10914 solved=False t=120.6
+### WAVE 1/4 of 20
+START django__django-10924
+DONE astropy__astropy-7746 solved=False t=186.8
+### WAVE 1/5 of 20
+START django__django-11019
+DONE astropy__astropy-6938 solved=True t=259.6
+### WAVE 2/6 of 20
+START django__django-11039
+DONE django__django-11039 solved=True t=91.9
+### WAVE 3/7 of 20
+START django__django-11049
+DONE django__django-10924 solved=False t=223.4
+START django__django-11179
+### WAVE 3/8 of 20
+DONE django__django-11049 solved=True t=130.4
+### WAVE 4/9 of 20
+START django__django-11283
+DONE django__django-11179 solved=True t=89.2
+### WAVE 5/10 of 20
+START django__django-11422
+DONE django__django-11283 solved=False t=301.2
+### WAVE 5/11 of 20
+START django__django-11564
+DONE django__django-11422 solved=True t=406.5
+START django__django-11620
+### WAVE 6/12 of 20
+DONE django__django-11564 solved=False t=266.7
+### WAVE 6/13 of 20
+START django__django-11630
+DONE django__django-11620 solved=True t=207.6
+### WAVE 7/14 of 20
+START django__django-11797
+DONE django__django-11630 solved=False t=190.2
+### WAVE 7/15 of 20
+START django__django-11815
+DONE django__django-11815 solved=True t=154.1
+### WAVE 8/16 of 20
+START django__django-11905
+DONE django__django-11797 solved=True t=291.2
+### WAVE 9/17 of 20
+START django__django-11964
+DONE django__django-11905 solved=False t=238.1
+### WAVE 9/18 of 20
+DONE django__django-11964 solved=False t=214.9
+### WAVE 9/19 of 20
+### WAVE 1/1 of 19
+### WAVE 1/2 of 19
+### WAVE 1/3 of 19
+START django__django-11019
+### WAVE 1/4 of 19
+### WAVE 1/5 of 19
+### WAVE 1/6 of 19
+### WAVE 2/7 of 19
+### WAVE 3/8 of 19
+### WAVE 3/9 of 19
+### WAVE 4/10 of 19
+### WAVE 5/11 of 19
+### WAVE 6/12 of 19
+### WAVE 6/13 of 19
+### WAVE 6/14 of 19
+### WAVE 7/15 of 19
+### WAVE 8/16 of 19
+### WAVE 8/17 of 19
+### WAVE 8/18 of 19
+DONE django__django-11019 solved=False t=412.0
+### WAVE 8/19 of 19

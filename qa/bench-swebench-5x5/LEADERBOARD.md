@@ -11,6 +11,7 @@ hidden grading.
 | pi strict | `results_pi_deepseek_v4_flash_strict_fifty` | **27/50** | same harsh exam |
 | pirs strict-verify-v2 | `results_deepseek_v4_flash_strict_verify_v2_fifty` | **32/50** | hidden multi-attempt loop |
 | pirs strict spark-ember smoke | `results_deepseek_v4_flash_strict_spark_ember_smoke` | **4/5** | dual-mode strategy smoke (strict) |
+| pirs strict spark-ember next20 | `results_deepseek_v4_flash_strict_spark_ember_next20` | **9/20** | dual-mode batch after smoke |
 | pirs strict v1 | `results_deepseek_v4_flash_strict_fifty` | **20/50** | pre-export-fix (corrupt patches) |
 | pirs fair | `results_deepseek_v4_flash_fair_fifty` | 45/50 | test_patch pre-applied |
 | pirs RAW ids | `results_deepseek_v4_flash_rawids_fifty` | 46/50 | F2P names spoon-fed |

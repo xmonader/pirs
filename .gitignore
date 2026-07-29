@@ -19,3 +19,7 @@ __pycache__/
 !qa/bench-swebench-5x5/
 !qa/bench-swebench-5x5/**
 !qa/bench-swebench-5x5/**/*.log
+
+# Flight-recorder JSONL can be hundreds of MB; keep on disk next to results, not in git.
+*.trace.jsonl
+# Actually we want them ignored always — undo re-include

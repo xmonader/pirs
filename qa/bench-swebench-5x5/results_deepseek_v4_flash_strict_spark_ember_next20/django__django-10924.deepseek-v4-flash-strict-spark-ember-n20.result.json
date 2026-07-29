@@ -1,0 +1,29 @@
+{
+  "id": "django__django-10924",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-spark-ember-n20",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-10924:latest",
+  "container": "pirsbench-django--django-10924-deepseek-v4-flash-strict-spark-ember-n20",
+  "strategy": "spark-ember",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 48398,
+    "cache_read": 1279744,
+    "cache_write": 0,
+    "out": 21238,
+    "reasoning": 9633,
+    "total": 1349380,
+    "cost_usd": 0.126
+  },
+  "stderr_tail": "strategy: spark-ember\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=69 tools=110 [read:43 grep:34 bash:17 find:6 edit_block:4 todo:3 run_tests:2 code_map:1]\ntokens by model:\n  deepseek-v4-flash: in=48398 cache_r=1279744 cache_w=0 out=21238 reasoning=9633 total=1349380 \u2014 $0.1260\n  TOTAL: in=48398 cache_r=1279744 cache_w=0 out=21238 reasoning=9633 total=1349380 \u2014 $0.1260\npatch written to \"/tmp/out.patch\" (2245 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 2.18s):\n  baseline: 1.35s (62%)\n  verify: 0.69s (32%)\n  discover: 0.09s (4%)\n  bootstrap: 0.05s (2%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 2245,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 223.4
+}

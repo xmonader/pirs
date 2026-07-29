@@ -1,0 +1,125 @@
+diff --git a/django/forms/widgets.py b/django/forms/widgets.py
+index 02aa32b207..da75cfd585 100644
+--- a/django/forms/widgets.py
++++ b/django/forms/widgets.py
+@@ -59,22 +59,21 @@ class Media:
+ 
+     @property
+     def _css(self):
+-        css = self._css_lists[0]
+-        # filter(None, ...) avoids calling merge with empty dicts.
+-        for obj in filter(None, self._css_lists[1:]):
+-            css = {
+-                medium: self.merge(css.get(medium, []), obj.get(medium, []))
+-                for medium in css.keys() | obj.keys()
+-            }
+-        return css
++        # Collect all distinct media types across all lists.
++        all_media_types = set()
++        for d in self._css_lists:
++            all_media_types.update(d.keys())
++        # For each medium, topologically sort across all lists.
++        return {
++            medium: self._topological_sort(
++                [d.get(medium, []) for d in self._css_lists]
++            )
++            for medium in sorted(all_media_types)
++        }
+ 
+     @property
+     def _js(self):
+-        js = self._js_lists[0]
+-        # filter(None, ...) avoids calling merge() with empty lists.
+-        for obj in filter(None, self._js_lists[1:]):
+-            js = self.merge(js, obj)
+-        return js
++        return self._topological_sort(self._js_lists)
+ 
+     def render(self):
+         return mark_safe('\n'.join(chain.from_iterable(getattr(self, 'render_' + name)() for name in MEDIA_TYPES)))
+@@ -114,6 +113,85 @@ class Media:
+             return Media(**{str(name): getattr(self, '_' + name)})
+         raise KeyError('Unknown media type "%s"' % name)
+ 
++    @staticmethod
++    def _topological_sort(lists):
++        """
++        Topologically sort items from multiple lists (Kahn's algorithm).
++
++        Collect ordering constraints from adjacent pairs in each input list,
++        build a DAG, and topologically sort it. When multiple nodes have
++        indegree 0, the one that appears earliest across all input lists
++        (first-appearance order) wins.
++
++        Raises MediaOrderConflictWarning for genuine cycles.
++        """
++        # Filter out empty lists.
++        non_empty = [lst for lst in lists if lst]
++        if not non_empty:
++            return []
++        if len(non_empty) == 1:
++            # Deduplicate while preserving order and original type.
++            seen = set()
++            result = []
++            for item in non_empty[0]:
++                if item not in seen:
++                    seen.add(item)
++                    result.append(item)
++            if isinstance(non_empty[0], tuple):
++                return tuple(result)
++            return result
++
++        # Collect all items and their first-appearance order.
++        all_items = []
++        seen = set()
++        for lst in non_empty:
++            for item in lst:
++                if item not in seen:
++                    seen.add(item)
++                    all_items.append(item)
++
++        # Build adjacency and in-degree from adjacent pairs in each list.
++        # item -> set of items that must come after it.
++        order_after = {item: set() for item in all_items}
++        in_degree = {item: 0 for item in all_items}
++
++        for lst in non_empty:
++            for i in range(len(lst) - 1):
++                a, b = lst[i], lst[i + 1]
++                if a == b:
++                    # Skip self-references (duplicates within a list).
++                    continue
++                if b not in order_after[a]:
++                    order_after[a].add(b)
++                    in_degree[b] += 1
++
++        # Kahn's algorithm with first-appearance tie-breaking.
++        result = []
++        ready = [item for item in all_items if in_degree[item] == 0]
++        ready.sort(key=lambda x: all_items.index(x))
++
++        while ready:
++            node = ready.pop(0)
++            result.append(node)
++            for successor in order_after[node]:
++                in_degree[successor] -= 1
++                if in_degree[successor] == 0:
++                    # Maintain tie-breaking order by first appearance.
++                    ready.append(successor)
++                    ready.sort(key=lambda x: all_items.index(x))
++
++        # Check for cycles.
++        if len(result) != len(all_items):
++            cycle_items = list(set(all_items) - set(result))
++            if len(cycle_items) >= 2:
++                warnings.warn(
++                    'Detected duplicate Media files in an opposite order:\n'
++                    '%s\n%s' % (cycle_items[0], cycle_items[1]),
++                    MediaOrderConflictWarning,
++                )
++
++        return result
++
+     @staticmethod
+     def merge(list_1, list_2):
+         """

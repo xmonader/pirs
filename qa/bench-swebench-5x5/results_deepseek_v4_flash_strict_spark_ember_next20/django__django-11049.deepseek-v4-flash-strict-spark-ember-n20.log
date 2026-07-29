@@ -1,0 +1,28 @@
+=== django__django-11049 (deepseek-v4-flash) start 1785337358.2629328 ===
+cacc7d1cdda820b0197af41ae854e85b67bb675c5429206ec144b7e3ec0d2ab4
+base_sha=17455e924e243e7a55e8a38f45966d8cbb27c273
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=17455e924e243e7a55e8a38f45966d8cbb27c273 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=spark-ember
+
+strategy: spark-ember
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=46 tools=67 [grep:27 read:20 bash:13 edit:3 run_tests:2 code_map:1 find:1]
+tokens by model:
+  deepseek-v4-flash: in=30515 cache_r=585984 cache_w=0 out=13072 reasoning=5895 total=629571 — $0.0636
+  TOTAL: in=30515 cache_r=585984 cache_w=0 out=13072 reasoning=5895 total=629571 — $0.0636
+patch written to "/tmp/out.patch" (53520 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 17455e924e Removed executable bit from static asset xregexp.js.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_invalid_string (model_fields.test_durationfield.TestValidation) --keep-green=test_dumping (model_fields.test_durationfield.TestSerialization) --keep-green=test_loading (model_fields.test_durationfield.TestSerialization) --keep-green=test_formfield (model_fields.test_durationfield.TestFormField) --keep-green=test_exact (model_fields.test_durationfield.TestQuerying) --keep-green=test_gt (model_fields.test_durationfield.TestQuerying) --keep-green=test_create_empty (model_fields.test_durationfield.TestSaveLoad) --keep-green=test_fractional_seconds (model_fields.test_durationfield.TestSaveLoad) --keep-green=test_simple_roundtrip (model_fields.test_durationfield.TestSaveLoad)
+
+outcome: Solved
+timing (total 5.74s):
+  verify: 3.34s (58% n=2)
+  baseline: 2.20s (38%)
+  discover: 0.13s (2%)
+  bootstrap: 0.07s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0
