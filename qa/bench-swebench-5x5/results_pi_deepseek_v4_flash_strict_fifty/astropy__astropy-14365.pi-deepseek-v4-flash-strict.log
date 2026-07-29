@@ -1,0 +1,39 @@
+=== astropy__astropy-14365 pi/deepseek-v4-flash STRICT start 1785312586.4289145 ===
+c486435f58ef6b5b0b70a9f232b412897c88223cd380aafcde5c65caacd1b2bd
+base_sha=3c297e66ab6822eda5f251a077965f4d7ef7a32b (NO test_patch for agent)
+grade targets=1 keep_green=8 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All tests and doctests pass.
+
+## Summary
+
+The fix was a single-line change in `/testbed/astropy/io/ascii/qdp.py`. The `_command_re` regex in `_line_type()` function was changed from:
+
+```python
+_command_re = r"READ [TS]ERR(\s+[0-9]+)+"
+```
+
+to:
+
+```python
+_command_re = r"[Rr][Ee][Aa][Dd] [TtSs][Ee][Rr][Rr](\s+[0-9]+)+"
+```
+
+This makes the QDP command recognition case-insensitive, so `read serr 1 2`, `READ SERR 1 2`, `Read Terr 1 2`, etc. are all recognized as valid QDP commands.
+
+
+pi_exit=0 agent_elapsed_s=35.5
+patch_bytes=493
+HEAD is now at 3c297e66a SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/io/ascii/tests/test_qdp.py::test_roundtrip[True] --keep-green=astropy/io/ascii/tests/test_qdp.py::test_get_tables_from_qdp_file --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip[False] --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_example --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip_example --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip_example_comma --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_write_simple --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_write_simple_specify_name --keep-green=astropy/io/ascii/tests/test_qdp.py::test_get_lines_from_qdp
+
+outcome: Failed(FixNoFlip)
+timing (total 278.83s):
+  bootstrap: 196.36s (70%)
+  discover: 75.69s (27%)
+  baseline: 4.15s (1%)
+  verify: 2.62s (1%)
+  fix: 0.00s (0%)
+
+check_exit=1

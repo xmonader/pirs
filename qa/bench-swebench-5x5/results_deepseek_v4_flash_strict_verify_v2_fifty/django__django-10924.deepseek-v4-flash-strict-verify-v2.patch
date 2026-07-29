@@ -1,0 +1,32 @@
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 0c64748ccd..2f95b45355 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -1708,8 +1708,12 @@ class FilePathField(Field):
+         return str(value)
+ 
+     def formfield(self, **kwargs):
++        if callable(self.path):
++            path = self.path()
++        else:
++            path = self.path
+         return super().formfield(**{
+-            'path': self.path,
++            'path': path,
+             'match': self.match,
+             'recursive': self.recursive,
+             'form_class': forms.FilePathField,
+diff --git a/django/forms/fields.py b/django/forms/fields.py
+index a977256525..104a4c45c1 100644
+--- a/django/forms/fields.py
++++ b/django/forms/fields.py
+@@ -1090,6 +1090,9 @@ class FilePathField(ChoiceField):
+         if self.match is not None:
+             self.match_re = re.compile(self.match)
+ 
++        if callable(self.path):
++            self.path = self.path()
++
+         if recursive:
+             for root, dirs, files in sorted(os.walk(self.path)):
+                 if self.allow_files:

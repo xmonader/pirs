@@ -1,0 +1,28 @@
+=== django__django-11630 (deepseek-v4-flash) start 1785319941.6506777 ===
+ce21fa622da51c2fb8fd004d2d78de8f51873b9779a5f3ffbf460b36dfae1d63
+base_sha=65e86948b80262574058a94ccaae3a9b59c3faea
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=65e86948b80262574058a94ccaae3a9b59c3faea --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=35 tools=42 [grep:17 read:13 bash:5 ls:2 run_tests:2 edit:1 edit_block:1 git:1]
+tokens by model:
+  deepseek-v4-flash: in=23880 cache_r=776064 cache_w=0 out=11632 reasoning=7398 total=811576 — $0.0736
+  TOTAL: in=23880 cache_r=776064 cache_w=0 out=11632 reasoning=7398 total=811576 — $0.0736
+patch written to "/tmp/out.patch" (3001 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 65e86948b8 Corrected several typos in string literals and test names.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_collision_across_apps_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --target=test_collision_in_same_app_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_in_same_app (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_proxy_models (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_unmanaged_models (check_framework.test_model_checks.DuplicateDBTableTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 2.55s):
+  baseline: 1.49s (59%)
+  verify: 0.88s (34%)
+  discover: 0.12s (5%)
+  bootstrap: 0.06s (2%)
+  fix: 0.00s (0%)
+
+check_exit=1

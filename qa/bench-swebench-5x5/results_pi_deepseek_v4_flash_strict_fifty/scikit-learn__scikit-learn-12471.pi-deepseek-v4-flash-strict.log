@@ -1,0 +1,38 @@
+=== scikit-learn__scikit-learn-12471 pi/deepseek-v4-flash STRICT start 1785315279.1981184 ===
+7bd78aa68aa5811e5f89ed302f461778d681c3c3950dedfe4a81d7020141a147
+base_sha=02dc9ed680e7f53f1b0d410dcdd37341c7958eb1 (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is clean and minimal. Here's a summary:
+
+## Root Cause
+
+In `_BaseEncoder._transform()`, when `handle_unknown='ignore'` and unknown string values are found, the code does:
+
+```python
+Xi = Xi.copy()
+Xi[~valid_mask] = self.categories_[i][0]
+```
+
+`Xi` is a column slice of the input `X`, so it inherits `X`'s dtype. If `X` was constructed from strings with a short max length (e.g., `<U5` for 5-char strings from `['55555', '22']`), the array has a fixed-width string dtype. When a longer string from `self.categories_[i][0]` (e.g., `'11111111'` which is 8 chars) is assigned into `Xi`, numpy silently truncates it to fit the dtype, potentially matching a different known category. Then `_encode` reports the truncated value as "previously unseen" and raises a `ValueError`.
+
+## Fix
+
+Changed one line in `_BaseEncoder._transform()`: replaced `Xi = Xi.copy()` with `Xi = Xi.astype(object)`. This ensures that when unknown categories need to be replaced, the copy has object dtype which avoids truncation when assigning longer strings. The change is inside the `handle_unknown == 'ignore'` branch, so it only affects the ignore-unknown path. The `_encode` function works fine with object dtype arrays.
+
+
+pi_exit=0 agent_elapsed_s=146.9
+patch_bytes=1784
+HEAD is now at 02dc9ed68 Fix max_depth overshoot in BFS expansion of trees (#12344)
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_handle_unknown_strings --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_sparse --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dense --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_deprecationwarnings --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_force_new_behaviour --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categorical_features --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_handle_unknown --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_not_fitted --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_no_categorical_features --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[int32-int32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[int32-float32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[int32-float64] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float32-int32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float32-float32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float32-float64] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float64-int32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float64-float32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float64-float64] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype_pandas[int32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype_pandas[float32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype_pandas[float64] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_set_params --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder[mixed] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder[numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder[object] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_inverse --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categories[mixed] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categories[numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categories[object] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categories[string] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_specified_categories[object] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_specified_categories[numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_specified_categories[object-string-cat] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_unsorted_categories --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_specified_categories_mixed_columns --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_pandas --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_feature_names --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_feature_names_unicode --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_raise_missing[error-numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_raise_missing[error-object] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_raise_missing[ignore-numeric]
+
+outcome: Solved
+timing (total 55.89s):
+  bootstrap: 25.05s (45%)
+  discover: 20.53s (37%)
+  verify: 6.04s (11% n=2)
+  baseline: 4.26s (8%)
+  fix: 0.00s (0%)
+
+check_exit=0

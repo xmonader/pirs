@@ -1,0 +1,39 @@
+=== django__django-11797 pi/deepseek-v4-flash STRICT start 1785313772.5197213 ===
+d76c53e42d0c57bd7d7439e0fb0d84d43cd0759122e99146a97b5ef876bac47b
+base_sha=3346b78a8a872286a245d1e77ef4718fc5e6be1a (NO test_patch for agent)
+grade targets=1 keep_green=36 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix works correctly. The inner subquery in `b.query` is now:
+```sql
+SELECT U0."id" FROM "auth_user" U0 WHERE U0."email" IS NULL LIMIT 1
+```
+
+No spurious `GROUP BY U0."id"` or `GROUP BY U0."email", U0."id"`. The GROUP BY is removed because:
+1. `process_rhs` calls `clear_select_clause()` which now also resets `group_by = None`
+2. The compiler's `get_group_by` returns `[]` when `group_by is None`
+3. The subquery cleanly selects the pk with LIMIT 1
+
+## Summary
+
+**Root cause**: `Query.clear_select_clause()` cleared the SELECT clause (select, default_cols, select_related, extra_mask, annotation_mask) but did not clear `group_by`. When `Exact.process_rhs` (and related methods) called `clear_select_clause()` followed by `add_fields(['pk'])` to change a subquery's select list, the stale `group_by` from the original query remained. During SQL compilation, `get_group_by()` would then add the newly selected pk column to the GROUP BY (via the `for expr, _, _ in select` loop), resulting in an incorrect GROUP BY that included the pk column.
+
+**Fix**: Added `self.group_by = None` to `clear_select_clause()` in `/testbed/django/db/models/sql/query.py`. This ensures that when the SELECT clause is cleared, the GROUP BY is also reset, preventing stale group-by columns from polluting the new query.
+
+**Why this is correct**: Once the SELECT clause is cleared and replaced (e.g., with just the pk), the original GROUP BY is no longer meaningful. The compiler correctly handles `group_by = None` as "no GROUP BY needed," and the LIMIT 1 on the subquery ensures a single row is returned as expected.
+
+
+pi_exit=0 agent_elapsed_s=337.4
+patch_bytes=423
+HEAD is now at 3346b78a8a Fixed #30786 -- Used CONVERT_TZ to check if the time zone definitions are installed on MySQL.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_exact_query_rhs_with_selected_columns (lookup.tests.LookupTests) --keep-green=test_chain_date_time_lookups (lookup.tests.LookupTests) --keep-green=test_count (lookup.tests.LookupTests) --keep-green=test_custom_field_none_rhs (lookup.tests.LookupTests) --keep-green=test_error_messages (lookup.tests.LookupTests) --keep-green=test_escaping (lookup.tests.LookupTests) --keep-green=test_exact_exists (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one_offset (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_not_limited_to_one (lookup.tests.LookupTests) --keep-green=test_exclude (lookup.tests.LookupTests) --keep-green=test_exists (lookup.tests.LookupTests) --keep-green=test_get_next_previous_by (lookup.tests.LookupTests) --keep-green=test_in (lookup.tests.LookupTests) --keep-green=test_in_bulk (lookup.tests.LookupTests) --keep-green=test_in_bulk_lots_of_ids (lookup.tests.LookupTests) --keep-green=test_in_bulk_non_unique_field (lookup.tests.LookupTests) --keep-green=test_in_bulk_with_field (lookup.tests.LookupTests) --keep-green=test_in_different_database (lookup.tests.LookupTests) --keep-green=test_in_keeps_value_ordering (lookup.tests.LookupTests) --keep-green=test_iterator (lookup.tests.LookupTests) --keep-green=test_lookup_collision (lookup.tests.LookupTests) --keep-green=test_lookup_date_as_str (lookup.tests.LookupTests) --keep-green=test_lookup_int_as_str (lookup.tests.LookupTests) --keep-green=test_nested_outerref_lhs (lookup.tests.LookupTests) --keep-green=test_none (lookup.tests.LookupTests) --keep-green=test_nonfield_lookups (lookup.tests.LookupTests) --keep-green=test_pattern_lookups_with_substr (lookup.tests.LookupTests) --keep-green=test_regex (lookup.tests.LookupTests) --keep-green=test_regex_backreferencing (lookup.tests.LookupTests) --keep-green=test_regex_non_ascii (lookup.tests.LookupTests) --keep-green=test_regex_non_string (lookup.tests.LookupTests) --keep-green=test_regex_null (lookup.tests.LookupTests) --keep-green=test_relation_nested_lookup_error (lookup.tests.LookupTests) --keep-green=test_unsupported_lookups (lookup.tests.LookupTests) --keep-green=test_values (lookup.tests.LookupTests) --keep-green=test_values_list (lookup.tests.LookupTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 3.83s):
+  baseline: 2.65s (69%)
+  verify: 0.92s (24%)
+  discover: 0.17s (5%)
+  bootstrap: 0.09s (2%)
+  fix: 0.00s (0%)
+
+check_exit=1

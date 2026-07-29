@@ -1,0 +1,46 @@
+=== pytest-dev__pytest-5221 pi/deepseek-v4-flash STRICT start 1785315035.89554 ===
+7118dd25b99f874bc9c106b3b9a943aa96d3cf19bb8066738e58fed2dd657346
+base_sha=4a2fdce62b73944030cff9b3e52862868ca9584d (NO test_patch for agent)
+grade targets=2 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The change is minimal and clean. Here's a summary:
+
+## Summary
+
+**Problem:** `pytest --fixtures` shows available fixtures but does not display their scope (function, class, module, session). Users have to look at documentation or source code to learn the scope.
+
+**Fix:** Added a single line in `src/_pytest/python.py` in the `_showfixtures_main` function that outputs the scope of each fixture as an indented line right after the fixture name:
+
+```python
+tw.line("    [scope: %s]" % fixturedef.scope)
+```
+
+This line appears between the fixture name and its docstring, producing output like:
+
+```
+tmpdir
+    [scope: function]
+    Return a temporary directory path object
+    ...
+```
+
+The scope is available via `fixturedef.scope` which is already stored on the `FixtureDef` object. No other changes were needed.
+
+**All 172 existing tests in `testing/python/fixtures.py` pass**, as the extra `[scope: ...]` line is simply skipped as an extra line by `fnmatch_lines`.
+
+
+pi_exit=0 agent_elapsed_s=191.6
+patch_bytes=473
+HEAD is now at 4a2fdce62 Emit a warning for record_property when used with xunit2 (#5204)
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=testing/python/fixtures.py::TestShowFixtures::test_show_fixtures --target=testing/python/fixtures.py::TestShowFixtures::test_show_fixtures_verbose --keep-green=testing/python/fixtures.py::test_getfuncargnames --keep-green=testing/python/fixtures.py::TestFillFixtures::test_fillfuncargs_exposed --keep-green=testing/python/fixtures.py::TestShowFixtures::test_fixture_disallow_twice --keep-green=testing/python/fixtures.py::test_call_fixture_function_error --keep-green=testing/python/fixtures.py::TestFillFixtures::test_funcarg_lookupfails --keep-green=testing/python/fixtures.py::TestFillFixtures::test_detect_recursive_dependency_error --keep-green=testing/python/fixtures.py::TestFillFixtures::test_funcarg_basic --keep-green=testing/python/fixtures.py::TestFillFixtures::test_funcarg_lookup_modulelevel --keep-green=testing/python/fixtures.py::TestFillFixtures::test_funcarg_lookup_classlevel --keep-green=testing/python/fixtures.py::TestFillFixtures::test_conftest_funcargs_only_available_in_subdir --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_module_class --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_conftest_module --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_conftest_conftest --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_conftest_plugin --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_plugin_plugin --keep-green=testing/python/fixtures.py::TestFillFixtures::test_override_parametrized_fixture_conftest_module --keep-green=testing/python/fixtures.py::TestFillFixtures::test_override_parametrized_fixture_conftest_conftest --keep-green=testing/python/fixtures.py::TestFillFixtures::test_override_non_parametrized_fixture_conftest_module --keep-green=testing/python/fixtures.py::TestFillFixtures::test_override_non_parametrized_fixture_conftest_conftest --keep-green=testing/python/fixtures.py::TestFillFixtures::test_override_autouse_fixture_with_parametrized_fixture_conftest_conftest --keep-green=testing/python/fixtures.py::TestFillFixtures::test_autouse_fixture_plugin --keep-green=testing/python/fixtures.py::TestFillFixtures::test_funcarg_lookup_error --keep-green=testing/python/fixtures.py::TestFillFixtures::test_fixture_excinfo_leak --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_attributes --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_attributes_method --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_contains_funcarg_arg2fixturedefs --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_garbage --keep-green=testing/python/fixtures.py::TestRequestBasic::test_getfixturevalue_recursive --keep-green=testing/python/fixtures.py::TestRequestBasic::test_getfixturevalue_teardown --keep-green=testing/python/fixtures.py::TestRequestBasic::test_getfixturevalue[getfixturevalue] --keep-green=testing/python/fixtures.py::TestRequestBasic::test_getfixturevalue[getfuncargvalue] --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_addfinalizer --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_addfinalizer_failing_setup --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_addfinalizer_failing_setup_module --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_addfinalizer_partial_setup_failure --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_subrequest_addfinalizer_exceptions --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_getmodulepath --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_fixturenames --keep-green=testing/python/fixtures.py::TestRequestBasic::test_request_fixturenames_dynamic_fixture --keep-green=testing/python/fixtures.py::TestRequestBasic::test_funcargnames_compatattr
+
+outcome: Failed(FixNoFlip)
+timing (total 46.91s):
+  bootstrap: 23.10s (49%)
+  discover: 13.24s (28%)
+  baseline: 9.47s (20%)
+  verify: 1.10s (2%)
+  fix: 0.00s (0%)
+
+check_exit=1

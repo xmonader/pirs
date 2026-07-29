@@ -1,0 +1,30 @@
+=== django__django-11564 (deepseek-v4-flash) start 1785324431.1532006 ===
+dd1c4a384daf3350eb2bf068d14500e05e8fe722504b50fc914ada19ea2854f7
+base_sha=580e644f24f1c5ae5b94784fb73a9953a178fd26
+filtered non-test ids: targets 2->2 keep_green 174->166
+capped keep_green 174->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=580e644f24f1c5ae5b94784fb73a9953a178fd26 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=55 [read:17 bash:14 grep:10 find:9 edit_block:2 ls:2 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=32235 cache_r=1110656 cache_w=0 out=10001 reasoning=4991 total=1152892 — $0.0975
+  TOTAL: in=32235 cache_r=1110656 cache_w=0 out=10001 reasoning=4991 total=1152892 — $0.0975
+patch written to "/tmp/out.patch" (1224 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 580e644f24 Fixed #30800 -- Fixed migrations crash when altering a field with custom db_type().
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_add_script_name_prefix (settings_tests.tests.MediaURLStaticURLPrefixTest) --target=test_not_prefixed (settings_tests.tests.MediaURLStaticURLPrefixTest) --keep-green=test_already_configured (settings_tests.tests.SettingsTests) --keep-green=test_class_decorator (settings_tests.tests.SettingsTests) --keep-green=test_configure (settings_tests.tests.IsOverriddenTest) --keep-green=test_context_manager (settings_tests.tests.SettingsTests) --keep-green=test_decorated_testcase_module (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_decorated_testcase_name (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_decorator (settings_tests.tests.SettingsTests) --keep-green=test_evaluated_lazysettings_repr (settings_tests.tests.IsOverriddenTest) --keep-green=test_incorrect_timezone (settings_tests.tests.SettingsTests) --keep-green=test_max_recursion_error (settings_tests.tests.ClassDecoratedTestCase) --keep-green=test_max_recursion_error (settings_tests.tests.ClassDecoratedTestCaseSuper) --keep-green=test_method_list_override (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_method_list_override_nested_order (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_method_list_override_no_ops (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_method_list_override_strings (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_method_override (settings_tests.tests.ClassDecoratedTestCase) --keep-green=test_method_override (settings_tests.tests.FullyDecoratedTestCase) --keep-green=test_method_override (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_module (settings_tests.tests.IsOverriddenTest) --keep-green=test_no_secret_key (settings_tests.tests.SettingsTests) --keep-green=test_no_settings_module (settings_tests.tests.SettingsTests) --keep-green=test_none (settings_tests.tests.SecureProxySslHeaderTest) --keep-green=test_nonupper_settings_ignored_in_default_settings (settings_tests.tests.SettingsTests) --keep-green=test_nonupper_settings_prohibited_in_configure (settings_tests.tests.SettingsTests) --keep-green=test_override (settings_tests.tests.ClassDecoratedTestCase) --keep-green=test_override (settings_tests.tests.FullyDecoratedTestCase) --keep-green=test_override (settings_tests.tests.FullyDecoratedTranTestCase) --keep-green=test_override (settings_tests.tests.IsOverriddenTest) --keep-green=test_override (settings_tests.tests.SettingsTests) --keep-green=test_override_change (settings_tests.tests.SettingsTests) --keep-green=test_override_doesnt_leak (settings_tests.tests.SettingsTests) --keep-green=test_override_settings_delete (settings_tests.tests.SettingsTests) --keep-green=test_override_settings_inheritance (settings_tests.tests.ChildDecoratedTestCase) --keep-green=test_override_settings_nested (settings_tests.tests.SettingsTests) --keep-green=test_override_settings_reusable_on_enter (settings_tests.tests.OverrideSettingsIsolationOnExceptionTests) --keep-green=test_set_with_xheader_right (settings_tests.tests.SecureProxySslHeaderTest) --keep-green=test_set_with_xheader_wrong (settings_tests.tests.SecureProxySslHeaderTest) --keep-green=test_set_without_xheader (settings_tests.tests.SecureProxySslHeaderTest) --keep-green=test_settings_delete (settings_tests.tests.SettingsTests) --keep-green=test_settings_delete_wrapped (settings_tests.tests.SettingsTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 2.43s):
+  baseline: 1.59s (66%)
+  verify: 0.64s (26%)
+  discover: 0.13s (5%)
+  bootstrap: 0.07s (3%)
+  fix: 0.00s (0%)
+
+check_exit=1

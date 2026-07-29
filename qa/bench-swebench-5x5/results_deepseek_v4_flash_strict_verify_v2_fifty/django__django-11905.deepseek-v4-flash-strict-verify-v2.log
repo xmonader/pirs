@@ -1,0 +1,25 @@
+=== django__django-11905 (deepseek-v4-flash) start 1785324869.5778816 ===
+626ef6075930d8dc617917b2ac556d41617a604b797108a489dd89a9415bf9da
+base_sha=2f72480fbd27896c986c45193e1603e35c0b19a7
+filtered non-test ids: targets 2->2 keep_green 38->36
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=2f72480fbd27896c986c45193e1603e35c0b19a7 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_isnull_non_boolean_value (lookup.tests.LookupTests) --target=test_iterator (lookup.tests.LookupTests) --keep-green=test_chain_date_time_lookups (lookup.tests.LookupTests) --keep-green=test_count (lookup.tests.LookupTests) --keep-green=test_custom_field_none_rhs (lookup.tests.LookupTests) --keep-green=test_error_messages (lookup.tests.LookupTests) --keep-green=test_escaping (lookup.tests.LookupTests) --keep-green=test_exact_exists (lookup.tests.LookupTests) --keep-green=test_exact_query_rhs_with_selected_columns (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one_offset (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_not_limited_to_one (lookup.tests.LookupTests) --keep-green=test_exclude (lookup.tests.LookupTests) --keep-green=test_exists (lookup.tests.LookupTests) --keep-green=test_get_next_previous_by (lookup.tests.LookupTests) --keep-green=test_in (lookup.tests.LookupTests) --keep-green=test_in_bulk (lookup.tests.LookupTests) --keep-green=test_in_bulk_lots_of_ids (lookup.tests.LookupTests) --keep-green=test_in_bulk_non_unique_field (lookup.tests.LookupTests) --keep-green=test_in_bulk_with_field (lookup.tests.LookupTests) --keep-green=test_in_different_database (lookup.tests.LookupTests) --keep-green=test_in_keeps_value_ordering (lookup.tests.LookupTests) --keep-green=test_lookup_collision (lookup.tests.LookupTests) --keep-green=test_lookup_date_as_str (lookup.tests.LookupTests) --keep-green=test_lookup_int_as_str (lookup.tests.LookupTests) --keep-green=test_nested_outerref_lhs (lookup.tests.LookupTests) --keep-green=test_none (lookup.tests.LookupTests) --keep-green=test_nonfield_lookups (lookup.tests.LookupTests) --keep-green=test_pattern_lookups_with_substr (lookup.tests.LookupTests) --keep-green=test_regex (lookup.tests.LookupTests) --keep-green=test_regex_backreferencing (lookup.tests.LookupTests) --keep-green=test_regex_non_ascii (lookup.tests.LookupTests) --keep-green=test_regex_non_string (lookup.tests.LookupTests) --keep-green=test_regex_null (lookup.tests.LookupTests) --keep-green=test_relation_nested_lookup_error (lookup.tests.LookupTests) --keep-green=test_unsupported_lookups (lookup.tests.LookupTests) --keep-green=test_values (lookup.tests.LookupTests) --keep-green=test_values_list (lookup.tests.LookupTests) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 3.11s):
+shadow-verify attempt 2/3
+agent produced no further edits; re-grading best patch
+shadow attempt 2: outcome=Failed(FixNoFlip) timing=timing (total 3.27s):
+shadow-verify attempt 3/3
+agent produced no further edits; re-grading best patch
+shadow attempt 3: outcome=Failed(FixNoFlip) timing=timing (total 3.16s):
+session: turns=120 tools=127 [bash:51 read:35 grep:32 edit:3 git:3 edit_block:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=39964 cache_r=4501632 cache_w=0 out=25817 reasoning=12389 total=4567413 — $0.3543
+  TOTAL: in=39964 cache_r=4501632 cache_w=0 out=25817 reasoning=12389 total=4567413 — $0.3543
+patch written (ungraded/failed) to "/tmp/out.patch" (752 bytes)
+outcome: Failed(shadow-verify)
+
+exit_code=1 elapsed_s=1093.4

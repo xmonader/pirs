@@ -1,0 +1,101 @@
+diff --git a/django/forms/widgets.py b/django/forms/widgets.py
+index 02aa32b207..3f09e590b8 100644
+--- a/django/forms/widgets.py
++++ b/django/forms/widgets.py
+@@ -59,21 +59,39 @@ class Media:
+ 
+     @property
+     def _css(self):
+-        css = self._css_lists[0]
+-        # filter(None, ...) avoids calling merge with empty dicts.
+-        for obj in filter(None, self._css_lists[1:]):
++        css_lists = self._css_lists
++        # Check for real ordering conflicts between all pairs of
++        # individual source lists before merging.
++        for i in range(len(css_lists)):
++            for j in range(i + 1, len(css_lists)):
++                for medium in css_lists[i].keys() & css_lists[j].keys():
++                    self._warn_for_conflicts(
++                        css_lists[i].get(medium, []),
++                        css_lists[j].get(medium, []),
++                    )
++        # Merge using the first list as base, merging only non-empty
++        # subsequent lists (filter(None, ...) skips empty dicts).
++        css = css_lists[0]
++        for obj in filter(None, css_lists[1:]):
+             css = {
+-                medium: self.merge(css.get(medium, []), obj.get(medium, []))
++                medium: self._merge_lists(css.get(medium, []), obj.get(medium, []))
+                 for medium in css.keys() | obj.keys()
+             }
+         return css
+ 
+     @property
+     def _js(self):
+-        js = self._js_lists[0]
+-        # filter(None, ...) avoids calling merge() with empty lists.
+-        for obj in filter(None, self._js_lists[1:]):
+-            js = self.merge(js, obj)
++        js_lists = self._js_lists
++        # Check for real ordering conflicts between all pairs of
++        # individual source lists before merging.
++        for i in range(len(js_lists)):
++            for j in range(i + 1, len(js_lists)):
++                self._warn_for_conflicts(js_lists[i], js_lists[j])
++        # Merge using the first list as base, merging only non-empty
++        # subsequent lists (filter(None, ...) skips empty lists).
++        js = js_lists[0]
++        for obj in filter(None, js_lists[1:]):
++            js = self._merge_lists(js, obj)
+         return js
+ 
+     def render(self):
+@@ -114,6 +132,48 @@ class Media:
+             return Media(**{str(name): getattr(self, '_' + name)})
+         raise KeyError('Unknown media type "%s"' % name)
+ 
++    @staticmethod
++    def _warn_for_conflicts(list_1, list_2):
++        """
++        Warn if two individual source lists have elements in opposite relative
++        order.
++        """
++        for a_idx, a in enumerate(list_1):
++            if a not in list_2:
++                continue
++            for b in list_1[a_idx + 1:]:
++                if b not in list_2:
++                    continue
++                if list_2.index(b) < list_2.index(a):
++                    warnings.warn(
++                        'Detected duplicate Media files in an opposite order:\n'
++                        '%s\n%s' % (a, b),
++                        MediaOrderConflictWarning,
++                    )
++
++    @staticmethod
++    def _merge_lists(list_1, list_2):
++        """
++        Merge two lists while trying to keep the relative order of the elements.
++        Unlike merge(), this does not warn about conflicts; it resolves them
++        by reordering to match list_2's order.
++        """
++        combined_list = list(list_1)
++        last_insert_index = len(list_1)
++        for path in reversed(list_2):
++            try:
++                index = combined_list.index(path)
++            except ValueError:
++                combined_list.insert(last_insert_index, path)
++            else:
++                if index > last_insert_index:
++                    # Reorder to match list_2's ordering.
++                    element = combined_list.pop(index)
++                    combined_list.insert(last_insert_index, element)
++                    # Recalculate the index of the moved path.
++                last_insert_index = combined_list.index(path)
++        return combined_list
++
+     @staticmethod
+     def merge(list_1, list_2):
+         """

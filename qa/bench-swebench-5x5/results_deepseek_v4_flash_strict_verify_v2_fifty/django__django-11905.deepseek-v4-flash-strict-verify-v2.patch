@@ -1,0 +1,20 @@
+diff --git a/django/db/models/lookups.py b/django/db/models/lookups.py
+index 9344979c56..8f628f9c08 100644
+--- a/django/db/models/lookups.py
++++ b/django/db/models/lookups.py
+@@ -462,6 +462,15 @@ class IsNull(BuiltinLookup):
+     lookup_name = 'isnull'
+     prepare_rhs = False
+ 
++    def get_prep_lookup(self):
++        if hasattr(self.rhs, 'resolve_expression'):
++            return self.rhs
++        if self.rhs is None and self.can_use_none_as_rhs:
++            return self.rhs
++        if not isinstance(self.rhs, bool):
++            raise ValueError('The __isnull lookup accepts only boolean values.')
++        return self.rhs
++
+     def as_sql(self, compiler, connection):
+         sql, params = compiler.compile(self.lhs)
+         if self.rhs:

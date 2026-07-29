@@ -1,0 +1,18 @@
+=== django__django-16046 (deepseek-v4-flash) start 1785327749.134625 ===
+4fcee9d47819a4881a8669d4f3f5868a5d777084482da7db14ea6ef827c158d5
+base_sha=ec13e801b820614ff374cb0046092caab8d67249
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=ec13e801b820614ff374cb0046092caab8d67249 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_empty (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_subclass (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_float_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_number (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_string (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_large_number (utils_tests.test_numberformat.TestNumberFormat) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Solved timing=timing (total 3.19s):
+session: turns=34 tools=37 [bash:14 read:10 grep:6 find:3 edit:1 edit_block:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=15031 cache_r=610304 cache_w=0 out=8137 reasoning=4231 total=633472 — $0.0557
+  TOTAL: in=15031 cache_r=610304 cache_w=0 out=8137 reasoning=4231 total=633472 — $0.0557
+patch written to "/tmp/out.patch" (608 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=129.0

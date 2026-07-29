@@ -1,0 +1,18 @@
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 0c64748ccd..2f95b45355 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -1708,8 +1708,12 @@ class FilePathField(Field):
+         return str(value)
+ 
+     def formfield(self, **kwargs):
++        if callable(self.path):
++            path = self.path()
++        else:
++            path = self.path
+         return super().formfield(**{
+-            'path': self.path,
++            'path': path,
+             'match': self.match,
+             'recursive': self.recursive,
+             'form_class': forms.FilePathField,

@@ -1,0 +1,20 @@
+=== django__django-11283 (deepseek-v4-flash) start 1785322153.0632186 ===
+aec76ce434e55a724847a097b19a070ed409a0f00f113d179b49fa5a36539e14
+base_sha=08a4ee06510ae45562c228eefbdcaac84bd38c7a
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=08a4ee06510ae45562c228eefbdcaac84bd38c7a --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_migrate_with_existing_target_permission (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_has_now_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_still_has_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 3.99s):
+shadow-verify attempt 2/3
+shadow attempt 2: outcome=Solved timing=timing (total 7.24s):
+session: turns=69 tools=73 [bash:30 read:16 find:7 grep:7 edit_block:4 ls:3 write:3 edit:2 git:1]
+tokens by model:
+  deepseek-v4-flash: in=34614 cache_r=2156928 cache_w=0 out=23313 reasoning=10139 total=2214855 — $0.1860
+  TOTAL: in=34614 cache_r=2156928 cache_w=0 out=23313 reasoning=10139 total=2214855 — $0.1860
+patch written to "/tmp/out.patch" (2396 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=399.8

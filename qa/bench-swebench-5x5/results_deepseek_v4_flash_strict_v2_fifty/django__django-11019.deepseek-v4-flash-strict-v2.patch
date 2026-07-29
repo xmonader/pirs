@@ -1,0 +1,53 @@
+diff --git a/django/forms/widgets.py b/django/forms/widgets.py
+index 02aa32b207..d1ff480aea 100644
+--- a/django/forms/widgets.py
++++ b/django/forms/widgets.py
+@@ -63,7 +63,7 @@ class Media:
+         # filter(None, ...) avoids calling merge with empty dicts.
+         for obj in filter(None, self._css_lists[1:]):
+             css = {
+-                medium: self.merge(css.get(medium, []), obj.get(medium, []))
++                medium: self._merge_safe(css.get(medium, []), obj.get(medium, []))
+                 for medium in css.keys() | obj.keys()
+             }
+         return css
+@@ -73,7 +73,7 @@ class Media:
+         js = self._js_lists[0]
+         # filter(None, ...) avoids calling merge() with empty lists.
+         for obj in filter(None, self._js_lists[1:]):
+-            js = self.merge(js, obj)
++            js = self._merge_safe(js, obj)
+         return js
+ 
+     def render(self):
+@@ -149,6 +149,30 @@ class Media:
+                 last_insert_index = index
+         return combined_list
+ 
++    def _merge_safe(self, list_1, list_2):
++        """
++        Merge two lists, similar to merge(), but when there is a conflict
++        prefer the order of list_2 (the newer list) by moving the conflicting
++        element in front of the element that caused the conflict. This avoids
++        introducing incorrect relative orderings from prior merges that can
++        cause a broken final result and spurious warnings when merging three
++        or more media objects.
++        """
++        combined_list = list(list_1)
++        last_insert_index = len(list_1)
++        for path in reversed(list_2):
++            try:
++                index = combined_list.index(path)
++            except ValueError:
++                combined_list.insert(last_insert_index, path)
++            else:
++                if index > last_insert_index:
++                    # Move the existing element to the front.
++                    del combined_list[index]
++                    combined_list.insert(last_insert_index, path)
++                last_insert_index = combined_list.index(path)
++        return combined_list
++
+     def __add__(self, other):
+         combined = Media()
+         combined._css_lists = self._css_lists + other._css_lists

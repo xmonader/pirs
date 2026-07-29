@@ -1,0 +1,29 @@
+=== django__django-11999 (deepseek-v4-flash) start 1785320524.3067327 ===
+59bbe3260fa82238a4dae0fddd65a3b1c635458c0a6a86fd50d387b34de5bca0
+base_sha=bcfe5aa5be19530f9d0924a4df0c32e216d7d190
+filtered non-test ids: targets 1->1 keep_green 30->23
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=bcfe5aa5be19530f9d0924a4df0c32e216d7d190 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=54 tools=53 [bash:16 grep:16 read:12 find:2 git:2 run_tests:2 edit_block:1 ls:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=19859 cache_r=1038976 cache_w=0 out=11652 reasoning=6775 total=1070487 — $0.0909
+  TOTAL: in=19859 cache_r=1038976 cache_w=0 out=11652 reasoning=6775 total=1070487 — $0.0909
+patch written to "/tmp/out.patch" (819 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at bcfe5aa5be SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_overriding_FIELD_display (model_fields.tests.GetFieldDisplayTests) --keep-green=test_blank_in_choices (model_fields.tests.GetChoicesTests) --keep-green=test_blank_in_grouped_choices (model_fields.tests.GetChoicesTests) --keep-green=test_empty_choices (model_fields.tests.GetChoicesTests) --keep-green=test_lazy_strings_not_evaluated (model_fields.tests.GetChoicesTests) --keep-green=test_check (model_fields.tests.ChoicesTests) --keep-green=test_choices (model_fields.tests.ChoicesTests) --keep-green=test_flatchoices (model_fields.tests.ChoicesTests) --keep-green=test_formfield (model_fields.tests.ChoicesTests) --keep-green=test_invalid_choice (model_fields.tests.ChoicesTests) --keep-green=test_field_name (model_fields.tests.BasicFieldTests) --keep-green=test_field_repr (model_fields.tests.BasicFieldTests) --keep-green=test_field_str (model_fields.tests.BasicFieldTests) --keep-green=test_field_verbose_name (model_fields.tests.BasicFieldTests) --keep-green=test_show_hidden_initial (model_fields.tests.BasicFieldTests) --keep-green=test_choices_and_field_display (model_fields.tests.GetFieldDisplayTests) --keep-green=test_empty_iterator_choices (model_fields.tests.GetFieldDisplayTests) --keep-green=test_iterator_choices (model_fields.tests.GetFieldDisplayTests) --keep-green=test_get_choices (model_fields.tests.GetChoicesLimitChoicesToTests) --keep-green=test_get_choices_reverse_related_field (model_fields.tests.GetChoicesLimitChoicesToTests) --keep-green=test_get_choices (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_default_ordering (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_reverse_related_field (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_reverse_related_field_default_ordering (model_fields.tests.GetChoicesOrderingTests)
+
+outcome: Solved
+timing (total 4.67s):
+  verify: 2.76s (59% n=2)
+  baseline: 1.72s (37%)
+  discover: 0.11s (2%)
+  bootstrap: 0.08s (2%)
+  fix: 0.00s (0%)
+
+check_exit=0

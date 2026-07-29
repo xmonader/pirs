@@ -1,0 +1,17 @@
+{
+  "id": "sympy__sympy-16106",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-16106:latest",
+  "container": "pirspi-sympy--sympy-16106-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 270.8,
+  "patch_bytes": 1499,
+  "patch_copied": true,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 430.9,
+  "stderr_tail": "outcome: Failed(FixNoFlip)\ntiming (total 158.62s):\n  discover: 132.06s (83%)\n  baseline: 14.54s (9%)\n  bootstrap: 10.98s (7%)\n  verify: 1.04s (1%)\n  fix: 0.00s (0%)"
+}

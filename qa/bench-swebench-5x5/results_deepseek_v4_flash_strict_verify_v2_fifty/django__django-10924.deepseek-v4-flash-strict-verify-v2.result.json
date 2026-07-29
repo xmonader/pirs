@@ -1,0 +1,29 @@
+{
+  "id": "django__django-10924",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-verify-v2",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-10924:latest",
+  "container": "pirsbench-django--django-10924-deepseek-v4-flash-strict-verify-v2",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": false,
+  "strict_verify": true,
+  "exit_code": 0,
+  "elapsed_s": 132.7,
+  "solved": true,
+  "stderr_tail": "strategy: monolithic\nmode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)\nshadow-verify attempt 1/3\nshadow attempt 1: outcome=Solved timing=timing (total 4.31s):\nsession: turns=40 tools=46 [read:18 grep:13 bash:6 find:3 ls:3 edit_block:2 project:1]\ntokens by model:\n  deepseek-v4-flash: in=19223 cache_r=752384 cache_w=0 out=9054 reasoning=4619 total=780661 \u2014 $0.0678\n  TOTAL: in=19223 cache_r=752384 cache_w=0 out=9054 reasoning=4619 total=780661 \u2014 $0.0678\npatch written to \"/tmp/out.patch\" (1154 bytes)\noutcome: Solved (shadow-verify)",
+  "tokens": {
+    "in": 19223,
+    "cache_read": 752384,
+    "cache_write": 0,
+    "out": 9054,
+    "reasoning": 4619,
+    "total": 780661,
+    "cost_usd": 0.0678
+  },
+  "patch_copied": true,
+  "patch_bytes": 1154
+}

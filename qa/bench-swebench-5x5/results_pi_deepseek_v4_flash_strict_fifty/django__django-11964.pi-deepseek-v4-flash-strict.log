@@ -1,0 +1,43 @@
+=== django__django-11964 pi/deepseek-v4-flash STRICT start 1785314017.63093 ===
+80384d779dca305e7fc29502a80d8ecdd4783cccf44b34eb816f3b7c1c52b09d
+base_sha=955c9315a0cc53999805502d587bbf2886317ded (NO test_patch for agent)
+grade targets=2 keep_green=15 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix works. Let me provide a summary of the changes:
+
+## Summary
+
+### Problem
+When a model field has `choices` using `TextChoices` or `IntegerChoices`, setting the field to an enum member stores the enum object itself (not its `.value`) in the instance dict. When `str()` is called on the stored enum member, it returns `'MyChoice.FIRST_CHOICE'` instead of `'first'` because `Enum.__str__` overrides `str.__str__` in the MRO.
+
+### Root Cause
+`DeferredAttribute` (the descriptor class for model fields) had no `__set__` method, so assigning to a field went directly into `instance.__dict__` without any conversion. The enum member was stored as-is.
+
+### Fix
+Added `__set__` and `__delete__` methods to `DeferredAttribute` in `/testbed/django/db/models/query_utils.py`:
+
+1. **`__set__`**: When setting a value, if it's an `enum.Enum` instance, extract its `.value` property before storing. This ensures the stored value is always the plain primitive value (string for `TextChoices`, int for `IntegerChoices`).
+
+2. **`__delete__`**: Added to support attribute deletion, which is required for any data descriptor (a descriptor with `__set__`). Without it, `del instance.field` would raise `AttributeError: __delete__`.
+
+### Files Changed
+- `/testbed/django/db/models/query_utils.py`
+  - Added `import enum` at the top
+  - Added `__set__` and `__delete__` methods to `DeferredAttribute`
+
+
+pi_exit=0 agent_elapsed_s=315.7
+patch_bytes=896
+HEAD is now at 955c9315a0 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_str (model_enums.tests.ChoicesTests) --target=test_textchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_invalid_definition (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_blank_value (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_bool_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_labels_valid (model_enums.tests.CustomChoicesTests) --keep-green=test_timezone_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_uuid_unsupported (model_enums.tests.CustomChoicesTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 3.63s):
+  baseline: 2.23s (61%)
+  verify: 1.03s (28%)
+  discover: 0.25s (7%)
+  bootstrap: 0.12s (3%)
+  fix: 0.00s (0%)
+
+check_exit=1

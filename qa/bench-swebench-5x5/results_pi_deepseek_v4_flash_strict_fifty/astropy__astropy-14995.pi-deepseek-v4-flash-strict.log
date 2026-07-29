@@ -1,0 +1,37 @@
+=== astropy__astropy-14995 pi/deepseek-v4-flash STRICT start 1785312905.4381275 ===
+4f8e95de1875121e2b2840cbc15070af0ab6d315344678c92c7e043036ded946
+base_sha=1e905ced3a7e0598609c2776028ea7819561d601 (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All 179 tests pass. 
+
+## Summary
+
+The bug was in `/testbed/astropy/nddata/mixins/ndarithmetic.py` in the `_arithmetic_mask` method (line 518).
+
+**Root cause**: The method had a gap in its conditional logic. It correctly handled:
+1. Both masks are `None` → return `None`
+2. Only `self.mask` is `None` but `operand.mask` exists → return copy of `operand.mask`
+3. `operand` is `None` → return copy of `self.mask`
+4. Both masks exist → call `handle_mask(self.mask, operand.mask)`
+
+But it **did not handle** the case where `self.mask` exists but `operand.mask` is `None` (i.e., the operand has no mask). This fell through to the `else` clause which tried to call `handle_mask(self.mask, None)` — causing `TypeError: unsupported operand type(s) for |: 'int' and 'NoneType'`.
+
+**Fix**: Added an `elif operand.mask is None` branch that returns `deepcopy(self.mask)`, matching the existing behavior pattern where a single non-None mask is simply copied to the result.
+
+
+pi_exit=0 agent_elapsed_s=34.1
+patch_bytes=677
+HEAD is now at 1e905ced3 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_nddata_bitmask_arithmetic --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data10-data20] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data11-data21] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data12-data22] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data13-data23] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data14-data24] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data15-data25] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data16-data26] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_invalid --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data10-data20] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data11-data21] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data12-data22] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data13-data23] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data14-data24] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data15-data25] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data16-data26] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data17-data27] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_not_identical[data10-data20] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_not_identical[data11-data21] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_not_identical[data12-data22] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_not_identical[data13-data23] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[None-None] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[None-wcs21] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[wcs12-None] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[wcs13-wcs23] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[wcs14-wcs24] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[None-None] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[None-False] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[True-None] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[False-False] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[True-False] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[False-True] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[True-True] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask17-mask27] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask18-mask28] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask19-mask29] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask110-mask210] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask111-mask211] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask112-mask212] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks_invalid --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_stddevuncertainty_basic
+
+outcome: Solved
+timing (total 261.09s):
+  bootstrap: 193.43s (74%)
+  discover: 54.73s (21%)
+  verify: 8.63s (3% n=2)
+  baseline: 4.31s (2%)
+  fix: 0.00s (0%)
+
+check_exit=0

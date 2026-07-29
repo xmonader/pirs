@@ -1,0 +1,32 @@
+=== django__django-11099 pi/deepseek-v4-flash STRICT start 1785313313.8002572 ===
+07ed934d23f7f6b354eb4cadc990cc55f3660484260eaf02421a70e43334efea
+base_sha=2a2861e0a18c88cf936c48d3fac8084d0eff986c (NO test_patch for agent)
+grade targets=3 keep_green=19 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is verified. Here's what was done:
+
+**Problem:** Both `ASCIIUsernameValidator` and `UnicodeUsernameValidator` used the regex pattern `r'^[\w.@+-]+$'`. Due to a Python regex quirk, `$` matches not only the end of the string but also just before a trailing newline at the end of the string. This means usernames like `"user\n"` would be incorrectly accepted.
+
+**Fix:** Changed the regex in both validators from `r'^[\w.@+-]+$'` to `r'\A[\w.@+-]+\Z'`.
+
+- `\A` matches only at the start of the string (unlike `^` which also matches at the start of each line)
+- `\Z` matches only at the end of the string (unlike `$` which also matches just before a trailing newline)
+
+This ensures that usernames with trailing newlines are properly rejected.
+
+
+pi_exit=0 agent_elapsed_s=22.0
+patch_bytes=901
+HEAD is now at 2a2861e0a1 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_ascii_validator (auth_tests.test_validators.UsernameValidatorsTests) --target=test_unicode_validator (auth_tests.test_validators.UsernameValidatorsTests) --target=test_help_text (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_help_text (auth_tests.test_validators.MinimumLengthValidatorTest) --keep-green=test_validate (auth_tests.test_validators.MinimumLengthValidatorTest) --keep-green=test_help_text (auth_tests.test_validators.NumericPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.NumericPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_validate_property (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_empty_password_validator_help_text_html (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_get_default_password_validators (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_get_password_validators_custom (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_changed (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_changed_with_custom_validator (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_text_html (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_text_html_escaping (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_texts (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_validate_password (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_help_text (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate_custom_list (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate_django_supplied_file (auth_tests.test_validators.CommonPasswordValidatorTest)
+
+outcome: Solved
+timing (total 5.95s):
+  verify: 3.22s (54% n=2)
+  baseline: 2.56s (43%)
+  discover: 0.10s (2%)
+  bootstrap: 0.07s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

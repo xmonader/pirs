@@ -1,0 +1,28 @@
+=== django__django-11099 (deepseek-v4-flash) start 1785324254.1288962 ===
+343de93c0b85d410426994a108aaaf73efd271981f787c22635ad8fef9ba826e
+base_sha=2a2861e0a18c88cf936c48d3fac8084d0eff986c
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=2a2861e0a18c88cf936c48d3fac8084d0eff986c --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=11 tools=11 [bash:3 edit:2 grep:2 read:2 find:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=3582 cache_r=103936 cache_w=0 out=1594 reasoning=182 total=109112 — $0.0100
+  TOTAL: in=3582 cache_r=103936 cache_w=0 out=1594 reasoning=182 total=109112 — $0.0100
+patch written to "/tmp/out.patch" (901 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 2a2861e0a1 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_ascii_validator (auth_tests.test_validators.UsernameValidatorsTests) --target=test_unicode_validator (auth_tests.test_validators.UsernameValidatorsTests) --target=test_help_text (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_help_text (auth_tests.test_validators.MinimumLengthValidatorTest) --keep-green=test_validate (auth_tests.test_validators.MinimumLengthValidatorTest) --keep-green=test_help_text (auth_tests.test_validators.NumericPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.NumericPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_validate_property (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_empty_password_validator_help_text_html (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_get_default_password_validators (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_get_password_validators_custom (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_changed (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_changed_with_custom_validator (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_text_html (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_text_html_escaping (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_texts (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_validate_password (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_help_text (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate_custom_list (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate_django_supplied_file (auth_tests.test_validators.CommonPasswordValidatorTest)
+
+outcome: Solved
+timing (total 5.03s):
+  verify: 2.94s (59% n=2)
+  baseline: 1.90s (38%)
+  discover: 0.12s (2%)
+  bootstrap: 0.06s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

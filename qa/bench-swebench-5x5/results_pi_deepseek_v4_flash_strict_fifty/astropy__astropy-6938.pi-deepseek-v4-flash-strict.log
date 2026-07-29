@@ -1,0 +1,27 @@
+=== astropy__astropy-6938 pi/deepseek-v4-flash STRICT start 1785312999.3052998 ===
+f52f7a4a685728e51c7aa32c04fa324740009890af36b144d5c5df257f6fc030
+base_sha=c76af9ed6bb89bfba45b9f5bc1e635188278e2fa (NO test_patch for agent)
+grade targets=2 keep_green=11 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is clean and correct. Here's a summary:
+
+**Root cause:** In `/testbed/astropy/io/fits/fitsrec.py`, line 1264, `output_field.replace(...)` was called on a `chararray` object. However, `numpy.char.chararray.replace()` returns a **copy** and does **not** modify the array in-place. So this code had no effect — the `D` exponent format was never actually applied, and `E` was silently kept in the output instead of being converted to `D`.
+
+**Fix:** Changed `output_field.replace(...)` to `output_field[:] = output_field.replace(...)`, which assigns the result back into the original array, performing the replacement in-place.
+
+
+pi_exit=0 agent_elapsed_s=40.7
+patch_bytes=519
+HEAD is now at c76af9ed6b Merge pull request #6981 from mhvk/iers-b-for-3.0
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_ascii_table_data --target=astropy/io/fits/tests/test_table.py::TestTableFunctions::test_ascii_table --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_sample_file --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_image_create --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data_auto_rescale --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_uint16_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_groups_hdu_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_open_with_no_keywords --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_writeto_convenience --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_hdu_writeto --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_datasum_only --keep-green=astropy/io/fits/tests/test_table.py::test_regression_scalar_indexing
+
+outcome: Solved
+timing (total 52.04s):
+  discover: 22.07s (42%)
+  bootstrap: 17.91s (34%)
+  verify: 7.68s (15% n=2)
+  baseline: 4.38s (8%)
+  fix: 0.00s (0%)
+
+check_exit=0

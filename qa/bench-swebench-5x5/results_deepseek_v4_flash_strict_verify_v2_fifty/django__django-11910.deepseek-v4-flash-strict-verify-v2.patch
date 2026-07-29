@@ -1,0 +1,306 @@
+diff --git a/debug.py b/debug.py
+new file mode 100644
+index 0000000000..b44eab1a02
+--- /dev/null
++++ b/debug.py
+@@ -0,0 +1,111 @@
++"""
++Debug: Check why PK rename detection fails.
++"""
++import os, sys
++os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.test_sqlite'
++sys.path.insert(0, '/testbed')
++sys.path.insert(0, '/testbed/tests')
++
++import django
++django.setup()
++
++from django.db import models
++from django.db.migrations.state import ModelState, ProjectState
++from django.db.migrations.autodetector import MigrationAutodetector
++from django.db.migrations.questioner import MigrationQuestioner
++
++before = [
++    ModelState('app1', 'ModelA', [
++        ('field_wrong', models.CharField('field1', max_length=50, primary_key=True)),
++    ]),
++    ModelState('app1', 'ModelB', [
++        ('id', models.AutoField(primary_key=True, auto_created=True)),
++        ('modela', models.ForeignKey('app1.ModelA', models.CASCADE, blank=True, null=True)),
++    ]),
++]
++
++after = [
++    ModelState('app1', 'ModelA', [
++        ('field_fixed', models.CharField('field1', max_length=50, primary_key=True)),
++    ]),
++    ModelState('app1', 'ModelB', [
++        ('id', models.AutoField(primary_key=True, auto_created=True)),
++        ('modela', models.ForeignKey('app1.ModelA', models.CASCADE, blank=True, null=True)),
++    ]),
++]
++
++def make_project_state(model_states):
++    project_state = ProjectState()
++    for model_state in model_states:
++        project_state.add_model(model_state.clone())
++    return project_state
++
++from_state = make_project_state(before)
++to_state = make_project_state(after)
++
++detector = MigrationAutodetector(from_state, to_state, MigrationQuestioner({'ask_rename': True}))
++
++# Manually inspect the field lists
++detector.old_apps = from_state.apps
++detector.new_apps = to_state.apps
++detector.renamed_models = {}
++detector.renamed_models_rel = {}
++detector.old_model_keys = set(from_state.models.keys())
++detector.new_model_keys = set(to_state.models.keys())
++detector.kept_model_keys = detector.old_model_keys & detector.new_model_keys
++detector.kept_proxy_keys = set()
++detector.kept_unmanaged_keys = set()
++
++print("old_model_keys:", detector.old_model_keys)
++print("new_model_keys:", detector.new_model_keys)
++print("kept_model_keys:", detector.kept_model_keys)
++
++detector.old_field_keys = {
++    (app_label, model_name, x)
++    for app_label, model_name in detector.kept_model_keys
++    for x, y in detector.from_state.models[
++        app_label,
++        detector.renamed_models.get((app_label, model_name), model_name)
++    ].fields
++}
++detector.new_field_keys = {
++    (app_label, model_name, x)
++    for app_label, model_name in detector.kept_model_keys
++    for x, y in detector.to_state.models[app_label, model_name].fields
++}
++
++print("\nold_field_keys:", sorted(detector.old_field_keys))
++print("new_field_keys:", sorted(detector.new_field_keys))
++print("new - old:", sorted(detector.new_field_keys - detector.old_field_keys))
++print("old - new:", sorted(detector.old_field_keys - detector.new_field_keys))
++
++# Now run generate_renamed_fields
++detector.renamed_fields = {}
++for app_label, model_name, field_name in sorted(detector.new_field_keys - detector.old_field_keys):
++    old_model_name = detector.renamed_models.get((app_label, model_name), model_name)
++    old_model_state = detector.from_state.models[app_label, old_model_name]
++    field = detector.new_apps.get_model(app_label, model_name)._meta.get_field(field_name)
++    field_dec = detector.deep_deconstruct(field)
++    
++    print(f"\n=== Checking new field: {app_label}.{model_name}.{field_name} ===")
++    print(f"  field_dec: {field_dec}")
++    
++    for rem_app_label, rem_model_name, rem_field_name in sorted(detector.old_field_keys - detector.new_field_keys):
++        if rem_app_label == app_label and rem_model_name == model_name:
++            old_field = old_model_state.get_field_by_name(rem_field_name)
++            old_field_dec = detector.deep_deconstruct(old_field)
++            print(f"  Comparing old: {rem_app_label}.{rem_model_name}.{rem_field_name}")
++            print(f"  old_field_dec: {old_field_dec}")
++            print(f"  equal: {old_field_dec == field_dec}")
++            
++            if field.remote_field and field.remote_field.model and 'to' in old_field_dec[2]:
++                old_rel_to = old_field_dec[2]['to']
++                if old_rel_to in detector.renamed_models_rel:
++                    old_field_dec[2]['to'] = detector.renamed_models_rel[old_rel_to]
++            old_field.set_attributes_from_name(rem_field_name)
++            old_db_column = old_field.get_attname_column()[1]
++            
++            match = (old_field_dec == field_dec or (
++                old_field_dec[0:2] == field_dec[0:2] and
++                dict(old_field_dec[2], db_column=old_db_column) == field_dec[2]))
++            print(f"  match after processing: {match}")
+diff --git a/django/db/migrations/autodetector.py b/django/db/migrations/autodetector.py
+index 1c40161c7f..dea0c89107 100644
+--- a/django/db/migrations/autodetector.py
++++ b/django/db/migrations/autodetector.py
+@@ -927,7 +927,9 @@ class MigrationAutodetector:
+                 if remote_field_name:
+                     to_field_rename_key = rename_key + (remote_field_name,)
+                     if to_field_rename_key in self.renamed_fields:
+-                        new_field.remote_field.field_name = old_field.remote_field.field_name
++                        old_field_remote_field_name = getattr(old_field.remote_field, 'field_name', None)
++                        if old_field_remote_field_name != old_field.remote_field.model._meta.pk.name:
++                            new_field.remote_field.field_name = old_field.remote_field.field_name
+                 # Handle ForeignObjects which can have multiple from_fields/to_fields.
+                 from_fields = getattr(new_field, 'from_fields', None)
+                 if from_fields:
+diff --git a/reproduce.py b/reproduce.py
+new file mode 100644
+index 0000000000..ecdddf5e60
+--- /dev/null
++++ b/reproduce.py
+@@ -0,0 +1,52 @@
++"""
++Debug: Check field key structure.
++"""
++import os, sys
++os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.test_sqlite'
++sys.path.insert(0, '/testbed')
++sys.path.insert(0, '/testbed/tests')
++
++import django
++django.setup()
++
++from django.db import models
++from django.db.migrations.state import ModelState, ProjectState
++
++before = [
++    ModelState('app1', 'ModelA', [
++        ('field_wrong', models.CharField('field1', max_length=50, primary_key=True)),
++    ]),
++    ModelState('app1', 'ModelB', [
++        ('id', models.AutoField(primary_key=True, auto_created=True)),
++        ('modela', models.ForeignKey('app1.ModelA', models.CASCADE, blank=True, null=True)),
++    ]),
++]
++
++after = [
++    ModelState('app1', 'ModelA', [
++        ('field_fixed', models.CharField('field1', max_length=50, primary_key=True)),
++    ]),
++    ModelState('app1', 'ModelB', [
++        ('id', models.AutoField(primary_key=True, auto_created=True)),
++        ('modela', models.ForeignKey('app1.ModelA', models.CASCADE, blank=True, null=True)),
++    ]),
++]
++
++def make_project_state(model_states):
++    project_state = ProjectState()
++    for model_state in model_states:
++        project_state.add_model(model_state.clone())
++    return project_state
++
++from_state = make_project_state(before)
++
++print("Model state fields structure:")
++for (app_label, model_name), model_state in from_state.models.items():
++    print(f"\n{app_label}.{model_name}:")
++    print(f"  type of fields: {type(model_state.fields)}")
++    for item in model_state.fields:
++        print(f"  item: {item!r}")
++        print(f"  type: {type(item)}")
++        if isinstance(item, tuple) and len(item) == 2:
++            name, field = item
++            print(f"    name={name!r}, field={type(field).__name__}")
+diff --git a/verify_fix.py b/verify_fix.py
+new file mode 100644
+index 0000000000..e35799c417
+--- /dev/null
++++ b/verify_fix.py
+@@ -0,0 +1,110 @@
++"""
++Verify the fix: ForeignKey without explicit to_field should not get
++a to_field pointing to old PK name when the PK is renamed.
++"""
++import os, sys
++os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.test_sqlite'
++sys.path.insert(0, '/testbed')
++sys.path.insert(0, '/testbed/tests')
++
++import django
++django.setup()
++
++from django.db import models
++from django.db.migrations.state import ModelState, ProjectState
++from django.db.migrations.autodetector import MigrationAutodetector
++from django.db.migrations.questioner import MigrationQuestioner
++
++# Reproduce: PK renamed, FK without explicit to_field
++before = [
++    ModelState('app1', 'ModelA', [
++        ('field_wrong', models.CharField('field1', max_length=50, primary_key=True)),
++    ]),
++    ModelState('app1', 'ModelB', [
++        ('id', models.AutoField(primary_key=True, auto_created=True)),
++        ('modela', models.ForeignKey('app1.ModelA', models.CASCADE, blank=True, null=True)),
++    ]),
++]
++
++after = [
++    ModelState('app1', 'ModelA', [
++        ('field_fixed', models.CharField('field1', max_length=50, primary_key=True)),
++    ]),
++    ModelState('app1', 'ModelB', [
++        ('id', models.AutoField(primary_key=True, auto_created=True)),
++        ('modela', models.ForeignKey('app1.ModelA', models.CASCADE, blank=True, null=True)),
++    ]),
++]
++
++def make_project_state(model_states):
++    project_state = ProjectState()
++    for model_state in model_states:
++        project_state.add_model(model_state.clone())
++    return project_state
++
++def get_changes(before_states, after_states, questioner=None):
++    return MigrationAutodetector(
++        make_project_state(before_states),
++        make_project_state(after_states),
++        questioner,
++    )._detect_changes()
++
++questioner = MigrationQuestioner({'ask_rename': True})
++changes = get_changes(before, after, questioner)
++
++print("=== Test 1: PK renamed, FK without explicit to_field ===")
++has_error = False
++for app_label, migrations_list in changes.items():
++    for migration in migrations_list:
++        for op in migration.operations:
++            print(f"  Operation: {op.describe()}")
++            if hasattr(op, 'field') and op.field and hasattr(op.field, 'remote_field'):
++                kwargs = op.field.deconstruct()[2]
++                if 'to_field' in kwargs:
++                    print(f"    ERROR: AlterField has to_field={kwargs['to_field']!r} - should NOT have to_field")
++                    has_error = True
++                else:
++                    print(f"    OK: no to_field in kwargs")
++
++print()
++
++# Also test: explicit to_field with field rename (existing behavior)
++before2 = [
++    ModelState('app', 'Foo', [
++        ('id', models.AutoField(primary_key=True)),
++        ('field', models.IntegerField(unique=True)),
++    ]),
++    ModelState('app', 'Bar', [
++        ('id', models.AutoField(primary_key=True)),
++        ('foo', models.ForeignKey('app.Foo', models.CASCADE, to_field='field')),
++    ]),
++]
++after2 = [
++    ModelState('app', 'Foo', [
++        ('id', models.AutoField(primary_key=True)),
++        ('renamed_field', models.IntegerField(unique=True)),
++    ]),
++    ModelState('app', 'Bar', [
++        ('id', models.AutoField(primary_key=True)),
++        ('foo', models.ForeignKey('app.Foo', models.CASCADE, to_field='renamed_field')),
++    ]),
++]
++
++changes2 = get_changes(before2, after2, questioner)
++print("=== Test 2: Explicit to_field with field rename (existing behavior) ===")
++for app_label, migrations_list in changes2.items():
++    for migration in migrations_list:
++        print(f"  Migration for {app_label}:")
++        for op in migration.operations:
++            print(f"    Operation: {op.describe()}")
++            if hasattr(op, 'field') and op.field and hasattr(op.field, 'remote_field'):
++                kwargs = op.field.deconstruct()[2]
++                if 'to_field' in kwargs:
++                    print(f"      has to_field={kwargs['to_field']!r}")
++
++print()
++if has_error:
++    print("FAIL: Bug still present!")
++    sys.exit(1)
++else:
++    print("All checks passed!")

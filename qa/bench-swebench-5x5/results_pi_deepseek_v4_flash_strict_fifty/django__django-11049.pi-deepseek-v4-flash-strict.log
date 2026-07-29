@@ -1,0 +1,43 @@
+=== django__django-11049 pi/deepseek-v4-flash STRICT start 1785313293.6638997 ===
+eec8289e44a9e5cd4489c6fd332bcd236e4caaf23e87bba7425604475b8567a0
+base_sha=17455e924e243e7a55e8a38f45966d8cbb27c273 (NO test_patch for agent)
+grade targets=1 keep_green=8 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All 261 tests pass.
+
+## Summary
+
+The issue was that the `DurationField` error message in `django/db/models/fields/__init__.py` had the wrong format notation.
+
+**Root cause:** The error message said `[DD] [HH:[MM:]]ss[.uuuuuu]` which implies hours are mandatory (when present) and minutes are optional within them. But the actual regex (`standard_duration_re` in `django/utils/dateparse.py`) shows the opposite behavior:
+
+- `(?:(?P<hours>\d+):)(?=\d+:\d+)` - hours are only valid **if followed by** `minutes:seconds`
+- `(?:(?P<minutes>\d+):)?` - minutes are optional
+- `(?P<seconds>\d+)` - seconds are mandatory
+
+So the correct format is **`[DD] [[HH:]MM:]ss[.uuuuuu]`** where:
+- Days are optional
+- Hours are optional but can only appear with minutes AND seconds
+- Minutes are optional (but if present with hours, the hours are implied)
+- Seconds are mandatory
+- Microseconds are optional
+
+**Fix:** Changed the format string in the error message from `[DD] [HH:[MM:]]ss[.uuuuuu]` to `[DD] [[HH:]MM:]ss[.uuuuuu]` in `django/db/models/fields/__init__.py`, and updated the corresponding test assertion.
+
+
+pi_exit=0 agent_elapsed_s=68.6
+patch_bytes=1138
+HEAD is now at 17455e924e Removed executable bit from static asset xregexp.js.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_invalid_string (model_fields.test_durationfield.TestValidation) --keep-green=test_dumping (model_fields.test_durationfield.TestSerialization) --keep-green=test_loading (model_fields.test_durationfield.TestSerialization) --keep-green=test_formfield (model_fields.test_durationfield.TestFormField) --keep-green=test_exact (model_fields.test_durationfield.TestQuerying) --keep-green=test_gt (model_fields.test_durationfield.TestQuerying) --keep-green=test_create_empty (model_fields.test_durationfield.TestSaveLoad) --keep-green=test_fractional_seconds (model_fields.test_durationfield.TestSaveLoad) --keep-green=test_simple_roundtrip (model_fields.test_durationfield.TestSaveLoad)
+
+[2m2026-07-29T08:22:49.061567Z[0m [33m WARN[0m [2mpirs_bench::driver[0m[2m:[0m git apply model patch failed: error: patch failed: tests/model_fields/test_durationfield.py:75
+error: tests/model_fields/test_durationfield.py: patch does not apply
+
+outcome: Failed(FixNoFlip)
+timing (total 2.56s):
+  baseline: 2.36s (92%)
+  discover: 0.13s (5%)
+  bootstrap: 0.06s (3%)
+
+check_exit=1

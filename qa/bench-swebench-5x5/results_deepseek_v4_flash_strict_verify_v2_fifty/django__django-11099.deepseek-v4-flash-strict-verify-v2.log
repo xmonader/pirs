@@ -1,0 +1,18 @@
+=== django__django-11099 (deepseek-v4-flash) start 1785321901.2309558 ===
+ab831b9dd7273598a9dfc759a15883f21ea76c2669e120149580a5bb23f5fc04
+base_sha=2a2861e0a18c88cf936c48d3fac8084d0eff986c
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=2a2861e0a18c88cf936c48d3fac8084d0eff986c --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_ascii_validator (auth_tests.test_validators.UsernameValidatorsTests) --target=test_unicode_validator (auth_tests.test_validators.UsernameValidatorsTests) --target=test_help_text (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_help_text (auth_tests.test_validators.MinimumLengthValidatorTest) --keep-green=test_validate (auth_tests.test_validators.MinimumLengthValidatorTest) --keep-green=test_help_text (auth_tests.test_validators.NumericPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.NumericPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_validate_property (auth_tests.test_validators.UserAttributeSimilarityValidatorTest) --keep-green=test_empty_password_validator_help_text_html (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_get_default_password_validators (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_get_password_validators_custom (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_changed (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_changed_with_custom_validator (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_text_html (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_text_html_escaping (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_password_validators_help_texts (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_validate_password (auth_tests.test_validators.PasswordValidationTest) --keep-green=test_help_text (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate_custom_list (auth_tests.test_validators.CommonPasswordValidatorTest) --keep-green=test_validate_django_supplied_file (auth_tests.test_validators.CommonPasswordValidatorTest) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Solved timing=timing (total 4.93s):
+session: turns=14 tools=13 [bash:4 read:4 grep:2 edit:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=6179 cache_r=149760 cache_w=0 out=1865 reasoning=372 total=157804 — $0.0142
+  TOTAL: in=6179 cache_r=149760 cache_w=0 out=1865 reasoning=372 total=157804 — $0.0142
+patch written to "/tmp/out.patch" (901 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=52.8

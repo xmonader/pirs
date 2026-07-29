@@ -1,0 +1,28 @@
+=== django__django-11964 (deepseek-v4-flash) start 1785324972.442239 ===
+db6889f0303b2764325df2afc430e1f40b0c1152908bfc794d05f2581154ac16
+base_sha=955c9315a0cc53999805502d587bbf2886317ded
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=955c9315a0cc53999805502d587bbf2886317ded --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=44 [bash:20 grep:10 read:6 find:3 edit:1 edit_block:1 git:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=17534 cache_r=772352 cache_w=0 out=12751 reasoning=8031 total=802637 — $0.0728
+  TOTAL: in=17534 cache_r=772352 cache_w=0 out=12751 reasoning=8031 total=802637 — $0.0728
+patch written to "/tmp/out.patch" (430 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 955c9315a0 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_str (model_enums.tests.ChoicesTests) --target=test_textchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_invalid_definition (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_blank_value (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_bool_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_labels_valid (model_enums.tests.CustomChoicesTests) --keep-green=test_timezone_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_uuid_unsupported (model_enums.tests.CustomChoicesTests)
+
+outcome: Solved
+timing (total 4.27s):
+  verify: 2.66s (62% n=2)
+  baseline: 1.45s (34%)
+  discover: 0.10s (2%)
+  bootstrap: 0.06s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

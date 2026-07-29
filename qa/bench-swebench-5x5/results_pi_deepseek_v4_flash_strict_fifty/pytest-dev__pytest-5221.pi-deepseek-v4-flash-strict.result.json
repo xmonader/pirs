@@ -1,0 +1,17 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirspi-pytest-dev--pytest-5221-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 191.6,
+  "patch_bytes": 473,
+  "patch_copied": true,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 240.3,
+  "stderr_tail": "outcome: Failed(FixNoFlip)\ntiming (total 46.91s):\n  bootstrap: 23.10s (49%)\n  discover: 13.24s (28%)\n  baseline: 9.47s (20%)\n  verify: 1.10s (2%)\n  fix: 0.00s (0%)"
+}

@@ -1,0 +1,23 @@
+=== django__django-11630 (deepseek-v4-flash) start 1785323036.892298 ===
+670b33ce06637a86535e89574bc41c9301ddf216bdbf2be2f36a73a517cb4c87
+base_sha=65e86948b80262574058a94ccaae3a9b59c3faea
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=65e86948b80262574058a94ccaae3a9b59c3faea --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_collision_across_apps_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --target=test_collision_in_same_app_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_in_same_app (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_proxy_models (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_unmanaged_models (check_framework.test_model_checks.DuplicateDBTableTests) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 2.59s):
+shadow-verify attempt 2/3
+agent produced no further edits; re-grading best patch
+shadow attempt 2: outcome=Failed(FixNoFlip) timing=timing (total 2.51s):
+shadow-verify attempt 3/3
+shadow attempt 3: outcome=Solved timing=timing (total 5.19s):
+session: turns=105 tools=106 [bash:44 read:24 grep:22 edit_block:11 find:2 run_tests:2 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=54983 cache_r=5054592 cache_w=0 out=38718 reasoning=20175 total=5148293 — $0.4113
+  TOTAL: in=54983 cache_r=5054592 cache_w=0 out=38718 reasoning=20175 total=5148293 — $0.4113
+patch written to "/tmp/out.patch" (2426 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=892.9

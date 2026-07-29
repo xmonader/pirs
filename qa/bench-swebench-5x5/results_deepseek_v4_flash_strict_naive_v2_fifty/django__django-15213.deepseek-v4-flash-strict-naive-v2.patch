@@ -1,0 +1,30 @@
+diff --git a/django/db/models/sql/where.py b/django/db/models/sql/where.py
+index 50ff13be75..5f502e63e8 100644
+--- a/django/db/models/sql/where.py
++++ b/django/db/models/sql/where.py
+@@ -65,7 +65,7 @@ class WhereNode(tree.Node):
+     def as_sql(self, compiler, connection):
+         """
+         Return the SQL version of the where clause and the value to be
+-        substituted in. Return '', [] if this node matches everything,
++        substituted in. Return '1', [] if this node matches everything,
+         None, [] if this node is empty, and raise EmptyResultSet if this
+         node can't match anything.
+         """
+@@ -94,14 +94,14 @@ class WhereNode(tree.Node):
+             # counts.
+             if empty_needed == 0:
+                 if self.negated:
+-                    return '', []
++                    return '1', []
+                 else:
+                     raise EmptyResultSet
+             if full_needed == 0:
+                 if self.negated:
+                     raise EmptyResultSet
+                 else:
+-                    return '', []
++                    return '1', []
+         conn = ' %s ' % self.connector
+         sql_string = conn.join(result)
+         if sql_string:

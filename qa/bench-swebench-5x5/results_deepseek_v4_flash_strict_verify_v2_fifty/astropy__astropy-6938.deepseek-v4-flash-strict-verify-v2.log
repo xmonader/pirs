@@ -1,0 +1,18 @@
+=== astropy__astropy-6938 (deepseek-v4-flash) start 1785320114.8248258 ===
+853e674ac3bc6bfe1a3cfcc6c90cfad977a779e5a953b09b4b51c49474c342c6
+base_sha=c76af9ed6bb89bfba45b9f5bc1e635188278e2fa
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=c76af9ed6bb89bfba45b9f5bc1e635188278e2fa --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_ascii_table_data --target=astropy/io/fits/tests/test_table.py::TestTableFunctions::test_ascii_table --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_sample_file --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_image_create --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data_auto_rescale --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_uint16_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_groups_hdu_data --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_open_with_no_keywords --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_writeto_convenience --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_hdu_writeto --keep-green=astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_datasum_only --keep-green=astropy/io/fits/tests/test_table.py::test_regression_scalar_indexing --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Solved timing=timing (total 161.18s):
+session: turns=40 tools=41 [bash:24 read:9 grep:5 code_map:1 edit_block:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=11973 cache_r=677760 cache_w=0 out=13630 reasoning=6940 total=703363 — $0.0657
+  TOTAL: in=11973 cache_r=677760 cache_w=0 out=13630 reasoning=6940 total=703363 — $0.0657
+patch written to "/tmp/out.patch" (519 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=674.8

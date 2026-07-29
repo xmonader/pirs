@@ -1,0 +1,43 @@
+diff --git a/sympy/printing/mathml.py b/sympy/printing/mathml.py
+index 1aa0ee01a2..ff0ae7b79a 100644
+--- a/sympy/printing/mathml.py
++++ b/sympy/printing/mathml.py
+@@ -449,6 +449,17 @@ def _print_Basic(self, e):
+             x.appendChild(self._print(arg))
+         return x
+ 
++    def _print_IndexedBase(self, e):
++        return self._print(e.label)
++
++    def _print_Indexed(self, e):
++        x = self.dom.createElement('apply')
++        x.appendChild(self.dom.createElement('subscript'))
++        x.appendChild(self._print(e.base))
++        for index in e.indices:
++            x.appendChild(self._print(index))
++        return x
++
+     def _print_AssocOp(self, e):
+         x = self.dom.createElement('apply')
+         x_1 = self.dom.createElement(self.mathml_tag(e))
+@@ -1025,6 +1036,20 @@ def _print_Tuple(self, e):
+         mrow.appendChild(x)
+         return mrow
+ 
++    def _print_IndexedBase(self, e):
++        return self._print(e.label)
++
++    def _print_Indexed(self, e):
++        x = self.dom.createElement('msub')
++        x.appendChild(self._print(e.base))
++        if len(e.indices) == 1:
++            x.appendChild(self._print(e.indices[0]))
++            return x
++        # For multiple indices, use a tuple-like structure
++        from sympy.core.containers import Tuple
++        x.appendChild(self._print(Tuple(*e.indices)))
++        return x
++
+     def _print_Interval(self, i):
+         mrow = self.dom.createElement('mrow')
+         brac = self.dom.createElement('mfenced')

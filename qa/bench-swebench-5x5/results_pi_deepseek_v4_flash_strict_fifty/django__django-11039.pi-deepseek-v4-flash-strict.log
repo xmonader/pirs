@@ -1,0 +1,36 @@
+=== django__django-11039 pi/deepseek-v4-flash STRICT start 1785313258.630632 ===
+5d8964d3cd9f001da4f87d99d3cbcc9ca390c553863758142ff97246b7ec2d86
+base_sha=d5276398046ce4a102776a1e67dcac2884d80dfe (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is minimal and correct. Here's a summary:
+
+**Root cause:** `sqlmigrate` was setting `self.output_transaction = migration.atomic` without considering whether the database connection supports transactional DDL (`connection.features.can_rollback_ddl`). On databases like MySQL with MyISAM tables or certain configurations where DDL cannot be rolled back, the SQL output would still be wrapped in BEGIN/COMMIT even though the schema editor doesn't actually use atomic transactions (because `atomic_migration = connection.features.can_rollback_ddl and atomic` — both conditions must be true).
+
+**Fix:** Changed line 59 from:
+```python
+self.output_transaction = migration.atomic
+```
+to:
+```python
+self.output_transaction = migration.atomic and connection.features.can_rollback_ddl
+```
+
+This matches the same logic used by the schema editor's `atomic_migration` attribute, ensuring that the outer BEGIN/COMMIT wrappers are only added when both the migration is atomic AND the database can rollback DDL.
+
+
+pi_exit=0 agent_elapsed_s=20.1
+patch_bytes=658
+HEAD is now at d527639804 Fixed #29754 -- Added is_dst parameter to Trunc database functions.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_sqlmigrate_for_non_transactional_databases (migrations.test_commands.MigrateTests) --keep-green=test_makemigrations_app_name_specified_as_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_makemigrations_nonexistent_app_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_migrate_app_name_specified_as_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_migrate_nonexistent_app_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_showmigrations_app_name_specified_as_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_showmigrations_nonexistent_app_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_sqlmigrate_app_name_specified_as_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_sqlmigrate_nonexistent_app_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_squashmigrations_app_name_specified_as_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_squashmigrations_nonexistent_app_label (migrations.test_commands.AppLabelErrorTests) --keep-green=test_squashmigrations_initial_attribute (migrations.test_commands.SquashMigrationsTests) --keep-green=test_squashmigrations_invalid_start (migrations.test_commands.SquashMigrationsTests) --keep-green=test_squashmigrations_optimizes (migrations.test_commands.SquashMigrationsTests) --keep-green=test_squashmigrations_squashes (migrations.test_commands.SquashMigrationsTests) --keep-green=test_squashmigrations_valid_start (migrations.test_commands.SquashMigrationsTests) --keep-green=test_ticket_23799_squashmigrations_no_optimize (migrations.test_commands.SquashMigrationsTests) --keep-green=test_failing_migration (migrations.test_commands.MakeMigrationsTests) --keep-green=test_files_content (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigration_merge_dry_run (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigration_merge_dry_run_verbosity_3 (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_auto_now_add_interactive (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_check (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_conflict_exit (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_consistency_checks_respect_routers (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_default_merge_name (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_disabled_migrations_for_app (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_dry_run (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_dry_run_verbosity_3 (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_empty_connections (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_empty_migration (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_empty_no_app_specified (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_handle_merge (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_inconsistent_history (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_interactive_accept (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_interactive_by_default (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_interactive_reject (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_merge_dont_output_dependency_operations (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_merge_no_conflict (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_migration_path_output (migrations.test_commands.MakeMigrationsTests) --keep-green=test_makemigrations_migration_path_output_valueerror (migrations.test_commands.MakeMigrationsTests)
+
+outcome: Solved
+timing (total 9.23s):
+  verify: 4.58s (50% n=2)
+  baseline: 4.47s (48%)
+  discover: 0.12s (1%)
+  bootstrap: 0.06s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

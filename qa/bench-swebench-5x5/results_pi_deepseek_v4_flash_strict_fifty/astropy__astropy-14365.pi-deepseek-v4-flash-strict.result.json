@@ -1,0 +1,17 @@
+{
+  "id": "astropy__astropy-14365",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14365:latest",
+  "container": "pirspi-astropy--astropy-14365-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 35.5,
+  "patch_bytes": 493,
+  "patch_copied": true,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 316.2,
+  "stderr_tail": "outcome: Failed(FixNoFlip)\ntiming (total 278.83s):\n  bootstrap: 196.36s (70%)\n  discover: 75.69s (27%)\n  baseline: 4.15s (1%)\n  verify: 2.62s (1%)\n  fix: 0.00s (0%)"
+}

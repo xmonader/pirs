@@ -1,0 +1,38 @@
+=== django__django-11742 pi/deepseek-v4-flash STRICT start 1785313757.9238415 ===
+29050adf771b26d5d1015db7b0d095e19bf8dccee5535916c7a07cea06957c50
+base_sha=fee75d2aed4e58ada6567c464cfd22e89dc65f4a (NO test_patch for agent)
+grade targets=2 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All tests pass. Here's a summary of the change:
+
+## Summary
+
+The fix adds a new system check to `CharField` (in `/testbed/django/db/models/fields/__init__.py`) that verifies the field's `max_length` is large enough to accommodate the longest string value in the field's `choices`.
+
+### Changes made:
+
+1. **Modified `_check_max_length_attribute`** - Instead of returning an empty list when `max_length` is valid, it now delegates to a new method `_check_max_length_choices`.
+
+2. **Added `_check_max_length_choices` method** - This method:
+   - Returns early if `choices` is not set
+   - Iterates over `self.flatchoices` (flattened choices) to find the longest string value's length
+   - Catches `ValueError`/`TypeError` for malformed choices (letting the existing `_check_choices` handle those errors)
+   - Returns a `checks.Warning` with ID `fields.E122` if the longest choice value exceeds `max_length`
+   - Only checks string values (non-string values like integers are not length-checked)
+
+
+pi_exit=0 agent_elapsed_s=97.3
+patch_bytes=1585
+HEAD is now at fee75d2aed Fixed #30767 -- Improved references to deployment documentation.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_choices_in_max_length (invalid_models_tests.test_ordinary_fields.CharFieldTests) --target=test_choices_named_group (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_non_nullable_blank (invalid_models_tests.test_ordinary_fields.GenericIPAddressFieldTests) --keep-green=test_forbidden_files_and_folders (invalid_models_tests.test_ordinary_fields.FilePathFieldTests) --keep-green=test_max_length_warning (invalid_models_tests.test_ordinary_fields.IntegerFieldTests) --keep-green=test_primary_key (invalid_models_tests.test_ordinary_fields.FileFieldTests) --keep-green=test_upload_to_callable_not_checked (invalid_models_tests.test_ordinary_fields.FileFieldTests) --keep-green=test_upload_to_starts_with_slash (invalid_models_tests.test_ordinary_fields.FileFieldTests) --keep-green=test_valid_case (invalid_models_tests.test_ordinary_fields.FileFieldTests) --keep-green=test_valid_default_case (invalid_models_tests.test_ordinary_fields.FileFieldTests) --keep-green=test_str_default_value (invalid_models_tests.test_ordinary_fields.BinaryFieldTests) --keep-green=test_valid_default_value (invalid_models_tests.test_ordinary_fields.BinaryFieldTests) --keep-green=test_max_length_warning (invalid_models_tests.test_ordinary_fields.AutoFieldTests) --keep-green=test_primary_key (invalid_models_tests.test_ordinary_fields.AutoFieldTests) --keep-green=test_valid_case (invalid_models_tests.test_ordinary_fields.AutoFieldTests) --keep-green=test_fix_default_value (invalid_models_tests.test_ordinary_fields.DateTimeFieldTests) --keep-green=test_fix_default_value_tz (invalid_models_tests.test_ordinary_fields.DateTimeFieldTests) --keep-green=test_auto_now_and_auto_now_add_raise_error (invalid_models_tests.test_ordinary_fields.DateFieldTests) --keep-green=test_fix_default_value (invalid_models_tests.test_ordinary_fields.DateFieldTests) --keep-green=test_fix_default_value_tz (invalid_models_tests.test_ordinary_fields.DateFieldTests) --keep-green=test_fix_default_value (invalid_models_tests.test_ordinary_fields.TimeFieldTests) --keep-green=test_fix_default_value_tz (invalid_models_tests.test_ordinary_fields.TimeFieldTests) --keep-green=test_bad_values_of_max_digits_and_decimal_places (invalid_models_tests.test_ordinary_fields.DecimalFieldTests) --keep-green=test_decimal_places_greater_than_max_digits (invalid_models_tests.test_ordinary_fields.DecimalFieldTests) --keep-green=test_negative_max_digits_and_decimal_places (invalid_models_tests.test_ordinary_fields.DecimalFieldTests) --keep-green=test_required_attributes (invalid_models_tests.test_ordinary_fields.DecimalFieldTests) --keep-green=test_valid_field (invalid_models_tests.test_ordinary_fields.DecimalFieldTests) --keep-green=test_bad_db_index_value (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_bad_max_length_value (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_bad_validators (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_choices_containing_lazy (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_choices_containing_non_pairs (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_choices_named_group_bad_structure (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_choices_named_group_lazy (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_choices_named_group_non_pairs (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_iterable_of_iterable_choices (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_lazy_choices (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_missing_max_length (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_negative_max_length (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_non_iterable_choices (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_str_max_length_type (invalid_models_tests.test_ordinary_fields.CharFieldTests) --keep-green=test_str_max_length_value (invalid_models_tests.test_ordinary_fields.CharFieldTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 2.68s):
+  baseline: 1.60s (60%)
+  verify: 0.76s (28%)
+  discover: 0.17s (6%)
+  bootstrap: 0.15s (6%)
+  fix: 0.00s (0%)
+
+check_exit=1

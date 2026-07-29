@@ -1,0 +1,35 @@
+=== django__django-11583 pi/deepseek-v4-flash STRICT start 1785313527.1979277 ===
+377850af903837b94eb8942ccbb889e1d96a2e7228bea0276c36ccea512fd576
+base_sha=60dc957a825232fdda9138e2f8878b2ca407a7c9 (NO test_patch for agent)
+grade targets=2 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All 72 tests pass (21 skipped due to Watchman not being available, which is expected).
+
+## Summary
+
+The issue was that `path.resolve(strict=True)` can raise `ValueError: embedded null byte` when the filesystem contains a path with embedded null bytes (which can happen intermittently with certain mount points, network drives, or filesystem quirks). The original code only caught `FileNotFoundError`, letting the `ValueError` propagate up as an unhandled exception, crashing the autoreloader.
+
+**Root cause:** In `django/utils/autoreload.py`, two functions call `path.resolve(strict=True).absolute()`:
+1. `iter_modules_and_files()` (line ~141)
+2. `sys_path_directories()` (line ~189)
+
+Both only caught `FileNotFoundError`, but `path.resolve(strict=True)` internally calls `os.readlink()` which raises `ValueError: embedded null byte` on paths containing null bytes.
+
+**Fix:** Changed the exception handling in both locations from `except FileNotFoundError` to `except (FileNotFoundError, ValueError)`. This way, if a path happens to contain an embedded null byte (or any other ValueError-raising condition), the reloader gracefully skips that path instead of crashing.
+
+
+pi_exit=0 agent_elapsed_s=23.8
+patch_bytes=941
+HEAD is now at 60dc957a82 Removed unnecessary code in Model.__init__().
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_path_with_embedded_null_bytes (utils_tests.test_autoreload.TestIterModulesAndFiles) --target=test_paths_are_pathlib_instances (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_no_exception (utils_tests.test_autoreload.TestRaiseLastException) --keep-green=test_raises_custom_exception (utils_tests.test_autoreload.TestRaiseLastException) --keep-green=test_raises_exception (utils_tests.test_autoreload.TestRaiseLastException) --keep-green=test_raises_exception_with_context (utils_tests.test_autoreload.TestRaiseLastException) --keep-green=test_watchman_available (utils_tests.test_autoreload.GetReloaderTests) --keep-green=test_watchman_unavailable (utils_tests.test_autoreload.GetReloaderTests) --keep-green=test_common_roots (utils_tests.test_autoreload.TestCommonRoots) --keep-green=test_calls_start_django (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_calls_sys_exit (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_swallows_keyboard_interrupt (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_mutates_error_files (utils_tests.test_autoreload.TestCheckErrors) --keep-green=test_sys_paths_absolute (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_directories (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_non_existing (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_with_directories (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_manage_py (utils_tests.test_autoreload.RestartWithReloaderTests) --keep-green=test_python_m_django (utils_tests.test_autoreload.RestartWithReloaderTests) --keep-green=test_run_loop_catches_stopiteration (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_run_loop_stop_and_return (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_wait_for_apps_ready_checks_for_exception (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_wait_for_apps_ready_without_exception (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_files_with_recursive_glob (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_with_glob (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_with_single_file (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_without_absolute (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_file (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_glob (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_multiple_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_multiple_recursive_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_nested_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_overlapping_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_overlapping_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_snapshot_files_ignores_missing_files (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_snapshot_files_updates (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_snapshot_files_with_duplicates (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_tick_does_not_trigger_twice (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_check_errors_called (utils_tests.test_autoreload.StartDjangoTests) --keep-green=test_echo_on_called (utils_tests.test_autoreload.StartDjangoTests) --keep-green=test_starts_thread_with_args (utils_tests.test_autoreload.StartDjangoTests)
+
+outcome: Solved
+timing (total 6.22s):
+  verify: 3.47s (56% n=2)
+  baseline: 2.43s (39%)
+  discover: 0.22s (3%)
+  bootstrap: 0.10s (2%)
+  fix: 0.00s (0%)
+
+check_exit=0

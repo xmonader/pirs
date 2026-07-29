@@ -1,0 +1,36 @@
+=== django__django-14608 pi/deepseek-v4-flash STRICT start 1785314695.1829703 ===
+1ae22f3bcb474ca317d8674cbaa08a2ea7dd7a1117af9f824f9b79eb21e0c0ea
+base_sha=e0b4b8b20c25a9ec4be63f36df71c03eee849e8c (NO test_patch for agent)
+grade targets=2 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All 73 tests pass. Here's a summary of the fix:
+
+## Summary
+
+The issue was that `FormSets` didn't add the `nonform` CSS class to `ErrorList` instances for non-form errors, unlike how `Forms` add the `nonfield` CSS class for non-field errors.
+
+**Root cause**: In `django/forms/formsets.py`, the `ErrorList` for `_non_form_errors` was created with `self.error_class()` instead of `self.error_class(error_class='nonform')`.
+
+**Fix**: Changed two locations in `formsets.py`:
+
+1. Line 333: `self._non_form_errors = self.error_class()` → `self._non_form_errors = self.error_class(error_class='nonform')`
+2. Line 383: `self._non_form_errors = self.error_class(e.error_list)` → `self._non_form_errors = self.error_class(e.error_list, error_class='nonform')`
+
+This is consistent with how forms handle non-field errors in `django/forms/forms.py`, which uses `self.error_class(error_class='nonfield')`. The `error_class` parameter is passed to `ErrorList.__init__` where it's combined with the default `errorlist` class, producing a final CSS class of `errorlist nonform`.
+
+
+pi_exit=0 agent_elapsed_s=40.0
+patch_bytes=861
+HEAD is now at e0b4b8b20c SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_non_form_errors (forms_tests.tests.test_formsets.FormsFormsetTestCase) --target=test_non_form_errors_is_errorlist (admin_views.tests.AdminViewListEditable) --keep-green=test_valid (forms_tests.tests.test_formsets.AllValidTests) --keep-green=test_customize_management_form_error (forms_tests.tests.test_formsets.TestIsBoundBehavior) --keep-green=test_empty_forms_are_unbound (forms_tests.tests.test_formsets.TestIsBoundBehavior) --keep-green=test_form_errors_are_caught_by_formset (forms_tests.tests.test_formsets.TestIsBoundBehavior) --keep-green=test_management_form_invalid_data (forms_tests.tests.test_formsets.TestIsBoundBehavior) --keep-green=test_no_data_error (forms_tests.tests.test_formsets.TestIsBoundBehavior) --keep-green=test_with_management_data_attrs_work_fine (forms_tests.tests.test_formsets.TestIsBoundBehavior) --keep-green=test_as_p (forms_tests.tests.test_formsets.FormsetAsTagTests) --keep-green=test_as_table (forms_tests.tests.test_formsets.FormsetAsTagTests) --keep-green=test_as_ul (forms_tests.tests.test_formsets.FormsetAsTagTests) --keep-green=test_absolute_max (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_absolute_max_invalid (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_absolute_max_with_max_num (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_can_delete_extra_formset_forms (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_default_absolute_max (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_disable_delete_extra_formset_forms (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_form_kwargs_empty_form (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_formset_total_error_count_with_non_form_errors (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_formset_validate_min_excludes_empty_forms (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_formset_validation (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_formsets_with_order_custom_widget (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_html_safe (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_limited_max_forms_two (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_max_num_with_initial_data (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_max_num_zero_with_initial (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_validate_max_ignores_forms_marked_for_deletion (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_should_be_able_to_edit_related_objects_on_add_view (admin_views.tests.AdminCustomSaveRelatedTests) --keep-green=test_should_be_able_to_edit_related_objects_on_change_view (admin_views.tests.AdminCustomSaveRelatedTests) --keep-green=test_should_be_able_to_edit_related_objects_on_changelist_view (admin_views.tests.AdminCustomSaveRelatedTests) --keep-green=test_explicitly_provided_pk (admin_views.tests.GetFormsetsWithInlinesArgumentTest) --keep-green=test_implicitly_generated_pk (admin_views.tests.GetFormsetsWithInlinesArgumentTest) --keep-green=test_lang_name_present (admin_views.tests.ValidXHTMLTests) --keep-green=test_secure_view_shows_login_if_not_logged_in (admin_views.tests.SecureViewTests) --keep-green=test_generic_content_object_in_list_display (admin_views.tests.TestGenericRelations) --keep-green=test_client_logout_url_can_be_used_to_login (admin_views.tests.AdminViewLogoutTests) --keep-green=test_logout (admin_views.tests.AdminViewLogoutTests) --keep-green=test_form_has_multipart_enctype (admin_views.tests.AdminInlineFileUploadTest) --keep-green=test_all_fields_hidden (admin_views.tests.TestLabelVisibility) --keep-green=test_all_fields_visible (admin_views.tests.TestLabelVisibility) --keep-green=test_mixin (admin_views.tests.TestLabelVisibility)
+
+outcome: Solved
+timing (total 27.02s):
+  verify: 14.90s (55% n=2)
+  baseline: 11.89s (44%)
+  discover: 0.15s (1%)
+  bootstrap: 0.08s (0%)
+  fix: 0.00s (0%)
+
+check_exit=0

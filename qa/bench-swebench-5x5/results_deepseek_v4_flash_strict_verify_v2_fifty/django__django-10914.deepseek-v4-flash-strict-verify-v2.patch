@@ -1,0 +1,18 @@
+diff --git a/django/core/files/storage.py b/django/core/files/storage.py
+index cbdab1de47..e931299517 100644
+--- a/django/core/files/storage.py
++++ b/django/core/files/storage.py
+@@ -282,6 +282,13 @@ class FileSystemStorage(Storage):
+ 
+         if self.file_permissions_mode is not None:
+             os.chmod(full_path, self.file_permissions_mode)
++        else:
++            # Set consistent permissions when file_permissions_mode is None.
++            # This makes TemporaryUploadedFile permissions consistent with
++            # the file creation mode used by os.open for MemoryUploadedFile.
++            old_umask = os.umask(0)
++            os.umask(old_umask)
++            os.chmod(full_path, 0o666 & ~old_umask)
+ 
+         # Store filenames with forward slashes, even on Windows.
+         return name.replace('\\', '/')

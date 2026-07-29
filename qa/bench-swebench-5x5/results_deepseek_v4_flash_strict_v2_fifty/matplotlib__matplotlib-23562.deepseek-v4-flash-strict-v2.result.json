@@ -1,0 +1,29 @@
+{
+  "id": "matplotlib__matplotlib-23562",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-v2",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23562:latest",
+  "container": "pirsbench-matplotlib--matplotlib-23562-deepseek-v4-flash-strict-v2",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 13305,
+    "cache_read": 459776,
+    "cache_write": 0,
+    "out": 8581,
+    "reasoning": 3689,
+    "total": 481662,
+    "cost_usd": 0.0452
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=28 tools=30 [read:11 bash:8 grep:6 edit_block:3 find:2]\ntokens by model:\n  deepseek-v4-flash: in=13305 cache_r=459776 cache_w=0 out=8581 reasoning=3689 total=481662 \u2014 $0.0452\n  TOTAL: in=13305 cache_r=459776 cache_w=0 out=8581 reasoning=3689 total=481662 \u2014 $0.0452\npatch written to \"/tmp/out.patch\" (993 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 506.86s):\n  bootstrap: 447.40s (88%)\n  baseline: 24.46s (5%)\n  discover: 18.78s (4%)\n  verify: 16.23s (3% n=2)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 993,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 639.4
+}

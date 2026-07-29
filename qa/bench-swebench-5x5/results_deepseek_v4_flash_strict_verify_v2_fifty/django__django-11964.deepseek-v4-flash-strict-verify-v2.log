@@ -1,0 +1,23 @@
+=== django__django-11964 (deepseek-v4-flash) start 1785326335.4030466 ===
+27afbd9a2f814472748d415a0b751e1a8b148cd05bd2ccef8c6911ce2da6823a
+base_sha=955c9315a0cc53999805502d587bbf2886317ded
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=955c9315a0cc53999805502d587bbf2886317ded --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_str (model_enums.tests.ChoicesTests) --target=test_textchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_integerchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_invalid_definition (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_auto_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_blank_value (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_containment (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_empty_label (model_enums.tests.ChoicesTests) --keep-green=test_textchoices_functional_api (model_enums.tests.ChoicesTests) --keep-green=test_bool_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_labels_valid (model_enums.tests.CustomChoicesTests) --keep-green=test_timezone_unsupported (model_enums.tests.CustomChoicesTests) --keep-green=test_uuid_unsupported (model_enums.tests.CustomChoicesTests) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 1.96s):
+shadow-verify attempt 2/3
+shadow attempt 2: outcome=Failed(FixNoFlip) timing=timing (total 1.94s):
+shadow-verify attempt 3/3
+agent produced no further edits; re-grading best patch
+shadow attempt 3: outcome=Failed(FixNoFlip) timing=timing (total 1.95s):
+session: turns=115 tools=122 [bash:44 grep:32 read:32 edit:5 edit_block:3 git:3 ls:1 run_tests:1 write:1]
+tokens by model:
+  deepseek-v4-flash: in=38264 cache_r=4099200 cache_w=0 out=25629 reasoning=11761 total=4163093 — $0.3255
+  TOTAL: in=38264 cache_r=4099200 cache_w=0 out=25629 reasoning=11761 total=4163093 — $0.3255
+patch written (ungraded/failed) to "/tmp/out.patch" (922 bytes)
+outcome: Failed(shadow-verify)
+
+exit_code=1 elapsed_s=1008.8

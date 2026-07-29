@@ -1,0 +1,35 @@
+=== django__django-15213 pi/deepseek-v4-flash STRICT start 1785314731.636707 ===
+e488815c6cd4b47eef4ca8217e5c160622645f018a5f6a73631176dd6098f3d7
+base_sha=03cadb912c78b769d6bf4a943a2a35fc1d952960 (NO test_patch for agent)
+grade targets=3 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is clean and minimal. Let me explain what it does:
+
+**The Problem:**
+`ExpressionWrapper(~Q(pk__in=[]))` crashes because when the resolved `WhereNode` (negated) is compiled, it returns `('', [])` — empty SQL. This is because `WhereNode.as_sql()` uses `('', [])` to mean "no constraint" (i.e., match everything), which is valid in a WHERE clause context but not when used as a SELECT expression.
+
+For the non-negated case `ExpressionWrapper(Q(pk__in=[]))`, the `WhereNode.as_sql()` raises `EmptyResultSet` (meaning "match nothing"), which is caught by the compiler and converted to `'0'` (FALSE). This works correctly.
+
+**The Fix:**
+In `ExpressionWrapper.as_sql()`, handle two edge cases:
+1. `EmptyResultSet` from the inner expression → the inner expression always evaluates to FALSE → return `'0'` 
+2. Empty SQL from the inner expression → the inner expression always evaluates to TRUE (e.g., NOT of an empty set) → return `'1'`
+
+This is a targeted fix that only affects `ExpressionWrapper` — it doesn't change `WhereNode.as_sql()` behavior, so existing WHERE clause handling remains unchanged.
+
+
+pi_exit=0 agent_elapsed_s=242.4
+patch_bytes=853
+HEAD is now at 03cadb912c Removed a Python error message dependency in test_questioner_no_default_bad_user_entry_code().
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_aggregate_over_full_expression_annotation (annotations.tests.NonAggregateAnnotationTestCase) --target=test_full_expression_annotation (annotations.tests.NonAggregateAnnotationTestCase) --target=test_full_expression_annotation_with_aggregation (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_aggregate_alias (annotations.tests.AliasTests) --keep-green=test_alias_after_annotation (annotations.tests.AliasTests) --keep-green=test_alias_annotate_with_aggregation (annotations.tests.AliasTests) --keep-green=test_alias_annotation_expression (annotations.tests.AliasTests) --keep-green=test_alias_default_alias_expression (annotations.tests.AliasTests) --keep-green=test_basic_alias (annotations.tests.AliasTests) --keep-green=test_basic_alias_annotation (annotations.tests.AliasTests) --keep-green=test_basic_alias_f_annotation (annotations.tests.AliasTests) --keep-green=test_basic_alias_f_transform_annotation (annotations.tests.AliasTests) --keep-green=test_dates_alias (annotations.tests.AliasTests) --keep-green=test_datetimes_alias (annotations.tests.AliasTests) --keep-green=test_defer_only_alias (annotations.tests.AliasTests) --keep-green=test_filter_alias_agg_with_double_f (annotations.tests.AliasTests) --keep-green=test_filter_alias_with_double_f (annotations.tests.AliasTests) --keep-green=test_filter_alias_with_f (annotations.tests.AliasTests) --keep-green=test_joined_alias_annotation (annotations.tests.AliasTests) --keep-green=test_order_by_alias (annotations.tests.AliasTests) --keep-green=test_order_by_alias_aggregate (annotations.tests.AliasTests) --keep-green=test_overwrite_alias_with_annotation (annotations.tests.AliasTests) --keep-green=test_overwrite_annotation_with_alias (annotations.tests.AliasTests) --keep-green=test_update_with_alias (annotations.tests.AliasTests) --keep-green=test_values_alias (annotations.tests.AliasTests) --keep-green=test_aggregate_over_annotation (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotate_exists (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotate_with_aggregation (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotation_aggregate_with_m2o (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotation_exists_aggregate_values_chaining (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotation_filter_with_subquery (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotation_in_f_grouped_by_annotation (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotation_reverse_m2m (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotation_subquery_and_aggregate_values_chaining (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotation_subquery_outerref_transform (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_annotation_with_m2m (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_arguments_must_be_expressions (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_basic_annotation (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_basic_f_annotation (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_boolean_value_annotation (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_chaining_annotation_filter_with_m2m (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_chaining_transforms (annotations.tests.NonAggregateAnnotationTestCase) --keep-green=test_column_field_ordering_with_deferred (annotations.tests.NonAggregateAnnotationTestCase)
+
+outcome: Solved
+timing (total 5.35s):
+  verify: 3.37s (63% n=2)
+  baseline: 1.77s (33%)
+  discover: 0.17s (3%)
+  bootstrap: 0.05s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

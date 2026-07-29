@@ -1,0 +1,30 @@
+=== django__django-11422 (deepseek-v4-flash) start 1785324362.9979818 ===
+d97a5dda2ef24d1829636fb89975c90c7336b0f1a665daa1cb317a8ab79d37f9
+base_sha=df46b329e0900e9e4dc1d60816c1dce6dfc1094e
+filtered non-test ids: targets 1->1 keep_green 46->44
+capped keep_green 46->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=df46b329e0900e9e4dc1d60816c1dce6dfc1094e --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=24 tools=27 [bash:9 grep:6 read:4 git:3 edit_block:2 find:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=18322 cache_r=406400 cache_w=0 out=3854 reasoning=1086 total=428576 — $0.0376
+  TOTAL: in=18322 cache_r=406400 cache_w=0 out=3854 reasoning=1086 total=428576 — $0.0376
+patch written to "/tmp/out.patch" (1133 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at df46b329e0 Refs #30485 -- Avoided unnecessary instance checks in urlencode.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_main_module_is_resolved (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_check_errors (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_check_errors_catches_all_exceptions (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_file_added (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_module_without_spec (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_paths_are_pathlib_instances (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_zip_reload (utils_tests.test_autoreload.TestIterModulesAndFiles) --keep-green=test_calls_start_django (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_calls_sys_exit (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_check_errors_called (utils_tests.test_autoreload.StartDjangoTests) --keep-green=test_common_roots (utils_tests.test_autoreload.TestCommonRoots) --keep-green=test_echo_on_called (utils_tests.test_autoreload.StartDjangoTests) --keep-green=test_file (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_glob (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_manage_py (utils_tests.test_autoreload.RestartWithReloaderTests) --keep-green=test_multiple_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_multiple_recursive_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_mutates_error_files (utils_tests.test_autoreload.TestCheckErrors) --keep-green=test_nested_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_no_exception (utils_tests.test_autoreload.TestRaiseLastException) --keep-green=test_overlapping_glob_recursive (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_overlapping_globs (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_python_m_django (utils_tests.test_autoreload.RestartWithReloaderTests) --keep-green=test_raises_exception (utils_tests.test_autoreload.TestRaiseLastException) --keep-green=test_run_loop_catches_stopiteration (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_run_loop_stop_and_return (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_snapshot_files_ignores_missing_files (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_snapshot_files_updates (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_snapshot_files_with_duplicates (utils_tests.test_autoreload.StatReloaderTests) --keep-green=test_starts_thread_with_args (utils_tests.test_autoreload.StartDjangoTests) --keep-green=test_swallows_keyboard_interrupt (utils_tests.test_autoreload.RunWithReloaderTests) --keep-green=test_sys_paths_absolute (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_directories (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_non_existing (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_sys_paths_with_directories (utils_tests.test_autoreload.TestSysPathDirectories) --keep-green=test_wait_for_apps_ready_checks_for_exception (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_wait_for_apps_ready_without_exception (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_files_with_recursive_glob (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_with_glob (utils_tests.test_autoreload.BaseReloaderTests) --keep-green=test_watch_with_single_file (utils_tests.test_autoreload.BaseReloaderTests)
+
+outcome: Solved
+timing (total 6.68s):
+  verify: 3.28s (49% n=2)
+  baseline: 3.15s (47%)
+  discover: 0.19s (3%)
+  bootstrap: 0.05s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

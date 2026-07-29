@@ -1,0 +1,20 @@
+=== astropy__astropy-14365 (deepseek-v4-flash) start 1785319161.1992288 ===
+75a3724100c61f94401717eebce28191d1607ed3825fceaad30ab87e8aef43ce
+base_sha=3c297e66ab6822eda5f251a077965f4d7ef7a32b
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=3c297e66ab6822eda5f251a077965f4d7ef7a32b --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=astropy/io/ascii/tests/test_qdp.py::test_roundtrip[True] --keep-green=astropy/io/ascii/tests/test_qdp.py::test_get_tables_from_qdp_file --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip[False] --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_example --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip_example --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip_example_comma --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_write_simple --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_write_simple_specify_name --keep-green=astropy/io/ascii/tests/test_qdp.py::test_get_lines_from_qdp --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 208.19s):
+shadow-verify attempt 2/3
+shadow attempt 2: outcome=Solved timing=timing (total 203.95s):
+session: turns=41 tools=41 [bash:16 read:12 grep:6 edit:4 git:2 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=31241 cache_r=1078528 cache_w=0 out=12836 reasoning=6921 total=1122605 — $0.0981
+  TOTAL: in=31241 cache_r=1078528 cache_w=0 out=12836 reasoning=6921 total=1122605 — $0.0981
+patch written to "/tmp/out.patch" (989 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=644.8

@@ -1,0 +1,68 @@
+diff --git a/django/contrib/staticfiles/storage.py b/django/contrib/staticfiles/storage.py
+index ba3b62620d..ff827f59d9 100644
+--- a/django/contrib/staticfiles/storage.py
++++ b/django/contrib/staticfiles/storage.py
+@@ -190,7 +190,10 @@ class HashedFilesMixin:
+                 force=True, hashed_files=hashed_files,
+             )
+ 
+-            transformed_url = '/'.join(url_path.split('/')[:-1] + hashed_url.split('/')[-1:])
++            if url_path.startswith('/'):
++                transformed_url = hashed_url
++            else:
++                transformed_url = '/'.join(url_path.split('/')[:-1] + hashed_url.split('/')[-1:])
+ 
+             # Restore the fragment that was stripped off earlier.
+             if fragment:
+diff --git a/django/core/files/storage.py b/django/core/files/storage.py
+index 4c27fce605..0d271ca280 100644
+--- a/django/core/files/storage.py
++++ b/django/core/files/storage.py
+@@ -1,6 +1,6 @@
+ import os
+ from datetime import datetime
+-from urllib.parse import urljoin
++from urllib.parse import urljoin, urlsplit
+ 
+ from django.conf import settings
+ from django.core.exceptions import SuspiciousFileOperation
+@@ -332,7 +332,15 @@ class FileSystemStorage(Storage):
+         url = filepath_to_uri(name)
+         if url is not None:
+             url = url.lstrip('/')
+-        return urljoin(self.base_url, url)
++        final_url = urljoin(self.base_url, url)
++        from django.urls import get_script_prefix
++        # Prepend SCRIPT_NAME prefix only if base_url is a relative URL
++        # (not an absolute URL like https://cdn.example.com/static/).
++        if not urlsplit(self.base_url).netloc:
++            script_prefix = get_script_prefix()
++            if script_prefix != '/':
++                final_url = script_prefix.rstrip('/') + final_url
++        return final_url
+ 
+     def _datetime_from_timestamp(self, ts):
+         """
+diff --git a/django/templatetags/static.py b/django/templatetags/static.py
+index 39712aaba0..05e1b75aac 100644
+--- a/django/templatetags/static.py
++++ b/django/templatetags/static.py
+@@ -1,4 +1,4 @@
+-from urllib.parse import quote, urljoin
++from urllib.parse import quote, urljoin, urlsplit
+ 
+ from django import template
+ from django.apps import apps
+@@ -44,6 +44,12 @@ class PrefixNode(template.Node):
+             prefix = ''
+         else:
+             prefix = iri_to_uri(getattr(settings, name, ''))
++        # Prepend SCRIPT_NAME prefix only if the URL is relative.
++        if not urlsplit(prefix).netloc:
++            from django.urls import get_script_prefix
++            script_prefix = get_script_prefix()
++            if script_prefix != '/':
++                prefix = script_prefix.rstrip('/') + prefix
+         return prefix
+ 
+     def render(self, context):

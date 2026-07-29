@@ -1,0 +1,105 @@
+diff --git a/django/db/backends/base/schema.py b/django/db/backends/base/schema.py
+index f2ca8c8df9..b6cf1c3538 100644
+--- a/django/db/backends/base/schema.py
++++ b/django/db/backends/base/schema.py
+@@ -494,6 +494,9 @@ class BaseDatabaseSchemaEditor:
+         self.execute(index.remove_sql(model, self))
+ 
+     def rename_index(self, model, old_index, new_index):
++        if old_index.name == new_index.name:
++            # No-op if the name hasn't changed.
++            return
+         if self.connection.features.can_rename_index:
+             self.execute(
+                 self._rename_index_sql(model, old_index.name, new_index.name),
+diff --git a/reproduce.py b/reproduce.py
+new file mode 100644
+index 0000000000..0f627582c6
+--- /dev/null
++++ b/reproduce.py
+@@ -0,0 +1,85 @@
++import django
++from django.conf import settings
++settings.configure(
++    DATABASES={
++        'default': {
++            'ENGINE': 'django.db.backends.sqlite3',
++            'NAME': ':memory:',
++        }
++    },
++    INSTALLED_APPS=['django.contrib.contenttypes', 'django.contrib.auth'],
++    DEFAULT_AUTO_FIELD='django.db.models.BigAutoField',
++)
++django.setup()
++
++from django.db import models, connection
++from django.db.migrations.state import ProjectState, ModelState
++from django.db.migrations import operations
++
++# Create a simple model with index_together
++state = ProjectState()
++state.add_model(ModelState('testapp', 'Pony', [
++    ('id', models.AutoField(primary_key=True)),
++    ('pink', models.IntegerField(default=3)),
++    ('weight', models.FloatField()),
++], options={'index_together': {('weight', 'pink')}}))
++
++# Make sure apps are resolved
++state.apps  # access property to resolve
++
++# Create the table using schema editor
++with connection.schema_editor() as editor:
++    editor.create_model(state.apps.get_model('testapp', 'Pony'))
++
++table_name = 'testapp_pony'
++
++# Check initial state
++with connection.cursor() as cursor:
++    cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?", [table_name])
++    indexes = [r[0] for r in cursor.fetchall()]
++    print('Initial indexes:', indexes)
++
++# Create operation
++operation = operations.RenameIndex(
++    "Pony", new_name="new_pony_test_idx", old_fields=("weight", "pink")
++)
++
++new_state = state.clone()
++operation.state_forwards('testapp', new_state)
++
++# Forward pass
++print("\n--- Forward pass ---")
++with connection.schema_editor() as editor:
++    operation.database_forwards('testapp', editor, state, new_state)
++
++with connection.cursor() as cursor:
++    cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?", [table_name])
++    indexes = [r[0] for r in cursor.fetchall()]
++    print('Indexes after forward:', indexes)
++
++# Backward pass (no-op for unnamed)
++print("\n--- Backward pass ---")
++with connection.schema_editor() as editor:
++    operation.database_backwards('testapp', editor, new_state, state)
++
++with connection.cursor() as cursor:
++    cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?", [table_name])
++    indexes = [r[0] for r in cursor.fetchall()]
++    print('Indexes after backward:', indexes)
++
++# Re-apply forward pass
++print("\n--- Re-apply forward pass ---")
++try:
++    with connection.schema_editor() as editor:
++        operation.database_forwards('testapp', editor, state, new_state)
++    print("Re-apply forward succeeded!")
++    with connection.cursor() as cursor:
++        cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?", [table_name])
++        indexes = [r[0] for r in cursor.fetchall()]
++        print('Indexes after re-apply:', indexes)
++except Exception as e:
++    print(f"Re-apply forward FAILED: {type(e).__name__}: {e}")
++    import traceback
++    traceback.print_exc()
++
++print("\nDone")

@@ -1,0 +1,27 @@
+=== astropy__astropy-14182 pi/deepseek-v4-flash STRICT start 1785312586.4285772 ===
+e9b777f4da4901cd4a6cfbdfeb2e352ba851a46567f047488155ffd0aa966ae0
+base_sha=72abacaea58d01a3dbc005849847d02fcd0c0687 (NO test_patch for agent)
+grade targets=1 keep_green=9 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+Here's a summary of the changes made to `/testbed/astropy/io/ascii/rst.py`:
+
+1. **`__init__`**: Added `header_rows` parameter (defaulting to `None`) and passed it through to `super().__init__()`. This allows the RST writer to accept the `header_rows` keyword argument.
+
+2. **`write`**: Fixed the position-line wrapping logic to correctly find the delimiter line (the `=====` line) when there are multiple header rows. Instead of hardcoding `lines[1]`, it now computes the index as `len(header_rows)`, where `header_rows` is retrieved from `self.data`. This correctly handles the case where the position/delimiter line is at index N (after N header rows like "name", "unit", etc.).
+
+
+pi_exit=0 agent_elapsed_s=144.2
+patch_bytes=813
+HEAD is now at 72abacaea SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_names --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_names_include --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_exclude --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column_header --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_right_indented_table --keep-green=astropy/io/ascii/tests/test_rst.py::test_trailing_spaces_in_row_definition --keep-green=astropy/io/ascii/tests/test_rst.py::test_write_normal
+
+outcome: Failed(FixNoFlip)
+timing (total 359.48s):
+  bootstrap: 289.09s (80%)
+  discover: 64.70s (18%)
+  baseline: 3.79s (1%)
+  verify: 1.90s (1%)
+  fix: 0.00s (0%)
+
+check_exit=1

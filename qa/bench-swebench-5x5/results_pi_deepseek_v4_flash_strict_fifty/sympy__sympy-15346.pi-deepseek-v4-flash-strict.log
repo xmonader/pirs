@@ -1,0 +1,37 @@
+=== sympy__sympy-15346 pi/deepseek-v4-flash STRICT start 1785315958.273334 ===
+d6514a0f3665f4390592a21a169c7fb73e2f4bfcd11d0b698fcd5020d6e9ca24
+base_sha=9ef28fba5b4d6d0168237c9c005a550e6dc27d81 (NO test_patch for agent)
+grade targets=1 keep_green=22 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is in place. Here's a summary of what was done:
+
+## Root Cause
+
+In the `_futrig` function (used by `trigsimp`'s default 'matching' method), the Fu transformation pipeline had `TRmorrie` (Morrie's law: `cos(x)*cos(2*x)... → sin(2^k*x)/(2^k*sin(x))`) placed **before** `TR10i` (sum-of-products → function-of-sum) and `[identity, TR8]` (product-to-sum).
+
+When simplifying `sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)`:
+1. `TRmorrie` would fire first on the `cos(1/50)*cos(1/25)` term (since `1/25 = 2*(1/50)`, it matches Morrie's law pattern), transforming it into `sin(2/25)/(4*sin(1/50))`
+2. The resulting expression `sin(1/50)*sin(1/25) + sin(2/25)/(4*sin(1/50))` no longer matches the pattern for `TR10i` or `TR8`, so no simplification was possible.
+
+This didn't happen with symbolic `x, y` because `cos(x)*cos(y)` doesn't match the Morrie pattern (different symbols), so `TR10i` could still match the original expression.
+
+## Fix
+
+In `/testbed/sympy/simplify/trigsimp.py`, moved `TR10i` and `[identity, TR8]` **before** `TRmorrie` in the transformation pipeline, so that sum-of-products patterns are simplified back to single trig functions before `TRmorrie` has a chance to break them.
+
+
+pi_exit=0 agent_elapsed_s=483.9
+patch_bytes=670
+HEAD is now at 9ef28fba5b Merge pull request #15258 from Upabjojr/tensor_operators
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_issue_15129_trigsimp_methods --keep-green=test_trigsimp1 --keep-green=test_trigsimp1a --keep-green=test_trigsimp2 --keep-green=test_issue_4373 --keep-green=test_trigsimp3 --keep-green=test_issue_4661 --keep-green=test_issue_4494 --keep-green=test_issue_5948 --keep-green=test_issue_4775 --keep-green=test_issue_4280 --keep-green=test_issue_3210 --keep-green=test_trigsimp_issues --keep-green=test_trigsimp_issue_2515 --keep-green=test_trigsimp_issue_3826 --keep-green=test_trigsimp_issue_4032 --keep-green=test_trigsimp_issue_7761 --keep-green=test_trigsimp_noncommutative --keep-green=test_hyperbolic_simp --keep-green=test_trigsimp_groebner --keep-green=test_issue_2827_trigsimp_methods --keep-green=test_exptrigsimp --keep-green=test_powsimp_on_numbers
+
+outcome: Solved
+timing (total 458.76s):
+  discover: 380.92s (83%)
+  baseline: 37.07s (8%)
+  verify: 21.49s (5% n=2)
+  bootstrap: 19.29s (4%)
+  fix: 0.00s (0%)
+
+check_exit=0

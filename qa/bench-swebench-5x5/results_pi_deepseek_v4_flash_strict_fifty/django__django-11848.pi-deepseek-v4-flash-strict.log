@@ -1,0 +1,52 @@
+=== django__django-11848 pi/deepseek-v4-flash STRICT start 1785313863.356655 ===
+e27cd4b680e6d4ab84f58ad1f000af5d764dfb0eee623c2982afe3ca35c43ab9
+base_sha=b485daa4cd0fb5071ec75ac9d651a08bb5d224db (NO test_patch for agent)
+grade targets=2 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is clean and correct. Let me summarize:
+
+## Fix
+
+**File:** `/testbed/django/utils/http.py` - `parse_http_date()` function
+
+**Problem:** The two-digit year parsing used hardcoded thresholds (years 0-69 → 2000s, 70-99 → 1900s), which doesn't comply with RFC 7231. RFC 7231 §7.1.1.1 states that recipients MUST interpret a two-digit year timestamp that appears to be more than 50 years in the future as representing the most recent year in the past with the same last two digits.
+
+**Fix:** Replace the hardcoded logic with a dynamic calculation based on the current year:
+
+```python
+# Old (hardcoded):
+if year < 70:
+    year += 2000
+else:
+    year += 1900
+
+# New (RFC 7231 compliant):
+current_year = datetime.datetime.now().year
+year += 1900
+if year < current_year - 50:
+    year += 100
+```
+
+This works by:
+1. First interpreting the two-digit year as 1900+YY
+2. Then checking if that interpretation is more than 50 years before the current year (i.e., `year < current_year - 50`)
+3. If so, moving it forward by 100 years (to the 2000s), since it would represent a date less than 50 years in the future per the RFC
+
+Since `datetime` was already imported at the top of the file, no new import was needed.
+
+
+pi_exit=0 agent_elapsed_s=49.7
+patch_bytes=657
+HEAD is now at b485daa4cd SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_parsing_rfc850 (utils_tests.test_http.HttpDateProcessingTests) --target=test_parsing_year_less_than_70 (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_input_too_large (utils_tests.test_http.Base36IntTests) --keep-green=test_invalid_literal (utils_tests.test_http.Base36IntTests) --keep-green=test_negative_input (utils_tests.test_http.Base36IntTests) --keep-green=test_roundtrip (utils_tests.test_http.Base36IntTests) --keep-green=test_to_base36_errors (utils_tests.test_http.Base36IntTests) --keep-green=test_to_int_errors (utils_tests.test_http.Base36IntTests) --keep-green=test_values (utils_tests.test_http.Base36IntTests) --keep-green=test (utils_tests.test_http.EscapeLeadingSlashesTests) --keep-green=test_quote (utils_tests.test_http.URLQuoteTests) --keep-green=test_quote_plus (utils_tests.test_http.URLQuoteTests) --keep-green=test_unquote (utils_tests.test_http.URLQuoteTests) --keep-green=test_unquote_plus (utils_tests.test_http.URLQuoteTests) --keep-green=test_parsing (utils_tests.test_http.ETagProcessingTests) --keep-green=test_quoting (utils_tests.test_http.ETagProcessingTests) --keep-green=test_allowed_hosts_str (utils_tests.test_http.IsSafeURLTests) --keep-green=test_bad_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_basic_auth (utils_tests.test_http.IsSafeURLTests) --keep-green=test_good_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_is_safe_url_deprecated (utils_tests.test_http.IsSafeURLTests) --keep-green=test_no_allowed_hosts (utils_tests.test_http.IsSafeURLTests) --keep-green=test_secure_param_https_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_secure_param_non_https_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_bad (utils_tests.test_http.IsSameDomainTests) --keep-green=test_good (utils_tests.test_http.IsSameDomainTests) --keep-green=test_roundtrip (utils_tests.test_http.URLSafeBase64Tests) --keep-green=test_http_date (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing_asctime (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing_rfc1123 (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_custom_iterable_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_empty_sequence_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_sequence_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_sequence_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_tuple_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_bytearray (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_bytes_values (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_sequence_of_bytes (utils_tests.test_http.URLEncodeTests) --keep-green=test_generator (utils_tests.test_http.URLEncodeTests) --keep-green=test_multivaluedict (utils_tests.test_http.URLEncodeTests) --keep-green=test_none (utils_tests.test_http.URLEncodeTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 2.82s):
+  baseline: 1.78s (63%)
+  verify: 0.90s (32%)
+  discover: 0.07s (3%)
+  bootstrap: 0.07s (3%)
+  fix: 0.00s (0%)
+
+check_exit=1

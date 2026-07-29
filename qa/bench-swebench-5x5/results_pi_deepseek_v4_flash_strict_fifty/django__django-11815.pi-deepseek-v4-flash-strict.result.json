@@ -1,0 +1,17 @@
+{
+  "id": "django__django-11815",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11815:latest",
+  "container": "pirspi-django--django-11815-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 130.7,
+  "patch_bytes": 4282,
+  "patch_copied": true,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 135.2,
+  "stderr_tail": "\u001b[2m2026-07-29T08:32:35.228605Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::driver\u001b[0m\u001b[2m:\u001b[0m git apply model patch failed: error: patch failed: tests/migrations/test_writer.py:267\nerror: tests/migrations/test_writer.py: patch does not apply\n\noutcome: Failed(FixNoFlip)\ntiming (total 1.91s):\n  baseline: 1.69s (88%)\n  discover: 0.15s (8%)\n  bootstrap: 0.08s (4%)"
+}

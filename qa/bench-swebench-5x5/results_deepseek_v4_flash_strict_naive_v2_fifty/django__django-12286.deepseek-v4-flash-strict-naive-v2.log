@@ -1,0 +1,28 @@
+=== django__django-12286 (deepseek-v4-flash) start 1785325235.0457041 ===
+117a24bebe4b66390307e13d5610a706c3fe360ca4386b3b6e478db2adb4a243
+base_sha=979f61abd322507aafced9627702362e541ec34e
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=979f61abd322507aafced9627702362e541ec34e --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=18 tools=17 [bash:5 read:5 grep:4 edit:2 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=8042 cache_r=212864 cache_w=0 out=3825 reasoning=1097 total=224731 — $0.0213
+  TOTAL: in=8042 cache_r=212864 cache_w=0 out=3825 reasoning=1097 total=224731 — $0.0213
+patch written to "/tmp/out.patch" (738 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 979f61abd3 Simplified model's Options.add_field() a bit.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_valid_variant_consistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_inconsistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages_bidi (check_framework.test_translation.TranslationCheckTests)
+
+outcome: Solved
+timing (total 4.69s):
+  verify: 2.80s (60% n=2)
+  baseline: 1.65s (35%)
+  discover: 0.17s (4%)
+  bootstrap: 0.08s (2%)
+  fix: 0.00s (0%)
+
+check_exit=0

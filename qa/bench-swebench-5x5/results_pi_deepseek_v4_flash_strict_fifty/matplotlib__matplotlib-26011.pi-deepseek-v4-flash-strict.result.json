@@ -1,0 +1,16 @@
+{
+  "id": "matplotlib__matplotlib-26011",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-26011:latest",
+  "container": "pirspi-matplotlib--matplotlib-26011-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 177.0,
+  "patch_bytes": 544,
+  "patch_copied": true,
+  "timed_out": true,
+  "solved": false,
+  "exit_code": null
+}

@@ -1,0 +1,17 @@
+{
+  "id": "sphinx-doc__sphinx-7686",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7686:latest",
+  "container": "pirspi-sphinx-doc--sphinx-7686-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 53.0,
+  "patch_bytes": 2067,
+  "patch_copied": true,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 86.2,
+  "stderr_tail": "outcome: Failed(FixNoFlip)\ntiming (total 31.28s):\n  bootstrap: 12.84s (41%)\n  baseline: 9.77s (31%)\n  discover: 6.82s (22%)\n  verify: 1.84s (6%)\n  fix: 0.00s (0%)"
+}

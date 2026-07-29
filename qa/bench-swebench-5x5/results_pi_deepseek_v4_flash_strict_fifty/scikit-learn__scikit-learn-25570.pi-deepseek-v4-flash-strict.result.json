@@ -1,0 +1,17 @@
+{
+  "id": "scikit-learn__scikit-learn-25570",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25570:latest",
+  "container": "pirspi-scikit-learn--scikit-learn-25570-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 336.7,
+  "patch_bytes": 995,
+  "patch_copied": true,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 1054.1,
+  "stderr_tail": "outcome: Solved\ntiming (total 714.48s):\n  bootstrap: 646.59s (90%)\n  discover: 51.10s (7%)\n  verify: 9.17s (1% n=2)\n  baseline: 7.62s (1%)\n  fix: 0.00s (0%)"
+}

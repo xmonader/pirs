@@ -1,0 +1,28 @@
+=== astropy__astropy-14365 (deepseek-v4-flash) start 1785323436.9108264 ===
+103bac3fa66e74c24581085ebc79f71791e2d681c4d7161e21ad3ab387e6fb7e
+base_sha=3c297e66ab6822eda5f251a077965f4d7ef7a32b
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=3c297e66ab6822eda5f251a077965f4d7ef7a32b --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=9 tools=8 [bash:5 edit:1 find:1 read:1]
+tokens by model:
+  deepseek-v4-flash: in=16215 cache_r=113536 cache_w=0 out=3251 reasoning=1756 total=133002 — $0.0159
+  TOTAL: in=16215 cache_r=113536 cache_w=0 out=3251 reasoning=1756 total=133002 — $0.0159
+patch written to "/tmp/out.patch" (475 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 3c297e66a SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/io/ascii/tests/test_qdp.py::test_roundtrip[True] --keep-green=astropy/io/ascii/tests/test_qdp.py::test_get_tables_from_qdp_file --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip[False] --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_example --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip_example --keep-green=astropy/io/ascii/tests/test_qdp.py::test_roundtrip_example_comma --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_write_simple --keep-green=astropy/io/ascii/tests/test_qdp.py::test_read_write_simple_specify_name --keep-green=astropy/io/ascii/tests/test_qdp.py::test_get_lines_from_qdp
+
+outcome: Failed(FixNoFlip)
+timing (total 221.32s):
+  bootstrap: 159.95s (72%)
+  discover: 57.43s (26%)
+  baseline: 2.70s (1%)
+  verify: 1.23s (1%)
+  fix: 0.00s (0%)
+
+check_exit=1

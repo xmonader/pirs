@@ -1,0 +1,35 @@
+=== django__django-11179 pi/deepseek-v4-flash STRICT start 1785313369.5519776 ===
+4223c9b3ed17c917b73a2e1c88436af1bda7a359f843038fb6a6f60b811d8855
+base_sha=ddd83987faf4d7a57a8b6829a745906a1aa28dcc (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All tests pass. The fix is correct and minimal.
+
+**Summary of the fix:**
+
+In `/testbed/django/db/models/deletion.py`, the optimized fast-delete path (lines 276-281) for single objects with no dependencies was missing the PK cleanup that the general path does at line 323.
+
+The general path sets the PK to None for all deleted instances:
+```python
+for instance in instances:
+    setattr(instance, model._meta.pk.attname, None)
+```
+
+The fix adds `setattr(instance, model._meta.pk.attname, None)` in the optimized fast-delete path before the early return, ensuring that the instance's PK is set to None after deletion regardless of which code path is taken.
+
+
+pi_exit=0 agent_elapsed_s=37.7
+patch_bytes=614
+HEAD is now at ddd83987fa SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_fast_delete_instance_set_pk_none (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_empty_no_update_can_self_select (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_fk (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_inheritance (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_joined_qs (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_large_batch (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_m2m (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_qs (delete.tests.FastDeleteTests) --keep-green=test_fast_delete_revm2m (delete.tests.FastDeleteTests) --keep-green=test_auto (delete.tests.OnDeleteTests) --keep-green=test_auto_nullable (delete.tests.OnDeleteTests) --keep-green=test_cascade (delete.tests.OnDeleteTests) --keep-green=test_cascade_from_child (delete.tests.OnDeleteTests) --keep-green=test_cascade_from_parent (delete.tests.OnDeleteTests) --keep-green=test_cascade_nullable (delete.tests.OnDeleteTests) --keep-green=test_do_nothing (delete.tests.OnDeleteTests) --keep-green=test_do_nothing_qscount (delete.tests.OnDeleteTests) --keep-green=test_inheritance_cascade_down (delete.tests.OnDeleteTests) --keep-green=test_inheritance_cascade_up (delete.tests.OnDeleteTests) --keep-green=test_o2o_setnull (delete.tests.OnDeleteTests) --keep-green=test_protect (delete.tests.OnDeleteTests) --keep-green=test_setdefault (delete.tests.OnDeleteTests) --keep-green=test_setdefault_none (delete.tests.OnDeleteTests) --keep-green=test_setnull (delete.tests.OnDeleteTests) --keep-green=test_setnull_from_child (delete.tests.OnDeleteTests) --keep-green=test_setnull_from_parent (delete.tests.OnDeleteTests) --keep-green=test_setvalue (delete.tests.OnDeleteTests) --keep-green=test_bulk (delete.tests.DeletionTests) --keep-green=test_can_defer_constraint_checks (delete.tests.DeletionTests) --keep-green=test_delete_with_keeping_parents (delete.tests.DeletionTests) --keep-green=test_delete_with_keeping_parents_relationships (delete.tests.DeletionTests) --keep-green=test_deletion_order (delete.tests.DeletionTests) --keep-green=test_hidden_related (delete.tests.DeletionTests) --keep-green=test_instance_update (delete.tests.DeletionTests) --keep-green=test_large_delete (delete.tests.DeletionTests) --keep-green=test_large_delete_related (delete.tests.DeletionTests) --keep-green=test_m2m (delete.tests.DeletionTests) --keep-green=test_model_delete_returns_num_rows (delete.tests.DeletionTests) --keep-green=test_proxied_model_duplicate_queries (delete.tests.DeletionTests) --keep-green=test_queryset_delete_returns_num_rows (delete.tests.DeletionTests) --keep-green=test_relational_post_delete_signals_happen_before_parent_object (delete.tests.DeletionTests)
+
+outcome: Solved
+timing (total 10.74s):
+  verify: 5.46s (51% n=2)
+  baseline: 4.97s (46%)
+  discover: 0.24s (2%)
+  bootstrap: 0.07s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

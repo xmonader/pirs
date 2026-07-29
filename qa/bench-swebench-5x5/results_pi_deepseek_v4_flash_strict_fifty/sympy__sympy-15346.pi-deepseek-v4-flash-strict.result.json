@@ -1,0 +1,17 @@
+{
+  "id": "sympy__sympy-15346",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15346:latest",
+  "container": "pirspi-sympy--sympy-15346-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 483.9,
+  "patch_bytes": 670,
+  "patch_copied": true,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 945.4,
+  "stderr_tail": "outcome: Solved\ntiming (total 458.76s):\n  discover: 380.92s (83%)\n  baseline: 37.07s (8%)\n  verify: 21.49s (5% n=2)\n  bootstrap: 19.29s (4%)\n  fix: 0.00s (0%)"
+}

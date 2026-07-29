@@ -1,0 +1,25 @@
+=== django__django-15695 pi/deepseek-v4-flash STRICT start 1785314760.4550695 ===
+55716279625dd9c29f562dcc385d0801fecb6f633b8aff2c5b105580179869b0
+base_sha=cdc62b5702d41f5937314b3675a1ddbfcb6eee89 (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All 130 tests pass.
+
+Let me provide a summary of the fix.
+
+
+pi_exit=0 agent_elapsed_s=266.3
+patch_bytes=727
+HEAD is now at cdc62b5702 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_rename_index_unnamed_index (migrations.test_operations.OperationTests) --keep-green=test_reference_field_by_through_fields (migrations.test_operations.FieldOperationTests) --keep-green=test_references_field_by_from_fields (migrations.test_operations.FieldOperationTests) --keep-green=test_references_field_by_name (migrations.test_operations.FieldOperationTests) --keep-green=test_references_field_by_remote_field_model (migrations.test_operations.FieldOperationTests) --keep-green=test_references_field_by_through (migrations.test_operations.FieldOperationTests) --keep-green=test_references_field_by_to_fields (migrations.test_operations.FieldOperationTests) --keep-green=test_references_model (migrations.test_operations.FieldOperationTests) --keep-green=test_references_model_mixin (migrations.test_operations.TestCreateModel) --keep-green=test_add_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_constraint_combinable (migrations.test_operations.OperationTests) --keep-green=test_add_constraint_percent_escaping (migrations.test_operations.OperationTests) --keep-green=test_add_covering_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_deferred_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_func_index (migrations.test_operations.OperationTests) --keep-green=test_add_func_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_index_state_forwards (migrations.test_operations.OperationTests) --keep-green=test_add_or_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_partial_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_alter_field_m2m (migrations.test_operations.OperationTests) --keep-green=test_alter_field_pk_mti_and_fk_to_base (migrations.test_operations.OperationTests) --keep-green=test_alter_field_pk_mti_fk (migrations.test_operations.OperationTests) --keep-green=test_alter_field_reloads_state_fk_with_to_field_related_name_target_type_change (migrations.test_operations.OperationTests) --keep-green=test_alter_field_reloads_state_on_fk_with_to_field_target_type_change (migrations.test_operations.OperationTests) --keep-green=test_alter_field_with_func_index (migrations.test_operations.OperationTests) --keep-green=test_alter_field_with_func_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_alter_index_together_remove (migrations.test_operations.OperationTests) --keep-green=test_alter_index_together_remove_with_unique_together (migrations.test_operations.OperationTests) --keep-green=test_alter_unique_together_remove (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_boolean_expression_in_check_constraint (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_constraint (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_deferred_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_duplicate_base (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_duplicate_field_name (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_duplicate_manager_name (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_partial_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_delete_mti_model (migrations.test_operations.OperationTests) --keep-green=test_remove_constraint (migrations.test_operations.OperationTests) --keep-green=test_remove_covering_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_remove_deferred_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_remove_field_m2m (migrations.test_operations.OperationTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 4.05s):
+  baseline: 2.86s (71%)
+  verify: 0.79s (20%)
+  discover: 0.26s (6%)
+  bootstrap: 0.13s (3%)
+  fix: 0.00s (0%)
+
+check_exit=1

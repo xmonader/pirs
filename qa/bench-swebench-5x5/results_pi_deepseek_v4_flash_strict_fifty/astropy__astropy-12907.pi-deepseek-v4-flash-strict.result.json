@@ -1,0 +1,17 @@
+{
+  "id": "astropy__astropy-12907",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-12907:latest",
+  "container": "pirspi-astropy--astropy-12907-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 30.7,
+  "patch_bytes": 504,
+  "patch_copied": true,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 410.7,
+  "stderr_tail": "outcome: Solved\ntiming (total 378.12s):\n  bootstrap: 284.32s (75%)\n  discover: 81.58s (22%)\n  verify: 8.05s (2% n=2)\n  baseline: 4.16s (1%)\n  fix: 0.00s (0%)"
+}

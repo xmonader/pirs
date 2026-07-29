@@ -1,0 +1,37 @@
+=== django__django-11630 pi/deepseek-v4-flash STRICT start 1785313742.244414 ===
+18961a8aaf0701826d0b74d5c7b7a5d8203e33be1d130272586000bd4e01b39e
+base_sha=65e86948b80262574058a94ccaae3a9b59c3faea (NO test_patch for agent)
+grade targets=2 keep_green=16 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All 16 tests pass. Let me summarize the fix:
+
+## Summary
+
+**Root cause**: The `check_all_models` function in `/testbed/django/core/checks/model_checks.py` unconditionally emitted a hard `Error` (id `models.E028`) when two or more managed, non-proxy models shared the same `db_table` value, regardless of whether those models were in different databases.
+
+In multi-database setups with database routers, different models in different databases can legitimately have the same table name - they exist in separate database namespaces. The check was too strict.
+
+**Fix** (applied to `django/core/checks/model_checks.py` and `docs/ref/checks.txt`):
+
+1. When `settings.DATABASE_ROUTERS` is configured (i.e., the user has a multi-database setup), duplicate `db_table` is demoted from a hard `Error` to a `Warning` (id `models.W035`), with a hint asking users to verify their routers are correctly routing models to separate databases.
+
+2. When no database routers are configured, the behavior remains unchanged - it's still a hard `Error` (id `models.E028`).
+
+This is exactly the fix that was applied in Django 2.2.5 for ticket #30673.
+
+
+pi_exit=0 agent_elapsed_s=67.6
+patch_bytes=2434
+HEAD is now at 65e86948b8 Corrected several typos in string literals and test names.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_collision_across_apps_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --target=test_collision_in_same_app_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_in_same_app (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_proxy_models (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_unmanaged_models (check_framework.test_model_checks.DuplicateDBTableTests)
+
+outcome: Solved
+timing (total 5.25s):
+  verify: 3.14s (60% n=2)
+  baseline: 1.89s (36%)
+  discover: 0.15s (3%)
+  bootstrap: 0.08s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

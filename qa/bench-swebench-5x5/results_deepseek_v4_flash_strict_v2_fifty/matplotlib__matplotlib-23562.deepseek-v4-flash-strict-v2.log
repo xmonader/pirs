@@ -1,0 +1,29 @@
+=== matplotlib__matplotlib-23562 (deepseek-v4-flash) start 1785321073.1162531 ===
+9bffd322d3b4ec84fb161d0fef546ea1071ca2cf491864ad2e6dda71dc1f8a22
+base_sha=29a86636a9c45ab5ac4d80ac76eaee497f460dce
+capped keep_green 136->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=29a86636a9c45ab5ac4d80ac76eaee497f460dce --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=28 tools=30 [read:11 bash:8 grep:6 edit_block:3 find:2]
+tokens by model:
+  deepseek-v4-flash: in=13305 cache_r=459776 cache_w=0 out=8581 reasoning=3689 total=481662 — $0.0452
+  TOTAL: in=13305 cache_r=459776 cache_w=0 out=8581 reasoning=3689 total=481662 — $0.0452
+patch written to "/tmp/out.patch" (993 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 29a86636a9 Merge pull request #23558 from greglucas/macosx-utf8-strings
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=lib/mpl_toolkits/tests/test_mplot3d.py::test_Poly3DCollection_get_facecolor --target=lib/mpl_toolkits/tests/test_mplot3d.py::test_Poly3DCollection_get_edgecolor --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_alpha[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_calling_conventions --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_edge_style[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_named_colors[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_rgb_data[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_simple[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::TestVoxels::test_xyz[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_add_collection3d_zs_array[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_add_collection3d_zs_scalar[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_aspects[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_autoscale --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_ax3d_tickcolour --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_cla[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_focal_length[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_focal_length_checks --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_isometric[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_labelpad[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_ortho[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_repr --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_axes3d_rotated[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_colors --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_lightsource --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_notshaded[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_bar3d_shaded[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_colorbar_pos --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_computed_zorder[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d_1d_input --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contour3d_extend3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-both-levels0] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-max-levels2] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_extend[png-min-levels1] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_contourf3d_fill[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_equal_box_aspect[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_errorbar3d[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_errorbar3d_errorevery[png] --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_format_coord --keep-green=lib/mpl_toolkits/tests/test_mplot3d.py::test_get_axis_position
+
+outcome: Solved
+timing (total 506.86s):
+  bootstrap: 447.40s (88%)
+  baseline: 24.46s (5%)
+  discover: 18.78s (4%)
+  verify: 16.23s (3% n=2)
+  fix: 0.00s (0%)
+
+check_exit=0

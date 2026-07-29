@@ -1,0 +1,22 @@
+diff --git a/sklearn/compose/_column_transformer.py b/sklearn/compose/_column_transformer.py
+index a26145117..bcb6fd62f 100644
+--- a/sklearn/compose/_column_transformer.py
++++ b/sklearn/compose/_column_transformer.py
+@@ -384,6 +384,8 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+                 # replace 'passthrough' with identity transformer and
+                 # skip in case of 'drop'
+                 if trans == "passthrough":
++                    if _is_empty_column_selection(columns):
++                        continue
+                     trans = FunctionTransformer(
+                         accept_sparse=True,
+                         check_inverse=False,
+@@ -587,6 +589,8 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+         for name, old, column, _ in self._iter():
+             if old == "drop":
+                 trans = "drop"
++            elif _is_empty_column_selection(column):
++                trans = old
+             elif old == "passthrough":
+                 # FunctionTransformer is present in list of transformers,
+                 # so get next transformer, but save original string

@@ -1,0 +1,28 @@
+=== django__django-11049 (deepseek-v4-flash) start 1785324185.1354032 ===
+0f69bd3620d459196ac61a72828a29ffe104948b0417cbfa41176307bad479f6
+base_sha=17455e924e243e7a55e8a38f45966d8cbb27c273
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=17455e924e243e7a55e8a38f45966d8cbb27c273 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=43 [bash:21 grep:9 read:9 edit:2 run_tests:1 write:1]
+tokens by model:
+  deepseek-v4-flash: in=21793 cache_r=883840 cache_w=0 out=8198 reasoning=3248 total=913831 — $0.0768
+  TOTAL: in=21793 cache_r=883840 cache_w=0 out=8198 reasoning=3248 total=913831 — $0.0768
+patch written to "/tmp/out.patch" (54740 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 17455e924e Removed executable bit from static asset xregexp.js.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_invalid_string (model_fields.test_durationfield.TestValidation) --keep-green=test_dumping (model_fields.test_durationfield.TestSerialization) --keep-green=test_loading (model_fields.test_durationfield.TestSerialization) --keep-green=test_formfield (model_fields.test_durationfield.TestFormField) --keep-green=test_exact (model_fields.test_durationfield.TestQuerying) --keep-green=test_gt (model_fields.test_durationfield.TestQuerying) --keep-green=test_create_empty (model_fields.test_durationfield.TestSaveLoad) --keep-green=test_fractional_seconds (model_fields.test_durationfield.TestSaveLoad) --keep-green=test_simple_roundtrip (model_fields.test_durationfield.TestSaveLoad)
+
+outcome: Solved
+timing (total 4.80s):
+  verify: 2.52s (53% n=2)
+  baseline: 2.04s (42%)
+  discover: 0.15s (3%)
+  bootstrap: 0.09s (2%)
+  fix: 0.00s (0%)
+
+check_exit=0

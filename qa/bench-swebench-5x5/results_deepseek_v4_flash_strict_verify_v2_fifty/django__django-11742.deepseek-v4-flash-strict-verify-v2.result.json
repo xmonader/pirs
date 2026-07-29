@@ -1,0 +1,17 @@
+{
+  "id": "django__django-11742",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-verify-v2",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11742:latest",
+  "container": "pirsbench-django--django-11742-deepseek-v4-flash-strict-verify-v2",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": false,
+  "strict_verify": true,
+  "exit_code": null,
+  "timed_out": true,
+  "solved": false
+}

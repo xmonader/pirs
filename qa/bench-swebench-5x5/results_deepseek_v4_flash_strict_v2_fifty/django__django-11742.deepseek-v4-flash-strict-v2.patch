@@ -1,0 +1,54 @@
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 9ce46e3f73..8ebc882354 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -955,6 +955,7 @@ class CharField(Field):
+         return [
+             *super().check(**kwargs),
+             *self._check_max_length_attribute(**kwargs),
++            *self._check_max_length_choices(**kwargs),
+         ]
+ 
+     def _check_max_length_attribute(self, **kwargs):
+@@ -978,6 +979,41 @@ class CharField(Field):
+         else:
+             return []
+ 
++    def _check_max_length_choices(self, **kwargs):
++        if self.choices and self.max_length is not None and (
++            isinstance(self.max_length, int) and not isinstance(self.max_length, bool)
++        ):
++            try:
++                flat = []
++                for choice, value in self.choices:
++                    if isinstance(value, (list, tuple)):
++                        flat.extend(value)
++                    else:
++                        flat.append((choice, value))
++            except (TypeError, ValueError):
++                # Choices are not well-formed; _check_choices handles this.
++                return []
++            try:
++                longest = max(
++                    (len(str(choice))
++                     for choice, _ in flat
++                     if isinstance(choice, (str, Promise))),
++                    default=0,
++                )
++            except (TypeError, ValueError):
++                # Some choices are not well-formed pairs.
++                return []
++            if longest > self.max_length:
++                return [
++                    checks.Error(
++                        "'max_length' is too small to fit the longest value "
++                        "in 'choices' (%d characters)." % longest,
++                        obj=self,
++                        id='fields.E122',
++                    )
++                ]
++        return []
++
+     def cast_db_type(self, connection):
+         if self.max_length is None:
+             return connection.ops.cast_char_field_without_max_length

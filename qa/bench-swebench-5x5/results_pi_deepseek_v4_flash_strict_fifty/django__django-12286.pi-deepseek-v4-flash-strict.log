@@ -1,0 +1,27 @@
+=== django__django-12286 pi/deepseek-v4-flash STRICT start 1785314686.3998387 ===
+0672344e26f181a04137d66c12d6028d58b40b7413255a3ea17eeafd95127348
+base_sha=979f61abd322507aafced9627702362e541ec34e (NO test_patch for agent)
+grade targets=1 keep_green=7 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is complete. Here's a summary:
+
+**Root cause:** The `check_language_settings_consistent` function in `/testbed/django/core/checks/translation.py` was doing an exact match check — it only verified if `LANGUAGE_CODE` was directly in the set of `LANGUAGES` tags. However, Django's actual language resolution logic in `get_supported_language_variant` (in `trans_real.py`) correctly falls back to the base language when a sublanguage isn't available (e.g., `de-at` falls back to `de`). The system check was inconsistent with this behavior.
+
+**Fix:** Added a fallback check: if the `LANGUAGE_CODE` is not directly in the available tags, the code now checks if the base language (the part before the first `-`) is available. If it is, no error is raised, matching Django's documented behavior.
+
+
+pi_exit=0 agent_elapsed_s=34.1
+patch_bytes=805
+HEAD is now at 979f61abd3 Simplified model's Options.add_field() a bit.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_valid_variant_consistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_inconsistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages_bidi (check_framework.test_translation.TranslationCheckTests)
+
+outcome: Solved
+timing (total 4.70s):
+  verify: 2.90s (62% n=2)
+  baseline: 1.66s (35%)
+  discover: 0.09s (2%)
+  bootstrap: 0.05s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

@@ -1,0 +1,105 @@
+diff --git a/django/forms/widgets.py b/django/forms/widgets.py
+index 02aa32b207..4cce852e6c 100644
+--- a/django/forms/widgets.py
++++ b/django/forms/widgets.py
+@@ -59,22 +59,18 @@ class Media:
+ 
+     @property
+     def _css(self):
+-        css = self._css_lists[0]
+-        # filter(None, ...) avoids calling merge with empty dicts.
+-        for obj in filter(None, self._css_lists[1:]):
+-            css = {
+-                medium: self.merge(css.get(medium, []), obj.get(medium, []))
+-                for medium in css.keys() | obj.keys()
+-            }
+-        return css
++        # Collect lists for each medium across all CSS dicts.
++        all_media = sorted(
++            {medium for css in self._css_lists if css for medium in css}
++        )
++        return {
++            medium: self._merge_lists([css.get(medium, []) for css in self._css_lists if css])
++            for medium in all_media
++        }
+ 
+     @property
+     def _js(self):
+-        js = self._js_lists[0]
+-        # filter(None, ...) avoids calling merge() with empty lists.
+-        for obj in filter(None, self._js_lists[1:]):
+-            js = self.merge(js, obj)
+-        return js
++        return self._merge_lists(self._js_lists)
+ 
+     def render(self):
+         return mark_safe('\n'.join(chain.from_iterable(getattr(self, 'render_' + name)() for name in MEDIA_TYPES)))
+@@ -149,6 +145,68 @@ class Media:
+                 last_insert_index = index
+         return combined_list
+ 
++    @staticmethod
++    def _merge_lists(lists):
++        """
++        Merge a list of lists while preserving relative order. Uses
++        topological sorting based on ordering constraints from all lists
++        to avoid introducing artificial ordering constraints that don't
++        exist in any individual list.
++
++        Falls back to incremental pairwise merge if a cycle is detected.
++        """
++        # Remove empty lists.
++        lists = [lst for lst in lists if lst]
++        if not lists:
++            return []
++
++        # Collect all unique elements in order of first appearance.
++        all_elements = []
++        seen = set()
++        for lst in lists:
++            for item in lst:
++                if item not in seen:
++                    all_elements.append(item)
++                    seen.add(item)
++
++        # If there's only one list, return it unchanged (preserves type).
++        if len(lists) <= 1:
++            return lists[0]
++
++        # Build a graph of ordering constraints. Each list specifies a
++        # total order for its elements. Consecutive pairs in each list
++        # define edges in the partial order.
++        successors = {item: [] for item in all_elements}
++        in_degree = {item: 0 for item in all_elements}
++        for lst in lists:
++            for i in range(len(lst) - 1):
++                a, b = lst[i], lst[i + 1]
++                if b not in successors[a]:
++                    successors[a].append(b)
++                    in_degree[b] = in_degree.get(b, 0) + 1
++
++        # Kahn's algorithm for topological sort. Use first-appearance
++        # order for deterministic tie-breaking.
++        queue = [item for item in all_elements if in_degree[item] == 0]
++        result = []
++        while queue:
++            # Sort by first appearance for stable, predictable ordering.
++            queue.sort(key=lambda x: all_elements.index(x))
++            item = queue.pop(0)
++            result.append(item)
++            for neighbor in successors[item]:
++                in_degree[neighbor] -= 1
++                if in_degree[neighbor] == 0:
++                    queue.append(neighbor)
++
++        # If a cycle exists, fall back to the incremental merge which
++        # will issue appropriate warnings.
++        if len(result) != len(all_elements):
++            result = lists[0]
++            for lst in lists[1:]:
++                result = Media.merge(result, lst)
++        return result
++
+     def __add__(self, other):
+         combined = Media()
+         combined._css_lists = self._css_lists + other._css_lists

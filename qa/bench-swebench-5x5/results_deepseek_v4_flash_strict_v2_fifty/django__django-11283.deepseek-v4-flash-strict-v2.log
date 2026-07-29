@@ -1,0 +1,28 @@
+=== django__django-11283 (deepseek-v4-flash) start 1785319652.2371385 ===
+42b8e0a55250e0772c69a7512df94c6b96cc8f756dbb3e69dedeb2d5c078bb24
+base_sha=08a4ee06510ae45562c228eefbdcaac84bd38c7a
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=08a4ee06510ae45562c228eefbdcaac84bd38c7a --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=44 [bash:16 read:11 grep:6 find:4 project:2 edit:1 edit_block:1 git:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=23020 cache_r=841344 cache_w=0 out=10537 reasoning=5558 total=874901 — $0.0767
+  TOTAL: in=23020 cache_r=841344 cache_w=0 out=10537 reasoning=5558 total=874901 — $0.0767
+patch written to "/tmp/out.patch" (1051 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 08a4ee0651 Fixed typos in test names.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_migrate_with_existing_target_permission (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_has_now_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithDifferentAppLabelTests) --keep-green=test_migrate_backwards (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_proxy_model_permissions_contenttype (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_keeps_same_permissions_after_migrating_backward (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests) --keep-green=test_user_still_has_proxy_model_permissions (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 3.63s):
+  baseline: 2.48s (68%)
+  verify: 0.95s (26%)
+  discover: 0.14s (4%)
+  bootstrap: 0.06s (2%)
+  fix: 0.00s (0%)
+
+check_exit=1

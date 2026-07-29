@@ -1,0 +1,19 @@
+=== django__django-12284 (deepseek-v4-flash) start 1785327290.4654891 ===
+459525e6cb202cc51900d5b5bfe4aa98d1765c2207b1aee777576e9bd578ddac
+base_sha=c5e373d48cbdd923575956fed477b63d66d9603f
+filtered non-test ids: targets 1->1 keep_green 31->24
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=c5e373d48cbdd923575956fed477b63d66d9603f --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_overriding_inherited_FIELD_display (model_fields.tests.GetFieldDisplayTests) --keep-green=test_blank_in_choices (model_fields.tests.GetChoicesTests) --keep-green=test_blank_in_grouped_choices (model_fields.tests.GetChoicesTests) --keep-green=test_empty_choices (model_fields.tests.GetChoicesTests) --keep-green=test_lazy_strings_not_evaluated (model_fields.tests.GetChoicesTests) --keep-green=test_choices_and_field_display (model_fields.tests.GetFieldDisplayTests) --keep-green=test_empty_iterator_choices (model_fields.tests.GetFieldDisplayTests) --keep-green=test_iterator_choices (model_fields.tests.GetFieldDisplayTests) --keep-green=test_overriding_FIELD_display (model_fields.tests.GetFieldDisplayTests) --keep-green=test_check (model_fields.tests.ChoicesTests) --keep-green=test_choices (model_fields.tests.ChoicesTests) --keep-green=test_flatchoices (model_fields.tests.ChoicesTests) --keep-green=test_formfield (model_fields.tests.ChoicesTests) --keep-green=test_invalid_choice (model_fields.tests.ChoicesTests) --keep-green=test_get_choices (model_fields.tests.GetChoicesLimitChoicesToTests) --keep-green=test_get_choices_reverse_related_field (model_fields.tests.GetChoicesLimitChoicesToTests) --keep-green=test_field_name (model_fields.tests.BasicFieldTests) --keep-green=test_field_repr (model_fields.tests.BasicFieldTests) --keep-green=test_field_str (model_fields.tests.BasicFieldTests) --keep-green=test_field_verbose_name (model_fields.tests.BasicFieldTests) --keep-green=test_show_hidden_initial (model_fields.tests.BasicFieldTests) --keep-green=test_get_choices (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_default_ordering (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_reverse_related_field (model_fields.tests.GetChoicesOrderingTests) --keep-green=test_get_choices_reverse_related_field_default_ordering (model_fields.tests.GetChoicesOrderingTests) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Solved timing=timing (total 5.13s):
+session: turns=28 tools=28 [read:11 bash:8 grep:6 edit_block:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=21451 cache_r=524160 cache_w=0 out=7317 reasoning=3425 total=552928 — $0.0505
+  TOTAL: in=21451 cache_r=524160 cache_w=0 out=7317 reasoning=3425 total=552928 — $0.0505
+patch written to "/tmp/out.patch" (659 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=115.8

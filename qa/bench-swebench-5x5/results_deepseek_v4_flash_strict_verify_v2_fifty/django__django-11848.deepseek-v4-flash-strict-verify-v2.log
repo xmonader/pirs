@@ -1,0 +1,23 @@
+=== django__django-11848 (deepseek-v4-flash) start 1785324428.041809 ===
+d3a1d81c72cb2fbdc7c7712b0a8ed0dbc3b20e295fbfcdd3a7ab680969f0ed66
+base_sha=b485daa4cd0fb5071ec75ac9d651a08bb5d224db
+capped keep_green 43->40 (PIRS_MAX_KEEP_GREEN=40)
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=b485daa4cd0fb5071ec75ac9d651a08bb5d224db --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_parsing_rfc850 (utils_tests.test_http.HttpDateProcessingTests) --target=test_parsing_year_less_than_70 (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing_asctime (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing_rfc1123 (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_http_date (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing (utils_tests.test_http.ETagProcessingTests) --keep-green=test (utils_tests.test_http.EscapeLeadingSlashesTests) --keep-green=test_allowed_hosts_str (utils_tests.test_http.IsSafeURLTests) --keep-green=test_bad (utils_tests.test_http.IsSameDomainTests) --keep-green=test_bad_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_basic_auth (utils_tests.test_http.IsSafeURLTests) --keep-green=test_custom_iterable_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_empty_sequence_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_sequence_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_sequence_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_tuple_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_bytearray (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_bytes_values (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_sequence_of_bytes (utils_tests.test_http.URLEncodeTests) --keep-green=test_generator (utils_tests.test_http.URLEncodeTests) --keep-green=test_good (utils_tests.test_http.IsSameDomainTests) --keep-green=test_good_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_input_too_large (utils_tests.test_http.Base36IntTests) --keep-green=test_invalid_literal (utils_tests.test_http.Base36IntTests) --keep-green=test_is_safe_url_deprecated (utils_tests.test_http.IsSafeURLTests) --keep-green=test_multivaluedict (utils_tests.test_http.URLEncodeTests) --keep-green=test_negative_input (utils_tests.test_http.Base36IntTests) --keep-green=test_no_allowed_hosts (utils_tests.test_http.IsSafeURLTests) --keep-green=test_none (utils_tests.test_http.URLEncodeTests) --keep-green=test_none_in_generator (utils_tests.test_http.URLEncodeTests) --keep-green=test_none_in_sequence (utils_tests.test_http.URLEncodeTests) --keep-green=test_quote (utils_tests.test_http.URLQuoteTests) --keep-green=test_quote_plus (utils_tests.test_http.URLQuoteTests) --keep-green=test_quoting (utils_tests.test_http.ETagProcessingTests) --keep-green=test_roundtrip (utils_tests.test_http.Base36IntTests) --keep-green=test_roundtrip (utils_tests.test_http.URLSafeBase64Tests) --keep-green=test_secure_param_https_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_secure_param_non_https_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_to_base36_errors (utils_tests.test_http.Base36IntTests) --keep-green=test_to_int_errors (utils_tests.test_http.Base36IntTests) --keep-green=test_tuples (utils_tests.test_http.URLEncodeTests) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 1.98s):
+shadow-verify attempt 2/3
+empty patch after attempt 2
+shadow-verify attempt 3/3
+shadow attempt 3: outcome=Failed(FixNoFlip) timing=timing (total 2.11s):
+session: turns=88 tools=89 [bash:49 read:16 grep:9 git:8 edit:2 run_tests:2 edit_block:1 find:1 write:1]
+tokens by model:
+  deepseek-v4-flash: in=28299 cache_r=2740352 cache_w=0 out=29786 reasoning=20174 total=2798437 — $0.2322
+  TOTAL: in=28299 cache_r=2740352 cache_w=0 out=29786 reasoning=20174 total=2798437 — $0.2322
+patch written (ungraded/failed) to "/tmp/out.patch" (613 bytes)
+outcome: Failed(shadow-verify)
+
+exit_code=1 elapsed_s=439.1

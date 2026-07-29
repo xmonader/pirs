@@ -1,0 +1,41 @@
+=== django__django-12125 pi/deepseek-v4-flash STRICT start 1785314342.7773852 ===
+4b078e50c08f78f9463f3e6e4d89dc53cc8aa405ff87b50d8f525a3a71a7ce2b
+base_sha=915a7406f113d79d266df0e6177e4e95e9373e7a (NO test_patch for agent)
+grade targets=2 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+Here's a summary of the fix:
+
+## Root Cause
+
+The `TypeSerializer` in `django/db/migrations/serializer.py` was using `self.value.__name__` instead of `self.value.__qualname__` when serializing a class (type) for migration files. 
+
+- `__name__` returns just the simple class name (e.g., `Inner`, `State`)
+- `__qualname__` returns the dotted qualified path including outer classes (e.g., `Outer.Inner`, `Thing.State`)
+
+This caused inner classes to be referenced incorrectly in generated migration files. For example, `Thing.State` (an inner enum class inside a Django model) would be serialized as `test1.models.State` instead of `test1.models.Thing.State`.
+
+## Fix
+
+Changed `TypeSerializer.serialize()` to use `__qualname__` instead of `__name__`, with a fallback to `__name__` for local classes (those with `<locals>` in their qualname), consistent with how `FunctionTypeSerializer` handles local functions.
+
+### Change in `/testbed/django/db/migrations/serializer.py`
+
+1. **Builtins case**: Changed from `self.value.__name__` to `self.value.__qualname__`
+2. **General case**: Use `self.value.__qualname__` when there are no `<locals>` in the qualname; fall back to `self.value.__name__` for local classes (which can't be referenced from outside the local scope with their fully qualified path)
+
+
+pi_exit=0 agent_elapsed_s=305.9
+patch_bytes=800
+HEAD is now at 915a7406f1 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_serialize_nested_class (migrations.test_writer.WriterTests) --target=test_serialize_numbers (migrations.test_writer.WriterTests) --keep-green=test_args_kwargs_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_empty_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_expand_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_kwargs_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_multiline_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_nested_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_nested_operation_expand_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_custom_operation (migrations.test_writer.WriterTests) --keep-green=test_deconstruct_class_arguments (migrations.test_writer.WriterTests) --keep-green=test_migration_file_header_comments (migrations.test_writer.WriterTests) --keep-green=test_migration_path (migrations.test_writer.WriterTests) --keep-green=test_models_import_omitted (migrations.test_writer.WriterTests) --keep-green=test_register_non_serializer (migrations.test_writer.WriterTests) --keep-green=test_register_serializer (migrations.test_writer.WriterTests) --keep-green=test_serialize_builtin_types (migrations.test_writer.WriterTests) --keep-green=test_serialize_builtins (migrations.test_writer.WriterTests) --keep-green=test_serialize_choices (migrations.test_writer.WriterTests) --keep-green=test_serialize_class_based_validators (migrations.test_writer.WriterTests) --keep-green=test_serialize_collections (migrations.test_writer.WriterTests) --keep-green=test_serialize_compiled_regex (migrations.test_writer.WriterTests) --keep-green=test_serialize_constants (migrations.test_writer.WriterTests) --keep-green=test_serialize_datetime (migrations.test_writer.WriterTests) --keep-green=test_serialize_empty_nonempty_tuple (migrations.test_writer.WriterTests) --keep-green=test_serialize_enums (migrations.test_writer.WriterTests) --keep-green=test_serialize_fields (migrations.test_writer.WriterTests) --keep-green=test_serialize_frozensets (migrations.test_writer.WriterTests) --keep-green=test_serialize_functions (migrations.test_writer.WriterTests) --keep-green=test_serialize_functools_partial (migrations.test_writer.WriterTests) --keep-green=test_serialize_functools_partialmethod (migrations.test_writer.WriterTests) --keep-green=test_serialize_iterators (migrations.test_writer.WriterTests) --keep-green=test_serialize_lazy_objects (migrations.test_writer.WriterTests) --keep-green=test_serialize_managers (migrations.test_writer.WriterTests) --keep-green=test_serialize_multiline_strings (migrations.test_writer.WriterTests) --keep-green=test_serialize_range (migrations.test_writer.WriterTests) --keep-green=test_serialize_set (migrations.test_writer.WriterTests) --keep-green=test_serialize_settings (migrations.test_writer.WriterTests) --keep-green=test_serialize_strings (migrations.test_writer.WriterTests) --keep-green=test_serialize_timedelta (migrations.test_writer.WriterTests) --keep-green=test_serialize_type_none (migrations.test_writer.WriterTests)
+
+outcome: Solved
+timing (total 6.72s):
+  verify: 4.46s (66% n=2)
+  baseline: 2.04s (30%)
+  discover: 0.15s (2%)
+  bootstrap: 0.08s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

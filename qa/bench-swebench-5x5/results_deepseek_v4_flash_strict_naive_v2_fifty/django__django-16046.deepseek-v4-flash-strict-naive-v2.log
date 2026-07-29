@@ -1,0 +1,28 @@
+=== django__django-16046 (deepseek-v4-flash) start 1785325624.0019047 ===
+7b7cf769c33e7524fcc0f646e76ac2d4e0f47c92af7b3d1ce08716dd5cc7f63d
+base_sha=ec13e801b820614ff374cb0046092caab8d67249
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=ec13e801b820614ff374cb0046092caab8d67249 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=36 tools=44 [bash:11 grep:9 read:9 web_fetch:4 git:3 edit_block:2 find:2 run_tests:2 ls:1 web_search:1]
+tokens by model:
+  deepseek-v4-flash: in=25016 cache_r=793728 cache_w=0 out=8175 reasoning=4670 total=826919 — $0.0713
+  TOTAL: in=25016 cache_r=793728 cache_w=0 out=8175 reasoning=4670 total=826919 — $0.0713
+patch written to "/tmp/out.patch" (561 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at ec13e801b8 Refs #31335 -- Added SchemaEditor._create_missing_fk_index() on MySQL.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_empty (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_subclass (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_float_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_number (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_string (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_large_number (utils_tests.test_numberformat.TestNumberFormat)
+
+outcome: Solved
+timing (total 4.40s):
+  verify: 2.46s (56% n=2)
+  baseline: 1.73s (39%)
+  discover: 0.15s (3%)
+  bootstrap: 0.06s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

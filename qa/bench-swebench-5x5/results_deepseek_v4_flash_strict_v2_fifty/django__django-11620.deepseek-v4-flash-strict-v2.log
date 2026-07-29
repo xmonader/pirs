@@ -1,0 +1,30 @@
+=== django__django-11620 (deepseek-v4-flash) start 1785319847.190561 ===
+cbe5634619227912380bcc22b7524762a758ba10d8effcc091a91106917fe06f
+base_sha=514efa3129792ec2abb2444f3e7aeb3f21a38386
+filtered non-test ids: targets 1->1 keep_green 66->55
+capped keep_green 66->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=514efa3129792ec2abb2444f3e7aeb3f21a38386 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=80 tools=87 [read:27 bash:25 grep:17 job_wait:8 edit:4 find:2 run_tests:2 ls:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=31286 cache_r=2742912 cache_w=0 out=30901 reasoning=18625 total=2805099 — $0.2344
+  TOTAL: in=31286 cache_r=2742912 cache_w=0 out=30901 reasoning=18625 total=2805099 — $0.2344
+patch written to "/tmp/out.patch" (1388 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 514efa3129 Fixed #30688 -- Clarified base_manager_name docs.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_technical_404_converter_raise_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_technical_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_400 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_403 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_403_template (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404_empty_path_not_in_urls (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404_not_in_urls (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_classbased_technical_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_default_urlconf_template (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_files (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_no_template_source_loaders (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_non_l10ned_numeric_ids (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_regression_21530 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_template_encoding (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_template_exceptions (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_400 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_403 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_404 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_ajax_response_encoding (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_callable_settings (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_callable_settings_forbidding_to_set_attributes (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_cleanse_setting_basic (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_cleanse_setting_ignore_case (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_cleanse_setting_recurses_in_dictionary (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_custom_exception_reporter_filter (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_custom_exception_reporter_filter (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_dict_setting_with_non_str_key (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_encoding_error (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_exception_fetching_user (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_handle_db_exception (view_tests.tests.test_debug.DebugViewQueriesAllowedTests) --keep-green=test_ignore_traceback_evaluation_exceptions (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_message_only (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_message_only (view_tests.tests.test_debug.PlainTextReportTests) --keep-green=test_multivalue_dict_key_error (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_non_sensitive_request (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_non_sensitive_request (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_paranoid_request (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_paranoid_request (view_tests.tests.test_debug.ExceptionReporterFilterTests) --keep-green=test_reporting_frames_for_cyclic_reference (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_reporting_frames_without_source (view_tests.tests.test_debug.ExceptionReporterTests)
+
+outcome: Solved
+timing (total 12.51s):
+  baseline: 6.63s (53%)
+  verify: 5.66s (45% n=2)
+  discover: 0.14s (1%)
+  bootstrap: 0.08s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

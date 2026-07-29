@@ -1,0 +1,1298 @@
+diff --git a/django/conf/locale/af/LC_MESSAGES/django.po b/django/conf/locale/af/LC_MESSAGES/django.po
+index 7f34b0756c..bc47059dae 100644
+--- a/django/conf/locale/af/LC_MESSAGES/django.po
++++ b/django/conf/locale/af/LC_MESSAGES/django.po
+@@ -517,7 +517,7 @@ msgstr "Desimale getal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/ar/LC_MESSAGES/django.po b/django/conf/locale/ar/LC_MESSAGES/django.po
+index d0c82d86a1..c91a9cc113 100644
+--- a/django/conf/locale/ar/LC_MESSAGES/django.po
++++ b/django/conf/locale/ar/LC_MESSAGES/django.po
+@@ -547,7 +547,7 @@ msgstr "رقم عشري"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "قيمة '%(value)s' ليست بنسق صحيح. القيمة يجب ان تكون من التنسيق [DD] [HH:"
+diff --git a/django/conf/locale/ast/LC_MESSAGES/django.po b/django/conf/locale/ast/LC_MESSAGES/django.po
+index 14ac3f6600..3647746585 100644
+--- a/django/conf/locale/ast/LC_MESSAGES/django.po
++++ b/django/conf/locale/ast/LC_MESSAGES/django.po
+@@ -504,7 +504,7 @@ msgstr "Númberu decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/az/LC_MESSAGES/django.po b/django/conf/locale/az/LC_MESSAGES/django.po
+index 60ddc200e5..82bd38cb42 100644
+--- a/django/conf/locale/az/LC_MESSAGES/django.po
++++ b/django/conf/locale/az/LC_MESSAGES/django.po
+@@ -528,10 +528,10 @@ msgstr "Rasional ədəd"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s' dəyərinin formatı səhvdir. Formatı [DD] [HH:[MM:]]ss[.uuuuuu] "
++"'%(value)s' dəyərinin formatı səhvdir. Formatı [DD] [[HH:]MM:]ss[.uuuuuu] "
+ "olmalıdır."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/be/LC_MESSAGES/django.po b/django/conf/locale/be/LC_MESSAGES/django.po
+index 25ecb7d508..947bdcc1e5 100644
+--- a/django/conf/locale/be/LC_MESSAGES/django.po
++++ b/django/conf/locale/be/LC_MESSAGES/django.po
+@@ -541,7 +541,7 @@ msgstr "Дзесятковы лік"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Значэньне '%(value)s' мае няправільны фармат. Яно павінна быць у фармаце "
+diff --git a/django/conf/locale/bg/LC_MESSAGES/django.po b/django/conf/locale/bg/LC_MESSAGES/django.po
+index 8a85adb889..92cd6ee708 100644
+--- a/django/conf/locale/bg/LC_MESSAGES/django.po
++++ b/django/conf/locale/bg/LC_MESSAGES/django.po
+@@ -526,7 +526,7 @@ msgstr "Десетична дроб"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Стойността на '%(value)s'  е с невалиден формат. Тя трябва да бъде в [ДД] "
+diff --git a/django/conf/locale/bn/LC_MESSAGES/django.po b/django/conf/locale/bn/LC_MESSAGES/django.po
+index 05aeea19c7..0b8d98ebfa 100644
+--- a/django/conf/locale/bn/LC_MESSAGES/django.po
++++ b/django/conf/locale/bn/LC_MESSAGES/django.po
+@@ -497,7 +497,7 @@ msgstr "দশমিক সংখ্যা"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/br/LC_MESSAGES/django.po b/django/conf/locale/br/LC_MESSAGES/django.po
+index 9c99f7c429..2bcaff5b3a 100644
+--- a/django/conf/locale/br/LC_MESSAGES/django.po
++++ b/django/conf/locale/br/LC_MESSAGES/django.po
+@@ -524,7 +524,7 @@ msgstr "Niver dekvedennel"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/bs/LC_MESSAGES/django.po b/django/conf/locale/bs/LC_MESSAGES/django.po
+index 967fd81fa9..ef45a839d5 100644
+--- a/django/conf/locale/bs/LC_MESSAGES/django.po
++++ b/django/conf/locale/bs/LC_MESSAGES/django.po
+@@ -503,7 +503,7 @@ msgstr "Decimalni broj"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/ca/LC_MESSAGES/django.po b/django/conf/locale/ca/LC_MESSAGES/django.po
+index dae6fe86b1..5bc7bb7828 100644
+--- a/django/conf/locale/ca/LC_MESSAGES/django.po
++++ b/django/conf/locale/ca/LC_MESSAGES/django.po
+@@ -524,7 +524,7 @@ msgstr "Número decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'El valor %(value)s' té un format invàlid. Ha d'estar en el format [DD] [HH:"
+diff --git a/django/conf/locale/cs/LC_MESSAGES/django.po b/django/conf/locale/cs/LC_MESSAGES/django.po
+index 8bf8bc65c9..4486f0c598 100644
+--- a/django/conf/locale/cs/LC_MESSAGES/django.po
++++ b/django/conf/locale/cs/LC_MESSAGES/django.po
+@@ -550,10 +550,10 @@ msgstr "Desetinné číslo"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"Hodnota '%(value)s' je v neplatném tvaru, který má být [DD] [HH:[MM:]]ss[."
++"Hodnota '%(value)s' je v neplatném tvaru, který má být [DD] [[HH:]MM:]ss[."
+ "uuuuuu]."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/cy/LC_MESSAGES/django.po b/django/conf/locale/cy/LC_MESSAGES/django.po
+index 38c1534538..ae23e1dc20 100644
+--- a/django/conf/locale/cy/LC_MESSAGES/django.po
++++ b/django/conf/locale/cy/LC_MESSAGES/django.po
+@@ -530,7 +530,7 @@ msgstr "Rhif degol"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/da/LC_MESSAGES/django.po b/django/conf/locale/da/LC_MESSAGES/django.po
+index 51d970d2dd..5a73d80c35 100644
+--- a/django/conf/locale/da/LC_MESSAGES/django.po
++++ b/django/conf/locale/da/LC_MESSAGES/django.po
+@@ -527,7 +527,7 @@ msgstr "Decimaltal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' værdien har et ugyldigt format. Den skal være i formatet [DD] "
+diff --git a/django/conf/locale/de/LC_MESSAGES/django.po b/django/conf/locale/de/LC_MESSAGES/django.po
+index efc1a522f2..664a5742ac 100644
+--- a/django/conf/locale/de/LC_MESSAGES/django.po
++++ b/django/conf/locale/de/LC_MESSAGES/django.po
+@@ -540,7 +540,7 @@ msgstr "Dezimalzahl"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "„%(value)s“ Wert hat ein ungültiges Format. Es muss der Form [DD] [HH:"
+diff --git a/django/conf/locale/dsb/LC_MESSAGES/django.po b/django/conf/locale/dsb/LC_MESSAGES/django.po
+index e3e343818f..3b992d615f 100644
+--- a/django/conf/locale/dsb/LC_MESSAGES/django.po
++++ b/django/conf/locale/dsb/LC_MESSAGES/django.po
+@@ -545,10 +545,10 @@ msgstr "Decimalna licba"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"Gódnota '%(value)s ma njepłaśiwy format. Musy we formaśe  [DD] [HH:[MM:]]ss[."
++"Gódnota '%(value)s ma njepłaśiwy format. Musy we formaśe  [DD] [[HH:]MM:]ss[."
+ "uuuuuu] byś."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/el/LC_MESSAGES/django.po b/django/conf/locale/el/LC_MESSAGES/django.po
+index 1669421d5b..ce7d059abf 100644
+--- a/django/conf/locale/el/LC_MESSAGES/django.po
++++ b/django/conf/locale/el/LC_MESSAGES/django.po
+@@ -542,7 +542,7 @@ msgstr "Δεκαδικός αριθμός"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Η τιμή '%(value)s' έχει εσφαλμένη μορφή. Πρέπει να είναι της μορφής [DD] [HH:"
+diff --git a/django/conf/locale/en/LC_MESSAGES/django.po b/django/conf/locale/en/LC_MESSAGES/django.po
+index 2c52175822..e95f84be75 100644
+--- a/django/conf/locale/en/LC_MESSAGES/django.po
++++ b/django/conf/locale/en/LC_MESSAGES/django.po
+@@ -645,7 +645,7 @@ msgstr ""
+ #: db/models/fields/__init__.py:1587
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/en_AU/LC_MESSAGES/django.po b/django/conf/locale/en_AU/LC_MESSAGES/django.po
+index ce059c995b..87df1bf07c 100644
+--- a/django/conf/locale/en_AU/LC_MESSAGES/django.po
++++ b/django/conf/locale/en_AU/LC_MESSAGES/django.po
+@@ -503,7 +503,7 @@ msgstr "Decimal number"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/en_GB/LC_MESSAGES/django.po b/django/conf/locale/en_GB/LC_MESSAGES/django.po
+index 381069888f..a433eb70b0 100644
+--- a/django/conf/locale/en_GB/LC_MESSAGES/django.po
++++ b/django/conf/locale/en_GB/LC_MESSAGES/django.po
+@@ -495,7 +495,7 @@ msgstr "Decimal number"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/eo/LC_MESSAGES/django.po b/django/conf/locale/eo/LC_MESSAGES/django.po
+index bb16d5d62f..fcad6d318a 100644
+--- a/django/conf/locale/eo/LC_MESSAGES/django.po
++++ b/django/conf/locale/eo/LC_MESSAGES/django.po
+@@ -531,11 +531,11 @@ msgstr "Dekuma nombro"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' valoro ne havas validan formaton. Ĝi devas esti kiel formato "
+-"[DD] [HH:[MM:]]ss[.uuuuuu]."
++"[DD] [[HH:]MM:]ss[.uuuuuu]."
+ 
+ msgid "Duration"
+ msgstr "Daŭro"
+diff --git a/django/conf/locale/es/LC_MESSAGES/django.po b/django/conf/locale/es/LC_MESSAGES/django.po
+index 15638c5d7c..a893de1cb6 100644
+--- a/django/conf/locale/es/LC_MESSAGES/django.po
++++ b/django/conf/locale/es/LC_MESSAGES/django.po
+@@ -539,11 +539,11 @@ msgstr "Número decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "El valor '%(value)s' no tiene un formato válido. Debe estar en el formato "
+-"[DD] [HH:[MM:]]ss[.uuuuuu]."
++"[DD] [[HH:]MM:]ss[.uuuuuu]."
+ 
+ msgid "Duration"
+ msgstr "Duración"
+diff --git a/django/conf/locale/es_AR/LC_MESSAGES/django.po b/django/conf/locale/es_AR/LC_MESSAGES/django.po
+index bd53fe8f78..71c12cbdd6 100644
+--- a/django/conf/locale/es_AR/LC_MESSAGES/django.po
++++ b/django/conf/locale/es_AR/LC_MESSAGES/django.po
+@@ -533,7 +533,7 @@ msgstr "Número decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "El valor de '%(value)s' tiene un formato inválido. Debe usar el formato [DD] "
+diff --git a/django/conf/locale/es_CO/LC_MESSAGES/django.po b/django/conf/locale/es_CO/LC_MESSAGES/django.po
+index 2cae813c9e..82c976317d 100644
+--- a/django/conf/locale/es_CO/LC_MESSAGES/django.po
++++ b/django/conf/locale/es_CO/LC_MESSAGES/django.po
+@@ -515,11 +515,11 @@ msgstr "Número decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' tiene un formato no válido. Este valor debe estar en el formato "
+-"[DD] [HH:[MM:]]ss[.uuuuuu]."
++"[DD] [[HH:]MM:]ss[.uuuuuu]."
+ 
+ msgid "Duration"
+ msgstr "Duración"
+diff --git a/django/conf/locale/es_MX/LC_MESSAGES/django.po b/django/conf/locale/es_MX/LC_MESSAGES/django.po
+index 44f60f873c..1ff3197553 100644
+--- a/django/conf/locale/es_MX/LC_MESSAGES/django.po
++++ b/django/conf/locale/es_MX/LC_MESSAGES/django.po
+@@ -499,7 +499,7 @@ msgstr "Número decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/es_VE/LC_MESSAGES/django.po b/django/conf/locale/es_VE/LC_MESSAGES/django.po
+index db2d592792..3eaa08a959 100644
+--- a/django/conf/locale/es_VE/LC_MESSAGES/django.po
++++ b/django/conf/locale/es_VE/LC_MESSAGES/django.po
+@@ -520,11 +520,11 @@ msgstr "Número decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "el valor '%(value)s' tiene un formato no válido. Este valor debe estar en el "
+-"formato [DD] [HH:[MM:]]ss[.uuuuuu]."
++"formato [DD] [[HH:]MM:]ss[.uuuuuu]."
+ 
+ msgid "Duration"
+ msgstr "Duración"
+diff --git a/django/conf/locale/et/LC_MESSAGES/django.po b/django/conf/locale/et/LC_MESSAGES/django.po
+index 7e8fccba69..67d14a4629 100644
+--- a/django/conf/locale/et/LC_MESSAGES/django.po
++++ b/django/conf/locale/et/LC_MESSAGES/django.po
+@@ -522,7 +522,7 @@ msgstr "Kümnendmurd"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' väärtusel on vale formaat. Peab olema formaadis [DD] [HH:"
+diff --git a/django/conf/locale/eu/LC_MESSAGES/django.po b/django/conf/locale/eu/LC_MESSAGES/django.po
+index ba3c41dc8a..b0e36889ba 100644
+--- a/django/conf/locale/eu/LC_MESSAGES/django.po
++++ b/django/conf/locale/eu/LC_MESSAGES/django.po
+@@ -534,7 +534,7 @@ msgstr "Zenbaki hamartarra"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' balioak ez dauka foramtu zuzena.  [EE] [OO:[MM:]]ss[.uuuuuu] "
+diff --git a/django/conf/locale/fa/LC_MESSAGES/django.po b/django/conf/locale/fa/LC_MESSAGES/django.po
+index 1143b2eea2..8eddff7437 100644
+--- a/django/conf/locale/fa/LC_MESSAGES/django.po
++++ b/django/conf/locale/fa/LC_MESSAGES/django.po
+@@ -530,7 +530,7 @@ msgstr "عدد دهدهی"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "مقدار «%(value)s» در قالب نادرستی وارد شده است. باید در قالب ‎[DD] [HH:"
+diff --git a/django/conf/locale/fi/LC_MESSAGES/django.po b/django/conf/locale/fi/LC_MESSAGES/django.po
+index fbab3be89e..3ac514436f 100644
+--- a/django/conf/locale/fi/LC_MESSAGES/django.po
++++ b/django/conf/locale/fi/LC_MESSAGES/django.po
+@@ -532,7 +532,7 @@ msgstr "Desimaaliluku"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr "%(value)s-arvo pitää olla muodossa [PP] TT:MM[:ss[.uuuuuu]]."
+ 
+diff --git a/django/conf/locale/fr/LC_MESSAGES/django.po b/django/conf/locale/fr/LC_MESSAGES/django.po
+index 91c9d9ef6d..c38647e0b7 100644
+--- a/django/conf/locale/fr/LC_MESSAGES/django.po
++++ b/django/conf/locale/fr/LC_MESSAGES/django.po
+@@ -540,7 +540,7 @@ msgstr "Nombre décimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Le format de la valeur « %(value)s » n'est pas valide. Le format correct est "
+diff --git a/django/conf/locale/fy/LC_MESSAGES/django.po b/django/conf/locale/fy/LC_MESSAGES/django.po
+index 35c00bbbf8..75e0ec5687 100644
+--- a/django/conf/locale/fy/LC_MESSAGES/django.po
++++ b/django/conf/locale/fy/LC_MESSAGES/django.po
+@@ -494,7 +494,7 @@ msgstr ""
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/ga/LC_MESSAGES/django.po b/django/conf/locale/ga/LC_MESSAGES/django.po
+index e348124395..7440e72bd7 100644
+--- a/django/conf/locale/ga/LC_MESSAGES/django.po
++++ b/django/conf/locale/ga/LC_MESSAGES/django.po
+@@ -517,7 +517,7 @@ msgstr "Uimhir deachúlach"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/gd/LC_MESSAGES/django.po b/django/conf/locale/gd/LC_MESSAGES/django.po
+index 103853e5d5..0acb45137a 100644
+--- a/django/conf/locale/gd/LC_MESSAGES/django.po
++++ b/django/conf/locale/gd/LC_MESSAGES/django.po
+@@ -567,7 +567,7 @@ msgstr "Àireamh dheicheach"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Tha fòrmat mì-dhligheach aig an luach “%(value)s”. Feumaidh e bhith san "
+diff --git a/django/conf/locale/gl/LC_MESSAGES/django.po b/django/conf/locale/gl/LC_MESSAGES/django.po
+index efdfd38881..6772217b15 100644
+--- a/django/conf/locale/gl/LC_MESSAGES/django.po
++++ b/django/conf/locale/gl/LC_MESSAGES/django.po
+@@ -502,7 +502,7 @@ msgstr "Número decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/he/LC_MESSAGES/django.po b/django/conf/locale/he/LC_MESSAGES/django.po
+index 1058a50426..25e7ac8846 100644
+--- a/django/conf/locale/he/LC_MESSAGES/django.po
++++ b/django/conf/locale/he/LC_MESSAGES/django.po
+@@ -506,7 +506,7 @@ msgstr "מספר עשרוני"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "הערך '%(value)s' מכיל פורמט לא חוקי. הוא חייב להיות בפורמט [DD] [HH:"
+diff --git a/django/conf/locale/hi/LC_MESSAGES/django.po b/django/conf/locale/hi/LC_MESSAGES/django.po
+index 6a4946486e..2e1f65811f 100644
+--- a/django/conf/locale/hi/LC_MESSAGES/django.po
++++ b/django/conf/locale/hi/LC_MESSAGES/django.po
+@@ -496,7 +496,7 @@ msgstr "दशमलव संख्या"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/hr/LC_MESSAGES/django.po b/django/conf/locale/hr/LC_MESSAGES/django.po
+index 084ef35374..892f65b0dd 100644
+--- a/django/conf/locale/hr/LC_MESSAGES/django.po
++++ b/django/conf/locale/hr/LC_MESSAGES/django.po
+@@ -543,7 +543,7 @@ msgstr "Decimalni broj"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' vrijednost je neispravno formatirana. Treba biti u [DD] [HH:"
+diff --git a/django/conf/locale/hsb/LC_MESSAGES/django.po b/django/conf/locale/hsb/LC_MESSAGES/django.po
+index 37cc5ba7d6..822e921d7e 100644
+--- a/django/conf/locale/hsb/LC_MESSAGES/django.po
++++ b/django/conf/locale/hsb/LC_MESSAGES/django.po
+@@ -543,10 +543,10 @@ msgstr "Decimalna ličba"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"Hódnota '%(value)s' ma njepłaćiwy format. Dyrbi w formaće [DD] [HH:[MM:]]ss[."
++"Hódnota '%(value)s' ma njepłaćiwy format. Dyrbi w formaće [DD] [[HH:]MM:]ss[."
+ "uuuuuu] być."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/hu/LC_MESSAGES/django.po b/django/conf/locale/hu/LC_MESSAGES/django.po
+index 64456a665d..24a6842064 100644
+--- a/django/conf/locale/hu/LC_MESSAGES/django.po
++++ b/django/conf/locale/hu/LC_MESSAGES/django.po
+@@ -541,7 +541,7 @@ msgstr "Tizes számrendszerű (decimális) szám"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' érték érvénytelen formátumban van. Az értéknek [DD] [HH:"
+diff --git a/django/conf/locale/hy/LC_MESSAGES/django.po b/django/conf/locale/hy/LC_MESSAGES/django.po
+index 3d73c48e8c..7a52fbe3ba 100644
+--- a/django/conf/locale/hy/LC_MESSAGES/django.po
++++ b/django/conf/locale/hy/LC_MESSAGES/django.po
+@@ -521,10 +521,10 @@ msgstr "Տասնորդական թիվ"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s'  արժեքը սխալ է։ Այն պետք է լինի  [DD] [HH:[MM:]]ss[.uuuuuu] "
++"'%(value)s'  արժեքը սխալ է։ Այն պետք է լինի  [DD] [[HH:]MM:]ss[.uuuuuu] "
+ "ֆորմատի"
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/ia/LC_MESSAGES/django.po b/django/conf/locale/ia/LC_MESSAGES/django.po
+index 10f0b35eae..8d3dff6c30 100644
+--- a/django/conf/locale/ia/LC_MESSAGES/django.po
++++ b/django/conf/locale/ia/LC_MESSAGES/django.po
+@@ -518,7 +518,7 @@ msgstr "Numero decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Le valor '%(value)s' es in un formato invalide. Debe esser in formato [DD] "
+diff --git a/django/conf/locale/id/LC_MESSAGES/django.po b/django/conf/locale/id/LC_MESSAGES/django.po
+index 99fc195f05..8d0840a04a 100644
+--- a/django/conf/locale/id/LC_MESSAGES/django.po
++++ b/django/conf/locale/id/LC_MESSAGES/django.po
+@@ -525,7 +525,7 @@ msgstr "Bilangan desimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "nilai '%(value)s' tidak sesuai format. Formatnya harus dalam [DD] [HH:"
+diff --git a/django/conf/locale/io/LC_MESSAGES/django.po b/django/conf/locale/io/LC_MESSAGES/django.po
+index 3efe6fdb0b..2a249662c5 100644
+--- a/django/conf/locale/io/LC_MESSAGES/django.po
++++ b/django/conf/locale/io/LC_MESSAGES/django.po
+@@ -502,7 +502,7 @@ msgstr "Decimala numero"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/is/LC_MESSAGES/django.po b/django/conf/locale/is/LC_MESSAGES/django.po
+index 09aaab84b5..383a644de2 100644
+--- a/django/conf/locale/is/LC_MESSAGES/django.po
++++ b/django/conf/locale/is/LC_MESSAGES/django.po
+@@ -534,7 +534,7 @@ msgstr "Tugatala"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' er á ógildu sniði. Það verður að vera á sniðinu [DD] [HH:"
+diff --git a/django/conf/locale/it/LC_MESSAGES/django.po b/django/conf/locale/it/LC_MESSAGES/django.po
+index 35ad800b54..7951a1212a 100644
+--- a/django/conf/locale/it/LC_MESSAGES/django.po
++++ b/django/conf/locale/it/LC_MESSAGES/django.po
+@@ -542,7 +542,7 @@ msgstr "Numero decimale"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Il valore '%(value)s' ha un formato non valido. Deve essere nel formato [GG]"
+diff --git a/django/conf/locale/ja/LC_MESSAGES/django.po b/django/conf/locale/ja/LC_MESSAGES/django.po
+index 04b771bfaa..c1e6ca5d85 100644
+--- a/django/conf/locale/ja/LC_MESSAGES/django.po
++++ b/django/conf/locale/ja/LC_MESSAGES/django.po
+@@ -519,10 +519,10 @@ msgstr "10 進数 (小数可)"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s' は無効な形式の値です。 [DD] [HH:[MM:]]ss[.uuuuuu] 形式でなければ"
++"'%(value)s' は無効な形式の値です。 [DD] [[HH:]MM:]ss[.uuuuuu] 形式でなければ"
+ "なりません。"
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/ka/LC_MESSAGES/django.po b/django/conf/locale/ka/LC_MESSAGES/django.po
+index d05ebeb21c..3269a9236e 100644
+--- a/django/conf/locale/ka/LC_MESSAGES/django.po
++++ b/django/conf/locale/ka/LC_MESSAGES/django.po
+@@ -509,10 +509,10 @@ msgstr "ათობითი რიცხვი"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s' არასწორი ფორმატი აქვს. ის უნდა იყოს [DD] [HH:[MM:]]ss[.uuuuuu] "
++"'%(value)s' არასწორი ფორმატი აქვს. ის უნდა იყოს [DD] [[HH:]MM:]ss[.uuuuuu] "
+ "ფორმატში."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/kab/LC_MESSAGES/django.po b/django/conf/locale/kab/LC_MESSAGES/django.po
+index f21e906f41..9f94682854 100644
+--- a/django/conf/locale/kab/LC_MESSAGES/django.po
++++ b/django/conf/locale/kab/LC_MESSAGES/django.po
+@@ -491,7 +491,7 @@ msgstr ""
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/kk/LC_MESSAGES/django.po b/django/conf/locale/kk/LC_MESSAGES/django.po
+index c430f88274..b785bb5c48 100644
+--- a/django/conf/locale/kk/LC_MESSAGES/django.po
++++ b/django/conf/locale/kk/LC_MESSAGES/django.po
+@@ -495,7 +495,7 @@ msgstr "Ондық сан"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/km/LC_MESSAGES/django.po b/django/conf/locale/km/LC_MESSAGES/django.po
+index 2e2bef8f2e..1c87b66670 100644
+--- a/django/conf/locale/km/LC_MESSAGES/django.po
++++ b/django/conf/locale/km/LC_MESSAGES/django.po
+@@ -486,7 +486,7 @@ msgstr "ចំនួនទសភាគ (Decimal)"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/kn/LC_MESSAGES/django.po b/django/conf/locale/kn/LC_MESSAGES/django.po
+index a268ab31b5..9bdf6af3d2 100644
+--- a/django/conf/locale/kn/LC_MESSAGES/django.po
++++ b/django/conf/locale/kn/LC_MESSAGES/django.po
+@@ -497,7 +497,7 @@ msgstr "ದಶಮಾನ ಸಂಖ್ಯೆ"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/ko/LC_MESSAGES/django.po b/django/conf/locale/ko/LC_MESSAGES/django.po
+index 03c1f6643c..7864401428 100644
+--- a/django/conf/locale/ko/LC_MESSAGES/django.po
++++ b/django/conf/locale/ko/LC_MESSAGES/django.po
+@@ -527,10 +527,10 @@ msgstr "10진수"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s' 값은 올바르지 않은 형식입니다. [DD] [HH:[MM:]]ss[.uuuuuu] 형식이"
++"'%(value)s' 값은 올바르지 않은 형식입니다. [DD] [[HH:]MM:]ss[.uuuuuu] 형식이"
+ "어야 합니다."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/lb/LC_MESSAGES/django.po b/django/conf/locale/lb/LC_MESSAGES/django.po
+index 9ee5eb2112..1662cf1c73 100644
+--- a/django/conf/locale/lb/LC_MESSAGES/django.po
++++ b/django/conf/locale/lb/LC_MESSAGES/django.po
+@@ -493,7 +493,7 @@ msgstr "Dezimalzuel"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/lt/LC_MESSAGES/django.po b/django/conf/locale/lt/LC_MESSAGES/django.po
+index 5480854cbd..eadce6cf48 100644
+--- a/django/conf/locale/lt/LC_MESSAGES/django.po
++++ b/django/conf/locale/lt/LC_MESSAGES/django.po
+@@ -558,7 +558,7 @@ msgstr "Dešimtainis skaičius"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' reikšmė yra neteisingo formato. Reikšmė turi būti pateikta [DD] "
+diff --git a/django/conf/locale/lv/LC_MESSAGES/django.po b/django/conf/locale/lv/LC_MESSAGES/django.po
+index 5367e97709..fbcc21b974 100644
+--- a/django/conf/locale/lv/LC_MESSAGES/django.po
++++ b/django/conf/locale/lv/LC_MESSAGES/django.po
+@@ -541,10 +541,10 @@ msgstr "Decimāls skaitlis"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s' vērtība satur nekorektu formātu. Tai jābūt [DD] [HH:[MM:]]ss[."
++"'%(value)s' vērtība satur nekorektu formātu. Tai jābūt [DD] [[HH:]MM:]ss[."
+ "uuuuuu] formātā."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/mk/LC_MESSAGES/django.po b/django/conf/locale/mk/LC_MESSAGES/django.po
+index f1c2a8f582..cd0037827d 100644
+--- a/django/conf/locale/mk/LC_MESSAGES/django.po
++++ b/django/conf/locale/mk/LC_MESSAGES/django.po
+@@ -525,7 +525,7 @@ msgstr "Децимален број"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' е во погрешен формат. Мора да биде во [ДД] [ЧЧ:[ММ:]]сс[.uuuuuu] "
+diff --git a/django/conf/locale/ml/LC_MESSAGES/django.po b/django/conf/locale/ml/LC_MESSAGES/django.po
+index 91fd6bf7f9..f46dbffef9 100644
+--- a/django/conf/locale/ml/LC_MESSAGES/django.po
++++ b/django/conf/locale/ml/LC_MESSAGES/django.po
+@@ -500,10 +500,10 @@ msgstr "ദശാംശസംഖ്യ"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s' മൂല്യം തെറ്റായ മാതൃകയിലാണ്. അത്  [DD] [HH:[MM:]]ss[.uuuuuu] എന്ന "
++"'%(value)s' മൂല്യം തെറ്റായ മാതൃകയിലാണ്. അത്  [DD] [[HH:]MM:]ss[.uuuuuu] എന്ന "
+ "മാതൃകയിലാണ് നല്കേണ്ടത്."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/mn/LC_MESSAGES/django.po b/django/conf/locale/mn/LC_MESSAGES/django.po
+index e29166db17..5d07f8cca1 100644
+--- a/django/conf/locale/mn/LC_MESSAGES/django.po
++++ b/django/conf/locale/mn/LC_MESSAGES/django.po
+@@ -531,10 +531,10 @@ msgstr "Аравтын бутархайт тоо"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s' утга буруу форматтай байна. Формат нь заавал [DD] [HH:[MM:]]ss[."
++"'%(value)s' утга буруу форматтай байна. Формат нь заавал [DD] [[HH:]MM:]ss[."
+ "uuuuuu] байх хэрэгтэй."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/mr/LC_MESSAGES/django.po b/django/conf/locale/mr/LC_MESSAGES/django.po
+index 6ba209b833..7ba5d17ba9 100644
+--- a/django/conf/locale/mr/LC_MESSAGES/django.po
++++ b/django/conf/locale/mr/LC_MESSAGES/django.po
+@@ -492,7 +492,7 @@ msgstr ""
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/my/LC_MESSAGES/django.po b/django/conf/locale/my/LC_MESSAGES/django.po
+index f82236a46a..de7c403162 100644
+--- a/django/conf/locale/my/LC_MESSAGES/django.po
++++ b/django/conf/locale/my/LC_MESSAGES/django.po
+@@ -487,7 +487,7 @@ msgstr ""
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/nb/LC_MESSAGES/django.po b/django/conf/locale/nb/LC_MESSAGES/django.po
+index 23c7e1553d..0700d07ab5 100644
+--- a/django/conf/locale/nb/LC_MESSAGES/django.po
++++ b/django/conf/locale/nb/LC_MESSAGES/django.po
+@@ -532,7 +532,7 @@ msgstr "Desimaltall"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s'-verdien har et ugyldig format. Det må være på formen [DD] [HH:"
+diff --git a/django/conf/locale/ne/LC_MESSAGES/django.po b/django/conf/locale/ne/LC_MESSAGES/django.po
+index 6654347457..5321f59dd6 100644
+--- a/django/conf/locale/ne/LC_MESSAGES/django.po
++++ b/django/conf/locale/ne/LC_MESSAGES/django.po
+@@ -514,7 +514,7 @@ msgstr "दश्मलव संख्या"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/nl/LC_MESSAGES/django.po b/django/conf/locale/nl/LC_MESSAGES/django.po
+index e5ed4f1cd8..cc35744457 100644
+--- a/django/conf/locale/nl/LC_MESSAGES/django.po
++++ b/django/conf/locale/nl/LC_MESSAGES/django.po
+@@ -529,11 +529,11 @@ msgstr "Decimaal getal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Waarde van '%(value)s' heeft een ongeldige notatie. De juiste notatie is "
+-"[DD] [HH:[MM:]]ss[.uuuuuu]."
++"[DD] [[HH:]MM:]ss[.uuuuuu]."
+ 
+ msgid "Duration"
+ msgstr "Tijdsduur"
+diff --git a/django/conf/locale/nn/LC_MESSAGES/django.po b/django/conf/locale/nn/LC_MESSAGES/django.po
+index abf9a418f8..5c2d3c01dc 100644
+--- a/django/conf/locale/nn/LC_MESSAGES/django.po
++++ b/django/conf/locale/nn/LC_MESSAGES/django.po
+@@ -498,7 +498,7 @@ msgstr "Desimaltall"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/os/LC_MESSAGES/django.po b/django/conf/locale/os/LC_MESSAGES/django.po
+index 4c2fdc6da9..07e5dfd44e 100644
+--- a/django/conf/locale/os/LC_MESSAGES/django.po
++++ b/django/conf/locale/os/LC_MESSAGES/django.po
+@@ -505,7 +505,7 @@ msgstr "Дӕсон нымӕц"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/pa/LC_MESSAGES/django.po b/django/conf/locale/pa/LC_MESSAGES/django.po
+index cc7db80bfe..21ecd9a575 100644
+--- a/django/conf/locale/pa/LC_MESSAGES/django.po
++++ b/django/conf/locale/pa/LC_MESSAGES/django.po
+@@ -493,7 +493,7 @@ msgstr "ਦਸ਼ਮਲਵ ਅੰਕ"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/pl/LC_MESSAGES/django.po b/django/conf/locale/pl/LC_MESSAGES/django.po
+index de7e48c1dc..c47034deb4 100644
+--- a/django/conf/locale/pl/LC_MESSAGES/django.po
++++ b/django/conf/locale/pl/LC_MESSAGES/django.po
+@@ -575,10 +575,10 @@ msgstr "Liczba dziesiętna"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"Wartość '%(value)s' ma błędny format. Poprawny format to [DD] [HH:[MM:]]ss[."
++"Wartość '%(value)s' ma błędny format. Poprawny format to [DD] [[HH:]MM:]ss[."
+ "uuuuuu]."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/pt/LC_MESSAGES/django.po b/django/conf/locale/pt/LC_MESSAGES/django.po
+index 5c15c66569..525543276e 100644
+--- a/django/conf/locale/pt/LC_MESSAGES/django.po
++++ b/django/conf/locale/pt/LC_MESSAGES/django.po
+@@ -522,7 +522,7 @@ msgstr "Número décimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "O valor '%(value)s' tem um formato inválido. Deve estar no formato [DD] [HH:"
+diff --git a/django/conf/locale/pt_BR/LC_MESSAGES/django.po b/django/conf/locale/pt_BR/LC_MESSAGES/django.po
+index 01569ec5d5..7aeac69fa8 100644
+--- a/django/conf/locale/pt_BR/LC_MESSAGES/django.po
++++ b/django/conf/locale/pt_BR/LC_MESSAGES/django.po
+@@ -550,11 +550,11 @@ msgstr "Número decimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "O valor '%(value)s' está em um formato inválido. Ele deve estar no formato "
+-"[DD] [HH:[MM:]]ss[.uuuuuu]."
++"[DD] [[HH:]MM:]ss[.uuuuuu]."
+ 
+ msgid "Duration"
+ msgstr "Duração"
+diff --git a/django/conf/locale/ro/LC_MESSAGES/django.po b/django/conf/locale/ro/LC_MESSAGES/django.po
+index dbc03a696c..095cd0bbd2 100644
+--- a/django/conf/locale/ro/LC_MESSAGES/django.po
++++ b/django/conf/locale/ro/LC_MESSAGES/django.po
+@@ -549,7 +549,7 @@ msgstr "Număr zecimal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' are un format invalid. Trebuie să fie în formatul [DD] [HH:"
+diff --git a/django/conf/locale/ru/LC_MESSAGES/django.po b/django/conf/locale/ru/LC_MESSAGES/django.po
+index ba5c81ba93..dab784f109 100644
+--- a/django/conf/locale/ru/LC_MESSAGES/django.po
++++ b/django/conf/locale/ru/LC_MESSAGES/django.po
+@@ -563,7 +563,7 @@ msgstr "Число с фиксированной запятой"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Значение '%(value)s' имеет неверный формат. Оно должно быть в формате [DD] "
+diff --git a/django/conf/locale/sk/LC_MESSAGES/django.po b/django/conf/locale/sk/LC_MESSAGES/django.po
+index 33b620ef38..5366cf6bcf 100644
+--- a/django/conf/locale/sk/LC_MESSAGES/django.po
++++ b/django/conf/locale/sk/LC_MESSAGES/django.po
+@@ -552,7 +552,7 @@ msgstr "Desatinné číslo"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' má neplatný tvar. Musí byť v tvare [DD] [HH:[MM]]ss[.uuuuuu]."
+diff --git a/django/conf/locale/sl/LC_MESSAGES/django.po b/django/conf/locale/sl/LC_MESSAGES/django.po
+index a63e51e972..f7d3550b90 100644
+--- a/django/conf/locale/sl/LC_MESSAGES/django.po
++++ b/django/conf/locale/sl/LC_MESSAGES/django.po
+@@ -548,7 +548,7 @@ msgstr "Decimalno število"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Vrednost '%(value)s' je v neveljavni obliki. Biti mora v obliki [DD][UU:"
+diff --git a/django/conf/locale/sq/LC_MESSAGES/django.po b/django/conf/locale/sq/LC_MESSAGES/django.po
+index c73db58315..cc5252e5cf 100644
+--- a/django/conf/locale/sq/LC_MESSAGES/django.po
++++ b/django/conf/locale/sq/LC_MESSAGES/django.po
+@@ -529,7 +529,7 @@ msgstr "Numër dhjetor"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Vlera '%(value)s' ka format të pavlefshëm. Duhet të jetë në formatin [DD] "
+diff --git a/django/conf/locale/sr/LC_MESSAGES/django.po b/django/conf/locale/sr/LC_MESSAGES/django.po
+index 5f426af950..394901b6fe 100644
+--- a/django/conf/locale/sr/LC_MESSAGES/django.po
++++ b/django/conf/locale/sr/LC_MESSAGES/django.po
+@@ -538,7 +538,7 @@ msgstr "Децимални број"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "'%(value)s' нема валидан формат. Мора бити у формату [ДД] [ЧЧ:[ММ:]]ss[."
+diff --git a/django/conf/locale/sr_Latn/LC_MESSAGES/django.po b/django/conf/locale/sr_Latn/LC_MESSAGES/django.po
+index 9d525db723..66fb803c71 100644
+--- a/django/conf/locale/sr_Latn/LC_MESSAGES/django.po
++++ b/django/conf/locale/sr_Latn/LC_MESSAGES/django.po
+@@ -501,7 +501,7 @@ msgstr "Decimalni broj"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/sv/LC_MESSAGES/django.po b/django/conf/locale/sv/LC_MESSAGES/django.po
+index 2451880294..c97a137946 100644
+--- a/django/conf/locale/sv/LC_MESSAGES/django.po
++++ b/django/conf/locale/sv/LC_MESSAGES/django.po
+@@ -528,7 +528,7 @@ msgstr "Decimaltal"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ "Värdet '%(value)s' har ett ogiltigt format. Det måste vara i formatet [DD] "
+diff --git a/django/conf/locale/sw/LC_MESSAGES/django.po b/django/conf/locale/sw/LC_MESSAGES/django.po
+index 23802e6b1a..e759ee888d 100644
+--- a/django/conf/locale/sw/LC_MESSAGES/django.po
++++ b/django/conf/locale/sw/LC_MESSAGES/django.po
+@@ -493,7 +493,7 @@ msgstr "Namba ya desimali"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/ta/LC_MESSAGES/django.po b/django/conf/locale/ta/LC_MESSAGES/django.po
+index 0969ca0f81..95fe209b8e 100644
+--- a/django/conf/locale/ta/LC_MESSAGES/django.po
++++ b/django/conf/locale/ta/LC_MESSAGES/django.po
+@@ -491,7 +491,7 @@ msgstr "தசம எண்கள்"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/te/LC_MESSAGES/django.po b/django/conf/locale/te/LC_MESSAGES/django.po
+index ff2c7a7442..0bb1bdfbfd 100644
+--- a/django/conf/locale/te/LC_MESSAGES/django.po
++++ b/django/conf/locale/te/LC_MESSAGES/django.po
+@@ -496,7 +496,7 @@ msgstr "దశగణసంఖ్య"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/th/LC_MESSAGES/django.po b/django/conf/locale/th/LC_MESSAGES/django.po
+index 174759549c..f9951c0dcd 100644
+--- a/django/conf/locale/th/LC_MESSAGES/django.po
++++ b/django/conf/locale/th/LC_MESSAGES/django.po
+@@ -503,7 +503,7 @@ msgstr "เลขฐานสิบหรือเลขทศนิยม"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/tr/LC_MESSAGES/django.po b/django/conf/locale/tr/LC_MESSAGES/django.po
+index f11c6bb766..7121ba56f7 100644
+--- a/django/conf/locale/tr/LC_MESSAGES/django.po
++++ b/django/conf/locale/tr/LC_MESSAGES/django.po
+@@ -539,10 +539,10 @@ msgstr "Ondalık sayı"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+-"'%(value)s' değer geçersiz bir biçime sahip. [DD] [HH:[MM:]]ss[.uuuuuu] "
++"'%(value)s' değer geçersiz bir biçime sahip. [DD] [[HH:]MM:]ss[.uuuuuu] "
+ "biçiminde olmak zorundadır."
+ 
+ msgid "Duration"
+diff --git a/django/conf/locale/tt/LC_MESSAGES/django.po b/django/conf/locale/tt/LC_MESSAGES/django.po
+index fe28eeeb07..55b5473073 100644
+--- a/django/conf/locale/tt/LC_MESSAGES/django.po
++++ b/django/conf/locale/tt/LC_MESSAGES/django.po
+@@ -492,7 +492,7 @@ msgstr "Унарлы вакланма"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/udm/LC_MESSAGES/django.po b/django/conf/locale/udm/LC_MESSAGES/django.po
+index 67b600d98e..b097f3aa65 100644
+--- a/django/conf/locale/udm/LC_MESSAGES/django.po
++++ b/django/conf/locale/udm/LC_MESSAGES/django.po
+@@ -487,7 +487,7 @@ msgstr "Десятичной лыд."
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/uk/LC_MESSAGES/django.po b/django/conf/locale/uk/LC_MESSAGES/django.po
+index 9ebc17a25d..3df6363c2f 100644
+--- a/django/conf/locale/uk/LC_MESSAGES/django.po
++++ b/django/conf/locale/uk/LC_MESSAGES/django.po
+@@ -569,9 +569,9 @@ msgstr "Десяткове число"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+-msgstr "Значення '%(value)s' не відповідає формату [DD] [HH:[MM:]]ss[.uuuuuu]."
++msgstr "Значення '%(value)s' не відповідає формату [DD] [[HH:]MM:]ss[.uuuuuu]."
+ 
+ msgid "Duration"
+ msgstr "Тривалість"
+diff --git a/django/conf/locale/ur/LC_MESSAGES/django.po b/django/conf/locale/ur/LC_MESSAGES/django.po
+index dd4b6ed939..3b72649e70 100644
+--- a/django/conf/locale/ur/LC_MESSAGES/django.po
++++ b/django/conf/locale/ur/LC_MESSAGES/django.po
+@@ -497,7 +497,7 @@ msgstr "اعشاری نمبر"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/vi/LC_MESSAGES/django.po b/django/conf/locale/vi/LC_MESSAGES/django.po
+index 05a985f3a6..a3c57e0bec 100644
+--- a/django/conf/locale/vi/LC_MESSAGES/django.po
++++ b/django/conf/locale/vi/LC_MESSAGES/django.po
+@@ -500,7 +500,7 @@ msgstr "Số thập phân"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+ msgstr ""
+ 
+diff --git a/django/conf/locale/zh_Hans/LC_MESSAGES/django.po b/django/conf/locale/zh_Hans/LC_MESSAGES/django.po
+index 7b5e5bf14d..82a0b28484 100644
+--- a/django/conf/locale/zh_Hans/LC_MESSAGES/django.po
++++ b/django/conf/locale/zh_Hans/LC_MESSAGES/django.po
+@@ -527,9 +527,9 @@ msgstr "小数"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+-msgstr "’%(value)s‘ 值格式错误，必须为 [DD] [HH:[MM:]]ss[.uuuuuu] 格式。"
++msgstr "’%(value)s‘ 值格式错误，必须为 [DD] [[HH:]MM:]ss[.uuuuuu] 格式。"
+ 
+ msgid "Duration"
+ msgstr "时长"
+diff --git a/django/conf/locale/zh_Hant/LC_MESSAGES/django.po b/django/conf/locale/zh_Hant/LC_MESSAGES/django.po
+index f5b70c9468..1cf64cdc56 100644
+--- a/django/conf/locale/zh_Hant/LC_MESSAGES/django.po
++++ b/django/conf/locale/zh_Hant/LC_MESSAGES/django.po
+@@ -504,9 +504,9 @@ msgstr "十進位數"
+ 
+ #, python-format
+ msgid ""
+-"'%(value)s' value has an invalid format. It must be in [DD] [HH:[MM:]]ss[."
++"'%(value)s' value has an invalid format. It must be in [DD] [[HH:]MM:]ss[."
+ "uuuuuu] format."
+-msgstr "'%(value)s' 格式錯誤，必須為 [DD] [HH:[MM:]]ss[.uuuuuu]。"
++msgstr "'%(value)s' 格式錯誤，必須為 [DD] [[HH:]MM:]ss[.uuuuuu]。"
+ 
+ msgid "Duration"
+ msgstr "時間長"
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index f32ce64629..71005490f3 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -1587,7 +1587,7 @@ class DurationField(Field):
+     empty_strings_allowed = False
+     default_error_messages = {
+         'invalid': _("'%(value)s' value has an invalid format. It must be in "
+-                     "[DD] [HH:[MM:]]ss[.uuuuuu] format.")
++                     "[DD] [[HH:]MM:]ss[.uuuuuu] format.")
+     }
+     description = _("Duration")
+ 
+diff --git a/update_po.py b/update_po.py
+new file mode 100644
+index 0000000000..1a20acf6d6
+--- /dev/null
++++ b/update_po.py
+@@ -0,0 +1,31 @@
++#!/usr/bin/env python3
++import os
++import re
++
++# Walk through all .po files
++for root, dirs, files in os.walk('django/conf/locale'):
++    for fn in files:
++        if not fn.endswith('.po'):
++            continue
++        path = os.path.join(root, fn)
++        with open(path, 'r', encoding='utf-8') as f:
++            content = f.read()
++        
++        # The old pattern as a literal string
++        old_literal = '[DD] [HH:[MM:]]ss[.uuuuuu]'
++        new_literal = '[DD] [[HH:]MM:]ss[.uuuuuu]'
++        
++        new_content = content.replace(old_literal, new_literal)
++        
++        # Also handle multi-line versions where the pattern is split across lines
++        # e.g., '[DD] [HH:[MM:]]ss[.' followed by newline+spaces+'"uuuuuu]'
++        new_content = re.sub(
++            r'\[DD\] \[HH:\[MM:\]\]ss\[\.\n',
++            '[DD] [[HH:]MM:]ss[.\n',
++            new_content
++        )
++        
++        if new_content != content:
++            with open(path, 'w', encoding='utf-8') as f:
++                f.write(new_content)
++            print(f'Updated: {path}')

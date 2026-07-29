@@ -1,0 +1,29 @@
+{
+  "id": "django__django-12125",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-v2",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-12125:latest",
+  "container": "pirsbench-django--django-12125-deepseek-v4-flash-strict-v2",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 14257,
+    "cache_read": 681728,
+    "cache_write": 0,
+    "out": 8361,
+    "reasoning": 4413,
+    "total": 704346,
+    "cost_usd": 0.0608
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=40 tools=40 [read:16 bash:9 grep:6 edit:3 edit_block:1 find:1 ls:1 project:1 run_tests:1 str_replace_editor:1]\ntokens by model:\n  deepseek-v4-flash: in=14257 cache_r=681728 cache_w=0 out=8361 reasoning=4413 total=704346 \u2014 $0.0608\n  TOTAL: in=14257 cache_r=681728 cache_w=0 out=8361 reasoning=4413 total=704346 \u2014 $0.0608\npatch written to \"/tmp/out.patch\" (653 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 3.46s):\n  verify: 2.13s (62% n=2)\n  baseline: 1.11s (32%)\n  discover: 0.12s (4%)\n  bootstrap: 0.09s (3%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 653,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 109.7
+}

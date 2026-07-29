@@ -1,0 +1,18 @@
+=== django__django-12286 (deepseek-v4-flash) start 1785327346.2935913 ===
+4bab5fca16032bda9f2a103cd3090a2babc16a4f9049566c7c430c766197e220
+base_sha=979f61abd322507aafced9627702362e541ec34e
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=979f61abd322507aafced9627702362e541ec34e --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_valid_variant_consistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_inconsistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Solved timing=timing (total 3.43s):
+session: turns=21 tools=25 [grep:10 read:8 bash:4 run_tests:2 edit:1]
+tokens by model:
+  deepseek-v4-flash: in=9163 cache_r=288256 cache_w=0 out=4677 reasoning=1979 total=302096 — $0.0278
+  TOTAL: in=9163 cache_r=288256 cache_w=0 out=4677 reasoning=1979 total=302096 — $0.0278
+patch written to "/tmp/out.patch" (863 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=80.2

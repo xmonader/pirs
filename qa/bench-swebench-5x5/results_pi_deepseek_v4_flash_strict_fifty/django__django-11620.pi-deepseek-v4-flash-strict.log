@@ -1,0 +1,36 @@
+=== django__django-11620 pi/deepseek-v4-flash STRICT start 1785313561.9369085 ===
+cb457129f4ddf215d45759f7822867ed2fe1bb226feaee469cc1fb3a38ddd7df
+base_sha=514efa3129792ec2abb2444f3e7aeb3f21a38386 (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+Everything looks good. Let me provide a summary of the fix:
+
+## Summary
+
+The root cause was in `/testbed/django/views/debug.py` in the `technical_404_response()` function.
+
+When a path converter's `to_python()` method raises `Http404`, the exception propagates up through the URL resolver as a bare `Http404` (not a `Resolver404`). The `technical_404_response()` function attempts to re-resolve the path to determine the "raising view name" for display in the debug 404 template. However, it only caught `Resolver404` exceptions, not the broader `Http404` exception class. Since `Http404` is not a `Resolver404`, the exception went uncaught, causing a crash that resulted in the unhelpful "A server error occurred" message.
+
+### Changes made:
+
+1. **`django/views/debug.py`**:
+   - Added `Http404` to the imports from `django.http`
+   - Removed unused `Resolver404` import from `django.urls`
+   - Changed `except Resolver404:` to `except Http404:` at line 486 (since `Resolver404` is a subclass of `Http404`, this catches both cases)
+
+
+pi_exit=0 agent_elapsed_s=182.0
+patch_bytes=955
+HEAD is now at 514efa3129 Fixed #30688 -- Clarified base_manager_name docs.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_technical_404_converter_raise_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_repr (view_tests.tests.test_debug.CallableSettingWrapperTests) --keep-green=test_cleanse_setting_basic (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_cleanse_setting_ignore_case (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_cleanse_setting_recurses_in_dictionary (view_tests.tests.test_debug.HelperFunctionTests) --keep-green=test_handle_db_exception (view_tests.tests.test_debug.DebugViewQueriesAllowedTests) --keep-green=test_400 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_403 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_404 (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_template_not_found_error (view_tests.tests.test_debug.NonDjangoTemplatesDebugViewTests) --keep-green=test_message_only (view_tests.tests.test_debug.PlainTextReportTests) --keep-green=test_request_with_items_key (view_tests.tests.test_debug.PlainTextReportTests) --keep-green=test_template_exception (view_tests.tests.test_debug.PlainTextReportTests) --keep-green=test_ajax_response_encoding (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_custom_exception_reporter_filter (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_non_sensitive_request (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_paranoid_request (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_sensitive_request (view_tests.tests.test_debug.AjaxResponseExceptionReporterFilter) --keep-green=test_400 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_403 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_403_template (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404_empty_path_not_in_urls (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_404_not_in_urls (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_classbased_technical_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_default_urlconf_template (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_files (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_no_template_source_loaders (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_non_l10ned_numeric_ids (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_regression_21530 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_technical_404 (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_template_encoding (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_template_exceptions (view_tests.tests.test_debug.DebugViewTests) --keep-green=test_encoding_error (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_exception_fetching_user (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_ignore_traceback_evaluation_exceptions (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_message_only (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_reporting_frames_for_cyclic_reference (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_reporting_frames_without_source (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_reporting_of_nested_exceptions (view_tests.tests.test_debug.ExceptionReporterTests) --keep-green=test_request_with_items_key (view_tests.tests.test_debug.ExceptionReporterTests)
+
+outcome: Solved
+timing (total 9.85s):
+  baseline: 5.24s (53%)
+  verify: 4.37s (44% n=2)
+  discover: 0.17s (2%)
+  bootstrap: 0.07s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

@@ -1,0 +1,29 @@
+=== django__django-11001 pi/deepseek-v4-flash STRICT start 1785313204.7612908 ===
+7c4c59eb300f3f32fadfd38a308c020c52309758cc7c26e54c7cf427b119f327
+base_sha=ef082ebb84f00e38af4e8880d04e8365c2766d34 (NO test_patch for agent)
+grade targets=2 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is minimal and correct. Here's a summary:
+
+**Root cause:** The `ordering_parts` regex `r'(.*)\s(ASC|DESC)(.*)'` did not have the `re.DOTALL` flag. Since `.` doesn't match newlines by default, when a RawSQL expression contained newlines (multi-line SQL), the `(.*)` only matched the last line of the expression. If two different RawSQL expressions happened to have the same last line, the second one was incorrectly treated as a duplicate and removed from the ORDER BY clause.
+
+**Fix:** Added `re.DOTALL` flag to the `ordering_parts` regex compilation on line 35 of `django/db/models/sql/compiler.py`. This makes `.` match newline characters, so the regex correctly captures the full multi-line SQL expression, not just the last line.
+
+This single-line change fixes both `get_order_by()` (line 356) and `get_extra_select()` (line 369), which both use `self.ordering_parts`.
+
+
+pi_exit=0 agent_elapsed_s=42.2
+patch_bytes=543
+HEAD is now at ef082ebb84 Fixed #29529 -- Allowed models.fields.FilePathField to accept a callable path.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_order_by_multiline_sql (expressions.tests.BasicExpressionsTests) --target=test_order_of_operations (expressions.tests.BasicExpressionsTests) --keep-green=test_deconstruct (expressions.tests.FTests) --keep-green=test_deepcopy (expressions.tests.FTests) --keep-green=test_equal (expressions.tests.FTests) --keep-green=test_hash (expressions.tests.FTests) --keep-green=test_not_equal_Value (expressions.tests.FTests) --keep-green=test_and (expressions.tests.CombinableTests) --keep-green=test_negation (expressions.tests.CombinableTests) --keep-green=test_or (expressions.tests.CombinableTests) --keep-green=test_reversed_and (expressions.tests.CombinableTests) --keep-green=test_reversed_or (expressions.tests.CombinableTests) --keep-green=test_aggregates (expressions.tests.ReprTests) --keep-green=test_distinct_aggregates (expressions.tests.ReprTests) --keep-green=test_expressions (expressions.tests.ReprTests) --keep-green=test_filtered_aggregates (expressions.tests.ReprTests) --keep-green=test_functions (expressions.tests.ReprTests) --keep-green=test_equal (expressions.tests.SimpleExpressionTests) --keep-green=test_hash (expressions.tests.SimpleExpressionTests) --keep-green=test_month_aggregation (expressions.tests.FieldTransformTests) --keep-green=test_multiple_transforms_in_values (expressions.tests.FieldTransformTests) --keep-green=test_transform_in_values (expressions.tests.FieldTransformTests) --keep-green=test_deconstruct (expressions.tests.ValueTests) --keep-green=test_deconstruct_output_field (expressions.tests.ValueTests) --keep-green=test_equal (expressions.tests.ValueTests) --keep-green=test_equal_output_field (expressions.tests.ValueTests) --keep-green=test_hash (expressions.tests.ValueTests) --keep-green=test_raise_empty_expressionlist (expressions.tests.ValueTests) --keep-green=test_update_TimeField_using_Value (expressions.tests.ValueTests) --keep-green=test_update_UUIDField_using_Value (expressions.tests.ValueTests) --keep-green=test_complex_expressions (expressions.tests.ExpressionsNumericTests) --keep-green=test_fill_with_value_from_same_object (expressions.tests.ExpressionsNumericTests) --keep-green=test_filter_not_equals_other_field (expressions.tests.ExpressionsNumericTests) --keep-green=test_increment_value (expressions.tests.ExpressionsNumericTests) --keep-green=test_F_reuse (expressions.tests.ExpressionsTests) --keep-green=test_insensitive_patterns_escape (expressions.tests.ExpressionsTests) --keep-green=test_patterns_escape (expressions.tests.ExpressionsTests) --keep-green=test_complex_expressions_do_not_introduce_sql_injection_via_untrusted_string_inclusion (expressions.tests.IterableLookupInnerExpressionsTests) --keep-green=test_expressions_in_lookups_join_choice (expressions.tests.IterableLookupInnerExpressionsTests) --keep-green=test_in_lookup_allows_F_expressions_and_expressions_for_datetimes (expressions.tests.IterableLookupInnerExpressionsTests) --keep-green=test_in_lookup_allows_F_expressions_and_expressions_for_integers (expressions.tests.IterableLookupInnerExpressionsTests) --keep-green=test_range_lookup_allows_F_expressions_and_expressions_for_integers (expressions.tests.IterableLookupInnerExpressionsTests)
+
+outcome: Solved
+timing (total 6.31s):
+  verify: 3.78s (60% n=2)
+  baseline: 2.26s (36%)
+  discover: 0.14s (2%)
+  bootstrap: 0.14s (2%)
+  fix: 0.00s (0%)
+
+check_exit=0

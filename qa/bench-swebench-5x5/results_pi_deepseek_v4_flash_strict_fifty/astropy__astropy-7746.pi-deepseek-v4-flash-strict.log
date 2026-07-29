@@ -1,0 +1,33 @@
+=== astropy__astropy-7746 pi/deepseek-v4-flash STRICT start 1785313093.9739182 ===
+aa47395fc99b9ce9e7fb3368b1b556b4a660c557c2e4a52744a4e25e3b31731d
+base_sha=d5bd3f68bb6d5ce3a61bdce9883ee750d1afade5 (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is clean and minimal. Here's a summary of what was done:
+
+**Root cause:** The `_array_converter` method in `astropy/wcs/wcs.py` passes empty arrays directly to the underlying wcslib C functions (like `wcsp2s`). These functions reject `ncoord == 0` with an `InconsistentAxisTypesError`.
+
+**Fix:** Added early returns in both code paths within `_array_converter`:
+
+1. **`_return_list_of_arrays`** (for the `([x], [y], origin)` form): When `xy.shape[0] == 0`, return a list of empty arrays matching the input shapes without calling the WCS function.
+
+2. **`_return_single_array`** (for the `(Nx2_array, origin)` form): When `xy.shape[0] == 0`, return the empty `xy` array directly without calling the WCS function.
+
+All 56 existing tests continue to pass, and the empty input case now returns empty arrays as expected.
+
+
+pi_exit=0 agent_elapsed_s=38.3
+patch_bytes=1440
+HEAD is now at d5bd3f68bb Merge pull request #7742 from astrofrog/travis-egg-info
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/wcs/tests/test_wcs.py::test_zero_size_input --keep-green=astropy/wcs/tests/test_wcs.py::TestMaps::test_consistency --keep-green=astropy/wcs/tests/test_wcs.py::TestMaps::test_maps --keep-green=astropy/wcs/tests/test_wcs.py::TestSpectra::test_consistency --keep-green=astropy/wcs/tests/test_wcs.py::TestSpectra::test_spectra --keep-green=astropy/wcs/tests/test_wcs.py::test_fixes --keep-green=astropy/wcs/tests/test_wcs.py::test_outside_sky --keep-green=astropy/wcs/tests/test_wcs.py::test_pix2world --keep-green=astropy/wcs/tests/test_wcs.py::test_load_fits_path --keep-green=astropy/wcs/tests/test_wcs.py::test_dict_init --keep-green=astropy/wcs/tests/test_wcs.py::test_extra_kwarg --keep-green=astropy/wcs/tests/test_wcs.py::test_3d_shapes --keep-green=astropy/wcs/tests/test_wcs.py::test_preserve_shape --keep-green=astropy/wcs/tests/test_wcs.py::test_broadcasting --keep-green=astropy/wcs/tests/test_wcs.py::test_shape_mismatch --keep-green=astropy/wcs/tests/test_wcs.py::test_invalid_shape --keep-green=astropy/wcs/tests/test_wcs.py::test_warning_about_defunct_keywords --keep-green=astropy/wcs/tests/test_wcs.py::test_warning_about_defunct_keywords_exception --keep-green=astropy/wcs/tests/test_wcs.py::test_to_header_string --keep-green=astropy/wcs/tests/test_wcs.py::test_to_fits --keep-green=astropy/wcs/tests/test_wcs.py::test_to_header_warning --keep-green=astropy/wcs/tests/test_wcs.py::test_no_comments_in_header --keep-green=astropy/wcs/tests/test_wcs.py::test_find_all_wcs_crash --keep-green=astropy/wcs/tests/test_wcs.py::test_validate --keep-green=astropy/wcs/tests/test_wcs.py::test_validate_with_2_wcses --keep-green=astropy/wcs/tests/test_wcs.py::test_crpix_maps_to_crval --keep-green=astropy/wcs/tests/test_wcs.py::test_all_world2pix --keep-green=astropy/wcs/tests/test_wcs.py::test_scamp_sip_distortion_parameters --keep-green=astropy/wcs/tests/test_wcs.py::test_fixes2 --keep-green=astropy/wcs/tests/test_wcs.py::test_unit_normalization --keep-green=astropy/wcs/tests/test_wcs.py::test_footprint_to_file --keep-green=astropy/wcs/tests/test_wcs.py::test_validate_faulty_wcs --keep-green=astropy/wcs/tests/test_wcs.py::test_error_message --keep-green=astropy/wcs/tests/test_wcs.py::test_out_of_bounds --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_1 --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_2 --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_3 --keep-green=astropy/wcs/tests/test_wcs.py::test_sip --keep-green=astropy/wcs/tests/test_wcs.py::test_printwcs --keep-green=astropy/wcs/tests/test_wcs.py::test_invalid_spherical --keep-green=astropy/wcs/tests/test_wcs.py::test_no_iteration
+
+outcome: Failed(FixNoFlip)
+timing (total 82.78s):
+  discover: 38.53s (47%)
+  bootstrap: 36.11s (44%)
+  baseline: 6.34s (8%)
+  verify: 1.79s (2%)
+  fix: 0.00s (0%)
+
+check_exit=1

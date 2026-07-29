@@ -1,0 +1,45 @@
+diff --git a/sympy/printing/mathml.py b/sympy/printing/mathml.py
+index 1aa0ee01a2..22e5561b67 100644
+--- a/sympy/printing/mathml.py
++++ b/sympy/printing/mathml.py
+@@ -477,6 +477,16 @@ def _print_int(self, p):
+         dom_element.appendChild(self.dom.createTextNode(str(p)))
+         return dom_element
+ 
++    def _print_Indexed(self, expr):
++        x = self.dom.createElement('apply')
++        x.appendChild(self._print(expr.base.label))
++        for index in expr.indices:
++            x.appendChild(self._print(index))
++        return x
++
++    def _print_IndexedBase(self, expr):
++        return self._print(expr.label)
++
+ 
+ class MathMLPresentationPrinter(MathMLPrinterBase):
+     """Prints an expression to the Presentation MathML markup language.
+@@ -1254,6 +1264,23 @@ def _print_ceiling(self, e):
+         return mrow
+ 
+ 
++    def _print_IndexedBase(self, expr):
++        return self._print(expr.label)
++
++    def _print_Indexed(self, expr):
++        base = self._print(expr.base.label)
++        msub = self.dom.createElement('msub')
++        msub.appendChild(base)
++        mrow = self.dom.createElement('mrow')
++        for i, index in enumerate(expr.indices):
++            if i > 0:
++                mo = self.dom.createElement('mo')
++                mo.appendChild(self.dom.createTextNode(','))
++                mrow.appendChild(mo)
++            mrow.appendChild(self._print(index))
++        msub.appendChild(mrow)
++        return msub
++
+     def _print_Lambda(self, e):
+         x = self.dom.createElement('mfenced')
+         mrow = self.dom.createElement('mrow')

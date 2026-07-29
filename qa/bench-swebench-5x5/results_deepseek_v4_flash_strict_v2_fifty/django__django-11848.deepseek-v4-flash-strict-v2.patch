@@ -1,0 +1,29 @@
+diff --git a/django/utils/http.py b/django/utils/http.py
+index 572cfb4347..122cb63aa7 100644
+--- a/django/utils/http.py
++++ b/django/utils/http.py
+@@ -2,6 +2,7 @@ import base64
+ import calendar
+ import datetime
+ import re
++import time
+ import unicodedata
+ import warnings
+ from binascii import Error as BinasciiError
+@@ -176,10 +177,13 @@ def parse_http_date(date):
+     try:
+         year = int(m.group('year'))
+         if year < 100:
+-            if year < 70:
+-                year += 2000
++            current_year = time.gmtime().tm_year
++            century = current_year // 100 * 100
++            candidate = century + year
++            if candidate - current_year > 50:
++                year = candidate - 100
+             else:
+-                year += 1900
++                year = candidate
+         month = MONTHS.index(m.group('mon').lower()) + 1
+         day = int(m.group('day'))
+         hour = int(m.group('hour'))

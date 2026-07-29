@@ -1,0 +1,29 @@
+=== scikit-learn__scikit-learn-12471 (deepseek-v4-flash) start 1785321399.134109 ===
+a2146b70a1c127915122bff0bf307756ace894602ddbf2114b89d69f6967fc7b
+base_sha=02dc9ed680e7f53f1b0d410dcdd37341c7958eb1
+capped keep_green 53->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=02dc9ed680e7f53f1b0d410dcdd37341c7958eb1 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=28 tools=27 [bash:11 read:10 edit:2 grep:2 find:1 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=21848 cache_r=672128 cache_w=0 out=11787 reasoning=7469 total=705763 — $0.0659
+  TOTAL: in=21848 cache_r=672128 cache_w=0 out=11787 reasoning=7469 total=705763 — $0.0659
+patch written to "/tmp/out.patch" (871 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 02dc9ed68 Fix max_depth overshoot in BFS expansion of trees (#12344)
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_handle_unknown_strings --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_encoder_dtypes --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_encoder_dtypes_pandas --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder[mixed] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder[numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder[object] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categorical_features --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categories[mixed] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categories[numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categories[object] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_categories[string] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dense --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_deprecationwarnings --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float32-float32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float32-float64] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float32-int32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float64-float32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float64-float64] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[float64-int32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[int32-float32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[int32-float64] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype[int32-int32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype_pandas[float32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype_pandas[float64] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_dtype_pandas[int32] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_feature_names --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_feature_names_unicode --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_force_new_behaviour --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_handle_unknown --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_inverse --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_no_categorical_features --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_not_fitted --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_pandas --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_raise_missing[error-numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_raise_missing[error-object] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_raise_missing[ignore-numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_raise_missing[ignore-object] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_set_params --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_sparse --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_specified_categories[numeric] --keep-green=sklearn/preprocessing/tests/test_encoders.py::test_one_hot_encoder_specified_categories[object-string-cat]
+
+outcome: Solved
+timing (total 65.47s):
+  bootstrap: 29.18s (45%)
+  discover: 22.65s (35%)
+  verify: 7.24s (11% n=2)
+  baseline: 6.40s (10%)
+  fix: 0.00s (0%)
+
+check_exit=0

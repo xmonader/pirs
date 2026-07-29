@@ -1,0 +1,24 @@
+=== astropy__astropy-7746 (deepseek-v4-flash) start 1785320180.7836354 ===
+da6da7e49be4853a071d983e3e001e70017deb3d01e8eeb0ed76c7fe0715b149
+base_sha=d5bd3f68bb6d5ce3a61bdce9883ee750d1afade5
+capped keep_green 56->40 (PIRS_MAX_KEEP_GREEN=40)
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=d5bd3f68bb6d5ce3a61bdce9883ee750d1afade5 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=astropy/wcs/tests/test_wcs.py::test_zero_size_input --keep-green=astropy/wcs/tests/test_wcs.py::TestMaps::test_consistency --keep-green=astropy/wcs/tests/test_wcs.py::TestMaps::test_maps --keep-green=astropy/wcs/tests/test_wcs.py::TestSpectra::test_consistency --keep-green=astropy/wcs/tests/test_wcs.py::TestSpectra::test_spectra --keep-green=astropy/wcs/tests/test_wcs.py::test_3d_shapes --keep-green=astropy/wcs/tests/test_wcs.py::test_all_world2pix --keep-green=astropy/wcs/tests/test_wcs.py::test_bounds_check --keep-green=astropy/wcs/tests/test_wcs.py::test_broadcasting --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_1 --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_2 --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_3 --keep-green=astropy/wcs/tests/test_wcs.py::test_crpix_maps_to_crval --keep-green=astropy/wcs/tests/test_wcs.py::test_dict_init --keep-green=astropy/wcs/tests/test_wcs.py::test_error_message --keep-green=astropy/wcs/tests/test_wcs.py::test_extra_kwarg --keep-green=astropy/wcs/tests/test_wcs.py::test_find_all_wcs_crash --keep-green=astropy/wcs/tests/test_wcs.py::test_fixes --keep-green=astropy/wcs/tests/test_wcs.py::test_fixes2 --keep-green=astropy/wcs/tests/test_wcs.py::test_footprint_to_file --keep-green=astropy/wcs/tests/test_wcs.py::test_hst_wcs --keep-green=astropy/wcs/tests/test_wcs.py::test_inconsistent_sip --keep-green=astropy/wcs/tests/test_wcs.py::test_invalid_shape --keep-green=astropy/wcs/tests/test_wcs.py::test_invalid_spherical --keep-green=astropy/wcs/tests/test_wcs.py::test_keyedsip --keep-green=astropy/wcs/tests/test_wcs.py::test_list_naxis --keep-green=astropy/wcs/tests/test_wcs.py::test_load_fits_path --keep-green=astropy/wcs/tests/test_wcs.py::test_naxis --keep-green=astropy/wcs/tests/test_wcs.py::test_no_comments_in_header --keep-green=astropy/wcs/tests/test_wcs.py::test_no_iteration --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval_p17 --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval_try2 --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_using_compare --keep-green=astropy/wcs/tests/test_wcs.py::test_out_of_bounds --keep-green=astropy/wcs/tests/test_wcs.py::test_outside_sky --keep-green=astropy/wcs/tests/test_wcs.py::test_passing_ImageHDU --keep-green=astropy/wcs/tests/test_wcs.py::test_pix2world --keep-green=astropy/wcs/tests/test_wcs.py::test_preserve_shape --keep-green=astropy/wcs/tests/test_wcs.py::test_printwcs --keep-green=astropy/wcs/tests/test_wcs.py::test_scamp_sip_distortion_parameters --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 200.50s):
+shadow-verify attempt 2/3
+agent produced no further edits; re-grading best patch
+shadow attempt 2: outcome=Failed(FixNoFlip) timing=timing (total 48.03s):
+shadow-verify attempt 3/3
+shadow attempt 3: outcome=Failed(FixNoFlip) timing=timing (total 55.09s):
+session: turns=76 tools=79 [bash:27 grep:21 read:20 run_tests:5 edit_block:2 git:2 ls:2]
+tokens by model:
+  deepseek-v4-flash: in=38709 cache_r=3411456 cache_w=0 out=53061 reasoning=38384 total=3503226 — $0.3076
+  TOTAL: in=38709 cache_r=3411456 cache_w=0 out=53061 reasoning=38384 total=3503226 — $0.3076
+patch written (ungraded/failed) to "/tmp/out.patch" (1232 bytes)
+outcome: Failed(shadow-verify)
+
+exit_code=1 elapsed_s=852.8

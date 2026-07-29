@@ -1,0 +1,29 @@
+=== astropy__astropy-14995 (deepseek-v4-flash) start 1785323705.5063362 ===
+254520e88d2bf1d78217da5c4c61b2be135ddc64a0884a19677017d1c1c08cd8
+base_sha=1e905ced3a7e0598609c2776028ea7819561d601
+capped keep_green 179->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=1e905ced3a7e0598609c2776028ea7819561d601 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=19 tools=20 [read:7 bash:4 find:2 grep:2 todo:2 edit:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=26589 cache_r=298112 cache_w=0 out=4973 reasoning=2233 total=329674 — $0.0335
+  TOTAL: in=26589 cache_r=298112 cache_w=0 out=4973 reasoning=2233 total=329674 — $0.0335
+patch written to "/tmp/out.patch" (671 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 1e905ced3 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_nddata_bitmask_arithmetic --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data10-data20] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data11-data21] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data12-data22] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data13-data23] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data14-data24] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data15-data25] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data[data16-data26] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_invalid --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[False-False] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[False-True] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[None-False] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[None-None] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[True-False] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[True-None] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[True-True] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask110-mask210] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask111-mask211] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask112-mask212] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask17-mask27] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask18-mask28] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks[mask19-mask29] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_masks_invalid --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data10-data20] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data11-data21] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data12-data22] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data13-data23] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data14-data24] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data15-data25] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data16-data26] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_identical[data17-data27] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_not_identical[data10-data20] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_not_identical[data11-data21] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_not_identical[data12-data22] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_unit_not_identical[data13-data23] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[None-None] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[None-wcs21] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[wcs12-None] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[wcs13-wcs23] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_data_wcs[wcs14-wcs24] --keep-green=astropy/nddata/mixins/tests/test_ndarithmetic.py::test_arithmetics_handle_switches[ff]
+
+outcome: Solved
+timing (total 192.46s):
+  bootstrap: 157.70s (82%)
+  discover: 26.11s (14%)
+  verify: 5.96s (3% n=2)
+  baseline: 2.69s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

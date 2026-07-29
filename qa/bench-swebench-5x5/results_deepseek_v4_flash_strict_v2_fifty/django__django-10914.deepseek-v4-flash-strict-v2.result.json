@@ -1,0 +1,29 @@
+{
+  "id": "django__django-10914",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-v2",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-10914:latest",
+  "container": "pirsbench-django--django-10914-deepseek-v4-flash-strict-v2",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 23497,
+    "cache_read": 1223040,
+    "cache_write": 0,
+    "out": 14753,
+    "reasoning": 9149,
+    "total": 1261290,
+    "cost_usd": 0.1082
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=51 tools=60 [bash:27 read:13 grep:12 edit_block:3 ls:2 find:1 project:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=23497 cache_r=1223040 cache_w=0 out=14753 reasoning=9149 total=1261290 \u2014 $0.1082\n  TOTAL: in=23497 cache_r=1223040 cache_w=0 out=14753 reasoning=9149 total=1261290 \u2014 $0.1082\npatch written to \"/tmp/out.patch\" (625 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(ReproFailed)\ntiming (total 1.31s):\n  baseline: 1.04s (79%)\n  discover: 0.18s (14%)\n  bootstrap: 0.09s (7%)",
+  "patch_copied": true,
+  "patch_bytes": 625,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 192.0
+}

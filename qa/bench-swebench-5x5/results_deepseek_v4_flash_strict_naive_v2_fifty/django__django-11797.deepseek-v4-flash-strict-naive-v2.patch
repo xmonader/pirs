@@ -1,0 +1,24 @@
+diff --git a/django/db/models/lookups.py b/django/db/models/lookups.py
+index 105dc93251..607273dd7f 100644
+--- a/django/db/models/lookups.py
++++ b/django/db/models/lookups.py
+@@ -262,9 +262,16 @@ class Exact(FieldGetDbPrepValueMixin, BuiltinLookup):
+         from django.db.models.sql.query import Query
+         if isinstance(self.rhs, Query):
+             if self.rhs.has_limit_one():
+-                # The subquery must select only the pk.
+-                self.rhs.clear_select_clause()
+-                self.rhs.add_fields(['pk'])
++                # The subquery must select exactly one column to be used
++                # as a comparison value. If it already selects a single
++                # column (e.g., via .values() or .annotate()), don't
++                # modify it. Otherwise, clear the select clause and
++                # select only the primary key.
++                if self.rhs.default_cols or (
++                    len(self.rhs.select) + len(self.rhs.annotation_select) + len(self.rhs.extra_select)
++                ) != 1:
++                    self.rhs.clear_select_clause()
++                    self.rhs.add_fields(['pk'])
+             else:
+                 raise ValueError(
+                     'The QuerySet value for an exact lookup must be limited to '

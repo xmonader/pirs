@@ -1,0 +1,17 @@
+{
+  "id": "django__django-11999",
+  "model": "deepseek-v4-flash",
+  "label": "pi-deepseek-v4-flash-strict",
+  "agent": "pi",
+  "protocol": "strict",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11999:latest",
+  "container": "pirspi-django--django-11999-pi-deepseek-v4-flash-strict",
+  "pi_exit": 0,
+  "agent_elapsed_s": 47.6,
+  "patch_bytes": 825,
+  "patch_copied": true,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 59.1,
+  "stderr_tail": "outcome: Solved\ntiming (total 8.45s):\n  verify: 5.48s (65% n=2)\n  baseline: 2.61s (31%)\n  discover: 0.28s (3%)\n  bootstrap: 0.08s (1%)\n  fix: 0.00s (0%)"
+}

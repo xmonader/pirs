@@ -1,0 +1,22 @@
+=== matplotlib__matplotlib-26011 pi/deepseek-v4-flash STRICT start 1785315009.1682916 ===
+0711fdcb970bab91ce4a2b9fdb399508ad577932c9c7fd51663af1a30471f5b6
+base_sha=00afcc0c6d4d2e4390338127f05b8f4fdb4e7087 (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+All share-related tests pass too.
+
+## Summary
+
+The fix is a single line addition in `/testbed/lib/matplotlib/axis.py`.
+
+**Root cause:** In `Axis._set_lim()`, when an axis limit change is triggered, the `{name}lim_changed` callback is only fired on the primary axis (where `emit=True`). For shared sibling axes, `_set_lim` is called with `emit=False`, so their registered callbacks are never notified.
+
+**Fix:** Added `other.callbacks.process(f"{name}lim_changed", other)` inside the loop that updates shared sibling axes. This ensures that shared axes' `xlim_changed`/`ylim_changed` callbacks are triggered when the limit change originates from another axis. We don't set `emit=True` on the recursive `_set_lim` call because that would cause recursion (the shared siblings would again iterate over shared axes and call `_set_lim` again). Instead, we fire the callback directly on each sibling after updating its limits.
+
+
+pi_exit=0 agent_elapsed_s=177.0
+patch_bytes=544
+HEAD is now at 00afcc0c6d Improve typing in pyplot (#26385)
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=lib/matplotlib/tests/test_axes.py::test_xylim_changed_shared --keep-green=lib/matplotlib/tests/test_axes.py::test_invisible_axes[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_get_labels --keep-green=lib/matplotlib/tests/test_axes.py::test_repr --keep-green=lib/matplotlib/tests/test_axes.py::test_label_loc_vertical[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_label_loc_vertical[pdf] --keep-green=lib/matplotlib/tests/test_axes.py::test_label_loc_horizontal[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_label_loc_horizontal[pdf] --keep-green=lib/matplotlib/tests/test_axes.py::test_label_loc_rc[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_label_loc_rc[pdf] --keep-green=lib/matplotlib/tests/test_axes.py::test_label_shift --keep-green=lib/matplotlib/tests/test_axes.py::test_acorr[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_acorr_integers[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_spy[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_spy_invalid_kwargs --keep-green=lib/matplotlib/tests/test_axes.py::test_matshow[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_formatter_ticker[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_formatter_ticker[pdf] --keep-green=lib/matplotlib/tests/test_axes.py::test_funcformatter_auto_formatter --keep-green=lib/matplotlib/tests/test_axes.py::test_strmethodformatter_auto_formatter --keep-green=lib/matplotlib/tests/test_axes.py::test_twin_axis_locators_formatters[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_twin_axis_locators_formatters[pdf] --keep-green=lib/matplotlib/tests/test_axes.py::test_twinx_cla --keep-green=lib/matplotlib/tests/test_axes.py::test_twin_units[x] --keep-green=lib/matplotlib/tests/test_axes.py::test_twin_units[y] --keep-green=lib/matplotlib/tests/test_axes.py::test_twin_logscale[png-x] --keep-green=lib/matplotlib/tests/test_axes.py::test_twin_logscale[png-y] --keep-green=lib/matplotlib/tests/test_axes.py::test_twinx_axis_scales[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_twin_inherit_autoscale_setting --keep-green=lib/matplotlib/tests/test_axes.py::test_inverted_cla --keep-green=lib/matplotlib/tests/test_axes.py::test_subclass_clear_cla --keep-green=lib/matplotlib/tests/test_axes.py::test_cla_not_redefined_internally --keep-green=lib/matplotlib/tests/test_axes.py::test_minorticks_on_rcParams_both[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_autoscale_tiny_range[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_autoscale_tiny_range[pdf] --keep-green=lib/matplotlib/tests/test_axes.py::test_autoscale_tight --keep-green=lib/matplotlib/tests/test_axes.py::test_autoscale_log_shared --keep-green=lib/matplotlib/tests/test_axes.py::test_use_sticky_edges --keep-green=lib/matplotlib/tests/test_axes.py::test_sticky_shared_axes[png] --keep-green=lib/matplotlib/tests/test_axes.py::test_nargs_stem --keep-green=lib/matplotlib/tests/test_axes.py::test_nargs_legend
+TIMEOUT after 1800s

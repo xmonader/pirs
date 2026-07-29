@@ -1,0 +1,29 @@
+=== django__django-11905 (deepseek-v4-flash) start 1785320296.8171005 ===
+2f5ddea1bdd3579c9b476af0c937c5ccdbd9e11dacfcdf1668874a60e8f30eb6
+base_sha=2f72480fbd27896c986c45193e1603e35c0b19a7
+filtered non-test ids: targets 2->2 keep_green 38->36
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=2f72480fbd27896c986c45193e1603e35c0b19a7 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=40 [grep:17 read:10 bash:7 code_map:1 edit_block:1 find:1 ls:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=20000 cache_r=723200 cache_w=0 out=7030 reasoning=3634 total=750230 — $0.0638
+  TOTAL: in=20000 cache_r=723200 cache_w=0 out=7030 reasoning=3634 total=750230 — $0.0638
+patch written to "/tmp/out.patch" (657 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 2f72480fbd Replaced deprecated assertEquals() with assertEqual().
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_isnull_non_boolean_value (lookup.tests.LookupTests) --target=test_iterator (lookup.tests.LookupTests) --keep-green=test_chain_date_time_lookups (lookup.tests.LookupTests) --keep-green=test_count (lookup.tests.LookupTests) --keep-green=test_custom_field_none_rhs (lookup.tests.LookupTests) --keep-green=test_error_messages (lookup.tests.LookupTests) --keep-green=test_escaping (lookup.tests.LookupTests) --keep-green=test_exact_exists (lookup.tests.LookupTests) --keep-green=test_exact_query_rhs_with_selected_columns (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one_offset (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_not_limited_to_one (lookup.tests.LookupTests) --keep-green=test_exclude (lookup.tests.LookupTests) --keep-green=test_exists (lookup.tests.LookupTests) --keep-green=test_get_next_previous_by (lookup.tests.LookupTests) --keep-green=test_in (lookup.tests.LookupTests) --keep-green=test_in_bulk (lookup.tests.LookupTests) --keep-green=test_in_bulk_lots_of_ids (lookup.tests.LookupTests) --keep-green=test_in_bulk_non_unique_field (lookup.tests.LookupTests) --keep-green=test_in_bulk_with_field (lookup.tests.LookupTests) --keep-green=test_in_different_database (lookup.tests.LookupTests) --keep-green=test_in_keeps_value_ordering (lookup.tests.LookupTests) --keep-green=test_lookup_collision (lookup.tests.LookupTests) --keep-green=test_lookup_date_as_str (lookup.tests.LookupTests) --keep-green=test_lookup_int_as_str (lookup.tests.LookupTests) --keep-green=test_nested_outerref_lhs (lookup.tests.LookupTests) --keep-green=test_none (lookup.tests.LookupTests) --keep-green=test_nonfield_lookups (lookup.tests.LookupTests) --keep-green=test_pattern_lookups_with_substr (lookup.tests.LookupTests) --keep-green=test_regex (lookup.tests.LookupTests) --keep-green=test_regex_backreferencing (lookup.tests.LookupTests) --keep-green=test_regex_non_ascii (lookup.tests.LookupTests) --keep-green=test_regex_non_string (lookup.tests.LookupTests) --keep-green=test_regex_null (lookup.tests.LookupTests) --keep-green=test_relation_nested_lookup_error (lookup.tests.LookupTests) --keep-green=test_unsupported_lookups (lookup.tests.LookupTests) --keep-green=test_values (lookup.tests.LookupTests) --keep-green=test_values_list (lookup.tests.LookupTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 2.88s):
+  baseline: 1.99s (69%)
+  verify: 0.73s (25%)
+  discover: 0.11s (4%)
+  bootstrap: 0.06s (2%)
+  fix: 0.00s (0%)
+
+check_exit=1

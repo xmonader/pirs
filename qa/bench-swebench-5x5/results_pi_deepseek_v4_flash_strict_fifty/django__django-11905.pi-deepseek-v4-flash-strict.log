@@ -1,0 +1,30 @@
+=== django__django-11905 pi/deepseek-v4-flash STRICT start 1785313920.2690687 ===
+b6ed9fb17a00630af292359ed501a09000e4a1a5fdb7b18b24efc8573ab4df98
+base_sha=2f72480fbd27896c986c45193e1603e35c0b19a7 (NO test_patch for agent)
+grade targets=2 keep_green=36 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is clean and minimal. Here's a summary of the change:
+
+**Root cause:** The `IsNull` lookup class (`__isnull`) accepted any value as the RHS, treating truthy/falsy values like booleans. This was undocumented, untested, and could cause confusion. For example, `field__isnull=1` or `field__isnull='yes'` would work but produce `IS NULL` for truthy values and `IS NOT NULL` for falsy values.
+
+**Fix:** Added a `get_prep_lookup()` method to the `IsNull` class in `/testbed/django/db/models/lookups.py` that:
+1. Allows expressions (like `Subquery`, `Exists`) to pass through for complex queries
+2. Allows `None` when the lookup explicitly supports it via `can_use_none_as_rhs` (for custom subclasses like `IsNullWithNoneAsRHS`)
+3. Raises `ValueError('The __isnull lookup accepts only True or False.')` for any other non-boolean value
+
+
+pi_exit=0 agent_elapsed_s=87.0
+patch_bytes=775
+HEAD is now at 2f72480fbd Replaced deprecated assertEquals() with assertEqual().
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_isnull_non_boolean_value (lookup.tests.LookupTests) --target=test_iterator (lookup.tests.LookupTests) --keep-green=test_chain_date_time_lookups (lookup.tests.LookupTests) --keep-green=test_count (lookup.tests.LookupTests) --keep-green=test_custom_field_none_rhs (lookup.tests.LookupTests) --keep-green=test_error_messages (lookup.tests.LookupTests) --keep-green=test_escaping (lookup.tests.LookupTests) --keep-green=test_exact_exists (lookup.tests.LookupTests) --keep-green=test_exact_query_rhs_with_selected_columns (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one_offset (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_not_limited_to_one (lookup.tests.LookupTests) --keep-green=test_exclude (lookup.tests.LookupTests) --keep-green=test_exists (lookup.tests.LookupTests) --keep-green=test_get_next_previous_by (lookup.tests.LookupTests) --keep-green=test_in (lookup.tests.LookupTests) --keep-green=test_in_bulk (lookup.tests.LookupTests) --keep-green=test_in_bulk_lots_of_ids (lookup.tests.LookupTests) --keep-green=test_in_bulk_non_unique_field (lookup.tests.LookupTests) --keep-green=test_in_bulk_with_field (lookup.tests.LookupTests) --keep-green=test_in_different_database (lookup.tests.LookupTests) --keep-green=test_in_keeps_value_ordering (lookup.tests.LookupTests) --keep-green=test_lookup_collision (lookup.tests.LookupTests) --keep-green=test_lookup_date_as_str (lookup.tests.LookupTests) --keep-green=test_lookup_int_as_str (lookup.tests.LookupTests) --keep-green=test_nested_outerref_lhs (lookup.tests.LookupTests) --keep-green=test_none (lookup.tests.LookupTests) --keep-green=test_nonfield_lookups (lookup.tests.LookupTests) --keep-green=test_pattern_lookups_with_substr (lookup.tests.LookupTests) --keep-green=test_regex (lookup.tests.LookupTests) --keep-green=test_regex_backreferencing (lookup.tests.LookupTests) --keep-green=test_regex_non_ascii (lookup.tests.LookupTests) --keep-green=test_regex_non_string (lookup.tests.LookupTests) --keep-green=test_regex_null (lookup.tests.LookupTests) --keep-green=test_relation_nested_lookup_error (lookup.tests.LookupTests) --keep-green=test_unsupported_lookups (lookup.tests.LookupTests) --keep-green=test_values (lookup.tests.LookupTests) --keep-green=test_values_list (lookup.tests.LookupTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 4.06s):
+  baseline: 2.82s (69%)
+  verify: 0.98s (24%)
+  discover: 0.14s (3%)
+  bootstrap: 0.12s (3%)
+  fix: 0.00s (0%)
+
+check_exit=1

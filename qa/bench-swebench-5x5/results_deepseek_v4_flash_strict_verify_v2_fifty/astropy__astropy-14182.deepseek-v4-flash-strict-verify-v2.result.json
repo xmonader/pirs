@@ -1,0 +1,29 @@
+{
+  "id": "astropy__astropy-14182",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-verify-v2",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14182:latest",
+  "container": "pirsbench-astropy--astropy-14182-deepseek-v4-flash-strict-verify-v2",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": false,
+  "strict_verify": true,
+  "exit_code": 1,
+  "elapsed_s": 1481.1,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nmode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)\nshadow-verify attempt 1/3\nshadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 362.73s):\nshadow-verify attempt 2/3\nagent produced no further edits; re-grading best patch\nshadow attempt 2: outcome=Failed(FixNoFlip) timing=timing (total 255.85s):\nshadow-verify attempt 3/3\nagent produced no further edits; re-grading best patch\nshadow attempt 3: outcome=Failed(FixNoFlip) timing=timing (total 273.94s):\nsession: turns=104 tools=108 [bash:46 read:37 grep:20 run_tests:3 code_map:1 edit_block:1]\ntokens by model:\n  deepseek-v4-flash: in=97290 cache_r=8193024 cache_w=0 out=36340 reasoning=22956 total=8326654 \u2014 $0.6398\n  TOTAL: in=97290 cache_r=8193024 cache_w=0 out=36340 reasoning=22956 total=8326654 \u2014 $0.6398\npatch written (ungraded/failed) to \"/tmp/out.patch\" (843 bytes)\noutcome: Failed(shadow-verify)",
+  "tokens": {
+    "in": 97290,
+    "cache_read": 8193024,
+    "cache_write": 0,
+    "out": 36340,
+    "reasoning": 22956,
+    "total": 8326654,
+    "cost_usd": 0.6398
+  },
+  "patch_copied": true,
+  "patch_bytes": 843
+}

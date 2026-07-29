@@ -1,0 +1,33 @@
+diff --git a/django/utils/autoreload.py b/django/utils/autoreload.py
+index 7ca0d68fae..13d0abcb6c 100644
+--- a/django/utils/autoreload.py
++++ b/django/utils/autoreload.py
+@@ -114,14 +114,21 @@ def iter_modules_and_files(modules, extra_files):
+         # During debugging (with PyDev) the 'typing.io' and 'typing.re' objects
+         # are added to sys.modules, however they are types not modules and so
+         # cause issues here.
+-        if not isinstance(module, ModuleType) or getattr(module, '__spec__', None) is None:
++        if not isinstance(module, ModuleType):
+             continue
+-        spec = module.__spec__
+-        # Modules could be loaded from places without a concrete location. If
+-        # this is the case, skip them.
+-        if spec.has_location:
+-            origin = spec.loader.archive if isinstance(spec.loader, zipimporter) else spec.origin
+-            sys_file_paths.append(origin)
++        spec = getattr(module, '__spec__', None)
++        if spec is not None:
++            # Modules could be loaded from places without a concrete location. If
++            # this is the case, skip them.
++            if spec.has_location:
++                origin = spec.loader.archive if isinstance(spec.loader, zipimporter) else spec.origin
++                sys_file_paths.append(origin)
++        else:
++            # Module may not have a spec (e.g. __main__) but may have a
++            # __file__ attribute that indicates a file to watch.
++            filename = getattr(module, '__file__', None)
++            if filename is not None:
++                sys_file_paths.append(filename)
+ 
+     results = set()
+     for filename in itertools.chain(sys_file_paths, extra_files):

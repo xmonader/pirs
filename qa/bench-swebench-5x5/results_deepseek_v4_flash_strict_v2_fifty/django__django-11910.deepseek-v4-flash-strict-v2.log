@@ -1,0 +1,30 @@
+=== django__django-11910 (deepseek-v4-flash) start 1785320347.942157 ===
+cb374fb6e09c9eff9108ce81fdc7da7a39e68f26c5ee9f77a10c9ed3581f74d2
+base_sha=d232fd76a85870daf345fd8f8d617fe7802ae194
+filtered non-test ids: targets 1->1 keep_green 110->73
+capped keep_green 110->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=d232fd76a85870daf345fd8f8d617fe7802ae194 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=45 [bash:13 grep:13 read:8 write:4 find:3 edit:1 git:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=24630 cache_r=1121280 cache_w=0 out=19651 reasoning=12065 total=1165561 — $0.1068
+  TOTAL: in=24630 cache_r=1121280 cache_w=0 out=19651 reasoning=12065 total=1165561 — $0.1068
+patch written to "/tmp/out.patch" (12580 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at d232fd76a8 Clarified that SECURE_REDIRECT_EXEMPT patterns should not include leading slashes.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_rename_referenced_primary_key (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_field_and_foo_together (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_field_foreign_key_to_field (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_field_preserved_db_column (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_foreign_object_fields (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_m2m_through_model (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_model_reverse_relation_dependencies (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_model_with_fks_in_different_position (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_model_with_renamed_rel_field (migrations.test_autodetector.AutodetectorTests) --keep-green=test_rename_related_field_preserved_db_column (migrations.test_autodetector.AutodetectorTests) --keep-green=test_add_alter_order_with_respect_to (migrations.test_autodetector.AutodetectorTests) --keep-green=test_add_blank_textfield_and_charfield (migrations.test_autodetector.AutodetectorTests) --keep-green=test_add_date_fields_with_auto_now_add_asking_for_default (migrations.test_autodetector.AutodetectorTests) --keep-green=test_add_date_fields_with_auto_now_add_not_asking_for_null_addition (migrations.test_autodetector.AutodetectorTests) --keep-green=test_add_date_fields_with_auto_now_not_asking_for_default (migrations.test_autodetector.AutodetectorTests) --keep-green=test_add_field_and_foo_together (migrations.test_autodetector.AutodetectorTests) --keep-green=test_add_model_order_with_respect_to (migrations.test_autodetector.AutodetectorTests) --keep-green=test_add_non_blank_textfield_and_charfield (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_db_table_no_changes (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_db_table_with_model_change (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_field_to_fk_dependency_other_app (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_field_to_not_null_oneoff_default (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_field_to_not_null_with_default (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_field_to_not_null_without_default (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_fk_before_model_deletion (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_many_to_many (migrations.test_autodetector.AutodetectorTests) --keep-green=test_alter_model_managers (migrations.test_autodetector.AutodetectorTests) --keep-green=test_circular_dependency_mixed_addcreate (migrations.test_autodetector.AutodetectorTests) --keep-green=test_circular_dependency_swappable (migrations.test_autodetector.AutodetectorTests) --keep-green=test_circular_dependency_swappable2 (migrations.test_autodetector.AutodetectorTests) --keep-green=test_circular_dependency_swappable_self (migrations.test_autodetector.AutodetectorTests) --keep-green=test_circular_fk_dependency (migrations.test_autodetector.AutodetectorTests) --keep-green=test_concrete_field_changed_to_many_to_many (migrations.test_autodetector.AutodetectorTests) --keep-green=test_create_model_and_unique_together (migrations.test_autodetector.AutodetectorTests) --keep-green=test_create_with_through_model (migrations.test_autodetector.AutodetectorTests) --keep-green=test_custom_deconstructible (migrations.test_autodetector.AutodetectorTests) --keep-green=test_deconstruct_type (migrations.test_autodetector.AutodetectorTests) --keep-green=test_default_related_name_option (migrations.test_autodetector.AutodetectorTests) --keep-green=test_different_regex_does_alter (migrations.test_autodetector.AutodetectorTests) --keep-green=test_empty_foo_together (migrations.test_autodetector.AutodetectorTests) --keep-green=test_first_dependency (migrations.test_autodetector.AutodetectorTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 3.34s):
+  baseline: 2.23s (67%)
+  verify: 0.82s (25%)
+  bootstrap: 0.16s (5%)
+  discover: 0.13s (4%)
+  fix: 0.00s (0%)
+
+check_exit=1

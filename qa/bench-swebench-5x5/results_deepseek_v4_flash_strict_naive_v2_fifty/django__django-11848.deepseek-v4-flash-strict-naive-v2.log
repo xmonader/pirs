@@ -1,0 +1,29 @@
+=== django__django-11848 (deepseek-v4-flash) start 1785324775.7221522 ===
+263707ed44957ccf406cf5605444d3b3c569e46ecaaa02082b8056bed5d0961b
+base_sha=b485daa4cd0fb5071ec75ac9d651a08bb5d224db
+capped keep_green 43->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=b485daa4cd0fb5071ec75ac9d651a08bb5d224db --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=14 tools=14 [bash:4 read:4 grep:2 edit:1 find:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=6616 cache_r=157824 cache_w=0 out=4532 reasoning=2605 total=168972 — $0.0178
+  TOTAL: in=6616 cache_r=157824 cache_w=0 out=4532 reasoning=2605 total=168972 — $0.0178
+patch written to "/tmp/out.patch" (728 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at b485daa4cd SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_parsing_rfc850 (utils_tests.test_http.HttpDateProcessingTests) --target=test_parsing_year_less_than_70 (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing_asctime (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing_rfc1123 (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_http_date (utils_tests.test_http.HttpDateProcessingTests) --keep-green=test_parsing (utils_tests.test_http.ETagProcessingTests) --keep-green=test (utils_tests.test_http.EscapeLeadingSlashesTests) --keep-green=test_allowed_hosts_str (utils_tests.test_http.IsSafeURLTests) --keep-green=test_bad (utils_tests.test_http.IsSameDomainTests) --keep-green=test_bad_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_basic_auth (utils_tests.test_http.IsSafeURLTests) --keep-green=test_custom_iterable_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_empty_sequence_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_sequence_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_sequence_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_containing_tuple_not_doseq (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_bytearray (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_bytes_values (utils_tests.test_http.URLEncodeTests) --keep-green=test_dict_with_sequence_of_bytes (utils_tests.test_http.URLEncodeTests) --keep-green=test_generator (utils_tests.test_http.URLEncodeTests) --keep-green=test_good (utils_tests.test_http.IsSameDomainTests) --keep-green=test_good_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_input_too_large (utils_tests.test_http.Base36IntTests) --keep-green=test_invalid_literal (utils_tests.test_http.Base36IntTests) --keep-green=test_is_safe_url_deprecated (utils_tests.test_http.IsSafeURLTests) --keep-green=test_multivaluedict (utils_tests.test_http.URLEncodeTests) --keep-green=test_negative_input (utils_tests.test_http.Base36IntTests) --keep-green=test_no_allowed_hosts (utils_tests.test_http.IsSafeURLTests) --keep-green=test_none (utils_tests.test_http.URLEncodeTests) --keep-green=test_none_in_generator (utils_tests.test_http.URLEncodeTests) --keep-green=test_none_in_sequence (utils_tests.test_http.URLEncodeTests) --keep-green=test_quote (utils_tests.test_http.URLQuoteTests) --keep-green=test_quote_plus (utils_tests.test_http.URLQuoteTests) --keep-green=test_quoting (utils_tests.test_http.ETagProcessingTests) --keep-green=test_roundtrip (utils_tests.test_http.Base36IntTests) --keep-green=test_roundtrip (utils_tests.test_http.URLSafeBase64Tests) --keep-green=test_secure_param_https_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_secure_param_non_https_urls (utils_tests.test_http.IsSafeURLTests) --keep-green=test_to_base36_errors (utils_tests.test_http.Base36IntTests) --keep-green=test_to_int_errors (utils_tests.test_http.Base36IntTests) --keep-green=test_tuples (utils_tests.test_http.URLEncodeTests)
+
+outcome: Solved
+timing (total 4.28s):
+  verify: 2.43s (57% n=2)
+  baseline: 1.56s (36%)
+  discover: 0.16s (4%)
+  bootstrap: 0.13s (3%)
+  fix: 0.00s (0%)
+
+check_exit=0

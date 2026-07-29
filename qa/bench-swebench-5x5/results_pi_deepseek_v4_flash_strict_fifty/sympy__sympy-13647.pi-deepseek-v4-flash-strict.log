@@ -1,0 +1,34 @@
+=== sympy__sympy-13647 pi/deepseek-v4-flash STRICT start 1785315900.978827 ===
+d17aa090ca0b1dc9b559be3197d01e605bafbe62c45c3cfeaf7eb885020bc4eb
+base_sha=19f1e16e74cd9b1beac4dba397fec98b988ee4ac (NO test_patch for agent)
+grade targets=1 keep_green=40 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+Good, `_eval_row_insert` uses a different implementation (list-based) so it's not affected.
+
+The fix is complete. Here's a summary:
+
+**Root cause:** In `_eval_col_insert` at `/testbed/sympy/matrices/common.py` line 93, the formula for mapping original matrix columns (beyond the insertion point) to the output was wrong. The line:
+```python
+return self[i, j - pos - other.cols]
+```
+should have been:
+```python
+return self[i, j - other.cols]
+```
+
+When inserting `other.cols` columns at position `pos`, the columns from `self` after position `pos` need to be shifted right by `other.cols` positions. So `self[i, k]` where `k >= pos` maps to output column `j = k + other.cols`. The inverse is `k = j - other.cols`, not `j - pos - other.cols`. The incorrect formula effectively re-fetched columns from the beginning of the matrix instead of the correct ones after the insertion point.
+
+
+pi_exit=0 agent_elapsed_s=40.2
+patch_bytes=529
+HEAD is now at 19f1e16e7 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_col_insert --keep-green=test__MinimalMatrix --keep-green=test_vec --keep-green=test_tolist --keep-green=test_row_col_del --keep-green=test_get_diag_blocks1 --keep-green=test_get_diag_blocks2 --keep-green=test_shape --keep-green=test_reshape --keep-green=test_row_col --keep-green=test_row_join --keep-green=test_col_join --keep-green=test_row_insert --keep-green=test_extract --keep-green=test_hstack --keep-green=test_vstack --keep-green=test_atoms --keep-green=test_free_symbols --keep-green=test_has --keep-green=test_is_anti_symmetric --keep-green=test_diagonal_symmetrical --keep-green=test_is_hermitian --keep-green=test_is_Identity --keep-green=test_is_symbolic --keep-green=test_is_upper --keep-green=test_is_lower --keep-green=test_is_square --keep-green=test_is_symmetric --keep-green=test_is_hessenberg --keep-green=test_is_zero --keep-green=test_values --keep-green=test_applyfunc --keep-green=test_adjoint --keep-green=test_as_real_imag --keep-green=test_conjugate --keep-green=test_doit --keep-green=test_evalf --keep-green=test_expand --keep-green=test_replace --keep-green=test_replace_map --keep-green=test_simplify
+
+outcome: Failed(ReproFailed)
+timing (total 12.19s):
+  baseline: 10.98s (90%)
+  discover: 0.71s (6%)
+  bootstrap: 0.49s (4%)
+
+check_exit=1

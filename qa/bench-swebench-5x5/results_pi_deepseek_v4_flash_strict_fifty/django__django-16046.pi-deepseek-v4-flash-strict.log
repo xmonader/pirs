@@ -1,0 +1,31 @@
+=== django__django-16046 pi/deepseek-v4-flash STRICT start 1785314910.5921843 ===
+3ef474312d073a3dbed1fa51946951767a3139a62585b212e78d8048f9934a3c
+base_sha=ec13e801b820614ff374cb0046092caab8d67249 (NO test_patch for agent)
+grade targets=1 keep_green=6 (hidden from agent)
+strict=1 agent on base only
+pi_cmd: cd /testbed && pi -p --provider deepseek --model deepseek-v4-flash --no-session --mode text --thinking off @/tmp/prompt.md
+The fix is clean and minimal. Here's what I changed:
+
+**File**: `/testbed/django/utils/numberformat.py`, line 72
+
+**Change**: `if str_number[0] == "-":` → `if str_number and str_number[0] == "-":`
+
+**Root cause**: When the `format()` function receives an empty string as the `number` argument, `str_number = str(number)` produces `""`. Then accessing `str_number[0]` raises an `IndexError: string index out of range` because the string is empty.
+
+**Fix**: Added a truthiness check (`str_number and`) before indexing into the string. This ensures that if `str_number` is an empty string, the condition short-circuits to `False` without accessing the first character. The rest of the function then handles the empty string gracefully (both `int_part` and `dec_part` end up as empty strings, and the final return is `sign + "" + ""` = `""`).
+
+
+pi_exit=0 agent_elapsed_s=89.5
+patch_bytes=454
+HEAD is now at ec13e801b8 Refs #31335 -- Added SchemaEditor._create_missing_fk_index() on MySQL.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_empty (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_decimal_subclass (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_float_numbers (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_number (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_format_string (utils_tests.test_numberformat.TestNumberFormat) --keep-green=test_large_number (utils_tests.test_numberformat.TestNumberFormat)
+
+outcome: Solved
+timing (total 4.59s):
+  verify: 2.87s (62% n=2)
+  baseline: 1.53s (33%)
+  discover: 0.11s (2%)
+  bootstrap: 0.09s (2%)
+  fix: 0.00s (0%)
+
+check_exit=0

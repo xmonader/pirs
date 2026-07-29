@@ -1,0 +1,29 @@
+{
+  "id": "sympy__sympy-13177",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-naive-v2",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13177:latest",
+  "container": "pirsbench-sympy--sympy-13177-deepseek-v4-flash-strict-naive-v2",
+  "strategy": null,
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 9688,
+    "cache_read": 215680,
+    "cache_write": 0,
+    "out": 4213,
+    "reasoning": 1714,
+    "total": 229581,
+    "cost_usd": 0.0223
+  },
+  "stderr_tail": "strategy: none\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=16 tools=16 [bash:6 grep:5 read:2 edit_block:1 find:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=9688 cache_r=215680 cache_w=0 out=4213 reasoning=1714 total=229581 \u2014 $0.0223\n  TOTAL: in=9688 cache_r=215680 cache_w=0 out=4213 reasoning=1714 total=229581 \u2014 $0.0223\npatch written to \"/tmp/out.patch\" (592 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 10.34s):\n  baseline: 8.69s (84%)\n  bootstrap: 0.61s (6%)\n  verify: 0.59s (6%)\n  discover: 0.45s (4%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 592,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 72.8
+}

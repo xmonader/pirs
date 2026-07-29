@@ -1,0 +1,30 @@
+=== django__django-11815 (deepseek-v4-flash) start 1785324769.9526901 ===
+f3a9b3aee24f79ffe156df803bfbcc145664cdf899c2d446d18226577d466a14
+base_sha=d21d80dbba47fb815951c86fec5a2a8584dc1a22
+filtered non-test ids: targets 2->2 keep_green 44->42
+capped keep_green 44->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=d21d80dbba47fb815951c86fec5a2a8584dc1a22 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --no-strategy
+
+strategy: none
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=27 tools=30 [grep:9 bash:7 edit:6 read:6 edit_block:1 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=10729 cache_r=423680 cache_w=0 out=7322 reasoning=2762 total=441731 — $0.0406
+  TOTAL: in=10729 cache_r=423680 cache_w=0 out=7322 reasoning=2762 total=441731 — $0.0406
+patch written to "/tmp/out.patch" (761 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at d21d80dbba SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_serialize_class_based_validators (migrations.test_writer.WriterTests) --target=test_serialize_enums (migrations.test_writer.WriterTests) --keep-green=test_serialize_builtin_types (migrations.test_writer.WriterTests) --keep-green=test_serialize_builtins (migrations.test_writer.WriterTests) --keep-green=test_serialize_choices (migrations.test_writer.WriterTests) --keep-green=test_serialize_collections (migrations.test_writer.WriterTests) --keep-green=test_serialize_compiled_regex (migrations.test_writer.WriterTests) --keep-green=test_serialize_constants (migrations.test_writer.WriterTests) --keep-green=test_serialize_datetime (migrations.test_writer.WriterTests) --keep-green=test_serialize_empty_nonempty_tuple (migrations.test_writer.WriterTests) --keep-green=test_serialize_fields (migrations.test_writer.WriterTests) --keep-green=test_serialize_frozensets (migrations.test_writer.WriterTests) --keep-green=test_serialize_functions (migrations.test_writer.WriterTests) --keep-green=test_serialize_functools_partial (migrations.test_writer.WriterTests) --keep-green=test_serialize_functools_partialmethod (migrations.test_writer.WriterTests) --keep-green=test_serialize_iterators (migrations.test_writer.WriterTests) --keep-green=test_serialize_lazy_objects (migrations.test_writer.WriterTests) --keep-green=test_serialize_managers (migrations.test_writer.WriterTests) --keep-green=test_serialize_multiline_strings (migrations.test_writer.WriterTests) --keep-green=test_serialize_numbers (migrations.test_writer.WriterTests) --keep-green=test_serialize_range (migrations.test_writer.WriterTests) --keep-green=test_serialize_set (migrations.test_writer.WriterTests) --keep-green=test_serialize_settings (migrations.test_writer.WriterTests) --keep-green=test_serialize_strings (migrations.test_writer.WriterTests) --keep-green=test_serialize_timedelta (migrations.test_writer.WriterTests) --keep-green=test_serialize_type_none (migrations.test_writer.WriterTests) --keep-green=test_serialize_uuid (migrations.test_writer.WriterTests) --keep-green=test_custom_operation (migrations.test_writer.WriterTests) --keep-green=test_deconstruct_class_arguments (migrations.test_writer.WriterTests) --keep-green=test_migration_file_header_comments (migrations.test_writer.WriterTests) --keep-green=test_migration_path (migrations.test_writer.WriterTests) --keep-green=test_models_import_omitted (migrations.test_writer.WriterTests) --keep-green=test_register_non_serializer (migrations.test_writer.WriterTests) --keep-green=test_register_serializer (migrations.test_writer.WriterTests) --keep-green=test_simple_migration (migrations.test_writer.WriterTests) --keep-green=test_sorted_imports (migrations.test_writer.WriterTests) --keep-green=test_args_kwargs_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_empty_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_expand_args_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_kwargs_signature (migrations.test_writer.OperationWriterTests) --keep-green=test_multiline_args_signature (migrations.test_writer.OperationWriterTests)
+
+outcome: Solved
+timing (total 4.30s):
+  verify: 2.67s (62% n=2)
+  baseline: 1.46s (34%)
+  discover: 0.11s (3%)
+  bootstrap: 0.06s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

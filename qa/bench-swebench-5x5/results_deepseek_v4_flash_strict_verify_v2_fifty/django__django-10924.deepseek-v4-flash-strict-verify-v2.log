@@ -1,0 +1,18 @@
+=== django__django-10924 (deepseek-v4-flash) start 1785321035.980596 ===
+2f8e915e542dd00f637e910bb0a0365b714a7072d2f7929828064af33c1a222e
+base_sha=bceadd2788dc2dad53eba0caae172bd8522fd483
+strict_verify=1: agent on base (NO test_patch in workspace); after each attempt grade in worktree via --shadow-test-patch (opaque verdicts, full baseline/verify stack)
+shadow_cmd: pirs-bench solve /testbed --shadow-test-patch=/tmp/test.patch --hide-targets --issue-file=/tmp/issue.md --base-sha=bceadd2788dc2dad53eba0caae172bd8522fd483 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --target=test_callable_path (model_fields.test_filepathfield.FilePathFieldTests) --keep-green=test_path (model_fields.test_filepathfield.FilePathFieldTests) --strategy=monolithic
+
+strategy: monolithic
+mode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)
+shadow-verify attempt 1/3
+shadow attempt 1: outcome=Solved timing=timing (total 4.31s):
+session: turns=40 tools=46 [read:18 grep:13 bash:6 find:3 ls:3 edit_block:2 project:1]
+tokens by model:
+  deepseek-v4-flash: in=19223 cache_r=752384 cache_w=0 out=9054 reasoning=4619 total=780661 — $0.0678
+  TOTAL: in=19223 cache_r=752384 cache_w=0 out=9054 reasoning=4619 total=780661 — $0.0678
+patch written to "/tmp/out.patch" (1154 bytes)
+outcome: Solved (shadow-verify)
+
+exit_code=0 elapsed_s=132.7
