@@ -19,6 +19,7 @@ const PLAN_EXEC: &str = include_str!("../builtins/plan-exec.rhai");
 const PLAN_CRITIC_EXEC: &str = include_str!("../builtins/plan-critic-exec.rhai");
 const WIDE_PLAN_EXEC: &str = include_str!("../builtins/wide-plan-exec.rhai");
 const PLAN_EXEC_WEAK: &str = include_str!("../builtins/plan-exec-weak.rhai");
+const SPARK_EMBER: &str = include_str!("../builtins/spark-ember.rhai");
 
 /// Primary product strategies (strong-plan/weak-exec pitch). Others remain
 /// available by name but are not the front-door set.
@@ -26,9 +27,11 @@ const SOURCES: &[(&str, &str)] = &[
     ("monolithic", MONOLITHIC),
     ("plan-exec", PLAN_EXEC),
     ("plan-critic-exec", PLAN_CRITIC_EXEC),
-    // Secondary / legacy — still loadable, not the product focus:
+    // Secondary / experimental — still loadable, not the product focus:
     ("wide-plan-exec", WIDE_PLAN_EXEC),
     ("plan-exec-weak", PLAN_EXEC_WEAK),
+    // soulrs dual-mode analogue (spark explore fan → ember code):
+    ("spark-ember", SPARK_EMBER),
 ];
 
 /// Names of the built-in strategies, in display order.
@@ -60,10 +63,12 @@ fn registry() -> &'static HashMap<&'static str, Strategy> {
 
 /// Canonicalize user-facing aliases to registry keys.
 /// `plan-exec-critic` is accepted as a synonym for `plan-critic-exec`.
+/// `dual` / `soul-dual` map to `spark-ember` (soulrs taskRouter analogue).
 pub fn canonicalize_name(name: &str) -> &str {
     match name {
         "plan-exec-critic" | "plan_critic_exec" => "plan-critic-exec",
         "plan_exec" => "plan-exec",
+        "dual" | "soul-dual" | "spark_ember" | "soulrs-dual" => "spark-ember",
         other => other,
     }
 }
@@ -180,5 +185,47 @@ mod tests {
             }
             _ => panic!("plan-exec-weak is two solo phases"),
         }
+    }
+
+    #[test]
+    fn spark_ember_fans_two_sparks_then_ember_exec() {
+        let s = builtin("spark-ember").unwrap();
+        assert!(!s.persist_across_attempts);
+        assert_eq!(s.steps.len(), 2);
+        match &s.steps[0] {
+            Step::Fan { branches, .. } => {
+                assert_eq!(branches.len(), 2, "two parallel spark explorers");
+                assert!(branches.iter().all(|b| b.scope == ToolScope::ReadOnly));
+                assert!(
+                    branches[0].system.contains("SPARK") || branches[0].system.contains("explore"),
+                    "spark system: {}",
+                    branches[0].system
+                );
+            }
+            Step::Solo(_) => panic!("first step must be spark fan-out"),
+        }
+        match &s.steps[1] {
+            Step::Solo(p) => {
+                assert_eq!(p.scope, ToolScope::Full);
+                assert!(
+                    p.system.contains("EMBER") || p.system.contains("code"),
+                    "ember system: {}",
+                    p.system
+                );
+                assert!(p.prompt.contains("{prev}"));
+            }
+            Step::Fan { .. } => panic!("second step is solo ember"),
+        }
+    }
+
+    #[test]
+    fn dual_alias_resolves_to_spark_ember() {
+        let a = builtin("dual").expect("dual alias");
+        let b = builtin("soul-dual").expect("soul-dual alias");
+        let c = builtin("spark-ember").expect("canonical");
+        assert_eq!(a.name, c.name);
+        assert_eq!(b.name, c.name);
+        assert_eq!(canonicalize_name("dual"), "spark-ember");
+        assert_eq!(canonicalize_name("soulrs-dual"), "spark-ember");
     }
 }

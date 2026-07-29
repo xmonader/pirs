@@ -278,14 +278,14 @@ fn merge(join: Join, outs: &[String]) -> String {
     }
 }
 
-/// Pin a strong planner (and critic) model onto every **read-only** phase.
+/// Pin a strong planner (and spark explorer) model onto every **read-only** phase.
 ///
-/// Full-scope executor phases are left alone so they keep the run default
+/// Full-scope executor / ember phases are left alone so they keep the run default
 /// (`--model` / weak executor). This is the product multi-model pitch:
-/// `--model <cheap> --plan-model <strong> --strategy plan-exec|plan-critic-exec`.
+/// `--model <cheap> --plan-model <strong> --strategy plan-exec|plan-critic-exec|spark-ember`.
 ///
 /// Applied after profile resolution so it overrides a profile-wide default on
-/// plan/critic phases only.
+/// plan/critic/spark phases only.
 pub fn pin_plan_model(strategy: &mut Strategy, plan_model: &str) {
     let model = plan_model.to_string();
     for step in &mut strategy.steps {
