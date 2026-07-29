@@ -1,0 +1,28 @@
+{
+  "id": "sympy__sympy-15346",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15346:latest",
+  "container": "pirsbench-sympy--sympy-15346-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 58253,
+    "cache_read": 2758656,
+    "cache_write": 0,
+    "out": 25087,
+    "reasoning": 11636,
+    "total": 2841996,
+    "cost_usd": 0.2364
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=76 tools=76 [bash:45 read:17 grep:9 find:2 edit:1 project:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=58253 cache_r=2758656 cache_w=0 out=25087 reasoning=11636 total=2841996 \u2014 $0.2364\n  TOTAL: in=58253 cache_r=2758656 cache_w=0 out=25087 reasoning=11636 total=2841996 \u2014 $0.2364\npatch written to \"/tmp/out.patch\" (611 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 32.04s):\n  baseline: 20.32s (63%)\n  verify: 10.90s (34% n=2)\n  discover: 0.42s (1%)\n  bootstrap: 0.40s (1%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 611,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 308.9
+}

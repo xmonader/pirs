@@ -1,0 +1,28 @@
+{
+  "id": "django__django-14608",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-14608:latest",
+  "container": "pirsbench-django--django-14608-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 36708,
+    "cache_read": 1315072,
+    "cache_write": 0,
+    "out": 12351,
+    "reasoning": 8017,
+    "total": 1364131,
+    "cost_usd": 0.1156
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=40 tools=48 [grep:17 read:15 bash:11 edit:2 ls:1 project:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=36708 cache_r=1315072 cache_w=0 out=12351 reasoning=8017 total=1364131 \u2014 $0.1156\n  TOTAL: in=36708 cache_r=1315072 cache_w=0 out=12351 reasoning=8017 total=1364131 \u2014 $0.1156\npatch written to \"/tmp/out.patch\" (1646 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\n\u001b[2m2026-07-28T22:24:47.586865Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::driver\u001b[0m\u001b[2m:\u001b[0m git apply model patch failed: error: patch failed: tests/admin_views/tests.py:3348\nerror: tests/admin_views/tests.py: patch does not apply\n\noutcome: Failed(FixNoFlip)\ntiming (total 9.39s):\n  baseline: 9.30s (99%)\n  discover: 0.05s (1%)\n  bootstrap: 0.03s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 1646,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 170.9
+}

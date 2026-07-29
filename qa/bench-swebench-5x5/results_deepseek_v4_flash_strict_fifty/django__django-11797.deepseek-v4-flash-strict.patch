@@ -1,0 +1,45 @@
+diff --git a/django/db/models/sql/compiler.py b/django/db/models/sql/compiler.py
+index e287a6f55a..87462b3c51 100644
+--- a/django/db/models/sql/compiler.py
++++ b/django/db/models/sql/compiler.py
+@@ -154,10 +154,22 @@ class SQLCompiler:
+                     expr.alias for expr in expressions
+                     if hasattr(expr, 'target') and expr.target.primary_key
+                 }
++                # When the explicit group_by is set (e.g., via .values()),
++                # preserve those columns even if their table's primary key
++                # is also in the GROUP BY. This prevents the subquery
++                # optimization (which adds the pk to the SELECT) from
++                # overriding the user's explicit GROUP BY.
++                if isinstance(self.query.group_by, (list, tuple)):
++                    explicit_group_by = set(self.query.group_by)
++                else:
++                    explicit_group_by = set()
+                 expressions = [pk] + [
+                     expr for expr in expressions
+                     if expr in having or (
+-                        getattr(expr, 'alias', None) is not None and expr.alias not in pk_aliases
++                        getattr(expr, 'alias', None) is not None and (
++                            expr.alias not in pk_aliases or
++                            expr in explicit_group_by
++                        )
+                     )
+                 ]
+         elif self.connection.features.allows_group_by_selected_pks:
+@@ -176,8 +188,16 @@ class SQLCompiler:
+                 )
+             }
+             aliases = {expr.alias for expr in pks}
++            # When the explicit group_by is set (e.g., via .values()),
++            # preserve those columns even if their table's primary key
++            # is also in the GROUP BY.
++            if isinstance(self.query.group_by, (list, tuple)):
++                explicit_group_by = set(self.query.group_by)
++            else:
++                explicit_group_by = set()
+             expressions = [
+-                expr for expr in expressions if expr in pks or getattr(expr, 'alias', None) not in aliases
++                expr for expr in expressions
++                if expr in pks or expr in explicit_group_by or getattr(expr, 'alias', None) not in aliases
+             ]
+         return expressions

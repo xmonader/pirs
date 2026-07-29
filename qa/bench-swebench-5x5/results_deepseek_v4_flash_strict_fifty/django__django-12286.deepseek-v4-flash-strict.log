@@ -1,0 +1,28 @@
+=== django__django-12286 (deepseek-v4-flash) start 1785277262.57801 ===
+a9c49794b20345ee3a243da3c925b090df83a0d5d4b129e58847e03af27ff540
+base_sha=979f61abd322507aafced9627702362e541ec34e
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=979f61abd322507aafced9627702362e541ec34e --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=18 tools=21 [bash:5 find:4 read:4 grep:3 run_tests:2 edit:1 ls:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=8988 cache_r=224256 cache_w=0 out=3802 reasoning=1091 total=237046 — $0.0223
+  TOTAL: in=8988 cache_r=224256 cache_w=0 out=3802 reasoning=1091 total=237046 — $0.0223
+patch written to "/tmp/out.patch" (873 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 979f61abd3 Simplified model's Options.add_field() a bit.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_valid_variant_consistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_inconsistent_language_settings (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_invalid_languages_bidi (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_language_code (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages (check_framework.test_translation.TranslationCheckTests) --keep-green=test_valid_languages_bidi (check_framework.test_translation.TranslationCheckTests)
+
+outcome: Solved
+timing (total 3.85s):
+  verify: 2.45s (64% n=2)
+  baseline: 1.26s (33%)
+  discover: 0.09s (2%)
+  bootstrap: 0.05s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

@@ -1,0 +1,28 @@
+{
+  "id": "astropy__astropy-6938",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-6938:latest",
+  "container": "pirsbench-astropy--astropy-6938-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 8317,
+    "cache_read": 352256,
+    "cache_write": 0,
+    "out": 5775,
+    "reasoning": 2792,
+    "total": 366348,
+    "cost_usd": 0.0333
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=27 tools=28 [bash:13 read:7 grep:4 edit_block:1 git:1 ls:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=8317 cache_r=352256 cache_w=0 out=5775 reasoning=2792 total=366348 \u2014 $0.0333\n  TOTAL: in=8317 cache_r=352256 cache_w=0 out=5775 reasoning=2792 total=366348 \u2014 $0.0333\npatch written to \"/tmp/out.patch\" (519 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 30.48s):\n  bootstrap: 13.52s (44%)\n  discover: 10.32s (34%)\n  verify: 3.71s (12% n=2)\n  baseline: 2.94s (10%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 519,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 287.4
+}

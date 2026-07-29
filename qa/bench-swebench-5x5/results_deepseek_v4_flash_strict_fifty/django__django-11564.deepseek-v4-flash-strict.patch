@@ -1,0 +1,60 @@
+diff --git a/django/core/files/storage.py b/django/core/files/storage.py
+index 4c27fce605..833dfb8bae 100644
+--- a/django/core/files/storage.py
++++ b/django/core/files/storage.py
+@@ -332,7 +332,10 @@ class FileSystemStorage(Storage):
+         url = filepath_to_uri(name)
+         if url is not None:
+             url = url.lstrip('/')
+-        return urljoin(self.base_url, url)
++        final_url = urljoin(self.base_url, url)
++        if settings.FORCE_SCRIPT_NAME:
++            final_url = settings.FORCE_SCRIPT_NAME.rstrip('/') + '/' + final_url.lstrip('/')
++        return final_url
+ 
+     def _datetime_from_timestamp(self, ts):
+         """
+diff --git a/django/templatetags/static.py b/django/templatetags/static.py
+index 39712aaba0..f0310ff700 100644
+--- a/django/templatetags/static.py
++++ b/django/templatetags/static.py
+@@ -48,6 +48,11 @@ class PrefixNode(template.Node):
+ 
+     def render(self, context):
+         prefix = self.handle_simple(self.name)
++        request = context.get('request')
++        if request:
++            script_name = request.META.get('SCRIPT_NAME', '')
++            if script_name:
++                prefix = script_name.rstrip('/') + '/' + prefix.lstrip('/')
+         if self.varname is None:
+             return prefix
+         context[self.varname] = prefix
+@@ -100,7 +105,13 @@ class StaticNode(template.Node):
+ 
+     def url(self, context):
+         path = self.path.resolve(context)
+-        return self.handle_simple(path)
++        url = self.handle_simple(path)
++        request = context.get('request')
++        if request:
++            script_name = request.META.get('SCRIPT_NAME', '')
++            if script_name:
++                url = script_name.rstrip('/') + '/' + url.lstrip('/')
++        return url
+ 
+     def render(self, context):
+         url = self.url(context)
+@@ -117,7 +128,11 @@ class StaticNode(template.Node):
+             from django.contrib.staticfiles.storage import staticfiles_storage
+             return staticfiles_storage.url(path)
+         else:
+-            return urljoin(PrefixNode.handle_simple("STATIC_URL"), quote(path))
++            from django.conf import settings
++            prefix = urljoin(PrefixNode.handle_simple("STATIC_URL"), quote(path))
++            if settings.FORCE_SCRIPT_NAME:
++                prefix = settings.FORCE_SCRIPT_NAME.rstrip('/') + '/' + prefix.lstrip('/')
++            return prefix
+ 
+     @classmethod
+     def handle_token(cls, parser, token):

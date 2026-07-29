@@ -1,0 +1,28 @@
+{
+  "id": "scikit-learn__scikit-learn-12471",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-12471:latest",
+  "container": "pirsbench-scikit-learn--scikit-learn-12471-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 17470,
+    "cache_read": 389760,
+    "cache_write": 0,
+    "out": 5228,
+    "reasoning": 2088,
+    "total": 412458,
+    "cost_usd": 0.0378
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=21 tools=20 [read:9 bash:6 grep:2 run_tests:2 edit:1]\ntokens by model:\n  deepseek-v4-flash: in=17470 cache_r=389760 cache_w=0 out=5228 reasoning=2088 total=412458 \u2014 $0.0378\n  TOTAL: in=17470 cache_r=389760 cache_w=0 out=5228 reasoning=2088 total=412458 \u2014 $0.0378\npatch written to \"/tmp/out.patch\" (934 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 29.49s):\n  bootstrap: 13.70s (46%)\n  discover: 10.25s (35%)\n  verify: 3.11s (11% n=2)\n  baseline: 2.43s (8%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 934,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 112.7
+}

@@ -1,0 +1,150 @@
+diff --git a/django/core/checks/model_checks.py b/django/core/checks/model_checks.py
+index 5c2266ca1d..7b156fceee 100644
+--- a/django/core/checks/model_checks.py
++++ b/django/core/checks/model_checks.py
+@@ -4,7 +4,8 @@ from collections import defaultdict
+ from itertools import chain
+ 
+ from django.apps import apps
+-from django.core.checks import Error, Tags, register
++from django.conf import settings
++from django.core.checks import Error, Tags, Warning, register
+ 
+ 
+ @register(Tags.models)
+@@ -35,14 +36,25 @@ def check_all_models(app_configs=None, **kwargs):
+             indexes[model_index.name].append(model._meta.label)
+         for model_constraint in model._meta.constraints:
+             constraints[model_constraint.name].append(model._meta.label)
++    if settings.DATABASE_ROUTERS:
++        error_class, error_id = Warning, 'models.W035'
++        error_hint = (
++            'You have configured settings.DATABASE_ROUTERS. Verify that %s '
++            'are correctly routed to separate databases.'
++        )
++    else:
++        error_class, error_id = Error, 'models.E028'
++        error_hint = None
+     for db_table, model_labels in db_table_models.items():
+         if len(model_labels) != 1:
++            model_labels_str = ', '.join(model_labels)
+             errors.append(
+-                Error(
++                error_class(
+                     "db_table '%s' is used by multiple models: %s."
+-                    % (db_table, ', '.join(db_table_models[db_table])),
++                    % (db_table, model_labels_str),
+                     obj=db_table,
+-                    id='models.E028',
++                    hint=(error_hint % model_labels_str) if error_hint else None,
++                    id=error_id,
+                 )
+             )
+     for index_name, model_labels in indexes.items():
+diff --git a/docs/ref/checks.txt b/docs/ref/checks.txt
+index 99f4e1d316..515d75d91a 100644
+--- a/docs/ref/checks.txt
++++ b/docs/ref/checks.txt
+@@ -317,6 +317,8 @@ Models
+   or a number.
+ * **models.E034**: The index name ``<index>`` cannot be longer than
+   ``<max_length>`` characters.
++* **models.W035**: ``db_table`` ``<db_table>`` is used by multiple models:
++  ``<model list>``.
+ 
+ Security
+ --------
+diff --git a/docs/releases/2.2.5.txt b/docs/releases/2.2.5.txt
+index 178588327e..718ec8d888 100644
+--- a/docs/releases/2.2.5.txt
++++ b/docs/releases/2.2.5.txt
+@@ -9,4 +9,6 @@ Django 2.2.5 fixes several bugs in 2.2.4.
+ Bugfixes
+ ========
+ 
+-* ...
++* Relaxed the system check added in Django 2.2 for models to reallow use of the
++  same ``db_table`` by multiple models when database routers are installed
++  (:ticket:`30673`).
+diff --git a/tests/check_framework/test_model_checks.py b/tests/check_framework/test_model_checks.py
+index 79177e38f7..f8e800416e 100644
+--- a/tests/check_framework/test_model_checks.py
++++ b/tests/check_framework/test_model_checks.py
+@@ -1,12 +1,16 @@
+ from django.core import checks
+-from django.core.checks import Error
++from django.core.checks import Error, Warning
+ from django.db import models
+ from django.test import SimpleTestCase, TestCase, skipUnlessDBFeature
+ from django.test.utils import (
+-    isolate_apps, modify_settings, override_system_checks,
++    isolate_apps, modify_settings, override_settings, override_system_checks,
+ )
+ 
+ 
++class EmptyRouter:
++    pass
++
++
+ @isolate_apps('check_framework', attr_name='apps')
+ @override_system_checks([checks.model_checks.check_all_models])
+ class DuplicateDBTableTests(SimpleTestCase):
+@@ -50,6 +54,58 @@ class DuplicateDBTableTests(SimpleTestCase):
+             )
+         ])
+ 
++    @override_settings(DATABASE_ROUTERS=['check_framework.test_model_checks.EmptyRouter'])
++    def test_collision_in_same_app_database_routers_installed(self):
++        class Model1(models.Model):
++            class Meta:
++                db_table = 'test_table'
++
++        class Model2(models.Model):
++            class Meta:
++                db_table = 'test_table'
++
++        self.assertEqual(checks.run_checks(app_configs=self.apps.get_app_configs()), [
++            Warning(
++                "db_table 'test_table' is used by multiple models: "
++                "check_framework.Model1, check_framework.Model2.",
++                hint=(
++                    'You have configured settings.DATABASE_ROUTERS. Verify '
++                    'that check_framework.Model1, check_framework.Model2 are '
++                    'correctly routed to separate databases.'
++                ),
++                obj='test_table',
++                id='models.W035',
++            )
++        ])
++
++    @modify_settings(INSTALLED_APPS={'append': 'basic'})
++    @override_settings(DATABASE_ROUTERS=['check_framework.test_model_checks.EmptyRouter'])
++    @isolate_apps('basic', 'check_framework', kwarg_name='apps')
++    def test_collision_across_apps_database_routers_installed(self, apps):
++        class Model1(models.Model):
++            class Meta:
++                app_label = 'basic'
++                db_table = 'test_table'
++
++        class Model2(models.Model):
++            class Meta:
++                app_label = 'check_framework'
++                db_table = 'test_table'
++
++        self.assertEqual(checks.run_checks(app_configs=apps.get_app_configs()), [
++            Warning(
++                "db_table 'test_table' is used by multiple models: "
++                "basic.Model1, check_framework.Model2.",
++                hint=(
++                    'You have configured settings.DATABASE_ROUTERS. Verify '
++                    'that basic.Model1, check_framework.Model2 are correctly '
++                    'routed to separate databases.'
++                ),
++                obj='test_table',
++                id='models.W035',
++            )
++        ])
++
+     def test_no_collision_for_unmanaged_models(self):
+         class Unmanaged(models.Model):
+             class Meta:

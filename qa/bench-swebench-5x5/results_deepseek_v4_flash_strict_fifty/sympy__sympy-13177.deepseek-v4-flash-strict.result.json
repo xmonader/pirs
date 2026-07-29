@@ -1,0 +1,28 @@
+{
+  "id": "sympy__sympy-13177",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13177:latest",
+  "container": "pirsbench-sympy--sympy-13177-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 11999,
+    "cache_read": 466048,
+    "cache_write": 0,
+    "out": 7038,
+    "reasoning": 3895,
+    "total": 485085,
+    "cost_usd": 0.0436
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=28 tools=27 [bash:17 read:3 grep:2 run_tests:2 edit:1 ls:1 project:1]\ntokens by model:\n  deepseek-v4-flash: in=11999 cache_r=466048 cache_w=0 out=7038 reasoning=3895 total=485085 \u2014 $0.0436\n  TOTAL: in=11999 cache_r=466048 cache_w=0 out=7038 reasoning=3895 total=485085 \u2014 $0.0436\npatch written to \"/tmp/out.patch\" (568 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\n\u001b[2m2026-07-28T22:39:27.122270Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::driver\u001b[0m\u001b[2m:\u001b[0m git apply model patch failed: error: corrupt patch at line 14\n\noutcome: Failed(FixNoFlip)\ntiming (total 18.69s):\n  bootstrap: 6.38s (34%)\n  discover: 6.35s (34%)\n  baseline: 5.96s (32%)",
+  "patch_copied": true,
+  "patch_bytes": 568,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 207.3
+}

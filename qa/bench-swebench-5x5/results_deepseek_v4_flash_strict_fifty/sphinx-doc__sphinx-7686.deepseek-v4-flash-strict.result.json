@@ -1,0 +1,28 @@
+{
+  "id": "sphinx-doc__sphinx-7686",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7686:latest",
+  "container": "pirsbench-sphinx-doc--sphinx-7686-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 22186,
+    "cache_read": 729088,
+    "cache_write": 0,
+    "out": 6838,
+    "reasoning": 2398,
+    "total": 758112,
+    "cost_usd": 0.0645
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=32 tools=36 [bash:15 read:11 edit:3 ls:2 edit_block:1 find:1 grep:1 project:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=22186 cache_r=729088 cache_w=0 out=6838 reasoning=2398 total=758112 \u2014 $0.0645\n  TOTAL: in=22186 cache_r=729088 cache_w=0 out=6838 reasoning=2398 total=758112 \u2014 $0.0645\npatch written to \"/tmp/out.patch\" (2117 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 19.09s):\n  bootstrap: 7.32s (38%)\n  baseline: 6.33s (33%)\n  discover: 4.59s (24%)\n  verify: 0.84s (4%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 2117,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 108.1
+}

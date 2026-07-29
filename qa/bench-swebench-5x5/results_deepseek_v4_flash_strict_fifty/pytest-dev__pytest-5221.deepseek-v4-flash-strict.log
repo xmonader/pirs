@@ -1,0 +1,29 @@
+=== pytest-dev__pytest-5221 (deepseek-v4-flash) start 1785277657.997954 ===
+dd6ca4714c669befbcc09de0bf29d58d8ab7859ef531e2cdd318bd0664b79a22
+base_sha=4a2fdce62b73944030cff9b3e52862868ca9584d
+capped keep_green 170->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=4a2fdce62b73944030cff9b3e52862868ca9584d --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=43 [bash:13 read:13 grep:10 ls:3 run_tests:2 edit_block:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=22307 cache_r=736512 cache_w=0 out=5783 reasoning=2085 total=764602 — $0.0639
+  TOTAL: in=22307 cache_r=736512 cache_w=0 out=5783 reasoning=2085 total=764602 — $0.0639
+patch written to "/tmp/out.patch" (765 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 4a2fdce62 Emit a warning for record_property when used with xunit2 (#5204)
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=testing/python/fixtures.py::TestShowFixtures::test_show_fixtures --target=testing/python/fixtures.py::TestShowFixtures::test_show_fixtures_verbose --keep-green=testing/python/fixtures.py::TestAutouseDiscovery::test_autouse_in_conftests --keep-green=testing/python/fixtures.py::TestAutouseDiscovery::test_autouse_in_module_and_two_classes --keep-green=testing/python/fixtures.py::TestAutouseDiscovery::test_callables_nocode --keep-green=testing/python/fixtures.py::TestAutouseDiscovery::test_parsefactories_conftest --keep-green=testing/python/fixtures.py::TestAutouseDiscovery::test_setup_at_classlevel --keep-green=testing/python/fixtures.py::TestAutouseDiscovery::test_two_classes_separated_autouse --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_autouse_conftest_mid_directory --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_class_function_parametrization_finalization --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_funcarg_and_setup --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_ordering_autouse_before_explicit --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_ordering_dependencies_torndown_first[p10-p00] --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_ordering_dependencies_torndown_first[p10-p01] --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_ordering_dependencies_torndown_first[p11-p00] --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_ordering_dependencies_torndown_first[p11-p01] --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_parametrization_setup_teardown_ordering --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_scope_ordering --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_session_parametrized_function --keep-green=testing/python/fixtures.py::TestAutouseManagement::test_uses_parametrized_resource --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_custom_name[fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_custom_name[yield_fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_scoped[fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_scoped[yield_fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_setup_exception[fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_setup_exception[yield_fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_simple[fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_simple[yield_fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_teardown_exception[fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_teardown_exception[yield_fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_yields_more_than_one[fixture] --keep-green=testing/python/fixtures.py::TestContextManagerFixtureFuncs::test_yields_more_than_one[yield_fixture] --keep-green=testing/python/fixtures.py::TestErrors::test_issue498_fixture_finalizer_failing --keep-green=testing/python/fixtures.py::TestErrors::test_setupfunc_missing_funcarg --keep-green=testing/python/fixtures.py::TestErrors::test_subfactory_missing_funcarg --keep-green=testing/python/fixtures.py::TestFillFixtures::test_autouse_fixture_plugin --keep-green=testing/python/fixtures.py::TestFillFixtures::test_conftest_funcargs_only_available_in_subdir --keep-green=testing/python/fixtures.py::TestFillFixtures::test_detect_recursive_dependency_error --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_conftest_conftest --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_conftest_module --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_conftest_plugin --keep-green=testing/python/fixtures.py::TestFillFixtures::test_extend_fixture_module_class
+
+outcome: Failed(FixNoFlip)
+timing (total 21.63s):
+  bootstrap: 11.07s (51%)
+  baseline: 5.45s (25%)
+  discover: 4.40s (20%)
+  verify: 0.71s (3%)
+  fix: 0.00s (0%)
+
+check_exit=1

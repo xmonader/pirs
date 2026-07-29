@@ -1,0 +1,29 @@
+=== sympy__sympy-13177 (deepseek-v4-flash) start 1785278158.9471219 ===
+9505825a9c4bc3bac73cefc1a93cff0ee8f462a34900073ee1d889caa62a4652
+base_sha=662cfb818e865f580e18b59efbb3540c34232beb
+capped keep_green 76->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=662cfb818e865f580e18b59efbb3540c34232beb --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=28 tools=27 [bash:17 read:3 grep:2 run_tests:2 edit:1 ls:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=11999 cache_r=466048 cache_w=0 out=7038 reasoning=3895 total=485085 — $0.0436
+  TOTAL: in=11999 cache_r=466048 cache_w=0 out=7038 reasoning=3895 total=485085 — $0.0436
+patch written to "/tmp/out.patch" (568 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 662cfb818e Merge pull request #13119 from valglad/perm_to_fp
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_mod --target=test_mod_inverse --keep-green=test_Catalan_EulerGamma_prec --keep-green=test_Div_By_Zero --keep-green=test_Float --keep-green=test_Float_RealElement --keep-green=test_Float_default_to_highprec_from_str --keep-green=test_Float_eq --keep-green=test_Float_eval --keep-green=test_Float_gcd_lcm_cofactors --keep-green=test_Float_idempotence --keep-green=test_Float_issue_2107 --keep-green=test_GoldenRatio_expand --keep-green=test_Infinity --keep-green=test_Infinity_2 --keep-green=test_Infinity_inequations --keep-green=test_IntegerInteger --keep-green=test_Integer_as_index --keep-green=test_Integer_factors --keep-green=test_Integer_new --keep-green=test_Mul_Infinity_Zero --keep-green=test_NaN --keep-green=test_Number_new --keep-green=test_Rational_cmp --keep-green=test_Rational_factors --keep-green=test_Rational_gcd_lcm_cofactors --keep-green=test_Rational_int --keep-green=test_Rational_new --keep-green=test_abs1 --keep-green=test_accept_int --keep-green=test_as_content_primitive --keep-green=test_bug_sqrt --keep-green=test_comp --keep-green=test_comparisons_with_unknown_type --keep-green=test_conversion_to_mpmath --keep-green=test_divmod --keep-green=test_dont_accept_str --keep-green=test_float_mpf --keep-green=test_golden_ratio_rewrite_as_sqrt --keep-green=test_hashing_sympy_integers --keep-green=test_igcd --keep-green=test_igcd2
+
+[2m2026-07-28T22:39:27.122270Z[0m [33m WARN[0m [2mpirs_bench::driver[0m[2m:[0m git apply model patch failed: error: corrupt patch at line 14
+
+outcome: Failed(FixNoFlip)
+timing (total 18.69s):
+  bootstrap: 6.38s (34%)
+  discover: 6.35s (34%)
+  baseline: 5.96s (32%)
+
+check_exit=1

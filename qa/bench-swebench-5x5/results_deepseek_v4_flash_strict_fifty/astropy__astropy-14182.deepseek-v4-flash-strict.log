@@ -1,0 +1,28 @@
+=== astropy__astropy-14182 (deepseek-v4-flash) start 1785275400.621712 ===
+bebfb62a7aff7184e313a2bc1c4b669c9e97a123ed03e1664aa28f90ec23ed35
+base_sha=72abacaea58d01a3dbc005849847d02fcd0c0687
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=72abacaea58d01a3dbc005849847d02fcd0c0687 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=17 tools=20 [read:8 bash:5 grep:3 edit:1 edit_block:1 find:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=18767 cache_r=348160 cache_w=0 out=6956 reasoning=4302 total=373883 — $0.0371
+  TOTAL: in=18767 cache_r=348160 cache_w=0 out=6956 reasoning=4302 total=373883 — $0.0371
+patch written to "/tmp/out.patch" (777 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 72abacaea SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_names --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_names_include --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_normal_exclude --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column_header --keep-green=astropy/io/ascii/tests/test_rst.py::test_read_right_indented_table --keep-green=astropy/io/ascii/tests/test_rst.py::test_trailing_spaces_in_row_definition --keep-green=astropy/io/ascii/tests/test_rst.py::test_write_normal
+
+outcome: Failed(FixNoFlip)
+timing (total 289.14s):
+  bootstrap: 240.12s (83%)
+  discover: 45.90s (16%)
+  baseline: 2.08s (1%)
+  verify: 1.04s (0%)
+  fix: 0.00s (0%)
+
+check_exit=1

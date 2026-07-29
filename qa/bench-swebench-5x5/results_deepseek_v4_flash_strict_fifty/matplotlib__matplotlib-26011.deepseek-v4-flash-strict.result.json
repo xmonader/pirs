@@ -1,0 +1,28 @@
+{
+  "id": "matplotlib__matplotlib-26011",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-26011:latest",
+  "container": "pirsbench-matplotlib--matplotlib-26011-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 8292,
+    "cache_read": 180480,
+    "cache_write": 0,
+    "out": 3893,
+    "reasoning": 1975,
+    "total": 192665,
+    "cost_usd": 0.0192
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=14 tools=13 [grep:6 read:3 bash:2 edit_block:1 find:1]\ntokens by model:\n  deepseek-v4-flash: in=8292 cache_r=180480 cache_w=0 out=3893 reasoning=1975 total=192665 \u2014 $0.0192\n  TOTAL: in=8292 cache_r=180480 cache_w=0 out=3893 reasoning=1975 total=192665 \u2014 $0.0192\npatch written to \"/tmp/out.patch\" (542 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\n\u001b[2m2026-07-28T22:37:47.921388Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::driver\u001b[0m\u001b[2m:\u001b[0m git apply model patch failed: error: corrupt patch at line 12\n\noutcome: Failed(FixNoFlip)\ntiming (total 530.89s):\n  bootstrap: 514.76s (97%)\n  discover: 12.57s (2%)\n  baseline: 3.57s (1%)",
+  "patch_copied": true,
+  "patch_bytes": 542,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 666.8
+}

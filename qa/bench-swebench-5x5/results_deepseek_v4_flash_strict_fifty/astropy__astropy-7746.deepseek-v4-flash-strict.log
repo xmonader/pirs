@@ -1,0 +1,29 @@
+=== astropy__astropy-7746 (deepseek-v4-flash) start 1785275815.4857204 ===
+db20206f815e2b0aaa8ee06a269b476c0d5fa2760b97c0c50272823682362186
+base_sha=d5bd3f68bb6d5ce3a61bdce9883ee750d1afade5
+capped keep_green 56->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=d5bd3f68bb6d5ce3a61bdce9883ee750d1afade5 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=37 tools=36 [read:12 bash:9 grep:8 run_tests:3 edit:2 find:1 ls:1]
+tokens by model:
+  deepseek-v4-flash: in=13572 cache_r=652672 cache_w=0 out=10899 reasoning=5341 total=677143 — $0.0613
+  TOTAL: in=13572 cache_r=652672 cache_w=0 out=10899 reasoning=5341 total=677143 — $0.0613
+patch written to "/tmp/out.patch" (1644 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at d5bd3f68bb Merge pull request #7742 from astrofrog/travis-egg-info
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=astropy/wcs/tests/test_wcs.py::test_zero_size_input --keep-green=astropy/wcs/tests/test_wcs.py::TestMaps::test_consistency --keep-green=astropy/wcs/tests/test_wcs.py::TestMaps::test_maps --keep-green=astropy/wcs/tests/test_wcs.py::TestSpectra::test_consistency --keep-green=astropy/wcs/tests/test_wcs.py::TestSpectra::test_spectra --keep-green=astropy/wcs/tests/test_wcs.py::test_3d_shapes --keep-green=astropy/wcs/tests/test_wcs.py::test_all_world2pix --keep-green=astropy/wcs/tests/test_wcs.py::test_bounds_check --keep-green=astropy/wcs/tests/test_wcs.py::test_broadcasting --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_1 --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_2 --keep-green=astropy/wcs/tests/test_wcs.py::test_calc_footprint_3 --keep-green=astropy/wcs/tests/test_wcs.py::test_crpix_maps_to_crval --keep-green=astropy/wcs/tests/test_wcs.py::test_dict_init --keep-green=astropy/wcs/tests/test_wcs.py::test_error_message --keep-green=astropy/wcs/tests/test_wcs.py::test_extra_kwarg --keep-green=astropy/wcs/tests/test_wcs.py::test_find_all_wcs_crash --keep-green=astropy/wcs/tests/test_wcs.py::test_fixes --keep-green=astropy/wcs/tests/test_wcs.py::test_fixes2 --keep-green=astropy/wcs/tests/test_wcs.py::test_footprint_to_file --keep-green=astropy/wcs/tests/test_wcs.py::test_hst_wcs --keep-green=astropy/wcs/tests/test_wcs.py::test_inconsistent_sip --keep-green=astropy/wcs/tests/test_wcs.py::test_invalid_shape --keep-green=astropy/wcs/tests/test_wcs.py::test_invalid_spherical --keep-green=astropy/wcs/tests/test_wcs.py::test_keyedsip --keep-green=astropy/wcs/tests/test_wcs.py::test_list_naxis --keep-green=astropy/wcs/tests/test_wcs.py::test_load_fits_path --keep-green=astropy/wcs/tests/test_wcs.py::test_naxis --keep-green=astropy/wcs/tests/test_wcs.py::test_no_comments_in_header --keep-green=astropy/wcs/tests/test_wcs.py::test_no_iteration --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval_p17 --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_crval_try2 --keep-green=astropy/wcs/tests/test_wcs.py::test_no_truncate_using_compare --keep-green=astropy/wcs/tests/test_wcs.py::test_out_of_bounds --keep-green=astropy/wcs/tests/test_wcs.py::test_outside_sky --keep-green=astropy/wcs/tests/test_wcs.py::test_passing_ImageHDU --keep-green=astropy/wcs/tests/test_wcs.py::test_pix2world --keep-green=astropy/wcs/tests/test_wcs.py::test_preserve_shape --keep-green=astropy/wcs/tests/test_wcs.py::test_printwcs --keep-green=astropy/wcs/tests/test_wcs.py::test_scamp_sip_distortion_parameters
+
+outcome: Failed(FixNoFlip)
+timing (total 42.11s):
+  bootstrap: 24.08s (57%)
+  discover: 12.47s (30%)
+  baseline: 4.27s (10%)
+  verify: 1.30s (3%)
+  fix: 0.00s (0%)
+
+check_exit=1

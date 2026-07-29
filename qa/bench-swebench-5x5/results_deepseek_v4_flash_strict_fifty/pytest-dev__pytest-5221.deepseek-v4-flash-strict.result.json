@@ -1,0 +1,28 @@
+{
+  "id": "pytest-dev__pytest-5221",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5221:latest",
+  "container": "pirsbench-pytest-dev--pytest-5221-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 22307,
+    "cache_read": 736512,
+    "cache_write": 0,
+    "out": 5783,
+    "reasoning": 2085,
+    "total": 764602,
+    "cost_usd": 0.0639
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=40 tools=43 [bash:13 read:13 grep:10 ls:3 run_tests:2 edit_block:1 project:1]\ntokens by model:\n  deepseek-v4-flash: in=22307 cache_r=736512 cache_w=0 out=5783 reasoning=2085 total=764602 \u2014 $0.0639\n  TOTAL: in=22307 cache_r=736512 cache_w=0 out=5783 reasoning=2085 total=764602 \u2014 $0.0639\npatch written to \"/tmp/out.patch\" (765 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 21.63s):\n  bootstrap: 11.07s (51%)\n  baseline: 5.45s (25%)\n  discover: 4.40s (20%)\n  verify: 0.71s (3%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 765,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 148.3
+}

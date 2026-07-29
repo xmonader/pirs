@@ -1,0 +1,28 @@
+=== django__django-10924 (deepseek-v4-flash) start 1785276029.0536892 ===
+0c116d5d5d33874a84df79273a4e4a7735e1cdb31b71446c44bef352120a5761
+base_sha=bceadd2788dc2dad53eba0caae172bd8522fd483
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=bceadd2788dc2dad53eba0caae172bd8522fd483 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=41 [grep:15 bash:11 read:10 edit_block:2 find:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=15543 cache_r=686464 cache_w=0 out=8429 reasoning=4127 total=710436 — $0.0615
+  TOTAL: in=15543 cache_r=686464 cache_w=0 out=8429 reasoning=4127 total=710436 — $0.0615
+patch written to "/tmp/out.patch" (1549 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at bceadd2788 Fixed #30396 -- Added system checks for uniqueness of indexes and constraints names.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_callable_path (model_fields.test_filepathfield.FilePathFieldTests) --keep-green=test_path (model_fields.test_filepathfield.FilePathFieldTests)
+
+outcome: Solved
+timing (total 2.71s):
+  verify: 1.78s (66% n=2)
+  baseline: 0.84s (31%)
+  discover: 0.06s (2%)
+  bootstrap: 0.03s (1%)
+  fix: 0.00s (0%)
+
+check_exit=0

@@ -1,0 +1,28 @@
+=== django__django-10914 (deepseek-v4-flash) start 1785276006.2597394 ===
+743db37a2915ef74cbffe17253a3a6017fb79aff74c345877d5be615c1b0876b
+base_sha=7c88088b05bf5ccdf5b42c64722cb4d16f859b18
+filtered non-test ids: targets 1->1 keep_green 98->96
+capped keep_green 98->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=7c88088b05bf5ccdf5b42c64722cb4d16f859b18 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=41 [grep:12 read:12 bash:10 edit:3 run_tests:2 ls:1 project:1]
+tokens by model:
+  deepseek-v4-flash: in=14953 cache_r=696320 cache_w=0 out=13818 reasoning=10193 total=725091 — $0.0680
+  TOTAL: in=14953 cache_r=696320 cache_w=0 out=13818 reasoning=10193 total=725091 — $0.0680
+patch written to "/tmp/out.patch" (625 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 7c88088b05 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_override_file_upload_permissions (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_database_routers (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_file_upload_directory_permissions (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_media_root (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_media_url (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_static_root (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_static_url (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_staticfiles_dirs (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_staticfiles_finders (test_utils.tests.OverrideSettingsTests) --keep-green=test_override_staticfiles_storage (test_utils.tests.OverrideSettingsTests) --keep-green=test_urlconf_cache (test_utils.tests.OverrideSettingsTests) --keep-green=test_urlconf_first (test_utils.tests.OverrideSettingsTests) --keep-green=test_urlconf_second (test_utils.tests.OverrideSettingsTests) --keep-green=test_all (test_utils.tests.DatabaseAliasTests) --keep-green=test_allowed_database_chunked_cursor_queries (test_utils.tests.AllowedDatabaseQueriesTests) --keep-green=test_allowed_database_queries (test_utils.tests.AllowedDatabaseQueriesTests) --keep-green=test_allowed_hosts (test_utils.tests.SetupTestEnvironmentTests) --keep-green=test_assert_field_output (test_utils.tests.AssertFieldOutputTests) --keep-green=test_assert_num_queries (test_utils.tests.AssertNumQueriesTests) --keep-green=test_assert_num_queries_with_client (test_utils.tests.AssertNumQueriesTests) --keep-green=test_assert_raises_message (test_utils.tests.AssertRaisesMsgTest) --keep-green=test_assert_used_on_http_response (test_utils.tests.AssertTemplateUsedContextManagerTests) --keep-green=test_attributes (test_utils.tests.HTMLEqualTests) --keep-green=test_callable (test_utils.tests.AssertWarnsMessageTests) --keep-green=test_class_decoration (test_utils.tests.IsolatedAppsTests) --keep-green=test_close_match (test_utils.tests.DatabaseAliasTests) --keep-green=test_comment_root (test_utils.tests.XMLEqualTests) --keep-green=test_complex_examples (test_utils.tests.HTMLEqualTests) --keep-green=test_contains_html (test_utils.tests.HTMLEqualTests) --keep-green=test_context_manager (test_utils.tests.AssertWarnsMessageTests) --keep-green=test_context_manager (test_utils.tests.IsolatedAppsTests) --keep-green=test_context_manager_failure (test_utils.tests.AssertWarnsMessageTests) --keep-green=test_count (test_utils.tests.HTMLEqualTests) --keep-green=test_custom_required_message (test_utils.tests.AssertFieldOutputTests) --keep-green=test_disallowed_database_chunked_cursor_queries (test_utils.tests.DisallowedDatabaseQueriesTests) --keep-green=test_disallowed_database_connections (test_utils.tests.DisallowedDatabaseQueriesTests) --keep-green=test_disallowed_database_queries (test_utils.tests.DisallowedDatabaseQueriesTests) --keep-green=test_equal (test_utils.tests.AssertURLEqualTests) --keep-green=test_equal_parsing_errors (test_utils.tests.JSONEqualTests) --keep-green=test_error_message (test_utils.tests.AssertTemplateUsedContextManagerTests) --keep-green=test_failure (test_utils.tests.AssertNumQueriesContextManagerTests)
+
+outcome: Failed(ReproFailed)
+timing (total 1.08s):
+  baseline: 0.96s (90%)
+  discover: 0.08s (7%)
+  bootstrap: 0.04s (3%)
+
+check_exit=1

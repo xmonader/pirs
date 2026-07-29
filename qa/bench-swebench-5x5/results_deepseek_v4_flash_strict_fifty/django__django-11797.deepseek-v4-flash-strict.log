@@ -1,0 +1,29 @@
+=== django__django-11797 (deepseek-v4-flash) start 1785276738.5591903 ===
+ed161070110ea85df2889b7d4ead98e0b4aa79a5e5179836716cc81ece8293ab
+base_sha=3346b78a8a872286a245d1e77ef4718fc5e6be1a
+filtered non-test ids: targets 1->1 keep_green 38->36
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=3346b78a8a872286a245d1e77ef4718fc5e6be1a --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=49 [grep:14 read:14 bash:8 find:4 job_wait:4 edit:2 edit_block:1 ls:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=36914 cache_r=1555584 cache_w=0 out=23706 reasoning=17191 total=1616204 — $0.1449
+  TOTAL: in=36914 cache_r=1555584 cache_w=0 out=23706 reasoning=17191 total=1616204 — $0.1449
+patch written to "/tmp/out.patch" (2336 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 3346b78a8a Fixed #30786 -- Used CONVERT_TZ to check if the time zone definitions are installed on MySQL.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_exact_query_rhs_with_selected_columns (lookup.tests.LookupTests) --keep-green=test_chain_date_time_lookups (lookup.tests.LookupTests) --keep-green=test_count (lookup.tests.LookupTests) --keep-green=test_custom_field_none_rhs (lookup.tests.LookupTests) --keep-green=test_error_messages (lookup.tests.LookupTests) --keep-green=test_escaping (lookup.tests.LookupTests) --keep-green=test_exact_exists (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_limit_one_offset (lookup.tests.LookupTests) --keep-green=test_exact_sliced_queryset_not_limited_to_one (lookup.tests.LookupTests) --keep-green=test_exclude (lookup.tests.LookupTests) --keep-green=test_exists (lookup.tests.LookupTests) --keep-green=test_get_next_previous_by (lookup.tests.LookupTests) --keep-green=test_in (lookup.tests.LookupTests) --keep-green=test_in_bulk (lookup.tests.LookupTests) --keep-green=test_in_bulk_lots_of_ids (lookup.tests.LookupTests) --keep-green=test_in_bulk_non_unique_field (lookup.tests.LookupTests) --keep-green=test_in_bulk_with_field (lookup.tests.LookupTests) --keep-green=test_in_different_database (lookup.tests.LookupTests) --keep-green=test_in_keeps_value_ordering (lookup.tests.LookupTests) --keep-green=test_iterator (lookup.tests.LookupTests) --keep-green=test_lookup_collision (lookup.tests.LookupTests) --keep-green=test_lookup_date_as_str (lookup.tests.LookupTests) --keep-green=test_lookup_int_as_str (lookup.tests.LookupTests) --keep-green=test_nested_outerref_lhs (lookup.tests.LookupTests) --keep-green=test_none (lookup.tests.LookupTests) --keep-green=test_nonfield_lookups (lookup.tests.LookupTests) --keep-green=test_pattern_lookups_with_substr (lookup.tests.LookupTests) --keep-green=test_regex (lookup.tests.LookupTests) --keep-green=test_regex_backreferencing (lookup.tests.LookupTests) --keep-green=test_regex_non_ascii (lookup.tests.LookupTests) --keep-green=test_regex_non_string (lookup.tests.LookupTests) --keep-green=test_regex_null (lookup.tests.LookupTests) --keep-green=test_relation_nested_lookup_error (lookup.tests.LookupTests) --keep-green=test_unsupported_lookups (lookup.tests.LookupTests) --keep-green=test_values (lookup.tests.LookupTests) --keep-green=test_values_list (lookup.tests.LookupTests)
+
+[2m2026-07-28T22:16:27.270374Z[0m [33m WARN[0m [2mpirs_bench::driver[0m[2m:[0m git apply model patch failed: error: corrupt patch at line 46
+
+outcome: Failed(FixNoFlip)
+timing (total 1.57s):
+  baseline: 1.49s (95%)
+  discover: 0.05s (3%)
+  bootstrap: 0.03s (2%)
+
+check_exit=1

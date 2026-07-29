@@ -1,0 +1,30 @@
+=== django__django-15695 (deepseek-v4-flash) start 1785277355.353258 ===
+087f30aac99be29299dd4df5e4b6d95cb26a6ffa0d16582ad7f76173076f82c5
+base_sha=cdc62b5702d41f5937314b3675a1ddbfcb6eee89
+filtered non-test ids: targets 1->1 keep_green 123->61
+capped keep_green 123->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=cdc62b5702d41f5937314b3675a1ddbfcb6eee89 --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=47 [grep:26 read:9 bash:8 edit:2 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=31172 cache_r=1327872 cache_w=0 out=19360 reasoning=14294 total=1378404 — $0.1227
+  TOTAL: in=31172 cache_r=1327872 cache_w=0 out=19360 reasoning=14294 total=1378404 — $0.1227
+patch written to "/tmp/out.patch" (727 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at cdc62b5702 SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_rename_index_unnamed_index (migrations.test_operations.OperationTests) --keep-green=test_rename_field_case (migrations.test_operations.OperationTests) --keep-green=test_rename_field_with_db_column (migrations.test_operations.OperationTests) --keep-green=test_rename_index (migrations.test_operations.OperationTests) --keep-green=test_rename_index_arguments (migrations.test_operations.OperationTests) --keep-green=test_rename_index_state_forwards (migrations.test_operations.OperationTests) --keep-green=test_rename_index_state_forwards_unnamed_index (migrations.test_operations.OperationTests) --keep-green=test_rename_index_unknown_unnamed_index (migrations.test_operations.OperationTests) --keep-green=test_rename_m2m_target_model (migrations.test_operations.OperationTests) --keep-green=test_rename_m2m_through_model (migrations.test_operations.OperationTests) --keep-green=test_rename_missing_field (migrations.test_operations.OperationTests) --keep-green=test_rename_model_with_db_table_noop (migrations.test_operations.OperationTests) --keep-green=test_rename_model_with_m2m (migrations.test_operations.OperationTests) --keep-green=test_rename_model_with_self_referential_m2m (migrations.test_operations.OperationTests) --keep-green=test_rename_referenced_field_state_forward (migrations.test_operations.OperationTests) --keep-green=test_add_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_constraint_combinable (migrations.test_operations.OperationTests) --keep-green=test_add_constraint_percent_escaping (migrations.test_operations.OperationTests) --keep-green=test_add_covering_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_deferred_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_func_index (migrations.test_operations.OperationTests) --keep-green=test_add_func_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_index_state_forwards (migrations.test_operations.OperationTests) --keep-green=test_add_or_constraint (migrations.test_operations.OperationTests) --keep-green=test_add_partial_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_alter_field_m2m (migrations.test_operations.OperationTests) --keep-green=test_alter_field_pk_mti_and_fk_to_base (migrations.test_operations.OperationTests) --keep-green=test_alter_field_pk_mti_fk (migrations.test_operations.OperationTests) --keep-green=test_alter_field_reloads_state_fk_with_to_field_related_name_target_type_change (migrations.test_operations.OperationTests) --keep-green=test_alter_field_reloads_state_on_fk_with_to_field_target_type_change (migrations.test_operations.OperationTests) --keep-green=test_alter_field_with_func_index (migrations.test_operations.OperationTests) --keep-green=test_alter_field_with_func_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_alter_index_together_remove (migrations.test_operations.OperationTests) --keep-green=test_alter_index_together_remove_with_unique_together (migrations.test_operations.OperationTests) --keep-green=test_alter_unique_together_remove (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_boolean_expression_in_check_constraint (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_constraint (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_deferred_unique_constraint (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_duplicate_base (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_duplicate_field_name (migrations.test_operations.OperationTests) --keep-green=test_create_model_with_duplicate_manager_name (migrations.test_operations.OperationTests)
+
+outcome: Failed(FixNoFlip)
+timing (total 3.40s):
+  baseline: 2.55s (75%)
+  verify: 0.71s (21%)
+  discover: 0.09s (3%)
+  bootstrap: 0.05s (1%)
+  fix: 0.00s (0%)
+
+check_exit=1

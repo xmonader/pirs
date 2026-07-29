@@ -1,0 +1,117 @@
+diff --git a/debug_repro.py b/debug_repro.py
+new file mode 100644
+index 000000000..9ccd43b63
+--- /dev/null
++++ b/debug_repro.py
+@@ -0,0 +1,39 @@
++import numpy as np
++import pandas as pd
++from sklearn.compose import ColumnTransformer
++from sklearn.impute import SimpleImputer
++from sklearn.pipeline import Pipeline
++from sklearn.preprocessing import RobustScaler
++
++X = pd.DataFrame(data=[[1.0, 2.0, 3.0, 4.0], [4, 2, 2, 5]],
++                 columns=["a", "b", "c", "d"])
++y = np.array([0, 1])
++categorical_features = []
++numerical_features = ["a", "b", "c"]
++
++ct = ColumnTransformer([
++    ('categorical', 'passthrough', categorical_features),
++    ('numerical', Pipeline([("scaler", RobustScaler()),
++                            ("imputer", SimpleImputer(strategy="median"))
++                            ]), numerical_features),
++], remainder='drop').set_output(transform="pandas")
++
++# Let's trace what happens
++print("transformers:", ct.transformers)
++print("_columns:", ct._columns if hasattr(ct, '_columns') else 'not set')
++
++try:
++    ct.fit(X, y)
++except Exception as e:
++    print(f"Error: {e}")
++    
++# Let's check transformers_
++print("\nAfter fit:")
++print("transformers_:", ct.transformers_)
++print("_name_to_fitted_passthrough:", ct._name_to_fitted_passthrough if hasattr(ct, '_name_to_fitted_passthrough') else 'not set')
++
++# Now try transform
++try:
++    ct.transform(X)
++except Exception as e:
++    print(f"Transform error: {e}")
+diff --git a/repro.py b/repro.py
+new file mode 100644
+index 000000000..6946af628
+--- /dev/null
++++ b/repro.py
+@@ -0,0 +1,22 @@
++import numpy as np
++import pandas as pd
++from sklearn.compose import ColumnTransformer
++from sklearn.impute import SimpleImputer
++from sklearn.pipeline import Pipeline
++from sklearn.preprocessing import RobustScaler
++
++X = pd.DataFrame(data=[[1.0, 2.0, 3.0, 4.0], [4, 2, 2, 5]],
++                 columns=["a", "b", "c", "d"])
++y = np.array([0, 1])
++categorical_features = []
++numerical_features = ["a", "b", "c"]
++model_preprocessing = ("preprocessing",
++                       ColumnTransformer([
++                           ('categorical', 'passthrough', categorical_features),
++                           ('numerical', Pipeline([("scaler", RobustScaler()),
++                                                   ("imputer", SimpleImputer(strategy="median"))
++                                                   ]), numerical_features),
++                       ], remainder='drop'))
++pipeline = Pipeline([model_preprocessing, ("classifier", type("Dummy", (), {"fit": lambda self, X, y: self})())]).set_output(transform="pandas")
++pipeline.fit(X, y)
++print("Success!")
+diff --git a/sklearn/compose/_column_transformer.py b/sklearn/compose/_column_transformer.py
+index a26145117..1d9c93f94 100644
+--- a/sklearn/compose/_column_transformer.py
++++ b/sklearn/compose/_column_transformer.py
+@@ -383,7 +383,9 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+             if replace_strings:
+                 # replace 'passthrough' with identity transformer and
+                 # skip in case of 'drop'
+-                if trans == "passthrough":
++                if _is_empty_column_selection(columns):
++                    continue
++                elif trans == "passthrough":
+                     trans = FunctionTransformer(
+                         accept_sparse=True,
+                         check_inverse=False,
+@@ -391,8 +393,6 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+                     ).set_output(transform=output_config["dense"])
+                 elif trans == "drop":
+                     continue
+-                elif _is_empty_column_selection(columns):
+-                    continue
+ 
+             if column_as_strings:
+                 # Convert all columns to using their string labels
+@@ -585,7 +585,9 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+         self._name_to_fitted_passthrough = {}
+ 
+         for name, old, column, _ in self._iter():
+-            if old == "drop":
++            if _is_empty_column_selection(column):
++                trans = old
++            elif old == "drop":
+                 trans = "drop"
+             elif old == "passthrough":
+                 # FunctionTransformer is present in list of transformers,
+@@ -596,8 +598,6 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+                 # The fitted FunctionTransformer is saved in another attribute,
+                 # so it can be used during transform for set_output.
+                 self._name_to_fitted_passthrough[name] = func_transformer
+-            elif _is_empty_column_selection(column):
+-                trans = old
+             else:
+                 trans = next(fitted_transformers)
+             transformers_.append((name, trans, column))

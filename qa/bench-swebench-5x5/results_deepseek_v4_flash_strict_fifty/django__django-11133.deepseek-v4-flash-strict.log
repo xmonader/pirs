@@ -1,0 +1,30 @@
+=== django__django-11133 (deepseek-v4-flash) start 1785276267.6692708 ===
+fe48cec0b12510b0509b5686597b12a84f95f2a2990bbf6825adc7707ccc6690
+base_sha=e3c66a3c1ba7c06be15ee7a245bdf3d997e3404b
+filtered non-test ids: targets 1->1 keep_green 64->56
+capped keep_green 64->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=e3c66a3c1ba7c06be15ee7a245bdf3d997e3404b --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=19 tools=19 [bash:12 find:3 run_tests:2 edit_block:1 read:1]
+tokens by model:
+  deepseek-v4-flash: in=9278 cache_r=288896 cache_w=0 out=5016 reasoning=2669 total=303190 — $0.0282
+  TOTAL: in=9278 cache_r=288896 cache_w=0 out=5016 reasoning=2669 total=303190 — $0.0282
+patch written to "/tmp/out.patch" (486 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at e3c66a3c1b SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_memoryview_content (httpwrappers.tests.HttpResponseTests) --keep-green=test_dict_behavior (httpwrappers.tests.HttpResponseTests) --keep-green=test_file_interface (httpwrappers.tests.HttpResponseTests) --keep-green=test_headers_type (httpwrappers.tests.HttpResponseTests) --keep-green=test_iter_content (httpwrappers.tests.HttpResponseTests) --keep-green=test_iterator_isnt_rewound (httpwrappers.tests.HttpResponseTests) --keep-green=test_lazy_content (httpwrappers.tests.HttpResponseTests) --keep-green=test_long_line (httpwrappers.tests.HttpResponseTests) --keep-green=test_newlines_in_headers (httpwrappers.tests.HttpResponseTests) --keep-green=test_non_string_content (httpwrappers.tests.HttpResponseTests) --keep-green=test_stream_interface (httpwrappers.tests.HttpResponseTests) --keep-green=test_unsafe_redirect (httpwrappers.tests.HttpResponseTests) --keep-green=test_basic_mutable_operations (httpwrappers.tests.QueryDictTests) --keep-green=test_cookie_edgecases (httpwrappers.tests.CookieTests) --keep-green=test_create_with_no_args (httpwrappers.tests.QueryDictTests) --keep-green=test_duplicates_in_fromkeys_iterable (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_empty_iterable (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_is_immutable_by_default (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_mutable_override (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_noniterable (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_with_nondefault_encoding (httpwrappers.tests.QueryDictTests) --keep-green=test_fromkeys_with_nonempty_value (httpwrappers.tests.QueryDictTests) --keep-green=test_httponly_after_load (httpwrappers.tests.CookieTests) --keep-green=test_immutability (httpwrappers.tests.QueryDictTests) --keep-green=test_immutable_basic_operations (httpwrappers.tests.QueryDictTests) --keep-green=test_immutable_get_with_default (httpwrappers.tests.QueryDictTests) --keep-green=test_invalid_cookies (httpwrappers.tests.CookieTests) --keep-green=test_invalid_redirect_repr (httpwrappers.tests.HttpResponseSubclassesTests) --keep-green=test_json_response_custom_encoder (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_list (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_non_ascii (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_passing_arguments_to_json_dumps (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_raises_type_error_with_default_setting (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_text (httpwrappers.tests.JsonResponseTests) --keep-green=test_json_response_uuid (httpwrappers.tests.JsonResponseTests) --keep-green=test_load_dict (httpwrappers.tests.CookieTests) --keep-green=test_missing_key (httpwrappers.tests.QueryDictTests) --keep-green=test_mutable_delete (httpwrappers.tests.QueryDictTests) --keep-green=test_nonstandard_keys (httpwrappers.tests.CookieTests) --keep-green=test_not_allowed (httpwrappers.tests.HttpResponseSubclassesTests) --keep-green=test_not_allowed_repr (httpwrappers.tests.HttpResponseSubclassesTests)
+
+[2m2026-07-28T22:05:40.119236Z[0m [33m WARN[0m [2mpirs_bench::driver[0m[2m:[0m git apply model patch failed: error: corrupt patch at line 13
+
+outcome: Failed(FixNoFlip)
+timing (total 1.43s):
+  baseline: 1.32s (92%)
+  discover: 0.07s (5%)
+  bootstrap: 0.04s (3%)
+
+check_exit=1

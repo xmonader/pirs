@@ -1,0 +1,29 @@
+=== django__django-11630 (deepseek-v4-flash) start 1785276585.488841 ===
+cce925add3958315b6492d5c3a1e4b617639a4083e3adf94357a840dcd9aea99
+base_sha=65e86948b80262574058a94ccaae3a9b59c3faea
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=65e86948b80262574058a94ccaae3a9b59c3faea --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=40 [read:11 bash:9 edit:8 grep:5 ls:2 run_tests:2 edit_block:1 find:1 git:1]
+tokens by model:
+  deepseek-v4-flash: in=18520 cache_r=774528 cache_w=0 out=7450 reasoning=2761 total=800498 — $0.0674
+  TOTAL: in=18520 cache_r=774528 cache_w=0 out=7450 reasoning=2761 total=800498 — $0.0674
+patch written to "/tmp/out.patch" (5873 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at 65e86948b8 Corrected several typos in string literals and test names.
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_collision_across_apps_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --target=test_collision_in_same_app_database_routers_installed (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.IndexNameTests) --keep-green=test_collision_abstract_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_different_models (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_in_same_model (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_abstract_model_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_no_collision_across_apps_interpolation (check_framework.test_model_checks.ConstraintNameTests) --keep-green=test_collision_across_apps (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_collision_in_same_app (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_proxy_models (check_framework.test_model_checks.DuplicateDBTableTests) --keep-green=test_no_collision_for_unmanaged_models (check_framework.test_model_checks.DuplicateDBTableTests)
+
+[2m2026-07-28T22:11:40.848083Z[0m [33m WARN[0m [2mpirs_bench::driver[0m[2m:[0m git apply model patch failed: error: patch failed: tests/check_framework/test_model_checks.py:1
+error: tests/check_framework/test_model_checks.py: patch does not apply
+
+outcome: Failed(FixNoFlip)
+timing (total 1.92s):
+  baseline: 1.78s (93%)
+  discover: 0.08s (4%)
+  bootstrap: 0.05s (3%)
+
+check_exit=1

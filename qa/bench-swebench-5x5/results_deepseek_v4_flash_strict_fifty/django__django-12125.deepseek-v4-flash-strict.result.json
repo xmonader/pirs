@@ -1,0 +1,28 @@
+{
+  "id": "django__django-12125",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-12125:latest",
+  "container": "pirsbench-django--django-12125-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 22717,
+    "cache_read": 799744,
+    "cache_write": 0,
+    "out": 11297,
+    "reasoning": 6821,
+    "total": 833758,
+    "cost_usd": 0.0745
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=35 tools=42 [read:18 bash:12 grep:8 edit:2 find:2]\ntokens by model:\n  deepseek-v4-flash: in=22717 cache_r=799744 cache_w=0 out=11297 reasoning=6821 total=833758 \u2014 $0.0745\n  TOTAL: in=22717 cache_r=799744 cache_w=0 out=11297 reasoning=6821 total=833758 \u2014 $0.0745\npatch written to \"/tmp/out.patch\" (649 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\n\u001b[2m2026-07-28T22:21:02.188897Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::driver\u001b[0m\u001b[2m:\u001b[0m git apply model patch failed: error: corrupt patch at line 12\n\noutcome: Failed(FixNoFlip)\ntiming (total 1.44s):\n  baseline: 1.35s (94%)\n  discover: 0.05s (4%)\n  bootstrap: 0.03s (2%)",
+  "patch_copied": true,
+  "patch_bytes": 649,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 122.8
+}

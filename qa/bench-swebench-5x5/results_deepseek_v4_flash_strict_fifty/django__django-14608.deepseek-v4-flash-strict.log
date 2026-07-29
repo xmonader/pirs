@@ -1,0 +1,31 @@
+=== django__django-14608 (deepseek-v4-flash) start 1785277315.7078414 ===
+fa24d5e23a3e99b3f3d32d3b726907c27d25b7dda33f83a4de2ef5dff802a555
+base_sha=e0b4b8b20c25a9ec4be63f36df71c03eee849e8c
+filtered non-test ids: targets 4->2 keep_green 394->183
+capped keep_green 394->40 (PIRS_MAX_KEEP_GREEN=40)
+strict=1: agent-only on base (NO test_patch); then apply test_patch + grade with --check-patch
+agent_cmd: pirs-bench solve /testbed --agent-only --hide-targets --issue-file=/tmp/issue.md --base-sha=e0b4b8b20c25a9ec4be63f36df71c03eee849e8c --provider=deepseek --model=deepseek-v4-flash --max-turns=40 --out=/tmp/out.patch --strategy=monolithic
+
+strategy: monolithic
+mode: agent-only (no baseline/reproduce/verify)
+session: turns=40 tools=48 [grep:17 read:15 bash:11 edit:2 ls:1 project:1 run_tests:1]
+tokens by model:
+  deepseek-v4-flash: in=36708 cache_r=1315072 cache_w=0 out=12351 reasoning=8017 total=1364131 — $0.1156
+  TOTAL: in=36708 cache_r=1315072 cache_w=0 out=12351 reasoning=8017 total=1364131 — $0.1156
+patch written to "/tmp/out.patch" (1646 bytes)
+outcome: AgentPatch (ungraded)
+
+agent_exit=0
+HEAD is now at e0b4b8b20c SWE-bench
+check_cmd: pirs-bench solve /testbed --check-patch=/tmp/out.patch --target=test_non_form_errors (forms_tests.tests.test_formsets.FormsFormsetTestCase) --target=test_non_form_errors_is_errorlist (admin_views.tests.AdminViewListEditable) --keep-green=test_non_form_errors (admin_views.tests.AdminViewListEditable) --keep-green=test_absolute_max (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_absolute_max_invalid (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_absolute_max_with_max_num (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_can_delete_extra_formset_forms (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_changelist_input_html (admin_views.tests.AdminViewListEditable) --keep-green=test_custom_pk (admin_views.tests.AdminViewListEditable) --keep-green=test_default_absolute_max (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_disable_delete_extra_formset_forms (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_form_kwargs_empty_form (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_formset_total_error_count_with_non_form_errors (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_formset_validate_min_excludes_empty_forms (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_formset_validation (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_formsets_with_order_custom_widget (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_html_safe (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_inheritance (admin_views.tests.AdminViewListEditable) --keep-green=test_inheritance_2 (admin_views.tests.AdminViewListEditable) --keep-green=test_limited_max_forms_two (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_list_editable_action_choices (admin_views.tests.AdminViewListEditable) --keep-green=test_list_editable_action_submit (admin_views.tests.AdminViewListEditable) --keep-green=test_list_editable_ordering (admin_views.tests.AdminViewListEditable) --keep-green=test_max_num_with_initial_data (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_max_num_zero_with_initial (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_post_messages (admin_views.tests.AdminViewListEditable) --keep-green=test_post_submission (admin_views.tests.AdminViewListEditable) --keep-green=test_validate_max_ignores_forms_marked_for_deletion (forms_tests.tests.test_formsets.FormsFormsetTestCase) --keep-green=test_non_admin_url_404_if_not_authenticated (admin_views.tests.AdminSiteFinalCatchAllPatternTests) --keep-green=test_non_admin_url_shares_url_prefix (admin_views.tests.AdminSiteFinalCatchAllPatternTests) --keep-green=test_non_admin_url_shares_url_prefix_without_final_catch_all_view (admin_views.tests.AdminSiteFinalCatchAllPatternTests) --keep-green=test_add (admin_views.tests.AdminViewProxyModelPermissionsTests) --keep-green=test_add_model_modeladmin_defer_qs (admin_views.tests.AdminCustomQuerysetTest) --keep-green=test_add_model_modeladmin_only_qs (admin_views.tests.AdminCustomQuerysetTest) --keep-green=test_add_view (admin_views.tests.AdminKeepChangeListFiltersTests) --keep-green=test_add_view (admin_views.tests.NamespacedAdminKeepChangeListFiltersTests) --keep-green=test_add_view_without_preserved_filters (admin_views.tests.AdminKeepChangeListFiltersTests) --keep-green=test_add_view_without_preserved_filters (admin_views.tests.NamespacedAdminKeepChangeListFiltersTests) --keep-green=test_add_with_GET_args (admin_views.tests.AdminViewBasicTest) --keep-green=test_all_fields_hidden (admin_views.tests.TestLabelVisibility) --keep-green=test_all_fields_visible (admin_views.tests.TestLabelVisibility) --keep-green=test_app_index_context (admin_views.tests.AdminViewBasicTest)
+
+[2m2026-07-28T22:24:47.586865Z[0m [33m WARN[0m [2mpirs_bench::driver[0m[2m:[0m git apply model patch failed: error: patch failed: tests/admin_views/tests.py:3348
+error: tests/admin_views/tests.py: patch does not apply
+
+outcome: Failed(FixNoFlip)
+timing (total 9.39s):
+  baseline: 9.30s (99%)
+  discover: 0.05s (1%)
+  bootstrap: 0.03s (0%)
+
+check_exit=1

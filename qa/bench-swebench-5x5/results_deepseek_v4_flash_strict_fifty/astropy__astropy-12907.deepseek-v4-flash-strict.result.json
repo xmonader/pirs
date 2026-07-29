@@ -1,0 +1,28 @@
+{
+  "id": "astropy__astropy-12907",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-12907:latest",
+  "container": "pirsbench-astropy--astropy-12907-deepseek-v4-flash-strict",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "tokens": {
+    "in": 11454,
+    "cache_read": 333696,
+    "cache_write": 0,
+    "out": 6364,
+    "reasoning": 3452,
+    "total": 351514,
+    "cost_usd": 0.0335
+  },
+  "stderr_tail": "strategy: monolithic\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=21 tools=21 [bash:10 read:5 find:3 todo:2 edit:1]\ntokens by model:\n  deepseek-v4-flash: in=11454 cache_r=333696 cache_w=0 out=6364 reasoning=3452 total=351514 \u2014 $0.0335\n  TOTAL: in=11454 cache_r=333696 cache_w=0 out=6364 reasoning=3452 total=351514 \u2014 $0.0335\npatch written to \"/tmp/out.patch\" (502 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\n\u001b[2m2026-07-28T21:56:54.051653Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mpirs_bench::driver\u001b[0m\u001b[2m:\u001b[0m git apply model patch failed: error: corrupt patch at line 13\n\noutcome: Failed(FixNoFlip)\ntiming (total 313.44s):\n  bootstrap: 245.00s (78%)\n  discover: 66.03s (21%)\n  baseline: 2.41s (1%)",
+  "patch_copied": true,
+  "patch_bytes": 502,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 412.6
+}

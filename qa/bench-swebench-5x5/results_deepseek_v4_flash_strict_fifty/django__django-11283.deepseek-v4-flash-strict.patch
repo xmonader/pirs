@@ -1,0 +1,111 @@
+diff --git a/django/contrib/auth/migrations/0011_update_proxy_permissions.py b/django/contrib/auth/migrations/0011_update_proxy_permissions.py
+index 0e66649695..32747a209b 100644
+--- a/django/contrib/auth/migrations/0011_update_proxy_permissions.py
++++ b/django/contrib/auth/migrations/0011_update_proxy_permissions.py
+@@ -24,6 +24,13 @@ def update_proxy_model_permissions(apps, schema_editor, reverse=False):
+         proxy_content_type = ContentType.objects.get_for_model(Model, for_concrete_model=False)
+         old_content_type = proxy_content_type if reverse else concrete_content_type
+         new_content_type = concrete_content_type if reverse else proxy_content_type
++        # Remove all permissions with the new content type to avoid
++        # unique constraint violation when updating permissions with
++        # the old content type.
++        Permission.objects.filter(
++            permissions_query,
++            content_type=new_content_type,
++        ).delete()
+         Permission.objects.filter(
+             permissions_query,
+             content_type=old_content_type,
+diff --git a/tests/auth_tests/test_migrations.py b/tests/auth_tests/test_migrations.py
+index 5ff2f6b4b3..9088a8a5cf 100644
+--- a/tests/auth_tests/test_migrations.py
++++ b/tests/auth_tests/test_migrations.py
+@@ -84,6 +84,88 @@ class ProxyModelWithDifferentAppLabelTests(TestCase):
+             self.assertFalse(user.has_perm('auth_tests.' + permission.codename))
+ 
+ 
++class PreExistingPermissionsSameAppLabelTests(TestCase):
++    available_apps = [
++        'auth_tests',
++        'django.contrib.auth',
++        'django.contrib.contenttypes',
++    ]
++
++    def setUp(self):
++        Permission.objects.all().delete()
++        self.concrete_content_type = ContentType.objects.get_for_model(Proxy, for_concrete_model=True)
++        self.proxy_content_type = ContentType.objects.get_for_model(Proxy, for_concrete_model=False)
++        self.default_permission = Permission.objects.create(
++            content_type=self.concrete_content_type,
++            codename='add_proxy',
++            name='Can add proxy',
++        )
++        self.custom_permission = Permission.objects.create(
++            content_type=self.concrete_content_type,
++            codename='display_proxys',
++            name='May display proxys information',
++        )
++        # Pre-existing permissions with the proxy content type.
++        Permission.objects.create(
++            content_type=self.proxy_content_type,
++            codename='add_proxy',
++            name='Can add proxy',
++        )
++        Permission.objects.create(
++            content_type=self.proxy_content_type,
++            codename='display_proxys',
++            name='May display proxys information',
++        )
++
++    def test_proxy_model_permissions_contenttype(self):
++        update_proxy_permissions.update_proxy_model_permissions(apps, None)
++        self.default_permission.refresh_from_db()
++        self.assertEqual(self.default_permission.content_type, self.proxy_content_type)
++        self.custom_permission.refresh_from_db()
++        self.assertEqual(self.custom_permission.content_type, self.proxy_content_type)
++
++
++class PreExistingPermissionsDifferentAppLabelTests(TestCase):
++    available_apps = [
++        'auth_tests',
++        'django.contrib.auth',
++        'django.contrib.contenttypes',
++    ]
++
++    def setUp(self):
++        Permission.objects.all().delete()
++        self.concrete_content_type = ContentType.objects.get_for_model(UserProxy, for_concrete_model=True)
++        self.proxy_content_type = ContentType.objects.get_for_model(UserProxy, for_concrete_model=False)
++        self.default_permission = Permission.objects.create(
++            content_type=self.concrete_content_type,
++            codename='add_userproxy',
++            name='Can add userproxy',
++        )
++        self.custom_permission = Permission.objects.create(
++            content_type=self.concrete_content_type,
++            codename='use_different_app_label',
++            name='May use a different app label',
++        )
++        # Pre-existing permissions with the proxy content type.
++        Permission.objects.create(
++            content_type=self.proxy_content_type,
++            codename='add_userproxy',
++            name='Can add userproxy',
++        )
++        Permission.objects.create(
++            content_type=self.proxy_content_type,
++            codename='use_different_app_label',
++            name='May use a different app label',
++        )
++
++    def test_proxy_model_permissions_contenttype(self):
++        update_proxy_permissions.update_proxy_model_permissions(apps, None)
++        self.default_permission.refresh_from_db()
++        self.assertEqual(self.default_permission.content_type, self.proxy_content_type)
++        self.custom_permission.refresh_from_db()
++        self.assertEqual(self.custom_permission.content_type, self.proxy_content_type)
++
++
+ class ProxyModelWithSameAppLabelTests(TestCase):
+     available_apps = [
+         'auth_tests',

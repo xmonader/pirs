@@ -11,7 +11,7 @@
 | [Filtered](../results_deepseek_v4_flash_fifty/) | Yes | Yes | 42/50 |
 | [RAW IDs](../results_deepseek_v4_flash_rawids_fifty/) | Yes | Yes | 46/50 |
 | **This dir (fair)** | **No** (`--hide-targets`) | **Yes** | **45/50** |
-| Strict (`PIRS_STRICT=1`) | No | **No** (only at grade time) | (next) |
+| [Strict](../results_deepseek_v4_flash_strict_fifty/) (`PIRS_STRICT=1`) | No | **No** (only at grade time) | **20/50** |
 
 **Fair is not gold-patch cheating.** It still applies only `test_patch` (never gold `patch`).  
 It **does** hide FAIL_TO_PASS ids from the agent prompt.
