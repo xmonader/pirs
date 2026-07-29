@@ -474,25 +474,74 @@ impl AgentExecutor {
         }
     }
 
-    /// Record a `phase.start` trace event (no-op without a recorder).
+    /// Human-visible role label for phase logs (SPARK/EMBER/PLAN/EXEC/…).
+    fn phase_role_label(req: &PhaseReq) -> &'static str {
+        let sys = req.system.to_ascii_uppercase();
+        match req.scope {
+            ToolScope::ReadOnly => {
+                if sys.contains("SPARK") {
+                    "SPARK"
+                } else if sys.contains("CRITIC") {
+                    "CRITIC"
+                } else {
+                    "PLAN"
+                }
+            }
+            ToolScope::Full => {
+                if sys.contains("EMBER") {
+                    "EMBER"
+                } else {
+                    "EXEC"
+                }
+            }
+        }
+    }
+
+    /// Record a `phase.start` trace event and always print a visible line to stderr.
     fn record_phase_start(&self, req: &PhaseReq, model: &str) {
+        let role = Self::phase_role_label(req);
+        let scope = format!("{:?}", req.scope);
+        eprintln!(
+            "phase.start role={role} id={} scope={scope} model={model} fresh={} attempt={}",
+            req.phase_id, req.fresh, self.attempt_no
+        );
+        // First line of system prompt — proves which strategy persona is live.
+        if let Some(line) = req.system.lines().next() {
+            let line = line.trim();
+            if !line.is_empty() {
+                let clip: String = line.chars().take(120).collect();
+                eprintln!("phase.system {clip}");
+            }
+        }
         if let Some(r) = &self.recorder {
             r.event(
                 "phase.start",
                 serde_json::json!({
                     "phase": req.phase_id,
+                    "role": role,
                     "attempt": self.attempt_no,
-                    "scope": format!("{:?}", req.scope),
+                    "scope": scope,
                     "fresh": req.fresh,
                     "model": model,
                     "prompt": req.prompt,
+                    "system": req.system,
                 }),
             );
         }
     }
 
-    /// Record a `phase.end` trace event (no-op without a recorder).
+    /// Record a `phase.end` trace event and always print a visible line to stderr.
     fn record_phase_end(&self, phase_id: &str, messages: usize, output: &str) {
+        let out_chars = output.chars().count();
+        let out_preview: String = output
+            .chars()
+            .take(160)
+            .collect::<String>()
+            .replace('\n', "\\n");
+        eprintln!(
+            "phase.end id={phase_id} attempt={} messages={messages} output_chars={out_chars} preview={out_preview}",
+            self.attempt_no
+        );
         if let Some(r) = &self.recorder {
             r.event(
                 "phase.end",
@@ -616,6 +665,11 @@ impl PhaseDriver for AgentExecutor {
     /// or on shared conversation state. I/O-bound LLM calls interleave at their
     /// await points, so N branches finish in ~one branch's wall-clock.
     fn run_parallel(&mut self, reqs: &[PhaseReq]) -> Vec<anyhow::Result<String>> {
+        eprintln!(
+            "phase.fan.start strategy_step branches={} attempt={}",
+            reqs.len(),
+            self.attempt_no
+        );
         // Per-branch config (each may override the model) and private context.
         let cfgs: Vec<LoopConfig> = reqs
             .iter()
@@ -670,6 +724,11 @@ impl PhaseDriver for AgentExecutor {
             self.record_phase_end(&req.phase_id, msgs.len(), &text);
             out.push(Ok(text));
         }
+        eprintln!(
+            "phase.fan.end branches_ok={} attempt={}",
+            out.iter().filter(|r| r.is_ok()).count(),
+            self.attempt_no
+        );
         out
     }
 }

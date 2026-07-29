@@ -163,14 +163,31 @@ pub fn run_strategy(
     // strategies always start each phase clean.
     let fresh = !strategy.persist_across_attempts;
     let mut prev = String::new();
+    eprintln!(
+        "strategy.run name={} steps={} persist={} fresh_phases={}",
+        strategy.name,
+        strategy.steps.len(),
+        strategy.persist_across_attempts,
+        fresh
+    );
     for (i, step) in strategy.steps.iter().enumerate() {
         match step {
             Step::Solo(phase) => {
                 let id = format!("{}#{i}", strategy.name);
+                eprintln!(
+                    "strategy.step {i}/{} solo id={id} scope={:?}",
+                    strategy.steps.len(),
+                    phase.scope
+                );
                 let req = req_for(id, phase, task, &prev, fresh);
                 prev = driver.run_phase(&req)?;
             }
             Step::Fan { branches, join } => {
+                eprintln!(
+                    "strategy.step {i}/{} fan branches={} join={join:?}",
+                    strategy.steps.len(),
+                    branches.len()
+                );
                 let reqs: Vec<PhaseReq> = branches
                     .iter()
                     .enumerate()
@@ -187,9 +204,14 @@ pub fn run_strategy(
                     anyhow::bail!("all parallel branches failed at step {i}");
                 }
                 prev = merge(*join, &outs);
+                eprintln!(
+                    "strategy.step {i} fan merged_chars={}",
+                    prev.chars().count()
+                );
             }
         }
     }
+    eprintln!("strategy.run done name={}", strategy.name);
     Ok(())
 }
 

@@ -37,6 +37,35 @@ def sh(cmd, **kw):
     return subprocess.run(cmd, check=True, **kw)
 
 
+def want_trace() -> bool:
+    """JSONL flight recorder on by default; set PIRS_TRACE=0 to disable."""
+    v = os.environ.get("PIRS_TRACE", "1").strip().lower()
+    return v not in ("0", "false", "no", "off")
+
+
+def append_trace_flag(cmd: list[str]) -> list[str]:
+    if want_trace() and not any(a.startswith("--trace") for a in cmd):
+        return cmd + ["--trace=/tmp/trace.jsonl"]
+    return cmd
+
+
+def copy_trace_out(cname: str, out_path: Path, logline) -> bool:
+    """Copy /tmp/trace.jsonl from the container if the recorder was enabled."""
+    if not want_trace():
+        return False
+    cp = subprocess.run(
+        ["docker", "cp", f"{cname}:/tmp/trace.jsonl", str(out_path)],
+        capture_output=True,
+        text=True,
+    )
+    ok = cp.returncode == 0 and out_path.exists() and out_path.stat().st_size > 0
+    if ok:
+        logline(f"trace_copied={out_path} bytes={out_path.stat().st_size}")
+    else:
+        logline(f"trace_copy_failed rc={cp.returncode} err={(cp.stderr or '').strip()[:200]}")
+    return ok
+
+
 def parse_token_stats(stderr: str) -> dict | None:
     """Extract in / cache_r / cache_w / out / reasoning / total from pirs-bench stderr.
 
@@ -388,6 +417,7 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
                 cmd.append("--strategy-script=/tmp/strategy.rhai")
             elif strategy:
                 cmd.append(f"--strategy={strategy}")
+            cmd = append_trace_flag(cmd)
             logline("shadow_cmd: " + " ".join(cmd))
             proc = docker_exec(cmd)
             elapsed = time.time() - start
@@ -408,6 +438,8 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             result["patch_copied"] = cp.returncode == 0 and patch_out.exists()
             if result["patch_copied"] and patch_out.exists():
                 result["patch_bytes"] = patch_out.stat().st_size
+            trace_out = out_dir / f"{instance_id}.{tag}.trace.jsonl"
+            result["trace_copied"] = copy_trace_out(cname, trace_out, logline)
 
         elif strict:
             # ── STRICT: agent never sees test_patch ──────────────────────────
@@ -439,6 +471,7 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
                 agent_cmd.append("--strategy-script=/tmp/strategy.rhai")
             elif strategy:
                 agent_cmd.append(f"--strategy={strategy}")
+            agent_cmd = append_trace_flag(agent_cmd)
             logline("agent_cmd: " + " ".join(agent_cmd))
             proc_agent = docker_exec(agent_cmd)
             logline(proc_agent.stdout)
@@ -447,7 +480,10 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             tokens = parse_token_stats(proc_agent.stderr)
             if tokens:
                 result["tokens"] = tokens
-            result["stderr_tail"] = "\n".join(proc_agent.stderr.splitlines()[-80:])
+            # Keep more lines so phase.start/end SPARK/EMBER are visible in tails.
+            result["stderr_tail"] = "\n".join(proc_agent.stderr.splitlines()[-200:])
+            trace_out = out_dir / f"{instance_id}.{tag}.trace.jsonl"
+            result["trace_copied"] = copy_trace_out(cname, trace_out, logline)
 
             cp = subprocess.run(
                 ["docker", "cp", f"{cname}:/tmp/out.patch", str(patch_out)],
@@ -537,6 +573,7 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
                 cmd.append("--strategy-script=/tmp/strategy.rhai")
             elif strategy:
                 cmd.append(f"--strategy={strategy}")
+            cmd = append_trace_flag(cmd)
             logline("cmd: " + " ".join(cmd))
 
             proc = docker_exec(cmd)
@@ -548,7 +585,7 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             result["exit_code"] = proc.returncode
             result["elapsed_s"] = round(elapsed, 1)
             result["solved"] = proc.returncode == 0
-            result["stderr_tail"] = "\n".join(proc.stderr.splitlines()[-80:])
+            result["stderr_tail"] = "\n".join(proc.stderr.splitlines()[-200:])
             tokens = parse_token_stats(proc.stderr)
             if tokens:
                 result["tokens"] = tokens
@@ -560,6 +597,8 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             result["patch_copied"] = cp.returncode == 0
             if cp.returncode == 0 and patch_out.exists():
                 result["patch_bytes"] = patch_out.stat().st_size
+            trace_out = out_dir / f"{instance_id}.{tag}.trace.jsonl"
+            result["trace_copied"] = copy_trace_out(cname, trace_out, logline)
 
     except subprocess.TimeoutExpired as e:
         result["exit_code"] = None
