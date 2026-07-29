@@ -119,3 +119,35 @@ START matplotlib__matplotlib-23562
 DONE django__django-15781 solved=False t=635.7
 START matplotlib__matplotlib-26011### WAVE 27/39 of 50
 
+DONE matplotlib__matplotlib-23562 solved=True t=515.3
+START pytest-dev__pytest-5221### WAVE 28/40 of 50
+
+DONE pytest-dev__pytest-5221 solved=False t=633.9
+START scikit-learn__scikit-learn-12471
+### WAVE 28/41 of 50
+DONE matplotlib__matplotlib-26011 solved=True t=957.4
+START scikit-learn__scikit-learn-25570
+### WAVE 29/42 of 50
+DONE scikit-learn__scikit-learn-12471 solved=True t=374.9
+START sphinx-doc__sphinx-7686
+### WAVE 30/43 of 50
+DONE scikit-learn__scikit-learn-25570 solved=True t=751.9
+START sympy__sympy-13177
+### WAVE 31/44 of 50
+DONE sphinx-doc__sphinx-7686 solved=False t=620.2
+START sympy__sympy-13647
+### WAVE 31/45 of 50
+DONE sympy__sympy-13177 solved=False t=486.1
+START sympy__sympy-15346
+### WAVE 31/46 of 50
+DONE sympy__sympy-15346 solved=False t=131.5
+START sympy__sympy-15678
+### WAVE 31/47 of 50
+DONE sympy__sympy-13647 solved=False t=584.2
+START sympy__sympy-16106
+### WAVE 31/48 of 50
+DONE sympy__sympy-15678 solved=True t=241.1
+### WAVE 32/49 of 50
+DONE sympy__sympy-16106 solved=False t=560.7
+### WAVE 32/50 of 50
+FINAL 32/50

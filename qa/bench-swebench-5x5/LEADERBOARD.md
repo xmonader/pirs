@@ -9,7 +9,7 @@ hidden grading.
 | pirs strict-naive-v2 | `results_deepseek_v4_flash_strict_naive_v2_fifty` | **31/50** | export fix, `--no-strategy` |
 | pirs strict-v2 mono | `results_deepseek_v4_flash_strict_v2_fifty` | **29/50** | export fix, monolithic |
 | pi strict | `results_pi_deepseek_v4_flash_strict_fifty` | **27/50** | same harsh exam |
-| pirs strict-verify-v2 | `results_deepseek_v4_flash_strict_verify_v2_fifty` | (see dir) | hidden multi-attempt loop |
+| pirs strict-verify-v2 | `results_deepseek_v4_flash_strict_verify_v2_fifty` | **32/50** | hidden multi-attempt loop |
 | pirs strict v1 | `results_deepseek_v4_flash_strict_fifty` | **20/50** | pre-export-fix (corrupt patches) |
 | pirs fair | `results_deepseek_v4_flash_fair_fifty` | 45/50 | test_patch pre-applied |
 | pirs RAW ids | `results_deepseek_v4_flash_rawids_fifty` | 46/50 | F2P names spoon-fed |

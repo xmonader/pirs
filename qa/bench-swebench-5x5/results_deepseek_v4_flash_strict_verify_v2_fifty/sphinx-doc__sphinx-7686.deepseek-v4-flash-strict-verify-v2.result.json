@@ -1,0 +1,29 @@
+{
+  "id": "sphinx-doc__sphinx-7686",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-verify-v2",
+  "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7686:latest",
+  "container": "pirsbench-sphinx-doc--sphinx-7686-deepseek-v4-flash-strict-verify-v2",
+  "strategy": "monolithic",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": false,
+  "strict_verify": true,
+  "exit_code": 1,
+  "elapsed_s": 620.2,
+  "solved": false,
+  "stderr_tail": "strategy: monolithic\nmode: shadow-verify (agent on base; grade via reset+test_patch on same repo; opaque verdicts)\nshadow-verify attempt 1/3\nshadow attempt 1: outcome=Failed(FixNoFlip) timing=timing (total 17.20s):\nshadow-verify attempt 2/3\nagent produced no further edits; re-grading best patch\nshadow attempt 2: outcome=Failed(FixNoFlip) timing=timing (total 17.02s):\nshadow-verify attempt 3/3\nshadow attempt 3: outcome=Failed(FixNoFlip) timing=timing (total 17.28s):\nsession: turns=86 tools=94 [read:38 bash:28 grep:12 find:5 run_tests:5 git:4 edit_block:2]\ntokens by model:\n  deepseek-v4-flash: in=58390 cache_r=4160128 cache_w=0 out=48088 reasoning=38313 total=4266606 \u2014 $0.3599\n  TOTAL: in=58390 cache_r=4160128 cache_w=0 out=48088 reasoning=38313 total=4266606 \u2014 $0.3599\npatch written (ungraded/failed) to \"/tmp/out.patch\" (1248 bytes)\noutcome: Failed(shadow-verify)",
+  "tokens": {
+    "in": 58390,
+    "cache_read": 4160128,
+    "cache_write": 0,
+    "out": 48088,
+    "reasoning": 38313,
+    "total": 4266606,
+    "cost_usd": 0.3599
+  },
+  "patch_copied": true,
+  "patch_bytes": 1248
+}
