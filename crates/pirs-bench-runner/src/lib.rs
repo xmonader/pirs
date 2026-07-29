@@ -73,6 +73,32 @@ pub fn build_provider(provider: &Provider) -> Arc<dyn LlmProvider> {
     }
 }
 
+/// Map a harness test id to a filesystem path worth protecting, if any.
+///
+/// - Pytest/go/nextest: `path/to/file.py::node` → `path/to/file.py`
+/// - Bare path-like ids: `tests/foo.py` when they look like test files
+/// - Django/unittest labels `test_x (mod.Class)`: no reliable path → `None`
+///   (handled by [`GitWorkspace::scrub_test_like_changes`] instead)
+fn test_id_to_protected_path(id: &str) -> Option<String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return None;
+    }
+    // Pytest node id
+    if let Some(path) = id.split("::").next() {
+        if path.contains('/') || path.ends_with(".py") || path.ends_with(".rs") {
+            if !path.is_empty() {
+                return Some(path.to_string());
+            }
+        }
+    }
+    // Already a path
+    if (id.contains('/') || id.ends_with(".py")) && pirs_bench::is_likely_test_path(id) {
+        return Some(id.to_string());
+    }
+    None
+}
+
 /// Model/provider/budget knobs for an [`AgentExecutor`].
 pub struct AgentConfig {
     pub model: String,
@@ -194,14 +220,14 @@ impl AgentExecutor {
             .cloned()
             .collect();
 
-        // The test file of an id is the segment before "::" (pytest/go/nextest
-        // node ids all share this shape).
+        // Test files to restore after each attempt. Pytest/go/nextest use
+        // `path::node`; django/unittest labels are `test_name (mod.Class)` with
+        // no path — those cannot be mapped here, so `scrub_test_like_changes`
+        // is the belt-and-suspenders path for agent-only / django.
         let protected: Vec<String> = targets
             .iter()
             .chain(keep_green.iter())
-            .filter_map(|id| id.split("::").next())
-            .filter(|f| !f.is_empty())
-            .map(|f| f.to_string())
+            .filter_map(|id| test_id_to_protected_path(id))
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
@@ -680,11 +706,12 @@ impl Executor for AgentExecutor {
             strategy::run_strategy(&strategy, self, &task)?;
         }
 
-        // Integrity: revert any edits to protected test files, so verification
-        // always runs against the original tests. A fix that only touched a test
-        // therefore leaves the tree unchanged and cannot pass.
+        // Integrity: revert protected test files AND any other test-like edits
+        // (django labels don't map to paths; agent-only often gets empty
+        // targets). A fix that only touched tests leaves the tree unchanged.
         let protected: Vec<&str> = self.protected.iter().map(String::as_str).collect();
         let _ = self.ws.restore_paths(&protected);
+        let _ = self.ws.scrub_test_like_changes();
 
         let after = self.ws.diff().unwrap_or_default();
         // A candidate worth verifying exists iff the (non-test) tree changed.

@@ -35,7 +35,7 @@ pub use driver::{
     drive_with_red_targets, run_task, run_task_cached, verify_model_patch, Executor, TaskSpec,
 };
 pub use gate::{evaluate, Verdict};
-pub use git::{is_git_repo, sanitize_export_patch, GitWorkspace};
+pub use git::{is_git_repo, is_likely_test_path, sanitize_export_patch, GitWorkspace};
 pub use harness::{check_model_patch, run_instance, Instance, InstanceReport};
 pub use localize::{parse_traceback, rank_candidates, scoped_tests, Candidate, Frame};
 pub use orchestrate::{plan_next, steer_hint, Hint, ModelOracle, PlanDecision};
