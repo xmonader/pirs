@@ -1,0 +1,29 @@
+{
+  "id": "django__django-11910",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-spark-ember-smoke",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11910:latest",
+  "container": "pirsbench-django--django-11910-deepseek-v4-flash-strict-spark-ember-smoke",
+  "strategy": "spark-ember",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 67969,
+    "cache_read": 2494592,
+    "cache_write": 0,
+    "out": 52929,
+    "reasoning": 36194,
+    "total": 2615490,
+    "cost_usd": 0.2512
+  },
+  "stderr_tail": "strategy: spark-ember\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=107 tools=121 [read:46 grep:39 bash:16 find:7 git:3 code_map:2 project:2 run_tests:2 todo:2 edit:1 ls:1]\ntokens by model:\n  deepseek-v4-flash: in=67969 cache_r=2494592 cache_w=0 out=52929 reasoning=36194 total=2615490 \u2014 $0.2512\n  TOTAL: in=67969 cache_r=2494592 cache_w=0 out=52929 reasoning=36194 total=2615490 \u2014 $0.2512\npatch written to \"/tmp/out.patch\" (1459 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 5.27s):\n  verify: 3.33s (63% n=2)\n  baseline: 1.80s (34%)\n  discover: 0.10s (2%)\n  bootstrap: 0.04s (1%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 1459,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 354.3
+}

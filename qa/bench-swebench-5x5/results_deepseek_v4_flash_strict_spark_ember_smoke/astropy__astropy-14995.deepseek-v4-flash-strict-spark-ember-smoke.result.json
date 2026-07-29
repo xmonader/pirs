@@ -1,0 +1,29 @@
+{
+  "id": "astropy__astropy-14995",
+  "model": "deepseek-v4-flash",
+  "plan_model": null,
+  "label": "deepseek-v4-flash-strict-spark-ember-smoke",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14995:latest",
+  "container": "pirsbench-astropy--astropy-14995-deepseek-v4-flash-strict-spark-ember-smoke",
+  "strategy": "spark-ember",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 60844,
+    "cache_read": 858240,
+    "cache_write": 0,
+    "out": 17540,
+    "reasoning": 10671,
+    "total": 936624,
+    "cost_usd": 0.0958
+  },
+  "stderr_tail": "strategy: spark-ember\nmode: agent-only (no baseline/reproduce/verify)\nsession: turns=45 tools=52 [git:15 read:14 grep:8 bash:3 code_map:3 find:2 project:2 todo:2 edit:1 edit_block:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=60844 cache_r=858240 cache_w=0 out=17540 reasoning=10671 total=936624 \u2014 $0.0958\n  TOTAL: in=60844 cache_r=858240 cache_w=0 out=17540 reasoning=10671 total=936624 \u2014 $0.0958\npatch written to \"/tmp/out.patch\" (645 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 192.41s):\n  bootstrap: 159.87s (83%)\n  discover: 23.92s (12%)\n  verify: 5.69s (3% n=2)\n  baseline: 2.92s (2%)\n  fix: 0.00s (0%)",
+  "patch_copied": true,
+  "patch_bytes": 645,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 356.7
+}

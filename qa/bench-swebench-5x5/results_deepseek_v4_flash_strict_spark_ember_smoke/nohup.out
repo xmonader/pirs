@@ -1,0 +1,64 @@
+spark-ember smoke master=/home/driver/xmoncode/pirs/qa/bench-swebench-5x5/results_deepseek_v4_flash_strict_spark_ember_smoke strategy=spark-ember
+queue 5: ['django__django-11001', 'django__django-11133', 'astropy__astropy-14995', 'django__django-11910', 'django__django-11848']
+START django__django-11001
+START django__django-11133
+DONE django__django-11001 solved=False t=0.3
+START astropy__astropy-14995
+### WAVE 0/1 of 5
+DONE django__django-11133 solved=False t=0.2
+START django__django-11910
+### WAVE 0/2 of 5
+DONE astropy__astropy-14995 solved=False t=0.3
+### WAVE 0/3 of 5
+START django__django-11848
+DONE django__django-11910 solved=False t=0.3
+### WAVE 0/4 of 5
+DONE django__django-11848 solved=False t=0.2
+### WAVE 0/5 of 5
+FINAL 0/5
+# spark-ember strict smoke
+
+**Score: 0/5**
+
+Strategy: `spark-ember` · model: `deepseek-v4-flash` · protocol: strict agent-only
+
+| Instance | spark-ember | mono-v2 | naive-v2 |
+|---|---|---|---|
+| `django__django-11001` | False | True | True |
+| `django__django-11133` | False | True | True |
+| `astropy__astropy-14995` | False | True | True |
+| `django__django-11910` | False | False | True |
+| `django__django-11848` | False | False | True |
+
+spark-ember smoke master=/home/driver/xmoncode/pirs/qa/bench-swebench-5x5/results_deepseek_v4_flash_strict_spark_ember_smoke strategy=spark-ember
+queue 5: ['django__django-11001', 'django__django-11133', 'astropy__astropy-14995', 'django__django-11910', 'django__django-11848']
+START django__django-11001
+START django__django-11133
+DONE django__django-11133 solved=True t=87.5
+START astropy__astropy-14995
+### WAVE 1/1 of 5
+DONE django__django-11001 solved=True t=210.1
+START django__django-11910
+### WAVE 2/2 of 5
+DONE astropy__astropy-14995 solved=True t=356.7
+START django__django-11848### WAVE 3/3 of 5
+
+DONE django__django-11848 solved=False t=79.3
+### WAVE 3/4 of 5
+DONE django__django-11910 solved=True t=354.3
+### WAVE 4/5 of 5
+FINAL 4/5
+# spark-ember strict smoke
+
+**Score: 4/5**
+
+Strategy: `spark-ember` · model: `deepseek-v4-flash` · protocol: strict agent-only
+
+| Instance | spark-ember | mono-v2 | naive-v2 |
+|---|---|---|---|
+| `django__django-11001` | True | True | True |
+| `django__django-11133` | True | True | True |
+| `astropy__astropy-14995` | True | True | True |
+| `django__django-11910` | True | False | True |
+| `django__django-11848` | False | False | True |
+
