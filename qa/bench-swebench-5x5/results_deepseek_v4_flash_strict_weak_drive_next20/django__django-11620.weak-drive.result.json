@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11620",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11620:latest",
+  "container": "pirsbench-django--django-11620-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 33088,
+    "cache_read": 1190144,
+    "cache_write": 0,
+    "out": 17902,
+    "reasoning": 10329,
+    "total": 1241134,
+    "cost_usd": 0.1119
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785352141-31 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=55 output_chars=1523 preview=Here is the fix plan:\\n\\n---\\n\\n1. **Add `Http404` to imports in `django/urls/resolvers.py`**\\n\\n   At the top of the file, add `Http404` to an existing import or add\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=23 output_chars=674 preview=All 24 URL pattern tests pass. The fix is complete.\\n\\n**Summary of changes made to `django/urls/resolvers.py`:**\\n\\n1. **Added import** of `Http404` from `django.h\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=86 output_chars=36 preview=Now let me run the tests to confirm:\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=26 output_chars=586 preview=The fix is already fully applied in the codebase. Let me confirm the final state:\\n\\n1. \u2705 **`Http404` is imported** \u2014 line 17: `from django.http import Http404`\\n2\nstrategy.run done name=weak-drive\nsession: turns=86 tools=100 [grep:37 read:31 find:10 bash:8 git:3 project:3 run_tests:3 code_map:2 edit_block:2 doctor:1]\ntokens by model:\n  deepseek-v4-flash: in=6313 cache_r=187904 cache_w=0 out=2974 reasoning=576 total=197191 \u2014 $0.0181\n  deepseek-v4-pro: in=26775 cache_r=1002240 cache_w=0 out=14928 reasoning=9753 total=1043943 \u2014 $0.0938\n  TOTAL: in=33088 cache_r=1190144 cache_w=0 out=17902 reasoning=10329 total=1241134 \u2014 $0.1119\npatch written to \"/tmp/out.patch\" (865 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 7.01s):\n  baseline: 4.05s (58%)\n  verify: 2.85s (41% n=2)\n  discover: 0.07s (1%)\n  bootstrap: 0.05s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 865,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 307.2
+}

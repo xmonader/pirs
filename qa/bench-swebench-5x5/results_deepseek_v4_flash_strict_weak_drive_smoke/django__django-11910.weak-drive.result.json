@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11910",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11910:latest",
+  "container": "pirsbench-django--django-11910-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 56106,
+    "cache_read": 1767040,
+    "cache_write": 0,
+    "out": 41566,
+    "reasoning": 26095,
+    "total": 1864712,
+    "cost_usd": 0.1846
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785346055-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=39 output_chars=3777 preview=Here is the fix plan:\\n\\n---\\n\\n## Plan\\n\\n### 1. Fix the autodetector to skip `to_field` adjustment when the FK implicitly points to the PK\\n\\n**File:** `django/db/mig\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=82 output_chars=75 preview=All 520 migration tests pass. Let me verify the final state of the changes:\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=40 output_chars=1363 preview=Based on my thorough review of the diff and surrounding code, here are my findings:\\n\\n**The `to_field` fix in `generate_altered_fields`** (lines 933-938) is exac\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=37 output_chars=796 preview=All **114 tests** pass with no failures. The fix has been applied successfully:\\n\\n1. **`django/db/migrations/autodetector.py`** \u2014 In `generate_renamed_fields`, `\nstrategy.run done name=weak-drive\nsession: turns=88 tools=106 [read:35 bash:26 grep:24 edit:6 code_map:4 git:4 find:3 project:2 run_tests:2]\ntokens by model:\n  deepseek-v4-flash: in=33553 cache_r=1227776 cache_w=0 out=16820 reasoning=5827 total=1278149 \u2014 $0.1135\n  deepseek-v4-pro: in=22553 cache_r=539264 cache_w=0 out=24746 reasoning=20268 total=586563 \u2014 $0.0711\n  TOTAL: in=56106 cache_r=1767040 cache_w=0 out=41566 reasoning=26095 total=1864712 \u2014 $0.1846\npatch written to \"/tmp/out.patch\" (2253 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 3.20s):\n  verify: 1.96s (61% n=2)\n  baseline: 1.15s (36%)\n  discover: 0.05s (2%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 2253,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 570.4
+}

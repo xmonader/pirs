@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11019",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11019:latest",
+  "container": "pirsbench-django--django-11019-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 120930,
+    "cache_read": 4320896,
+    "cache_write": 0,
+    "out": 103643,
+    "reasoning": 82472,
+    "total": 4545469,
+    "cost_usd": 0.4491
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785349736-31 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=51 output_chars=7937 preview=Now I have all the details. Here is the fix plan:\\n\\n---\\n\\n**Plan: Fix form Media merging using topological sort to avoid spurious MediaOrderConflictWarning**\\n\\n###\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=86 output_chars=90 preview=Now let me update `test_media_property_parent_references`. Let me check the actual output:\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=88 output_chars=54 preview=Let me check how Form collects media from its widgets.\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=81 output_chars=70 preview=Great progress \u2014 only 1 failure left! Let me check what's at line 152.\nstrategy.run done name=weak-drive\nsession: turns=141 tools=161 [read:61 bash:40 grep:23 git:12 edit_block:8 find:5 project:3 ls:2 run_tests:2 web_fetch:2 edit:1 recall:1 web_search:1]\ntokens by model:\n  deepseek-v4-flash: in=49201 cache_r=2285568 cache_w=0 out=57435 reasoning=43394 total=2392204 \u2014 $0.2365\n  deepseek-v4-pro: in=71729 cache_r=2035328 cache_w=0 out=46208 reasoning=39078 total=2153265 \u2014 $0.2127\n  TOTAL: in=120930 cache_r=4320896 cache_w=0 out=103643 reasoning=82472 total=4545469 \u2014 $0.4491\npatch written to \"/tmp/out.patch\" (6032 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 5.80s):\n  baseline: 4.75s (82%)\n  verify: 0.96s (17%)\n  discover: 0.05s (1%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 6032,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 1171.2
+}

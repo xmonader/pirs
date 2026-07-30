@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11283",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11283:latest",
+  "container": "pirsbench-django--django-11283-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 37259,
+    "cache_read": 688512,
+    "cache_write": 0,
+    "out": 17248,
+    "reasoning": 10831,
+    "total": 743019,
+    "cost_usd": 0.0772
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785351350-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=25 output_chars=3527 preview=Here is the fix plan:\\n\\n---\\n\\n**Plan: Handle pre-existing permissions in proxy model permissions data migration**\\n\\n## 1. Fix `django/contrib/auth/migrations/0011_\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=33 output_chars=765 preview=All 498 auth_tests pass. The implementation is complete and verified.\\n\\n**Summary of changes:**\\n\\n1. **`django/contrib/auth/migrations/0011_update_proxy_permissio\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=35 output_chars=1441 preview=Based on my thorough review of the implementation against the plan:\\n\\n**Code review confirms all plan items are implemented correctly:**\\n\\n1. **Imports added** \u2014 \nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=21 output_chars=821 preview=All 9 tests pass, including the new `test_migrate_with_existing_target_permission` test. The implementation is already fully in place and working correctly.\\n\\nHe\nstrategy.run done name=weak-drive\nsession: turns=52 tools=58 [read:17 bash:10 grep:7 edit_block:6 find:5 git:3 web_fetch:3 code_map:2 project:2 run_tests:2 web_search:1]\ntokens by model:\n  deepseek-v4-flash: in=16558 cache_r=327168 cache_w=0 out=4569 reasoning=1230 total=348295 \u2014 $0.0324\n  deepseek-v4-pro: in=20701 cache_r=361344 cache_w=0 out=12679 reasoning=9601 total=394724 \u2014 $0.0448\n  TOTAL: in=37259 cache_r=688512 cache_w=0 out=17248 reasoning=10831 total=743019 \u2014 $0.0772\npatch written to \"/tmp/out.patch\" (2394 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 4.04s):\n  verify: 2.41s (60% n=2)\n  baseline: 1.54s (38%)\n  discover: 0.06s (1%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 2394,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 270.9
+}

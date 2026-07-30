@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11099",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11099:latest",
+  "container": "pirsbench-django--django-11099-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 13376,
+    "cache_read": 322432,
+    "cache_write": 0,
+    "out": 5220,
+    "reasoning": 1733,
+    "total": 341028,
+    "cost_usd": 0.0319
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785357136-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=9 output_chars=1149 preview=Here's the fix plan:\\n\\n---\\n\\n## Plan\\n\\n### Step 1: Edit `django/contrib/auth/validators.py`\\n\\n**File:** `django/contrib/auth/validators.py`\\n\\nMake two changes:\\n\\n1. *\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=20 output_chars=514 preview=All 22 tests pass. The fix is complete.\\n\\n**Summary of changes in `django/contrib/auth/validators.py`:**\\n\\n| Validator | Before | After |\\n|---|---|---|\\n| `ASCIIUs\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=33 output_chars=352 preview=The diff is exactly as specified in the plan \u2014 both regexes changed from `^...$` to `\\A...\\Z`. This is a well-understood Python regex quirk: `$` matches before \nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=19 output_chars=260 preview=All 22 tests pass. The fix is complete.\\n\\n**Summary:** Both regexes in `django/contrib/auth/validators.py` have been changed from `r'^[\\w.@+-]+$'` to `r'\\A[\\w.@+\nstrategy.run done name=weak-drive\nsession: turns=36 tools=41 [read:9 find:8 bash:6 grep:5 project:5 git:3 edit_block:2 run_tests:2 ls:1]\ntokens by model:\n  deepseek-v4-flash: in=6076 cache_r=158080 cache_w=0 out=2048 reasoning=362 total=166204 \u2014 $0.0150\n  deepseek-v4-pro: in=7300 cache_r=164352 cache_w=0 out=3172 reasoning=1371 total=174824 \u2014 $0.0170\n  TOTAL: in=13376 cache_r=322432 cache_w=0 out=5220 reasoning=1733 total=341028 \u2014 $0.0319\npatch written to \"/tmp/out.patch\" (901 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 3.06s):\n  verify: 1.75s (57% n=2)\n  baseline: 1.23s (40%)\n  discover: 0.05s (2%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 901,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 92.4
+}

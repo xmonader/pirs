@@ -6,6 +6,7 @@ pub mod control_pins;
 pub mod delegate;
 pub mod events;
 pub mod gate;
+pub mod hybrid;
 pub mod jobs;
 pub mod memory;
 pub mod phase_agent;
@@ -34,6 +35,7 @@ pub use strategy::pin_plan_model;
 pub use agent_loop::{
     looks_like_freeform_tool_text, validate_tool_call_payload, ToolCallData,
 };
+pub use hybrid::{AskAdvisorTool, HybridConfig};
 pub use thrash::{
     LoopDetectionTracker, MistakeTracker, ThrashGuard, ToolSignature,
 };

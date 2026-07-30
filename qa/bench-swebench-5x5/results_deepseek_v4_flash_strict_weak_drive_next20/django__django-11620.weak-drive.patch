@@ -1,0 +1,21 @@
+diff --git a/django/urls/resolvers.py b/django/urls/resolvers.py
+index 2154a46320..23df55e6b1 100644
+--- a/django/urls/resolvers.py
++++ b/django/urls/resolvers.py
+@@ -14,6 +14,7 @@ from urllib.parse import quote
+ from asgiref.local import Local
+ 
+ from django.conf import settings
++from django.http import Http404
+ from django.core.checks import Error, Warning
+ from django.core.checks.urls import check_resolver
+ from django.core.exceptions import ImproperlyConfigured, ViewDoesNotExist
+@@ -258,7 +259,7 @@ class RoutePattern(CheckURLMixin):
+                 converter = self.converters[key]
+                 try:
+                     kwargs[key] = converter.to_python(value)
+-                except ValueError:
++                except (ValueError, Http404):
+                     return None
+             return path[match.end():], (), kwargs
+         return None

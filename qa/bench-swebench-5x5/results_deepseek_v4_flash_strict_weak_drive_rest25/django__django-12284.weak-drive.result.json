@@ -1,0 +1,30 @@
+{
+  "id": "django__django-12284",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-12284:latest",
+  "container": "pirsbench-django--django-12284-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 28150,
+    "cache_read": 975872,
+    "cache_write": 0,
+    "out": 14883,
+    "reasoning": 7451,
+    "total": 1018905,
+    "cost_usd": 0.0923
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785359186-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=24 output_chars=1711 preview=Here is the fix plan:\\n\\n---\\n\\n1. **File: `django/db/models/fields/__init__.py`, line 767**\\n\\n   **Current code:**\\n   ```python\\n   if not hasattr(cls, 'get_%s_displ\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=22 output_chars=901 preview=All 6 tests in `GetFieldDisplayTests` pass, including the new `test_get_FIELD_display_inherited_choices`. The fix is working correctly.\\n\\n**Summary of changes:**\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=83 output_chars=0 preview=\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=38 output_chars=700 preview=**Recovery plan applied successfully.** Here's a summary:\\n\\n1. **Source fix** \u2014 In `django/db/models/fields/__init__.py`, changed `if not hasattr(cls, 'get_%s_di\nstrategy.run done name=weak-drive\nsession: turns=78 tools=85 [read:29 grep:21 bash:11 find:7 todo:3 edit:2 git:2 ls:2 project:2 run_tests:2 code_map:1 doctor:1 recall:1 run:1]\ntokens by model:\n  deepseek-v4-flash: in=10116 cache_r=289280 cache_w=0 out=4047 reasoning=854 total=303443 \u2014 $0.0274\n  deepseek-v4-pro: in=18034 cache_r=686592 cache_w=0 out=10836 reasoning=6597 total=715462 \u2014 $0.0649\n  TOTAL: in=28150 cache_r=975872 cache_w=0 out=14883 reasoning=7451 total=1018905 \u2014 $0.0923\npatch written to \"/tmp/out.patch\" (659 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 3.30s):\n  verify: 1.92s (58% n=2)\n  baseline: 1.30s (39%)\n  discover: 0.05s (2%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 659,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 249.6
+}

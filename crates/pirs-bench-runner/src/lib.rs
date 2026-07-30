@@ -347,6 +347,7 @@ impl AgentExecutor {
             cascade: None,
             thrash: None,
             skip_remaining_if: None,
+            hybrid: None,
             budgets: Budgets {
                 max_turns: Some(self.max_turns_per_attempt),
                 max_tool_calls: None,

@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11848",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11848:latest",
+  "container": "pirsbench-django--django-11848-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 16012,
+    "cache_read": 494464,
+    "cache_write": 0,
+    "out": 11119,
+    "reasoning": 6476,
+    "total": 521595,
+    "cost_usd": 0.0512
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785346627-31 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=16 output_chars=1197 preview=## Fix Plan\\n\\n**Issue:** In `django/utils/http.py`, `parse_http_date()` uses a hardcoded two-digit-year pivot (0\u201369 \u2192 2000s, 70\u201399 \u2192 1900s) instead of the RFC 72\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=20 output_chars=313 preview=All 5 tests pass. The fix is complete. The hardcoded two-digit-year pivot (0\u201369 \u2192 2000s, 70\u201399 \u2192 1900s) has been replaced with the RFC 7231 sliding-window rule:\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\n\n[ask_user] I can't easily run the Python test suite from the project tool (it detects npm). Should I try `python tests/runtests.py utils_tests.test_http.HttpDateProcessingTests` directly, or would you prefer I review the code logic statically?\n  1. [try] Try running the test with python directly\n  2. [approve] Approve based on code review alone\n  3. [revise] There are issues \u2014 request revision\nselect option id: \n[ask_user] I've reviewed the code change. The diff matches the plan exactly. All four tests should pass with this logic (year 94\u21921994, year 37\u21922037). The RFC 7231 sliding-window rule is correctly implemented. I cannot run the test suite due to the project's npm toolchain detection, but the code logic is sound. Should I APPROVE?\n  1. [approve] APPROVE - Code review looks correct\n  2. [revise] REVISE - There are issues\nselect option id: phase.end id=weak-drive#2 attempt=1 messages=53 output_chars=874 preview=Based on my code review:\\n\\n1. **The diff matches the plan exactly** \u2014 the hardcoded pivot (0\u201369 \u2192 2000s, 70\u201399 \u2192 1900s) is replaced with the RFC 7231 sliding-win\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=16 output_chars=528 preview=All 5 tests pass \u2705. The recovery plan is complete:\\n\\n- **Change applied**: The hardcoded two-digit-year pivot (0\u201369 \u2192 2000s, 70\u201399 \u2192 1900s) in `django/utils/http\nstrategy.run done name=weak-drive\nsession: turns=49 tools=52 [read:16 grep:10 find:6 project:5 bash:3 code_map:3 ask_user:2 run_tests:2 doctor:1 edit_block:1 git:1 ls:1 recall:1]\ntokens by model:\n  deepseek-v4-flash: in=5354 cache_r=149504 cache_w=0 out=2006 reasoning=456 total=156864 \u2014 $0.0141\n  deepseek-v4-pro: in=10658 cache_r=344960 cache_w=0 out=9113 reasoning=6020 total=364731 \u2014 $0.0370\n  TOTAL: in=16012 cache_r=494464 cache_w=0 out=11119 reasoning=6476 total=521595 \u2014 $0.0512\npatch written to \"/tmp/out.patch\" (618 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 2.37s):\n  verify: 1.51s (64% n=2)\n  baseline: 0.78s (33%)\n  discover: 0.05s (2%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 618,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 185.5
+}

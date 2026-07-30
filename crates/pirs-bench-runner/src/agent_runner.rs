@@ -281,6 +281,7 @@ impl TestRunner for AgentDiscoveredRunner {
             },
             thrash: None,
             skip_remaining_if: None,
+            hybrid: None,
         };
         let emit: Emit = Arc::new(|_| {});
         let prompt = "Investigate and report the current pass/fail state of every listed test id."

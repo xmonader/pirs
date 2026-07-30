@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11179",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11179:latest",
+  "container": "pirsbench-django--django-11179-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 12393,
+    "cache_read": 322432,
+    "cache_write": 0,
+    "out": 4668,
+    "reasoning": 1590,
+    "total": 339493,
+    "cost_usd": 0.0311
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785351262-31 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=9 output_chars=1704 preview=Here is the fix plan:\\n\\n---\\n\\n## Fix Plan\\n\\n### Step 1 \u2014 Clear the PK on the fast-delete path\\n\\n**File:** `django/db/models/deletion.py`  \\n**Function:** `Collector.\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=42 output_chars=575 preview=All 41 tests pass (1 skipped). The fix is complete.\\n\\n**Summary of the change:**\\n\\nIn `django/db/models/deletion.py`, line 280, I added `setattr(instance, model._\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=17 output_chars=313 preview=APPROVE\\n\\nThe one-line addition of `setattr(instance, model._meta.pk.attname, None)` on line 280 in `django/db/models/deletion.py` is exactly as specified in the\nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=33 tools=32 [read:13 grep:5 bash:3 project:3 find:2 ls:2 run_tests:2 edit_block:1 git:1]\ntokens by model:\n  deepseek-v4-flash: in=7903 cache_r=230528 cache_w=0 out=2606 reasoning=782 total=241037 \u2014 $0.0211\n  deepseek-v4-pro: in=4490 cache_r=91904 cache_w=0 out=2062 reasoning=808 total=98456 \u2014 $0.0099\n  TOTAL: in=12393 cache_r=322432 cache_w=0 out=4668 reasoning=1590 total=339493 \u2014 $0.0311\npatch written to \"/tmp/out.patch\" (614 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 6.40s):\n  verify: 3.71s (58% n=2)\n  baseline: 2.60s (41%)\n  discover: 0.06s (1%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 614,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 87.5
+}

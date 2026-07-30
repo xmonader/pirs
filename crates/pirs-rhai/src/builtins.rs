@@ -20,6 +20,7 @@ const PLAN_CRITIC_EXEC: &str = include_str!("../builtins/plan-critic-exec.rhai")
 const WIDE_PLAN_EXEC: &str = include_str!("../builtins/wide-plan-exec.rhai");
 const PLAN_EXEC_WEAK: &str = include_str!("../builtins/plan-exec-weak.rhai");
 const SPARK_EMBER: &str = include_str!("../builtins/spark-ember.rhai");
+const WEAK_DRIVE: &str = include_str!("../builtins/weak-drive.rhai");
 
 /// Primary product strategies (strong-plan/weak-exec pitch). Others remain
 /// available by name but are not the front-door set.
@@ -32,6 +33,8 @@ const SOURCES: &[(&str, &str)] = &[
     ("plan-exec-weak", PLAN_EXEC_WEAK),
     // soulrs dual-mode analogue (spark explore fan → ember code):
     ("spark-ember", SPARK_EMBER),
+    // weak drives; strong only at plan+review checkpoints (multi-provider hybrid):
+    ("weak-drive", WEAK_DRIVE),
 ];
 
 /// Names of the built-in strategies, in display order.
@@ -64,11 +67,13 @@ fn registry() -> &'static HashMap<&'static str, Strategy> {
 /// Canonicalize user-facing aliases to registry keys.
 /// `plan-exec-critic` is accepted as a synonym for `plan-critic-exec`.
 /// `dual` / `soul-dual` map to `spark-ember` (soulrs taskRouter analogue).
+/// `advisor` / `weak-strong` / `advise-exec` map to `weak-drive`.
 pub fn canonicalize_name(name: &str) -> &str {
     match name {
         "plan-exec-critic" | "plan_critic_exec" => "plan-critic-exec",
         "plan_exec" => "plan-exec",
         "dual" | "soul-dual" | "spark_ember" | "soulrs-dual" => "spark-ember",
+        "advisor" | "weak-strong" | "advise-exec" | "weak_drive" | "weak-advisor" => "weak-drive",
         other => other,
     }
 }
@@ -227,5 +232,66 @@ mod tests {
         assert_eq!(b.name, c.name);
         assert_eq!(canonicalize_name("dual"), "spark-ember");
         assert_eq!(canonicalize_name("soulrs-dual"), "spark-ember");
+    }
+
+    #[test]
+    fn weak_drive_is_plan_exec_review_fixup() {
+        let s = builtin("weak-drive").unwrap();
+        assert!(!s.persist_across_attempts);
+        assert!(
+            s.hybrid,
+            "weak-drive enables agentpy hybrid thrash→advisor on full phases"
+        );
+        assert_eq!(s.steps.len(), 4, "plan → exec → review → fixup");
+        match (&s.steps[0], &s.steps[1], &s.steps[2], &s.steps[3]) {
+            (Step::Solo(plan), Step::Solo(exec), Step::Solo(review), Step::Solo(fixup)) => {
+                assert_eq!(plan.scope, ToolScope::ReadOnly);
+                assert_eq!(exec.scope, ToolScope::Full);
+                assert_eq!(review.scope, ToolScope::ReadOnly);
+                assert_eq!(fixup.scope, ToolScope::Full);
+                assert!(
+                    plan.system.contains("STRONG") || plan.system.contains("advisor"),
+                    "plan system: {}",
+                    plan.system
+                );
+                assert!(
+                    exec.system.contains("WEAK") || exec.system.contains("executor"),
+                    "exec system: {}",
+                    exec.system
+                );
+                assert!(
+                    review.system.contains("APPROVE") && review.system.contains("REVISE"),
+                    "review must gate on APPROVE/REVISE: {}",
+                    review.system
+                );
+                assert!(
+                    review.prompt.contains("{prev_0}"),
+                    "review must keep the original plan via prev_0: {}",
+                    review.prompt
+                );
+                assert_eq!(
+                    fixup.skip_if_prev_prefix.as_deref(),
+                    Some("APPROVE"),
+                    "fixup must skip free on APPROVE"
+                );
+                assert!(
+                    fixup.prompt.contains("{prev}"),
+                    "fixup applies review: {}",
+                    fixup.system
+                );
+            }
+            _ => panic!("weak-drive must be four solo phases"),
+        }
+    }
+
+    #[test]
+    fn advisor_alias_resolves_to_weak_drive() {
+        let a = builtin("advisor").expect("advisor alias");
+        let b = builtin("weak-strong").expect("weak-strong alias");
+        let c = builtin("weak-drive").expect("canonical");
+        assert_eq!(a.name, c.name);
+        assert_eq!(b.name, c.name);
+        assert_eq!(canonicalize_name("advisor"), "weak-drive");
+        assert_eq!(canonicalize_name("advise-exec"), "weak-drive");
     }
 }

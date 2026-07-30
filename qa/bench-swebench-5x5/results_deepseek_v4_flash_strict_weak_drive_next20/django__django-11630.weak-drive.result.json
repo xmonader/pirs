@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11630",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11630:latest",
+  "container": "pirsbench-django--django-11630-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 38114,
+    "cache_read": 1113728,
+    "cache_write": 0,
+    "out": 18226,
+    "reasoning": 10340,
+    "total": 1170068,
+    "cost_usd": 0.1083
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785352449-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=37 output_chars=4272 preview=Now I have full context. Here is the fix plan:\\n\\n---\\n\\n## Fix Plan\\n\\n### 1. Modify `django/core/checks/model_checks.py` \u2014 add required imports\\n\\nAt line 1-6, add `c\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=38 output_chars=770 preview=All 16 tests pass, including all 4 `DuplicateDBTableTests`. The fix is complete and verified.\\n\\n**Summary of changes made to `django/core/checks/model_checks.py`\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=72 output_chars=1041 preview=The implementation matches the plan precisely:\\n\\n1. **Imports**: `from django.db import connections, router as db_router` \u2014 correct.\\n2. **Model objects stored**:\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=14 output_chars=751 preview=All 16 tests pass, including the 4 `DuplicateDBTableTests` cases:\\n\\n```\\ntest_collision_across_apps ... ok\\ntest_collision_in_same_app ... ok\\ntest_no_collision_for\nstrategy.run done name=weak-drive\nsession: turns=77 tools=80 [read:28 grep:27 bash:12 edit:3 project:3 find:2 ls:2 run_tests:2 git:1]\ntokens by model:\n  deepseek-v4-flash: in=15369 cache_r=318464 cache_w=0 out=3606 reasoning=916 total=337439 \u2014 $0.0304\n  deepseek-v4-pro: in=22745 cache_r=795264 cache_w=0 out=14620 reasoning=9424 total=832629 \u2014 $0.0779\n  TOTAL: in=38114 cache_r=1113728 cache_w=0 out=18226 reasoning=10340 total=1170068 \u2014 $0.1083\npatch written to \"/tmp/out.patch\" (2641 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 38.52s):\n  bootstrap: 19.34s (50%)\n  discover: 17.73s (46%)\n  baseline: 1.05s (3%)\n  verify: 0.40s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 2641,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 367.0
+}

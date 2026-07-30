@@ -4,18 +4,22 @@ Same instance set. **Strict** = agent never sees `test_patch` / F2P names;
 grade after with oracle tests. **Shadow-verify** = same blindness + mid-loop
 hidden grading.
 
-| Campaign | Dir | Score | Notes |
-|----------|-----|------:|-------|
-| pirs strict-naive-v2 | `results_deepseek_v4_flash_strict_naive_v2_fifty` | **31/50** | export fix, `--no-strategy` |
-| pirs strict-v2 mono | `results_deepseek_v4_flash_strict_v2_fifty` | **29/50** | export fix, monolithic |
-| pi strict | `results_pi_deepseek_v4_flash_strict_fifty` | **27/50** | same harsh exam |
-| pirs strict-verify-v2 | `results_deepseek_v4_flash_strict_verify_v2_fifty` | **32/50** | hidden multi-attempt loop |
-| pirs strict spark-ember smoke | `results_deepseek_v4_flash_strict_spark_ember_smoke` | **4/5** | dual-mode strategy smoke (strict) |
-| pirs strict spark-ember next20 | `results_deepseek_v4_flash_strict_spark_ember_next20` | **9/20** | dual-mode batch after smoke |
-| pirs strict v1 | `results_deepseek_v4_flash_strict_fifty` | **20/50** | pre-export-fix (corrupt patches) |
-| pirs fair | `results_deepseek_v4_flash_fair_fifty` | 45/50 | test_patch pre-applied |
-| pirs RAW ids | `results_deepseek_v4_flash_rawids_fifty` | 46/50 | F2P names spoon-fed |
-| pirs filtered | `results_deepseek_v4_flash_fifty` | 42/50 | earlier protocol |
+**Default model column = executor.** Only **weak-drive** also uses a second model
+(`deepseek-v4-pro` as `--plan-model` for readonly plan/review).
+
+| Campaign | Models | Dir | Score | Notes |
+|----------|--------|-----|------:|-------|
+| **pirs strict weak-drive** | **flash + pro** | `results_deepseek_v4_flash_strict_weak_drive_fifty` | **34/50** | `--model deepseek-v4-flash --plan-model deepseek-v4-pro --strategy weak-drive`; reports in dir |
+| pirs strict-verify-v2 | flash only | `results_deepseek_v4_flash_strict_verify_v2_fifty` | **32/50** | mono + hidden multi-attempt loop |
+| pirs strict-naive-v2 | flash only | `results_deepseek_v4_flash_strict_naive_v2_fifty` | **31/50** | export fix, `--no-strategy` |
+| pirs strict-v2 mono | flash only | `results_deepseek_v4_flash_strict_v2_fifty` | **29/50** | export fix, monolithic |
+| pi strict | flash only | `results_pi_deepseek_v4_flash_strict_fifty` | **27/50** | same harsh exam |
+| pirs strict spark-ember smoke | flash only | `results_deepseek_v4_flash_strict_spark_ember_smoke` | **4/5** | dual-mode; no plan-model in results |
+| pirs strict spark-ember next20 | flash only | `results_deepseek_v4_flash_strict_spark_ember_next20` | **9/20** | dual-mode batch after smoke |
+| pirs strict v1 | flash only | `results_deepseek_v4_flash_strict_fifty` | **20/50** | pre-export-fix (corrupt patches) |
+| pirs fair | flash only | `results_deepseek_v4_flash_fair_fifty` | 45/50 | test_patch pre-applied |
+| pirs RAW ids | flash only | `results_deepseek_v4_flash_rawids_fifty` | 46/50 | F2P names spoon-fed |
+| pirs filtered | flash only | `results_deepseek_v4_flash_fifty` | 42/50 | earlier protocol |
 
 ## Always land results in-repo
 

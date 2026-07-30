@@ -10,6 +10,10 @@
 //!     phases: [
 //!         #{ system: "You plan...",  prompt: "Investigate {issue}\n{targets}", scope: "readonly" },
 //!         #{ system: "You execute...", prompt: "Plan:\n{prev}\nApply it.",       scope: "full" },
+//!         // Optional: skip this phase when the previous output starts with APPROVE
+//!         // (case-insensitive). Also: {prev_0}…{prev_N} = earlier phase outputs.
+//!         #{ system: "fixup", prompt: "Review:\n{prev}\nPlan was:\n{prev_0}",
+//!            scope: "full", skip_if_prev_prefix: "APPROVE" },
 //!     ],
 //! }
 //! ```
@@ -64,8 +68,8 @@ fn get_str(map: &Map, key: &str) -> Option<String> {
     map.get(key).and_then(|v| v.clone().into_string().ok())
 }
 
-/// Parse one phase map (`system`, `prompt`, `scope?`, `model?`). `where_` labels
-/// the phase in error messages.
+/// Parse one phase map (`system`, `prompt`, `scope?`, `model?`,
+/// `skip_if_prev_prefix?`). `where_` labels the phase in error messages.
 fn phase_from_map(pm: &Map, where_: &str) -> anyhow::Result<Phase> {
     let system =
         get_str(pm, "system").ok_or_else(|| anyhow!("{where_} is missing a `system` string"))?;
@@ -78,11 +82,15 @@ fn phase_from_map(pm: &Map, where_: &str) -> anyhow::Result<Phase> {
     };
     // Optional per-phase model override — the Oracle lever.
     let model = get_str(pm, "model");
+    // Optional free skip: e.g. skip fixup when review returned APPROVE.
+    let skip_if_prev_prefix = get_str(pm, "skip_if_prev_prefix")
+        .or_else(|| get_str(pm, "skip_if_prev_starts_with"));
     Ok(Phase {
         system,
         prompt,
         scope,
         model,
+        skip_if_prev_prefix,
     })
 }
 
@@ -129,6 +137,11 @@ pub fn strategy_from_map(map: Map, default_name: &str) -> anyhow::Result<Strateg
         .get("persist")
         .and_then(|v| v.as_bool().ok())
         .unwrap_or(false);
+    // Agentpy-style weak-drive: thrash escalates to plan-model advisor mid-loop.
+    let hybrid = map
+        .get("hybrid")
+        .and_then(|v| v.as_bool().ok())
+        .unwrap_or(false);
 
     let phases_dyn = map
         .get("phases")
@@ -153,6 +166,7 @@ pub fn strategy_from_map(map: Map, default_name: &str) -> anyhow::Result<Strateg
         name,
         steps,
         persist_across_attempts: persist,
+        hybrid,
     })
 }
 
@@ -280,5 +294,22 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("phases"), "{err}");
+    }
+
+    #[test]
+    fn skip_if_prev_prefix_parses() {
+        let src = r#"
+            #{ phases: [
+                #{ system: "r", prompt: "review", scope: "readonly" },
+                #{ system: "f", prompt: "fix {prev}", scope: "full",
+                   skip_if_prev_prefix: "APPROVE" },
+            ] }
+        "#;
+        let s = load_strategy_str(src, "x").unwrap();
+        assert_eq!(
+            solo(&s.steps[1]).skip_if_prev_prefix.as_deref(),
+            Some("APPROVE")
+        );
+        assert_eq!(solo(&s.steps[0]).skip_if_prev_prefix, None);
     }
 }

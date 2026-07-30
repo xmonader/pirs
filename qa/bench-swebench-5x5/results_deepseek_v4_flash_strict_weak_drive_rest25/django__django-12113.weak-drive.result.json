@@ -1,0 +1,30 @@
+{
+  "id": "django__django-12113",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-12113:latest",
+  "container": "pirsbench-django--django-12113-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 92925,
+    "cache_read": 2794624,
+    "cache_write": 0,
+    "out": 42656,
+    "reasoning": 31292,
+    "total": 2930205,
+    "cost_usd": 0.2676
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785357800-31 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=86 output_chars=0 preview=\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=82 output_chars=80 preview=Let me also run the full admin_views test module to make sure nothing is broken:\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=62 output_chars=973 preview=REVISE\\n\\nThe `tests/test_sqlite.py` is Django's **default** test settings module (see `runtests.py:535`). Changing it to file-based databases alters behavior for\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=23 output_chars=845 preview=All 3 tests pass with `--keepdb` (no more `database is locked` error).\\n\\n## Summary of changes\\n\\n| File | Action |\\n|---|---|\\n| `tests/test_sqlite.py` | **Reverted\nstrategy.run done name=weak-drive\nsession: turns=116 tools=133 [read:56 grep:35 bash:18 git:6 code_map:4 project:4 run_tests:3 edit_block:2 find:2 ls:2 edit:1]\ntokens by model:\n  deepseek-v4-flash: in=45793 cache_r=1225472 cache_w=0 out=14840 reasoning=9375 total=1286105 \u2014 $0.1145\n  deepseek-v4-pro: in=47132 cache_r=1569152 cache_w=0 out=27816 reasoning=21917 total=1644100 \u2014 $0.1532\n  TOTAL: in=92925 cache_r=2794624 cache_w=0 out=42656 reasoning=31292 total=2930205 \u2014 $0.2676\npatch written to \"/tmp/out.patch\" (525 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 1.64s):\n  baseline: 0.78s (48%)\n  verify: 0.77s (47%)\n  discover: 0.05s (3%)\n  bootstrap: 0.03s (2%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 525,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 671.7
+}

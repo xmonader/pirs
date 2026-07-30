@@ -19,7 +19,7 @@ const BUILTIN: &[(&str, &str)] = &[
     ("/thoughts", "expand/collapse model thinking"),
     ("/context", "show multi-root work context"),
     ("/plan-model", "planner fuzzy picker or set"),
-    ("/strategy", "plan-exec | plan-critic-exec | monolithic | none"),
+    ("/strategy", "plan-exec | plan-critic-exec | weak-drive | monolithic | none"),
     ("/stats", "session usage + timing"),
     ("/usage", "alias for /stats"),
     ("/status", "runtime features, autonomy, packs, caps"),

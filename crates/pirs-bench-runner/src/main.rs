@@ -166,6 +166,7 @@ impl Common {
                 name: "none".to_string(),
                 steps: Vec::new(),
                 persist_across_attempts: true,
+                hybrid: false,
             });
         }
         let mut strategy = if let Some(profile) = self.profile()? {
@@ -224,6 +225,10 @@ enum StrategyKind {
     /// CLI aliases: `dual`, `soul-dual` (clap rename below).
     #[value(alias = "dual", alias = "soul-dual", alias = "soulrs-dual")]
     SparkEmber,
+    /// Weak executor drives; strong model only at plan + review checkpoints.
+    /// CLI aliases: `advisor`, `weak-strong`, `advise-exec`.
+    #[value(alias = "advisor", alias = "weak-strong", alias = "advise-exec", alias = "weak-advisor")]
+    WeakDrive,
 }
 
 impl From<StrategyKind> for Strategy {
@@ -235,6 +240,7 @@ impl From<StrategyKind> for Strategy {
             StrategyKind::PlanCriticExec => "plan-critic-exec",
             StrategyKind::WidePlanExec => "wide-plan-exec",
             StrategyKind::SparkEmber => "spark-ember",
+            StrategyKind::WeakDrive => "weak-drive",
         };
         pirs_rhai::builtins::builtin(name)
             .unwrap_or_else(|| panic!("built-in strategy {name:?} missing"))

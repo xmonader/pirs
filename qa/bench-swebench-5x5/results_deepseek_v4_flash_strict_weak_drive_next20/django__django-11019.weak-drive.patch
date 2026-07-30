@@ -1,0 +1,136 @@
+diff --git a/django/forms/widgets.py b/django/forms/widgets.py
+index 02aa32b207..68bd1506f2 100644
+--- a/django/forms/widgets.py
++++ b/django/forms/widgets.py
+@@ -6,6 +6,7 @@ import copy
+ import datetime
+ import re
+ import warnings
++from collections import defaultdict
+ from itertools import chain
+ 
+ from django.conf import settings
+@@ -14,8 +15,12 @@ from django.templatetags.static import static
+ from django.utils import datetime_safe, formats
+ from django.utils.dates import MONTHS
+ from django.utils.formats import get_format
++from django.utils.datastructures import OrderedSet
+ from django.utils.html import format_html, html_safe
+ from django.utils.safestring import mark_safe
++from django.utils.topological_sort import (
++    CyclicDependencyError, stable_topological_sort,
++)
+ from django.utils.translation import gettext_lazy as _
+ 
+ from .renderers import get_default_renderer
+@@ -59,22 +64,19 @@ class Media:
+ 
+     @property
+     def _css(self):
+-        css = self._css_lists[0]
+-        # filter(None, ...) avoids calling merge with empty dicts.
+-        for obj in filter(None, self._css_lists[1:]):
+-            css = {
+-                medium: self.merge(css.get(medium, []), obj.get(medium, []))
+-                for medium in css.keys() | obj.keys()
+-            }
+-        return css
++        if len(self._css_lists) <= 1:
++            return self._css_lists[0] if self._css_lists else {}
++        css = defaultdict(list)
++        for css_list in self._css_lists:
++            for medium, sublist in css_list.items():
++                css[medium].append(sublist)
++        return {medium: self.merge(*lists) for medium, lists in css.items()}
+ 
+     @property
+     def _js(self):
+-        js = self._js_lists[0]
+-        # filter(None, ...) avoids calling merge() with empty lists.
+-        for obj in filter(None, self._js_lists[1:]):
+-            js = self.merge(js, obj)
+-        return js
++        if len(self._js_lists) <= 1:
++            return self._js_lists[0] if self._js_lists else []
++        return self.merge(*self._js_lists)
+ 
+     def render(self):
+         return mark_safe('\n'.join(chain.from_iterable(getattr(self, 'render_' + name)() for name in MEDIA_TYPES)))
+@@ -115,38 +117,52 @@ class Media:
+         raise KeyError('Unknown media type "%s"' % name)
+ 
+     @staticmethod
+-    def merge(list_1, list_2):
++    def merge(*lists):
+         """
+-        Merge two lists while trying to keep the relative order of the elements.
+-        Warn if the lists have the same two elements in a different relative
++        Merge lists while trying to keep the relative order of the elements.
++        Warn if the lists have the same elements in a different relative
+         order.
+ 
+         For static assets it can be important to have them included in the DOM
+         in a certain order. In JavaScript you may not be able to reference a
+         global or in CSS you might want to override a style.
+         """
+-        # Start with a copy of list_1.
+-        combined_list = list(list_1)
+-        last_insert_index = len(list_1)
+-        # Walk list_2 in reverse, inserting each element into combined_list if
+-        # it doesn't already exist.
+-        for path in reversed(list_2):
+-            try:
+-                # Does path already exist in the list?
+-                index = combined_list.index(path)
+-            except ValueError:
+-                # Add path to combined_list since it doesn't exist.
+-                combined_list.insert(last_insert_index, path)
+-            else:
+-                if index > last_insert_index:
+-                    warnings.warn(
+-                        'Detected duplicate Media files in an opposite order:\n'
+-                        '%s\n%s' % (combined_list[last_insert_index], combined_list[index]),
+-                        MediaOrderConflictWarning,
+-                    )
+-                # path already exists in the list. Update last_insert_index so
+-                # that the following elements are inserted in front of this one.
+-                last_insert_index = index
++        lists = [l for l in lists if l]
++        if len(lists) <= 1:
++            return list(lists[0]) if lists else []
++        # Collect all direct ordering constraints from the original lists.
++        # A constraint (a, b) means "a appears immediately before b in a list".
++        original_constraints = {}
++        for list_ in lists:
++            for i in range(len(list_) - 1):
++                a, b = list_[i], list_[i + 1]
++                original_constraints[(a, b)] = True
++        # Sequential pairwise merge using the original algorithm.
++        combined_list = list(lists[0])
++        for list_ in lists[1:]:
++            last_insert_index = len(combined_list)
++            for path in reversed(list_):
++                try:
++                    index = combined_list.index(path)
++                except ValueError:
++                    combined_list.insert(last_insert_index, path)
++                else:
++                    if index > last_insert_index:
++                        # Only warn if the conflicting pair reflects a real
++                        # constraint from the original lists (not an artifact
++                        # of an intermediate merge).
++                        a = combined_list[last_insert_index]
++                        b = combined_list[index]
++                        # Check if (b, a) (the reversed order) appears as a
++                        # direct constraint in any original list, meaning
++                        # two original lists genuinely disagree.
++                        if (b, a) in original_constraints:
++                            warnings.warn(
++                                'Detected duplicate Media files in an opposite order:\n'
++                                '%s\n%s' % (a, b),
++                                MediaOrderConflictWarning,
++                            )
++                    last_insert_index = index
+         return combined_list
+ 
+     def __add__(self, other):

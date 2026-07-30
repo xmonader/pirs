@@ -1,0 +1,30 @@
+{
+  "id": "django__django-10914",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-10914:latest",
+  "container": "pirsbench-django--django-10914-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 24594,
+    "cache_read": 662016,
+    "cache_write": 0,
+    "out": 13048,
+    "reasoning": 7036,
+    "total": 699658,
+    "cost_usd": 0.0673
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785349289-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=36 output_chars=3418 preview=Now I have a clear understanding of the issue. Here is the fix plan:\\n\\n---\\n\\n1. **Change the default in `django/conf/global_settings.py`**\\n   - At line 307, chang\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=42 output_chars=579 preview=All edits are in place and the permission tests pass:\\n\\n1. **`django/conf/global_settings.py`** \u2014 Default changed from `None` to `0o644`\\n2. **`docs/ref/settings.\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=44 output_chars=369 preview=APPROVE\\nAll three edits match the original plan exactly (global_settings default \u2192 0o644, settings.txt default + description, checklist.txt language), the `_sav\nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=55 tools=64 [read:27 bash:14 grep:10 project:5 edit_block:2 code_map:1 edit:1 find:1 git:1 ls:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=5773 cache_r=203648 cache_w=0 out=2934 reasoning=730 total=212355 \u2014 $0.0190\n  deepseek-v4-pro: in=18821 cache_r=458368 cache_w=0 out=10114 reasoning=6306 total=487303 \u2014 $0.0483\n  TOTAL: in=24594 cache_r=662016 cache_w=0 out=13048 reasoning=7036 total=699658 \u2014 $0.0673\npatch written to \"/tmp/out.patch\" (2741 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(ReproFailed)\ntiming (total 0.84s):\n  baseline: 0.76s (90%)\n  discover: 0.05s (6%)\n  bootstrap: 0.03s (4%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 2741,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 213.6
+}

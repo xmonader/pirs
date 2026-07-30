@@ -128,12 +128,14 @@ mod tests {
             prompt: "p {issue}".into(),
             scope,
             model: None,
+            skip_if_prev_prefix: None,
         }
     }
     fn plan_exec() -> Strategy {
         Strategy {
             name: "plan-exec".into(),
             persist_across_attempts: false,
+            hybrid: false,
             steps: vec![
                 Step::Solo(ph("plan", ToolScope::ReadOnly)),
                 Step::Solo(ph("exec", ToolScope::Full)),
@@ -146,6 +148,7 @@ mod tests {
         Strategy {
             name: "plan-oracle-exec".into(),
             persist_across_attempts: false,
+            hybrid: false,
             steps: vec![
                 Step::Solo(ph("plan", ToolScope::ReadOnly)),
                 Step::Solo(critic),
@@ -157,6 +160,7 @@ mod tests {
         Strategy {
             name: "wide-plan-exec".into(),
             persist_across_attempts: false,
+            hybrid: false,
             steps: vec![
                 Step::Fan {
                     branches: (0..n).map(|_| ph("plan", ToolScope::ReadOnly)).collect(),
@@ -170,6 +174,7 @@ mod tests {
         Strategy {
             name: "monolithic".into(),
             persist_across_attempts: true,
+            hybrid: false,
             steps: vec![Step::Solo(ph("mono", ToolScope::Full))],
         }
     }

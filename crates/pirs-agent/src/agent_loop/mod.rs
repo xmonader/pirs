@@ -41,6 +41,9 @@ pub struct LoopConfig {
     /// When sequential tools run, if this returns true after a tool finishes,
     /// remaining tools in the batch are skipped (steering pending, etc.).
     pub skip_remaining_if: Option<std::sync::Arc<dyn Fn() -> bool + Send + Sync>>,
+    /// Agentpy hybrid: on thrash, ask the strong advisor and continue instead
+    /// of hard-stopping. `None` keeps the historical stop-on-thrash behavior.
+    pub hybrid: Option<crate::hybrid::HybridConfig>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -269,10 +272,31 @@ pub async fn run_agent_loop(
                 message: Box::new(assistant.clone()),
                 tool_results: results.clone(),
             });
-            // Thrash stop after tool_results are on the wire (protocol-safe).
+            // Thrash handling after tool_results are on the wire (protocol-safe).
+            // Default: hard stop. Hybrid (weak-drive): escalate to plan-model
+            // advisor and continue the weak loop — agentpy's reactive path.
             if had_calls {
                 if let Some(guard) = &config.thrash {
                     if let Some(msg) = guard.take_stop() {
+                        if let Some(hybrid) = &config.hybrid {
+                            if let Some(guidance) =
+                                hybrid.on_thrash(&msg, &context.messages).await
+                            {
+                                let advise = Message::user(guidance);
+                                emit(AgentEvent::MessageStart {
+                                    message: Box::new(advise.clone()),
+                                });
+                                context.messages.push(advise.clone());
+                                emit(AgentEvent::MessageEnd {
+                                    message: Box::new(advise.clone()),
+                                });
+                                new_messages.push(advise);
+                                // Continue the weak loop with advisor guidance.
+                                turn_count += 1;
+                                tool_call_count += results.len();
+                                continue;
+                            }
+                        }
                         let stop = Message::user(format!("[system thrash stop] {msg}"));
                         emit(AgentEvent::MessageStart {
                             message: Box::new(stop.clone()),

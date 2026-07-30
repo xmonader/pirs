@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11133",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11133:latest",
+  "container": "pirsbench-django--django-11133-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 26121,
+    "cache_read": 262272,
+    "cache_write": 0,
+    "out": 4412,
+    "reasoning": 1450,
+    "total": 292805,
+    "cost_usd": 0.0303
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785345654-31 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=21 output_chars=1968 preview=Now I have a complete understanding of the issue. Here's the fix plan:\\n\\n---\\n\\n**Plan**\\n\\n1. **Open `django/http/response.py`** and locate the `make_bytes` method \nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=23 output_chars=447 preview=All 32 existing tests pass. The fix is complete.\\n\\n**Summary**: Added a `memoryview` type check in `make_bytes()` in `django/http/response.py` \u2014 `if isinstance(v\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=20 output_chars=294 preview=APPROVE\\n\\nFix matches the plan exactly: `memoryview` check added in `make_bytes()` at the correct position (after `bytes`, before `str`). All content paths flow \nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=30 tools=31 [grep:7 read:7 bash:5 project:4 find:2 git:2 code_map:1 edit_block:1 ls:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=3588 cache_r=104576 cache_w=0 out=1374 reasoning=215 total=109538 \u2014 $0.0098\n  deepseek-v4-pro: in=22533 cache_r=157696 cache_w=0 out=3038 reasoning=1235 total=183267 \u2014 $0.0205\n  TOTAL: in=26121 cache_r=262272 cache_w=0 out=4412 reasoning=1450 total=292805 \u2014 $0.0303\npatch written to \"/tmp/out.patch\" (545 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 2.35s):\n  verify: 1.47s (62% n=2)\n  baseline: 0.78s (33%)\n  discover: 0.06s (3%)\n  bootstrap: 0.04s (2%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 545,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 88.2
+}

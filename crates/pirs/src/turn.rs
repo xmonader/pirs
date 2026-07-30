@@ -117,7 +117,9 @@ pub async fn run_strategy_turn(
 use pirs_agent::gate::{run_gated, GateOutcome};
 use pirs_agent::phase_agent::AgentPhaseDriver;
 use pirs_agent::profile::Profile;
-use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, ToolScope};
+use pirs_agent::strategy::{
+        pin_plan_model, run_strategy_async, AsyncPhaseDriver, PhaseReq, Task, ToolScope,
+    };
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -146,11 +148,40 @@ use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, T
     }
     let policy = profile.tools.clone();
 
+    // Agentpy hybrid (weak-drive): thrash→strong advisor mid-loop + ask_advisor tool.
+    // Requires --plan-model; without it hybrid degrades to phase-only behavior.
+    let hybrid_cfg = if strategy.hybrid {
+        match plan_model {
+            Some(pm) => {
+                eprintln!(
+                    "[hybrid] enabled — thrash escalates to plan-model '{pm}', ask_advisor available on full phases"
+                );
+                Some(pirs_agent::HybridConfig::new(
+                    Arc::clone(&base.provider),
+                    pm.to_string(),
+                    // Routing provider carries keys; no need to re-pass via options.
+                    None,
+                    input.to_string(),
+                    4,
+                ))
+            }
+            None => {
+                eprintln!(
+                    "[hybrid] strategy '{}' has hybrid=true but no --plan-model; thrash will hard-stop",
+                    strategy.name
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Retry only makes sense with a gate; default to 3 attempts when verifying.
     let attempts = max_attempts.unwrap_or(if verify.is_some() { 3 } else { 1 });
 
     eprintln!(
-        "[strategy '{}' · {} step(s){}{}{}]",
+        "[strategy '{}' · {} step(s){}{}{}{}]",
         strategy.name,
         strategy.steps.len(),
         profile_arg
@@ -159,6 +190,11 @@ use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, T
         plan_model
             .map(|m| format!(" · plan-model '{m}' · exec-model '{default_model}'"))
             .unwrap_or_default(),
+        if hybrid_cfg.is_some() {
+            " · hybrid"
+        } else {
+            ""
+        },
         verify
             .map(|_| format!(" · verify (≤{attempts} attempts)"))
             .unwrap_or_default(),
@@ -179,8 +215,12 @@ use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, T
         let all_messages = Rc::clone(&all_messages);
         let rec = rec_owned.clone();
         let phase_slot = Arc::clone(&phase_slot);
+        let hybrid_for_attempt = hybrid_cfg.clone();
         async move {
-            let mut driver = AgentPhaseDriver::new(|req: &PhaseReq| {
+            let hybrid_for_factory = hybrid_for_attempt.clone();
+            let rec_for_factory = rec.clone();
+            let phase_slot_for_factory = Arc::clone(&phase_slot);
+            let inner = AgentPhaseDriver::new(move |req: &PhaseReq| {
                 // Profile tool policy first (a role can forbid tools entirely),
                 // then the phase's read/write scope narrows a planner to nav-only.
                 let mut scoped: Vec<Arc<dyn AgentTool>> = tools_ref
@@ -190,10 +230,13 @@ use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, T
                     .collect();
                 if req.scope == ToolScope::ReadOnly {
                     scoped.retain(|t| READONLY_PHASE_TOOLS.contains(&t.name()));
+                } else if let Some(h) = &hybrid_for_factory {
+                    // Weak exec: agentpy ask_advisor tool (strong model behind the curtain).
+                    scoped.push(Arc::new(pirs_agent::AskAdvisorTool::new(h.clone())));
                 }
                 let model = req.model.clone().unwrap_or_else(|| model_ref.to_string());
                 eprintln!(
-                    "\n\x1b[2m── phase {} · model {} · {}\x1b[0m",
+                    "\n\x1b[2m── phase {} · model {} · {}{}\x1b[0m",
                     req.phase_id,
                     model,
                     if req.scope == ToolScope::ReadOnly {
@@ -201,17 +244,34 @@ use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, T
                     } else {
                         "full"
                     },
+                    if hybrid_for_factory.is_some() && req.scope == ToolScope::Full {
+                        " · hybrid"
+                    } else {
+                        ""
+                    },
                 );
-                if let Ok(mut p) = phase_slot.lock() {
+                if let Ok(mut p) = phase_slot_for_factory.lock() {
                     *p = req.phase_id.clone();
                 }
-                if let Some(rec) = &rec {
+                if let Some(rec) = &rec_for_factory {
                     crate::observability::record_phase_start(rec, req);
                 }
                 // Per-phase model so telemetry packs / session_meta see the active one.
                 pirs_rhai::set_session_meta(&pirs_rhai::current_session_id(), &model);
-                base.fork_for_phase(req.system.clone(), model, scoped)
+                let mut agent = base.fork_for_phase(req.system.clone(), model, scoped);
+                // Full-scope hybrid phases: thrash escalates instead of stopping.
+                if req.scope == ToolScope::Full {
+                    if let Some(h) = &hybrid_for_factory {
+                        agent = agent.with_hybrid(h.clone());
+                    }
+                }
+                agent
             });
+            // Capture plan after each readonly phase so thrash mid-exec has it.
+            let mut driver = HybridPlanCapture {
+                inner,
+                hybrid: hybrid_for_attempt.clone(),
+            };
             let task = Task {
                 issue: input.to_string(),
                 targets: Vec::new(),
@@ -225,6 +285,7 @@ use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, T
                     .map(|g| g.clone())
                     .unwrap_or_else(|_| "strategy".into());
                 let output_chars: usize = driver
+                    .inner
                     .messages()
                     .iter()
                     .map(|m| match m {
@@ -258,7 +319,7 @@ use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, T
             }
             all_messages
                 .borrow_mut()
-                .extend(driver.messages().iter().cloned());
+                .extend(driver.inner.messages().iter().cloned());
             result
         }
     };
@@ -305,6 +366,42 @@ use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, T
         }
     };
     Ok((report, passed))
+}
+
+/// Wraps the phase driver so the first readonly phase's text becomes the hybrid
+/// plan before full-scope exec runs (thrash mid-exec needs that plan).
+struct HybridPlanCapture<D> {
+    inner: D,
+    hybrid: Option<pirs_agent::HybridConfig>,
+}
+
+#[async_trait::async_trait(?Send)]
+impl<D: pirs_agent::strategy::AsyncPhaseDriver> pirs_agent::strategy::AsyncPhaseDriver
+    for HybridPlanCapture<D>
+{
+    async fn run_phase(
+        &mut self,
+        req: &pirs_agent::strategy::PhaseReq,
+    ) -> anyhow::Result<String> {
+        let out = self.inner.run_phase(req).await?;
+        if req.scope == pirs_agent::strategy::ToolScope::ReadOnly {
+            if let Some(h) = &self.hybrid {
+                // Prefer the first plan; later readonly review may overwrite if
+                // we always set — only set when empty so plan phase wins.
+                if h.plan().is_empty() && !out.trim().is_empty() {
+                    h.set_plan(out.clone());
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    async fn run_parallel(
+        &mut self,
+        reqs: &[pirs_agent::strategy::PhaseReq],
+    ) -> Vec<anyhow::Result<String>> {
+        self.inner.run_parallel(reqs).await
+    }
 }
 
 pub struct SteerHandle {

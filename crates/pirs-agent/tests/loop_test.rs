@@ -314,6 +314,7 @@ async fn steering_queue_primitive_injects_mid_run() {
         budgets: Budgets::default(),
         thrash: None,
         skip_remaining_if: None,
+        hybrid: None,
     };
     let emit: Emit = Arc::new(|_| {});
     let mut ctx = Context {
@@ -1160,6 +1161,7 @@ async fn thrash_stop_keeps_tool_use_result_pairs() {
         budgets: Budgets::default(),
         thrash: Some(thrash),
         skip_remaining_if: None,
+        hybrid: None,
     };
     let emit: Emit = Arc::new(|_| {});
     let mut ctx = Context {

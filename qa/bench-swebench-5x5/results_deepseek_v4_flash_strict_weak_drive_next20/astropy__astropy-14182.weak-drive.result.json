@@ -1,0 +1,30 @@
+{
+  "id": "astropy__astropy-14182",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14182:latest",
+  "container": "pirsbench-astropy--astropy-14182-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 44591,
+    "cache_read": 767488,
+    "cache_write": 0,
+    "out": 14584,
+    "reasoning": 9641,
+    "total": 826663,
+    "cost_usd": 0.0818
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785347992-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=41 output_chars=947 preview=1. Modify `RST.__init__` in `astropy/io/ascii/rst.py` (line 55) to accept and forward `header_rows`:\\n\\n   **Current:**\\n   ```python\\n   def __init__(self):\\n      \nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=15 output_chars=171 preview=Both the original RST output and the new `header_rows` feature work correctly. All 11 existing RST tests pass, and the scenario from the issue now succeeds with\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=45 output_chars=221 preview=APPROVE\\nThe diff matches the original plan exactly: `RST.__init__` forwards `header_rows`, and `RST.write` computes the separator index from `len(self.header.he\nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=43 tools=53 [read:21 grep:19 code_map:6 bash:2 edit_block:2 git:1 project:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=4392 cache_r=66560 cache_w=0 out=1021 reasoning=192 total=71973 \u2014 $0.0070\n  deepseek-v4-pro: in=40199 cache_r=700928 cache_w=0 out=13563 reasoning=9449 total=754690 \u2014 $0.0748\n  TOTAL: in=44591 cache_r=767488 cache_w=0 out=14584 reasoning=9641 total=826663 \u2014 $0.0818\npatch written to \"/tmp/out.patch\" (734 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 181.35s):\n  bootstrap: 150.27s (83%)\n  discover: 28.11s (15%)\n  baseline: 1.99s (1%)\n  verify: 0.98s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 734,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 476.2
+}

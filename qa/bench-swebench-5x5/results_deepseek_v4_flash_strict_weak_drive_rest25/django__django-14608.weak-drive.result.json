@@ -1,0 +1,30 @@
+{
+  "id": "django__django-14608",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-14608:latest",
+  "container": "pirsbench-django--django-14608-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 38391,
+    "cache_read": 948224,
+    "cache_write": 0,
+    "out": 10967,
+    "reasoning": 4472,
+    "total": 997582,
+    "cost_usd": 0.0888
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785359591-33 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=43 output_chars=2114 preview=Now I have a clear picture. Here is the self-contained fix plan:\\n\\n---\\n\\n## Fix Plan\\n\\n### Context\\nIn Forms, the `non_field_errors()` method returns an `ErrorList`\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=66 output_chars=1494 preview=All tests pass. Here's a summary of the changes made:\\n\\n## Summary\\n\\n**Problem:** FormSets' `non_form_errors()` lacked a distinguishing CSS class (like `nonfield`\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=24 output_chars=262 preview=APPROVE\\nAll three changes match the plan exactly: `_non_form_errors` initialized with `error_class='nonform'` at line 336, preserved in the `ValidationError` ca\nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=59 tools=71 [grep:21 read:20 bash:12 code_map:5 project:4 edit_block:3 find:2 run_tests:2 git:1 ls:1]\ntokens by model:\n  deepseek-v4-flash: in=19341 cache_r=553600 cache_w=0 out=4507 reasoning=1103 total=577448 \u2014 $0.0489\n  deepseek-v4-pro: in=19050 cache_r=394624 cache_w=0 out=6460 reasoning=3369 total=420134 \u2014 $0.0399\n  TOTAL: in=38391 cache_r=948224 cache_w=0 out=10967 reasoning=4472 total=997582 \u2014 $0.0888\npatch written to \"/tmp/out.patch\" (861 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 17.69s):\n  baseline: 9.20s (52%)\n  verify: 8.41s (48% n=2)\n  discover: 0.05s (0%)\n  bootstrap: 0.03s (0%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 861,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 196.2
+}

@@ -1,0 +1,30 @@
+{
+  "id": "astropy__astropy-14995",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14995:latest",
+  "container": "pirsbench-astropy--astropy-14995-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 25411,
+    "cache_read": 329472,
+    "cache_write": 0,
+    "out": 10715,
+    "reasoning": 7219,
+    "total": 365598,
+    "cost_usd": 0.0417
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785345744-31 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=30 output_chars=2269 preview=Here is the fix plan:\\n\\n---\\n\\n## Plan\\n\\n### 1. Fix `_arithmetic_mask` in `astropy/nddata/mixins/ndarithmetic.py`\\n\\nIn the method `_arithmetic_mask` (around line 485\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=14 output_chars=564 preview=All tests pass and the user's reproduction case works correctly:\\n\\n- **mask \u00d7 constant** \u2192 mask is copied over (was: `TypeError`)\\n- **mask \u00d7 no mask** \u2192 mask is \nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=13 output_chars=92 preview=APPROVE \u2014 single `elif` branch added exactly as planned; all 192 tests pass; no scope creep.\nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=26 tools=28 [read:8 git:4 grep:4 code_map:3 project:3 find:2 bash:1 edit:1 edit_block:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=4173 cache_r=69504 cache_w=0 out=1768 reasoning=451 total=75445 \u2014 $0.0079\n  deepseek-v4-pro: in=21238 cache_r=259968 cache_w=0 out=8947 reasoning=6768 total=290153 \u2014 $0.0338\n  TOTAL: in=25411 cache_r=329472 cache_w=0 out=10715 reasoning=7219 total=365598 \u2014 $0.0417\npatch written to \"/tmp/out.patch\" (715 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 133.99s):\n  bootstrap: 109.24s (82%)\n  discover: 18.26s (14%)\n  verify: 4.21s (3% n=2)\n  baseline: 2.28s (2%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 715,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 310.2
+}

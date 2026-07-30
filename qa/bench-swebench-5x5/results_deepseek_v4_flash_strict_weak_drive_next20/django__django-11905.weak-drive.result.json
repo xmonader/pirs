@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11905",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11905:latest",
+  "container": "pirsbench-django--django-11905-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 22397,
+    "cache_read": 631680,
+    "cache_write": 0,
+    "out": 11669,
+    "reasoning": 5704,
+    "total": 665746,
+    "cost_usd": 0.0631
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785354238-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=59 output_chars=1969 preview=Here is the self-contained fix plan:\\n\\n---\\n\\n1. **File: `django/db/models/lookups.py`** \u2014 In the `IsNull` class (around line 461), modify the `as_sql` method. Bef\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=23 output_chars=435 preview=The edit is in place exactly as planned. All 498 tests in the affected modules pass with no regressions. \\n\\n**Summary**: Added a `ValueError` check in `IsNull.as\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=26 output_chars=329 preview=The diff matches the plan precisely. `RelatedIsNull` inherits from `IsNull` without overriding `as_sql`, so both paths are covered. `prepare_rhs = False` ensure\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=22 output_chars=436 preview=All 748 tests pass (11 skipped). The fix is complete:\\n\\n**Change applied**: Added `isinstance(self.rhs, bool)` validation in `IsNull.as_sql()` that raises `Value\nstrategy.run done name=weak-drive\nsession: turns=58 tools=68 [grep:21 read:16 bash:8 find:8 project:4 git:3 ls:3 run_tests:3 code_map:1 edit_block:1]\ntokens by model:\n  deepseek-v4-flash: in=5624 cache_r=189824 cache_w=0 out=2559 reasoning=542 total=198007 \u2014 $0.0176\n  deepseek-v4-pro: in=16773 cache_r=441856 cache_w=0 out=9110 reasoning=5162 total=467739 \u2014 $0.0455\n  TOTAL: in=22397 cache_r=631680 cache_w=0 out=11669 reasoning=5704 total=665746 \u2014 $0.0631\npatch written to \"/tmp/out.patch\" (574 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 1.98s):\n  baseline: 1.37s (69%)\n  verify: 0.52s (26%)\n  discover: 0.05s (3%)\n  bootstrap: 0.03s (2%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 574,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 206.7
+}

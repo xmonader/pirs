@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11564",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11564:latest",
+  "container": "pirsbench-django--django-11564-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 62479,
+    "cache_read": 1556736,
+    "cache_write": 0,
+    "out": 23897,
+    "reasoning": 13559,
+    "total": 1643112,
+    "cost_usd": 0.1521
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785351769-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=81 output_chars=4047 preview=Now I have all the information needed. Here is the plan:\\n\\n---\\n\\n## Fix Plan: Add SCRIPT_NAME support to static/media URL generation\\n\\n### Problem\\n\\n`FileSystemStor\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=31 output_chars=1110 preview=Both edits are correctly applied and all relevant tests pass. Here's a summary:\\n\\n### Changes Made\\n\\n**1. `django/core/files/storage.py`** \u2014 `FileSystemStorage.ur\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=54 output_chars=674 preview=The implementation matches the plan exactly. Both edits are correct and the logic is sound:\\n\\n- `FileSystemStorage.url()` prepends `get_script_prefix().rstrip('/\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=37 output_chars=897 preview=All non-ASCII-related tests pass. Here's the summary:\\n\\n## Summary \u2014 Edits Applied\\n\\n### \u2705 `django/core/files/storage.py` \u2014 `FileSystemStorage.url()`\\n- After `url\nstrategy.run done name=weak-drive\nsession: turns=84 tools=115 [read:47 grep:30 bash:17 find:8 run_tests:4 project:3 edit_block:2 git:2 code_map:1 ls:1]\ntokens by model:\n  deepseek-v4-flash: in=15589 cache_r=357888 cache_w=0 out=5472 reasoning=1350 total=378949 \u2014 $0.0353\n  deepseek-v4-pro: in=46890 cache_r=1198848 cache_w=0 out=18425 reasoning=12209 total=1264163 \u2014 $0.1168\n  TOTAL: in=62479 cache_r=1556736 cache_w=0 out=23897 reasoning=13559 total=1643112 \u2014 $0.1521\npatch written to \"/tmp/out.patch\" (1452 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 2.22s):\n  baseline: 1.55s (70%)\n  verify: 0.55s (25%)\n  discover: 0.07s (3%)\n  bootstrap: 0.04s (2%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 1452,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 370.0
+}

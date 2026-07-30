@@ -58,6 +58,8 @@ pub struct Agent {
     running: Arc<AtomicBool>,
     cancel: CancelSlot,
     thrash: crate::thrash::ThrashGuard,
+    /// Agentpy-style hybrid: thrash escalates to strong advisor instead of stop.
+    hybrid: Option<crate::hybrid::HybridConfig>,
 }
 
 /// Stable handle for cancelling the agent's current run. The token inside is
@@ -90,12 +92,23 @@ impl Agent {
             running: Arc::new(AtomicBool::new(false)),
             cancel: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
             thrash: crate::thrash::ThrashGuard::new(),
+            hybrid: None,
         }
     }
 
     pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.system_prompt = prompt.into();
         self
+    }
+
+    /// Enable agentpy-style hybrid escalation (thrash → plan-model advisor).
+    pub fn with_hybrid(mut self, hybrid: crate::hybrid::HybridConfig) -> Self {
+        self.hybrid = Some(hybrid);
+        self
+    }
+
+    pub fn hybrid(&self) -> Option<&crate::hybrid::HybridConfig> {
+        self.hybrid.as_ref()
     }
 
     /// Build a sibling agent for one strategy phase: same provider, completion,
@@ -141,6 +154,9 @@ impl Agent {
             // let N parallel planners each calling the same `read` trip the
             // default max_repeats=3 loop detector spuriously.
             thrash: crate::thrash::ThrashGuard::new(),
+            // Hybrid config is shared across phases of one attempt so advisor
+            // budget and plan text survive plan → exec → review.
+            hybrid: self.hybrid.clone(),
         }
     }
 
@@ -373,6 +389,7 @@ impl Agent {
         };
 
         let thrash = self.thrash.clone();
+        let hybrid = self.hybrid.clone();
         let steer_peek = Arc::clone(&self.steering);
         let config = LoopConfig {
             model: self.model.clone(),
@@ -386,6 +403,7 @@ impl Agent {
             budgets: self.budgets.clone(),
             thrash: Some(thrash),
             skip_remaining_if: Some(Arc::new(move || !steer_peek.lock().unwrap().is_empty())),
+            hybrid,
         };
 
         let tools = self.tools.clone();

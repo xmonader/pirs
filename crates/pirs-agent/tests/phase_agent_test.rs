@@ -15,6 +15,7 @@ use pirs_agent::Agent;
 // only needs well-shaped strategies to drive the AgentPhaseDriver).
 fn ph(system: &str, prompt: &str, scope: ToolScope, model: Option<&str>) -> Phase {
     Phase {
+        skip_if_prev_prefix: None,
         system: system.into(),
         prompt: prompt.into(),
         scope,
@@ -25,6 +26,7 @@ fn plan_oracle_exec(oracle_model: &str) -> Strategy {
     Strategy {
         name: "plan-oracle-exec".into(),
         persist_across_attempts: false,
+        hybrid: false,
         steps: vec![
             Step::Solo(ph("plan-sys", "plan {issue}", ToolScope::ReadOnly, None)),
             Step::Solo(ph(
@@ -41,6 +43,7 @@ fn wide_plan_exec(n: usize) -> Strategy {
     Strategy {
         name: "wide-plan-exec".into(),
         persist_across_attempts: false,
+        hybrid: false,
         steps: vec![
             Step::Fan {
                 branches: (0..n)
@@ -214,6 +217,7 @@ async fn pin_plan_model_strong_plan_weak_exec_reaches_provider() {
     let mut strategy = Strategy {
         name: "plan-critic-exec".into(),
         persist_across_attempts: false,
+        hybrid: false,
         steps: vec![
             Step::Solo(ph(
                 "plan-sys",

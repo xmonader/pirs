@@ -1,0 +1,21 @@
+diff --git a/sklearn/preprocessing/_encoders.py b/sklearn/preprocessing/_encoders.py
+index 1e05aba59..f1d1e9d4e 100644
+--- a/sklearn/preprocessing/_encoders.py
++++ b/sklearn/preprocessing/_encoders.py
+@@ -111,6 +111,16 @@ class _BaseEncoder(BaseEstimator, TransformerMixin):
+                     # removed later.
+                     X_mask[:, i] = valid_mask
+                     Xi = Xi.copy()
++                    # If Xi is a fixed-width string array and the
++                    # replacement category is longer than its dtype
++                    # can hold, upcast to object to avoid truncation
++                    # (truncation causes spurious "unseen labels" errors).
++                    if Xi.dtype.kind == 'U':
++                        repl = self.categories_[i][0]
++                        # dtype.itemsize is bytes; for Unicode ('U') kind,
++                        # each character takes 4 bytes, so max chars = itemsize // 4
++                        if len(repl) > Xi.dtype.itemsize // 4:
++                            Xi = Xi.astype(object)
+                     Xi[~valid_mask] = self.categories_[i][0]
+             _, encoded = _encode(Xi, self.categories_[i], encode=True)
+             X_int[:, i] = encoded

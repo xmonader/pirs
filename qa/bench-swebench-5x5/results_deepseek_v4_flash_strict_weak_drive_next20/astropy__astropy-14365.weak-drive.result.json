@@ -1,0 +1,30 @@
+{
+  "id": "astropy__astropy-14365",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14365:latest",
+  "container": "pirsbench-astropy--astropy-14365-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 20929,
+    "cache_read": 204288,
+    "cache_write": 0,
+    "out": 4285,
+    "reasoning": 1915,
+    "total": 229502,
+    "cost_usd": 0.0247
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785348470-33 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=19 output_chars=1259 preview=Here is the fix plan:\\n\\n---\\n\\n1. **Edit `astropy/io/ascii/qdp.py`, line 63** \u2014 Change `_command_re` to use a case-insensitive non-capturing group so that `READ`, \nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=14 output_chars=551 preview=The fix works. The lowercase QDP command `read serr 1 2` is now parsed correctly, producing a `Table` with errors as expected. All existing QDP tests pass.\\n\\n**S\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=15 output_chars=222 preview=APPROVE\\n\\nThe single-line change is exactly as planned: `_command_re` now uses `(?i:...)` to make command keywords case-insensitive. All 834 tests pass (includin\nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=23 tools=22 [read:6 grep:5 project:5 bash:2 edit:1 find:1 git:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=4141 cache_r=65024 cache_w=0 out=1033 reasoning=224 total=70198 \u2014 $0.0068\n  deepseek-v4-pro: in=16788 cache_r=139264 cache_w=0 out=3252 reasoning=1691 total=159304 \u2014 $0.0179\n  TOTAL: in=20929 cache_r=204288 cache_w=0 out=4285 reasoning=1915 total=229502 \u2014 $0.0247\npatch written to \"/tmp/out.patch\" (475 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(FixNoFlip)\ntiming (total 166.75s):\n  bootstrap: 130.87s (78%)\n  discover: 32.91s (20%)\n  baseline: 2.01s (1%)\n  verify: 0.97s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 475,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 333.9
+}

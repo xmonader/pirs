@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11422",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11422:latest",
+  "container": "pirsbench-django--django-11422-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 41397,
+    "cache_read": 529024,
+    "cache_write": 0,
+    "out": 8359,
+    "reasoning": 4414,
+    "total": 578780,
+    "cost_usd": 0.0574
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785351622-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=33 output_chars=1783 preview=Now I understand the issue fully. Here's the fix plan:\\n\\n---\\n\\n## Plan\\n\\nThe root cause: when `manage.py` is run directly (`python manage.py runserver`), the `__ma\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=18 output_chars=260 preview=All 67 tests pass with the fix applied. The `test_module_without_spec` test (which verifies that a non-`__main__` module with `__spec__` deleted returns empty) \nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=19 output_chars=436 preview=The diff matches the original plan precisely. I traced through the `test_module_without_spec` case: module name is `'test_module'` (not `'__main__'`), so it fal\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=17 output_chars=606 preview=The fix is already in place exactly as the plan described:\\n\\n1. **Line 117**: `if not isinstance(module, ModuleType): continue` \u2014 Skip non-module types\\n2. **Line\nstrategy.run done name=weak-drive\nsession: turns=41 tools=42 [read:15 grep:7 project:5 bash:3 find:3 ls:2 run_tests:2 code_map:1 edit_block:1 git:1 web_fetch:1 web_search:1]\ntokens by model:\n  deepseek-v4-flash: in=8191 cache_r=155776 cache_w=0 out=2253 reasoning=662 total=166220 \u2014 $0.0156\n  deepseek-v4-pro: in=33206 cache_r=373248 cache_w=0 out=6106 reasoning=3752 total=412560 \u2014 $0.0418\n  TOTAL: in=41397 cache_r=529024 cache_w=0 out=8359 reasoning=4414 total=578780 \u2014 $0.0574\npatch written to \"/tmp/out.patch\" (1133 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 3.75s):\n  verify: 1.99s (53% n=2)\n  baseline: 1.68s (45%)\n  discover: 0.05s (1%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 1133,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 145.8
+}

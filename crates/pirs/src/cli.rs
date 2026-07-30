@@ -42,7 +42,8 @@ pub struct Cli {
     pub resume: bool,
 
     /// Run a multi-phase loop strategy for a one-shot prompt. Primary built-ins:
-    /// `monolithic`, `plan-exec`, `plan-critic-exec` (alias `plan-exec-critic`).
+    /// `monolithic`, `plan-exec`, `plan-critic-exec` (alias `plan-exec-critic`),
+    /// `weak-drive` (alias `advisor`: strong plan+review, weak exec+fixup).
     /// Also accepts other built-in names, `.pirs/strategies/<name>.rhai`, or a
     /// path to a .rhai script. No effect in the interactive REPL.
     /// Pair with `--plan-model` for strong-plan / weak-exec multi-model runs.

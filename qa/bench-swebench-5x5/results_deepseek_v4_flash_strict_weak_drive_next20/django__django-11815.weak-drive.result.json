@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11815",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11815:latest",
+  "container": "pirsbench-django--django-11815-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 21203,
+    "cache_read": 527232,
+    "cache_write": 0,
+    "out": 15442,
+    "reasoning": 9108,
+    "total": 563877,
+    "cost_usd": 0.0596
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785353976-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=17 output_chars=4072 preview=Now I have all the information needed. Here is the fix plan:\\n\\n---\\n\\n**Fix Plan: Enum migration serializer should use name-based access instead of value-based**\\n\\n\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=39 output_chars=602 preview=All 518 migration tests pass. The fix is complete.\\n\\n**Summary of changes:**\\n\\n1. **`django/db/migrations/serializer.py`** \u2014 Changed `EnumSerializer.serialize()` \nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=41 output_chars=624 preview=APPROVE\\n\\nChanges exactly match the original plan: `EnumSerializer.serialize()` now uses `self.value.name` with bracket-access syntax (`Status['GOOD']`), and all\nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=44 tools=50 [grep:13 read:13 bash:9 edit_block:6 find:4 project:3 git:1 run_tests:1]\ntokens by model:\n  deepseek-v4-flash: in=6096 cache_r=234368 cache_w=0 out=3428 reasoning=487 total=243892 \u2014 $0.0218\n  deepseek-v4-pro: in=15107 cache_r=292864 cache_w=0 out=12014 reasoning=8621 total=319985 \u2014 $0.0378\n  TOTAL: in=21203 cache_r=527232 cache_w=0 out=15442 reasoning=9108 total=563877 \u2014 $0.0596\npatch written to \"/tmp/out.patch\" (791 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 2.59s):\n  verify: 1.66s (64% n=2)\n  baseline: 0.84s (33%)\n  discover: 0.05s (2%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 791,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 252.4
+}

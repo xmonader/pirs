@@ -1,0 +1,40 @@
+diff --git a/sympy/printing/mathml.py b/sympy/printing/mathml.py
+index 1aa0ee01a2..83d5345f66 100644
+--- a/sympy/printing/mathml.py
++++ b/sympy/printing/mathml.py
+@@ -443,6 +443,16 @@ def _print_Function(self, e):
+             x.appendChild(self._print(arg))
+         return x
+ 
++    def _print_Indexed(self, e):
++        x = self.dom.createElement("apply")
++        x.appendChild(self._print(e.base))
++        for arg in e.indices:
++            x.appendChild(self._print(arg))
++        return x
++
++    def _print_IndexedBase(self, e):
++        return self._print(e.label)
++
+     def _print_Basic(self, e):
+         x = self.dom.createElement(self.mathml_tag(e))
+         for arg in e.args:
+@@ -1006,6 +1016,18 @@ def _print_polylog(self, expr, exp=None):
+         mrow.appendChild(brac)
+         return mrow
+ 
++    def _print_Indexed(self, e):
++        mrow = self.dom.createElement('mrow')
++        mrow.appendChild(self._print(e.base))
++        brac = self.dom.createElement('mfenced')
++        for arg in e.indices:
++            brac.appendChild(self._print(arg))
++        mrow.appendChild(brac)
++        return mrow
++
++    def _print_IndexedBase(self, e):
++        return self._print(e.label)
++
+     def _print_Basic(self, e):
+         mrow = self.dom.createElement('mrow')
+         mi = self.dom.createElement('mi')

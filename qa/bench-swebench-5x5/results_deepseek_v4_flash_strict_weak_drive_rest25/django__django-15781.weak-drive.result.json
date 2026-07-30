@@ -1,0 +1,30 @@
+{
+  "id": "django__django-15781",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-15781:latest",
+  "container": "pirsbench-django--django-15781-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 21545,
+    "cache_read": 668672,
+    "cache_write": 0,
+    "out": 8198,
+    "reasoning": 2924,
+    "total": 698415,
+    "cost_usd": 0.0616
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785360709-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=45 output_chars=1439 preview=Now I have a clear understanding of the issue and the fix.\\n\\n**Root cause:** `DjangoHelpFormatter` inherits from `argparse.HelpFormatter`, which collapses newlin\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=47 output_chars=865 preview=The fix works correctly. Here's a summary of what was done:\\n\\n**Changes made to `django/core/management/base.py`:**\\n\\n1. **Line 8**: Changed `from argparse import\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=33 output_chars=361 preview=APPROVE\\nChanges exactly match the plan: import `RawDescriptionHelpFormatter`, use it as `DjangoHelpFormatter`'s parent. `RawDescriptionHelpFormatter` only overr\nstrategy.skip 3/4 id=weak-drive#3 reason=prev_prefix:\"APPROVE\"\nstrategy.run done name=weak-drive\nsession: turns=60 tools=62 [grep:17 bash:12 read:11 project:6 git:4 job_wait:3 ls:2 run_tests:2 audit_tail:1 code_map:1 edit:1 find:1 recall:1]\ntokens by model:\n  deepseek-v4-flash: in=5082 cache_r=235904 cache_w=0 out=2873 reasoning=559 total=243859 \u2014 $0.0210\n  deepseek-v4-pro: in=16463 cache_r=432768 cache_w=0 out=5325 reasoning=2365 total=454556 \u2014 $0.0406\n  TOTAL: in=21545 cache_r=668672 cache_w=0 out=8198 reasoning=2924 total=698415 \u2014 $0.0616\npatch written to \"/tmp/out.patch\" (783 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Failed(ReproFailed)\ntiming (total 0.70s):\n  baseline: 0.61s (87%)\n  discover: 0.06s (8%)\n  bootstrap: 0.03s (5%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 783,
+  "exit_code": 1,
+  "solved": false,
+  "elapsed_s": 192.2
+}

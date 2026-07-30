@@ -34,14 +34,19 @@ pub struct Phase {
     /// System prompt establishing the phase's role.
     pub system: String,
     /// Prompt template. Placeholders: `{issue}`, `{targets}`, `{prev}` (the
-    /// previous phase's text output), `{verdict}` (the last attempt's verdict, or
-    /// empty on the first attempt).
+    /// previous phase's text output), `{prev_0}`…`{prev_N}` (0-based prior phase
+    /// outputs — so a review phase can still see the original plan after exec),
+    /// `{verdict}` (the last attempt's verdict, or empty on the first attempt).
     pub prompt: String,
     pub scope: ToolScope,
     /// Model override for this phase. `None` uses the run's default model. This is
     /// the "Oracle" lever: run e.g. the critic phase on a stronger reasoning model
     /// than the executor — a *different* model for the second opinion.
     pub model: Option<String>,
+    /// If set, skip this phase when the previous phase's output (trimmed) starts
+    /// with this prefix, case-insensitive. Used so a fixup phase can no-op for
+    /// free when review returned `APPROVE` (without burning a model call).
+    pub skip_if_prev_prefix: Option<String>,
 }
 
 /// How a fan-out step merges its branches' outputs into the `{prev}` of the next
@@ -73,6 +78,11 @@ pub struct Strategy {
     /// phase starts from a clean context each attempt (the plan/execute split,
     /// whose whole point is a fresh executor seeded with only the plan).
     pub persist_across_attempts: bool,
+    /// When true, full-scope executor phases get agentpy-style hybrid behavior:
+    /// thrash escalates to `--plan-model` advisor (continue loop) instead of a
+    /// hard stop, and an `ask_advisor` tool is offered. Requires a plan-model
+    /// at run time. Built-in `weak-drive` sets this.
+    pub hybrid: bool,
 }
 
 /// A fully-rendered phase ready to run: the engine has already substituted the
@@ -141,13 +151,30 @@ fn render_verdict(verdict: Option<&str>) -> String {
 }
 
 /// Substitute a phase template's placeholders. `prev` is the previous phase's
-/// output (empty for the first phase).
+/// output (empty for the first phase). Prefer [`render_with_priors`] when earlier
+/// phase outputs must stay visible after more than one hand-off.
 pub fn render(template: &str, task: &Task, prev: &str) -> String {
-    template
+    render_with_priors(template, task, prev, &[])
+}
+
+/// Like [`render`], also substituting `{prev_0}`…`{prev_N}` from `priors`
+/// (0-based list of completed phase outputs so far, oldest first).
+pub fn render_with_priors(template: &str, task: &Task, prev: &str, priors: &[String]) -> String {
+    let mut out = template
         .replace("{issue}", task.issue.trim())
         .replace("{targets}", render_targets(&task.targets).trim_end())
         .replace("{prev}", prev.trim())
-        .replace("{verdict}", &render_verdict(task.verdict.as_deref()))
+        .replace("{verdict}", &render_verdict(task.verdict.as_deref()));
+    for (i, p) in priors.iter().enumerate() {
+        out = out.replace(&format!("{{prev_{i}}}"), p.trim());
+    }
+    out
+}
+
+fn prev_matches_prefix(prev: &str, prefix: &str) -> bool {
+    prev.trim()
+        .to_ascii_uppercase()
+        .starts_with(&prefix.trim().to_ascii_uppercase())
 }
 
 /// Run a strategy end to end for one attempt: each phase's rendered prompt is
@@ -163,6 +190,7 @@ pub fn run_strategy(
     // strategies always start each phase clean.
     let fresh = !strategy.persist_across_attempts;
     let mut prev = String::new();
+    let mut priors: Vec<String> = Vec::new();
     eprintln!(
         "strategy.run name={} steps={} persist={} fresh_phases={}",
         strategy.name,
@@ -174,13 +202,24 @@ pub fn run_strategy(
         match step {
             Step::Solo(phase) => {
                 let id = format!("{}#{i}", strategy.name);
+                if let Some(prefix) = phase.skip_if_prev_prefix.as_deref() {
+                    if prev_matches_prefix(&prev, prefix) {
+                        eprintln!(
+                            "strategy.skip {i}/{} id={id} reason=prev_prefix:{prefix:?}",
+                            strategy.steps.len()
+                        );
+                        continue;
+                    }
+                }
                 eprintln!(
                     "strategy.step {i}/{} solo id={id} scope={:?}",
                     strategy.steps.len(),
                     phase.scope
                 );
-                let req = req_for(id, phase, task, &prev, fresh);
-                prev = driver.run_phase(&req)?;
+                let req = req_for(id, phase, task, &prev, &priors, fresh);
+                let out = driver.run_phase(&req)?;
+                prev = out.clone();
+                priors.push(out);
             }
             Step::Fan { branches, join } => {
                 eprintln!(
@@ -193,7 +232,7 @@ pub fn run_strategy(
                     .enumerate()
                     .map(|(b, phase)| {
                         let id = format!("{}#{i}.{b}", strategy.name);
-                        req_for(id, phase, task, &prev, fresh)
+                        req_for(id, phase, task, &prev, &priors, fresh)
                     })
                     .collect();
                 let results = driver.run_parallel(&reqs);
@@ -204,6 +243,7 @@ pub fn run_strategy(
                     anyhow::bail!("all parallel branches failed at step {i}");
                 }
                 prev = merge(*join, &outs);
+                priors.push(prev.clone());
                 eprintln!(
                     "strategy.step {i} fan merged_chars={}",
                     prev.chars().count()
@@ -247,12 +287,20 @@ pub async fn run_strategy_async(
 ) -> anyhow::Result<()> {
     let fresh = !strategy.persist_across_attempts;
     let mut prev = String::new();
+    let mut priors: Vec<String> = Vec::new();
     for (i, step) in strategy.steps.iter().enumerate() {
         match step {
             Step::Solo(phase) => {
                 let id = format!("{}#{i}", strategy.name);
-                let req = req_for(id, phase, task, &prev, fresh);
-                prev = driver.run_phase(&req).await?;
+                if let Some(prefix) = phase.skip_if_prev_prefix.as_deref() {
+                    if prev_matches_prefix(&prev, prefix) {
+                        continue;
+                    }
+                }
+                let req = req_for(id, phase, task, &prev, &priors, fresh);
+                let out = driver.run_phase(&req).await?;
+                prev = out.clone();
+                priors.push(out);
             }
             Step::Fan { branches, join } => {
                 let reqs: Vec<PhaseReq> = branches
@@ -260,7 +308,7 @@ pub async fn run_strategy_async(
                     .enumerate()
                     .map(|(b, phase)| {
                         let id = format!("{}#{i}.{b}", strategy.name);
-                        req_for(id, phase, task, &prev, fresh)
+                        req_for(id, phase, task, &prev, &priors, fresh)
                     })
                     .collect();
                 let results = driver.run_parallel(&reqs).await;
@@ -269,6 +317,7 @@ pub async fn run_strategy_async(
                     anyhow::bail!("all parallel branches failed at step {i}");
                 }
                 prev = merge(*join, &outs);
+                priors.push(prev.clone());
             }
         }
     }
@@ -276,11 +325,18 @@ pub async fn run_strategy_async(
 }
 
 /// Build a rendered request for one phase under the given `phase_id`.
-fn req_for(phase_id: String, phase: &Phase, task: &Task, prev: &str, fresh: bool) -> PhaseReq {
+fn req_for(
+    phase_id: String,
+    phase: &Phase,
+    task: &Task,
+    prev: &str,
+    priors: &[String],
+    fresh: bool,
+) -> PhaseReq {
     PhaseReq {
         phase_id,
         system: phase.system.clone(),
-        prompt: render(&phase.prompt, task, prev),
+        prompt: render_with_priors(&phase.prompt, task, prev, priors),
         scope: phase.scope,
         fresh,
         model: phase.model.clone(),
@@ -304,7 +360,7 @@ fn merge(join: Join, outs: &[String]) -> String {
 ///
 /// Full-scope executor / ember phases are left alone so they keep the run default
 /// (`--model` / weak executor). This is the product multi-model pitch:
-/// `--model <cheap> --plan-model <strong> --strategy plan-exec|plan-critic-exec|spark-ember`.
+/// `--model <cheap> --plan-model <strong> --strategy plan-exec|plan-critic-exec|spark-ember|weak-drive`.
 ///
 /// Applied after profile resolution so it overrides a profile-wide default on
 /// plan/critic/spark phases only.
@@ -373,12 +429,14 @@ mod tests {
             prompt: prompt.into(),
             scope,
             model: None,
+            skip_if_prev_prefix: None,
         }
     }
     fn monolithic() -> Strategy {
         Strategy {
             name: "monolithic".into(),
             persist_across_attempts: true,
+            hybrid: false,
             steps: vec![Step::Solo(ph(
                 "mono",
                 "fix {issue}\n{targets}",
@@ -390,6 +448,7 @@ mod tests {
         Strategy {
             name: "plan-exec".into(),
             persist_across_attempts: false,
+            hybrid: false,
             steps: vec![
                 Step::Solo(ph("plan", "plan {issue}\n{targets}", ToolScope::ReadOnly)),
                 Step::Solo(ph("exec", "exec {prev}", ToolScope::Full)),
@@ -400,6 +459,7 @@ mod tests {
         Strategy {
             name: "plan-critic-exec".into(),
             persist_across_attempts: false,
+            hybrid: false,
             steps: vec![
                 Step::Solo(ph("plan", "plan {issue}", ToolScope::ReadOnly)),
                 Step::Solo(ph("critic", "critic {prev}", ToolScope::ReadOnly)),
@@ -413,6 +473,7 @@ mod tests {
         Strategy {
             name: "plan-oracle-exec".into(),
             persist_across_attempts: false,
+            hybrid: false,
             steps: vec![
                 Step::Solo(ph("plan", "plan {issue}", ToolScope::ReadOnly)),
                 Step::Solo(critic),
@@ -427,6 +488,7 @@ mod tests {
         Strategy {
             name: "wide-plan-exec".into(),
             persist_across_attempts: false,
+            hybrid: false,
             steps: vec![
                 Step::Fan {
                     branches,
@@ -452,6 +514,81 @@ mod tests {
         assert!(out.contains("- t.py::test_add"));
         assert!(out.contains("prior: THE PLAN"));
         assert!(out.contains("gate verdict: NotYet"));
+    }
+
+    #[test]
+    fn render_with_priors_keeps_earlier_phase_outputs() {
+        let priors = vec!["PLAN_TEXT".into(), "EXEC_SUMMARY".into()];
+        let out = render_with_priors(
+            "plan={prev_0}\nexec={prev_1}\nlast={prev}",
+            &task(),
+            "EXEC_SUMMARY",
+            &priors,
+        );
+        assert!(out.contains("plan=PLAN_TEXT"));
+        assert!(out.contains("exec=EXEC_SUMMARY"));
+        assert!(out.contains("last=EXEC_SUMMARY"));
+    }
+
+    #[test]
+    fn skip_if_prev_prefix_skips_fixup_on_approve() {
+        let mut fixup = ph("fixup", "fixup {prev}", ToolScope::Full);
+        fixup.skip_if_prev_prefix = Some("APPROVE".into());
+        // Driver returns APPROVE for the review phase so fixup should not run.
+        struct ApproveThenFail;
+        impl PhaseDriver for ApproveThenFail {
+            fn run_phase(&mut self, req: &PhaseReq) -> anyhow::Result<String> {
+                if req.phase_id.ends_with("#1") {
+                    Ok("APPROVE\nlooks good".into())
+                } else if req.phase_id.ends_with("#2") {
+                    anyhow::bail!("fixup should have been skipped")
+                } else {
+                    Ok(format!("OUT[{}]", req.phase_id))
+                }
+            }
+        }
+        let s = Strategy {
+            name: "weak-drive-like".into(),
+            persist_across_attempts: false,
+            hybrid: true,
+            steps: vec![
+                Step::Solo(ph("plan", "plan {issue}", ToolScope::ReadOnly)),
+                Step::Solo(ph("review", "review {prev}", ToolScope::ReadOnly)),
+                Step::Solo(fixup),
+            ],
+        };
+        let mut d = ApproveThenFail;
+        run_strategy(&s, &mut d, &task()).unwrap();
+    }
+
+    #[test]
+    fn weak_drive_like_review_sees_plan_via_prev_0() {
+        let mut d = RecordingDriver::default();
+        let s = Strategy {
+            name: "wd".into(),
+            persist_across_attempts: false,
+            hybrid: true,
+            steps: vec![
+                Step::Solo(ph("plan", "plan {issue}", ToolScope::ReadOnly)),
+                Step::Solo(ph("exec", "exec {prev}", ToolScope::Full)),
+                Step::Solo(ph(
+                    "review",
+                    "plan was:\n{prev_0}\nexec said:\n{prev}",
+                    ToolScope::ReadOnly,
+                )),
+            ],
+        };
+        run_strategy(&s, &mut d, &task()).unwrap();
+        assert_eq!(d.calls.len(), 3);
+        let review_prompt = &d.calls[2].3;
+        assert!(
+            review_prompt.contains("OUTPUT_OF[wd#0]"),
+            "review must still see the plan via prev_0: {review_prompt}"
+        );
+        assert!(
+            review_prompt.contains("OUTPUT_OF[wd#1]"),
+            "review must see exec via prev: {review_prompt}"
+        );
     }
 
     #[test]

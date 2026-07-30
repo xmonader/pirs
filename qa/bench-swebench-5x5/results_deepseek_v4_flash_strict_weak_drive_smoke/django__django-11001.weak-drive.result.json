@@ -1,0 +1,30 @@
+{
+  "id": "django__django-11001",
+  "model": "deepseek-v4-flash",
+  "plan_model": "deepseek-v4-pro",
+  "label": "weak-drive",
+  "image": "swebench/sweb.eval.x86_64.django_1776_django-11001:latest",
+  "container": "pirsbench-django--django-11001-weak-drive",
+  "strategy": "weak-drive",
+  "raw_test_ids": false,
+  "hide_targets": true,
+  "fair": false,
+  "strict": true,
+  "strict_verify": false,
+  "tokens": {
+    "in": 39877,
+    "cache_read": 320896,
+    "cache_write": 0,
+    "out": 6442,
+    "reasoning": 2615,
+    "total": 367215,
+    "cost_usd": 0.0403
+  },
+  "stderr_tail": "plan-model: deepseek-v4-pro (read-only phases) \u00b7 exec-model: deepseek-v4-flash\nstrategy: weak-drive\nmode: agent-only (no baseline/reproduce/verify)\ntrace: run-1785345536-32 -> \"/tmp/trace.jsonl\"\nstrategy.run name=weak-drive steps=4 persist=false fresh_phases=true\nstrategy.step 0/4 solo id=weak-drive#0 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#0 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor writing a fix plan for a weaker coding model.\nphase.end id=weak-drive#0 attempt=1 messages=17 output_chars=1900 preview=Here is the fix plan:\\n\\n---\\n\\n1. **File**: `django/db/models/sql/compiler.py`, line 356 (inside `get_order_by`)\\n\\n   **Change**: Replace:\\n   ```python\\n   without_o\nstrategy.step 1/4 solo id=weak-drive#1 scope=Full\nphase.start role=EXEC id=weak-drive#1 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor implementing an APPROVED plan from a stronger advisor.\nphase.end id=weak-drive#1 attempt=1 messages=18 output_chars=661 preview=All tests pass:\\n- **ordering**: 23/23 OK\\n- **queries**: 364/364 OK (9 skipped, 2 expected failures \u2014 all pre-existing)\\n\\nBoth edits from the plan are applied:\\n\\n1\nstrategy.step 2/4 solo id=weak-drive#2 scope=ReadOnly\nphase.start role=PLAN id=weak-drive#2 scope=ReadOnly model=deepseek-v4-pro fresh=true attempt=1\nphase.system You are the STRONG advisor reviewing work done by a weaker executor.\nphase.end id=weak-drive#2 attempt=1 messages=21 output_chars=361 preview=Both `ordering_parts.search` call sites are patched, no stragglers. The diff is minimal, exactly matching the plan. The regex `(.*)\\s(ASC|DESC)(.*)` now receive\nstrategy.step 3/4 solo id=weak-drive#3 scope=Full\nphase.start role=EXEC id=weak-drive#3 scope=Full model=deepseek-v4-flash fresh=true attempt=1\nphase.system You are the WEAK executor applying a STRONG advisor's REVISE plan.\nphase.end id=weak-drive#3 attempt=1 messages=24 output_chars=224 preview=All tests pass. The fix (replacing `sql` with `' '.join(sql.split())` at both `ordering_parts.search` call sites) is already applied, and both the `queries` (36\nstrategy.run done name=weak-drive\nsession: turns=37 tools=39 [bash:10 grep:8 read:7 find:4 project:3 git:2 run_tests:2 audit_tail:1 edit:1 recall:1]\ntokens by model:\n  deepseek-v4-flash: in=19736 cache_r=192128 cache_w=0 out=2579 reasoning=640 total=214443 \u2014 $0.0216\n  deepseek-v4-pro: in=20141 cache_r=128768 cache_w=0 out=3863 reasoning=1975 total=152772 \u2014 $0.0187\n  TOTAL: in=39877 cache_r=320896 cache_w=0 out=6442 reasoning=2615 total=367215 \u2014 $0.0403\npatch written to \"/tmp/out.patch\" (1296 bytes)\noutcome: AgentPatch (ungraded)\n--- check ---\noutcome: Solved\ntiming (total 3.16s):\n  verify: 1.97s (62% n=2)\n  baseline: 1.10s (35%)\n  discover: 0.05s (2%)\n  bootstrap: 0.03s (1%)\n  fix: 0.00s (0%)",
+  "trace_copied": true,
+  "patch_copied": true,
+  "patch_bytes": 1296,
+  "exit_code": 0,
+  "solved": true,
+  "elapsed_s": 117.5
+}
