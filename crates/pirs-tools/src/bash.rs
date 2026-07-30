@@ -93,6 +93,11 @@ impl AgentTool for BashTool {
             bail!("working directory {} does not exist", self.cwd.display());
         }
 
+        // Hard denials (newline-safe). Packs may add more; they cannot loosen these.
+        if let Some(reason) = crate::shell_safety::catastrophic_shell_reason(&args.command) {
+            bail!("{reason}");
+        }
+
         // Soulforge-style pre-commit: run native lint+typecheck before git commit.
         // Skip with PIRS_NO_PRECOMMIT=1.
         if crate::project::looks_like_git_commit(&args.command)
@@ -117,7 +122,11 @@ impl AgentTool for BashTool {
                 if !matches!(pre.code, Some(0)) || pre.timed_out {
                     let body = format!("{}{}", pre.stdout, pre.stderr);
                     let tail = if body.len() > 4000 {
-                        body[body.len() - 4000..].to_string()
+                        let mut cut = body.len() - 4000;
+                        while cut < body.len() && !body.is_char_boundary(cut) {
+                            cut += 1;
+                        }
+                        body[cut..].to_string()
                     } else {
                         body
                     };

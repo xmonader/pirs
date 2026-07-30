@@ -1,6 +1,12 @@
 //! Loop / mistake detectors — stop thrash without requiring `--weak` packs.
+//!
+//! Detectors (harness-owned — do not rely on the model to self-report "stuck"):
+//! - identical tool signature repeats
+//! - consecutive tool/API error streak
+//! - **edit oscillation**: same path written with content hash A→B→A
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 /// Signature of a tool call for identity thrash detection.
@@ -145,6 +151,8 @@ pub struct ThrashGuard {
 struct ThrashInner {
     loops: LoopDetectionTracker,
     mistakes: MistakeTracker,
+    /// Recent content hashes per edited path (oldest→newest), for A→B→A detection.
+    edit_hashes: HashMap<String, VecDeque<u64>>,
     /// When set, next tool batch / turn should stop.
     stop_message: Option<String>,
 }
@@ -159,6 +167,7 @@ impl ThrashGuard {
             inner: Arc::new(Mutex::new(ThrashInner {
                 loops: LoopDetectionTracker::new(12, loop_repeats),
                 mistakes: MistakeTracker::new(mistake_streak),
+                edit_hashes: HashMap::new(),
                 stop_message: None,
             })),
         }
@@ -167,6 +176,10 @@ impl ThrashGuard {
     pub fn observe_tool_start(&self, name: &str, args: &serde_json::Value) -> Option<String> {
         let mut g = self.inner.lock().unwrap();
         if let Some(msg) = g.loops.observe(ToolSignature::new(name, args)) {
+            g.stop_message = Some(msg.clone());
+            return Some(msg);
+        }
+        if let Some(msg) = observe_edit_oscillation(&mut g.edit_hashes, name, args) {
             g.stop_message = Some(msg.clone());
             return Some(msg);
         }
@@ -195,6 +208,73 @@ impl ThrashGuard {
     pub fn is_same_instance(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.inner, &other.inner)
     }
+}
+
+/// Content fingerprint for write/edit tools (stable, short).
+fn content_hash(s: &str) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
+}
+
+fn edit_path_and_body(name: &str, args: &serde_json::Value) -> Option<(String, String)> {
+    let path = args
+        .get("path")
+        .or_else(|| args.get("target_file"))
+        .or_else(|| args.get("file_path"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let body = match name {
+        "write" => args.get("content").and_then(|v| v.as_str())?,
+        "edit" | "edit_block" | "safe_edit" => args
+            .get("new_string")
+            .or_else(|| args.get("new_str"))
+            .or_else(|| args.get("replacement"))
+            .or_else(|| args.get("content"))
+            .and_then(|v| v.as_str())?,
+        "ast_edit" => args
+            .get("body")
+            .or_else(|| args.get("content"))
+            .or_else(|| args.get("new_body"))
+            .and_then(|v| v.as_str())?,
+        _ => return None,
+    };
+    Some((path, body.to_string()))
+}
+
+/// Record a mutating edit's content hash. Returns a stop message on A→B→A.
+fn observe_edit_oscillation(
+    map: &mut HashMap<String, VecDeque<u64>>,
+    name: &str,
+    args: &serde_json::Value,
+) -> Option<String> {
+    if !matches!(
+        name,
+        "write" | "edit" | "edit_block" | "safe_edit" | "ast_edit"
+    ) {
+        return None;
+    }
+    let (path, body) = edit_path_and_body(name, args)?;
+    let h = content_hash(&body);
+    let hist = map.entry(path.clone()).or_default();
+    // Trip when this hash already appeared earlier and the previous write was different
+    // (A→B→A), not mere A→A retry of the same payload (loop detector covers that).
+    if !hist.is_empty() {
+        let last = *hist.back().unwrap();
+        if last != h && hist.iter().any(|x| *x == h) {
+            return Some(format!(
+                "edit oscillation: file `{path}` content returned to a previous hash \
+                 (A→B→A thrash). Stop rewriting the same region; re-read the file, \
+                 verify with tests, or escalate with a different approach."
+            ));
+        }
+    }
+    hist.push_back(h);
+    while hist.len() > 6 {
+        hist.pop_front();
+    }
+    None
 }
 
 #[cfg(test)]
@@ -274,6 +354,28 @@ mod tests {
         assert!(a.peek_stop().is_none());
         assert!(b.peek_stop().is_none());
         assert!(c.peek_stop().is_none());
+    }
+
+    #[test]
+    fn edit_oscillation_a_b_a_trips() {
+        let g = ThrashGuard::with_limits(10, 10);
+        let a = json!({"path": "f.rs", "content": "fn a() {}"});
+        let b = json!({"path": "f.rs", "content": "fn b() {}"});
+        assert!(g.observe_tool_start("write", &a).is_none());
+        assert!(g.observe_tool_start("write", &b).is_none());
+        let msg = g.observe_tool_start("write", &a).unwrap();
+        assert!(msg.contains("oscillation"), "{msg}");
+        assert!(msg.contains("f.rs"), "{msg}");
+    }
+
+    #[test]
+    fn same_content_rewrite_is_not_oscillation() {
+        // A→A is loop-signature thrash, not oscillation.
+        let g = ThrashGuard::with_limits(10, 10);
+        let a = json!({"path": "f.rs", "content": "fn a() {}"});
+        assert!(g.observe_tool_start("write", &a).is_none());
+        assert!(g.observe_tool_start("write", &a).is_none());
+        assert!(g.peek_stop().is_none());
     }
 }
 

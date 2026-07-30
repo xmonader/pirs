@@ -39,6 +39,7 @@ pub const BUNDLED_ORDER: &[&str] = &[
     "instincts",
     "mutation-guard",
     "path-guard",
+    "scope-creep",
     "project-discipline",
     "repo-pulse",
     "review-gate",
@@ -164,6 +165,10 @@ pub const BUNDLED: &[(&str, &str)] = &[
     (
         "bundled:path-guard.rhai",
         include_str!("../../../extensions/path-guard.rhai"),
+    ),
+    (
+        "bundled:scope-creep.rhai",
+        include_str!("../../../extensions/scope-creep.rhai"),
     ),
     (
         "bundled:project-discipline.rhai",

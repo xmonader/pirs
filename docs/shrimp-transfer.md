@@ -39,3 +39,17 @@ not a shrimp fork.
 
 Neither product vendors shrimp source; both depend on `pirs-agent` / `pirs-tools` / `pirs-ai` / registry.
 See [PRODUCTS.md](PRODUCTS.md).
+
+## Evidence-driven follow-ups (2026-07-30)
+
+From shrimp **run reports** + external code review (not taken as design gospel):
+
+| pirs change | Rationale |
+|-------------|-----------|
+| Hard `shell_safety` denials (newline-safe) | Avoid catastrophic patterns even if packs are off |
+| Edit oscillation in `ThrashGuard` (A→B→A) | Harness-owned stuck signal (hybrid can escalate) |
+| `weak-model` only clears stop-gate on real verify | `ls`/`echo` must not count as tests |
+| Completeness nudge after first successful edit | Multi-site incomplete fixes dominate clean misses |
+| `scope-creep` pack | Env/build file thrash (setup/tox/requirements) |
+
+Re-validate with pirs Lite/smoke before claiming score impact.

@@ -68,7 +68,7 @@ collisions.
 
 | Order | Pack | Role |
 |------:|------|------|
-| 1 | `weak-model.rhai` | Loop thrash detection, verify-after-edit, stop gate, `update_plan` + plan pin |
+| 1 | `weak-model.rhai` | Loop thrash detection, verify-after-edit (**real test/build only**), stop gate, completeness nudge, `update_plan` + plan pin |
 | 2 | `context-janitor.rhai` | Shrink stale giant tool outputs in outgoing context |
 | 3 | `env-doctor.rhai` | Block tools when toolchains are missing |
 | 4 | `goal.rhai` | Session goal pin (`[SESSION GOAL]`) |
@@ -100,6 +100,7 @@ Host APIs (after `register_core_host_apis()`): `project_profile(cwd)`,
 | `sandbox.rhai` | Overrides `bash` with an OS-level sandbox. |
 | `guardrails.rhai` | Hard-blocks catastrophic patterns (`rm -rf /`, `curl \| bash`, force-push, …). |
 | `path-guard.rhai` | Blocks commands whose targets resolve outside the working directory. |
+| `scope-creep.rhai` | Blocks edits to env/build files (`setup.py`, `tox.ini`, lockfiles, …); allowlist via `.pirs/scope-creep-allow.txt`. |
 | `blast-radius-judge.rhai` | Semantic blast-radius via sub-agent. |
 | `diff-shield.rhai` | Merge consecutive same-tool results to compress context. |
 | `dirty-guard.rhai` | Commit pre-existing user WIP before the AI edits a file. |

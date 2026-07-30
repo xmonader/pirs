@@ -18,12 +18,44 @@ const MAX_NO_PROGRESS = 6;
 const MAX_STOP_FIRES = 2;
 const MAX_CMD_FAILS = 2;
 
+// Commands that count as verification (not `ls` / `echo` / idle bash).
+// Any successful non-verify shell after an edit must NOT clear the stop gate.
+const VERIFY_MARKERS = [
+    "pytest", "cargo test", "cargo check", "npm test", "pnpm test", "yarn test",
+    "go test", "make test", "ctest", "python -m pytest", "python -m unittest",
+    "tox", "nox", "rake test", "mvn test", "gradle test", "dotnet test",
+    "run_tests",
+];
+
 fn is_mutate(name) {
     name == "edit" || name == "edit_block" || name == "write" || name == "safe_edit" || name == "ast_edit"
 }
 
 fn is_exec(name) {
     name == "bash" || name == "run_tests" || name == "project"
+}
+
+fn looks_like_verify_cmd(cmd) {
+    // Case-sensitive substrings (agent-typed commands are almost always lower).
+    let c = `${cmd}`;
+    if c.contains("\"action\":\"test\"") || c.contains("\"action\": \"test\"") {
+        return true;
+    }
+    if c.contains("action=test") || c.contains("action\": \"test") {
+        return true;
+    }
+    for m in VERIFY_MARKERS {
+        if c.contains(m) {
+            return true;
+        }
+    }
+    // Generic: cargo/npm/make/go + test token.
+    if (c.contains(" test") || c.contains("test "))
+        && (c.contains("cargo ") || c.contains("npm ") || c.contains("make ") || c.contains("go "))
+    {
+        return true;
+    }
+    false
 }
 
 // Normalize thrash key: tool name + path (if any) + arg JSON with whitespace
@@ -63,6 +95,18 @@ fn is_plan_pin(m) {
 }
 
 fn on_tool_call(id, name, args) {
+    if is_exec(name) {
+        // Capture command text for verify classification (bash / project).
+        let cmd = if args.contains("command") {
+            `${args.command}`
+        } else if args.contains("action") {
+            `action=${args.action}`
+        } else {
+            ""
+        };
+        state_set("last_exec_cmd", cmd);
+    }
+
     let key = thrash_key(name, args);
     let counts = if state_has("call_counts") { state_get("call_counts") } else { #{} };
     let n = (counts[key] ?? 0) + 1;
@@ -114,6 +158,12 @@ fn on_tool_result(id, name, result) {
             state_set("had_successful_mutate", true);
             state_set("verified_since_edit", false);
             state_set("idle_rounds", 0);
+            // Completeness: after a successful edit, once, ask for multi-site scan.
+            if !state_has("completeness_nudge_done") {
+                state_set("nudge", true);
+                state_set("nudge_kind", "completeness");
+                state_set("completeness_nudge_done", true);
+            }
             if state_has("last_mutate_path") {
                 let path = state_get("last_mutate_path");
                 let fails = if state_has("edit_fails") { state_get("edit_fails") } else { #{} };
@@ -141,10 +191,22 @@ fn on_tool_result(id, name, result) {
             // First failure: soft nudge. Second consecutive: stronger "change approach".
             state_set("nudge", true);
             state_set("nudge_kind", if streak >= MAX_CMD_FAILS { "cmd_fail_hard" } else { "cmd_fail" });
+            // Green→red style: a prior verify that later fails re-opens the gate.
+            if state_has("had_successful_mutate") && state_get("had_successful_mutate") {
+                let cmd = state_get("last_exec_cmd") ?? "";
+                if looks_like_verify_cmd(cmd) {
+                    state_set("verified_since_edit", false);
+                    state_set("needs_verify", true);
+                }
+            }
         } else {
             state_set("cmd_fail_streak", 0);
             state_set("idle_rounds", 0);
-            if state_has("had_successful_mutate") && state_get("had_successful_mutate") {
+            // Only real test/build/project verify clears the stop gate — not `ls`/`echo`.
+            let cmd = state_get("last_exec_cmd") ?? "";
+            let is_verify = name == "run_tests" || looks_like_verify_cmd(cmd)
+                || (name == "project" && looks_like_verify_cmd(`${result}`));
+            if is_verify && state_has("had_successful_mutate") && state_get("had_successful_mutate") {
                 state_set("needs_verify", false);
                 state_set("verified_since_edit", true);
                 state_set("had_test_run", true);
@@ -180,6 +242,11 @@ Your last shell/command failed. Do NOT re-run the same command. If the invocatio
             state_set("idle_rounds", 0);
             return `<system-reminder> kind=no_progress
 You have made several tool calls without a successful file change or test run. Restate the goal in one sentence, then take ONE different concrete step.
+</system-reminder>`;
+        }
+        if kind == "completeness" {
+            return `<system-reminder> kind=completeness
+After a successful edit: before claiming done, search for other sites of the same bug (same symbol, same pattern, companion files). Incomplete multi-site fixes are a common failure mode. Then run real tests — not a no-op command.
 </system-reminder>`;
         }
         return `<system-reminder> kind=repeat

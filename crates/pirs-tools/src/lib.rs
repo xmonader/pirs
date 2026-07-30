@@ -69,6 +69,7 @@ pub mod run_tests;
 pub mod safety_profile;
 pub mod sandbox;
 pub mod session_rewind;
+pub mod shell_safety;
 pub mod todo_tool;
 pub mod tool_preset;
 pub mod truncate;
@@ -136,6 +137,7 @@ pub use safety_profile::{
     profile_hook, profile_skips_approval, SafetyProfile,
 };
 pub use session_rewind::{host_undo, snapshot as rewind_snapshot, RewindTool};
+pub use shell_safety::{catastrophic_shell_reason, flatten_shell_command};
 pub use todo_tool::{TodoStore, TodoTool};
 pub use tool_preset::{apply_tool_preset, ToolPreset, ToolPresetConfig};
 pub use vision::vision_tools;
