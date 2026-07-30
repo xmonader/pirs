@@ -101,7 +101,8 @@ pub async fn handle_gateway_message(
             &reply,
         )
         .await;
-        // Crystallize / improve in background — don't block Telegram reply.
+        // Serve process is long-lived: crystallize off the reply path so
+        // Telegram delivery stays snappy. (CLI paths must await instead.)
         let transcript = pirs_claw::learn::session_transcript(&inbound.text, &reply, "gateway");
         let skills_owned: Vec<(String, String, String)> = skills
             .iter()
@@ -112,6 +113,9 @@ pub async fn handle_gateway_message(
         let provider_bg = provider.clone();
         let model_bg = model.to_string();
         let key_bg = key_for_learn.clone();
+        // Detach: gateway handler must not wait on secondary LLM work.
+        // Runtime lives for the life of `serve`, so the task is not dropped
+        // on reply return (unlike CLI chat/code, which must await).
         tokio::spawn(async move {
             if transcript.chars().count() >= 800 {
                 let _ = pirs_claw::learn::maybe_crystallize_skill(

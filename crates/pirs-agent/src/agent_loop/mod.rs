@@ -272,11 +272,17 @@ pub async fn run_agent_loop(
                 // the run — preserves role alternation and reduces re-send thrash.
                 let steers = config.hooks.steering();
                 if !steers.is_empty() {
-                    apply_soft_steer_to_last_tool_result(
+                    let applied = apply_soft_steer_to_last_tool_result(
                         &mut context.messages,
                         &mut new_messages,
+                        &mut results,
                         &steers,
                     );
+                    if !applied {
+                        // Fallback: inject as user messages next iteration
+                        // (merged with any later hook steers below).
+                        pending.extend(steers);
+                    }
                 }
             }
 
@@ -393,7 +399,14 @@ pub async fn run_agent_loop(
                     return (new_messages, None);
                 }
             }
-            pending = config.hooks.steering();
+            // Keep any soft-steer fallback user msgs already in `pending`, then
+            // drain fresh steers from hooks (do not overwrite re-queued steers).
+            let mut more = config.hooks.steering();
+            if pending.is_empty() {
+                pending = more;
+            } else if !more.is_empty() {
+                pending.append(&mut more);
+            }
         }
 
         let follow = config.hooks.follow_up();
@@ -438,13 +451,15 @@ fn steer_texts(msgs: &[Message]) -> Vec<String> {
         .collect()
 }
 
-/// Append soft-steer text to the last tool-result message in history.
+/// Append soft-steer text to the last tool-result in history + batch results.
 ///
 /// Returns true if the steer was applied. If there is no tool result to attach
-/// to, returns false and the caller should deliver steers as normal user msgs.
+/// to (or no usable steer text), returns false so the caller can re-queue
+/// steers as normal user messages (Hermes fallback).
 pub fn apply_soft_steer_to_last_tool_result(
     context_messages: &mut [Message],
     new_messages: &mut [Message],
+    batch_results: &mut [ToolResultMessage],
     steers: &[Message],
 ) -> bool {
     let texts = steer_texts(steers);
@@ -452,8 +467,9 @@ pub fn apply_soft_steer_to_last_tool_result(
         return false;
     }
     let marker = format_soft_steer_marker(&texts);
+
     let mut applied = false;
-    // Prefer mutating the last tool result in context (API history).
+    // 1) API history (context)
     for msg in context_messages.iter_mut().rev() {
         if let Message::ToolResult(tr) = msg {
             tr.content.push(pirs_ai::ContentBlock::text(marker.clone()));
@@ -461,23 +477,35 @@ pub fn apply_soft_steer_to_last_tool_result(
             break;
         }
     }
-    // Keep new_messages in sync (session append / events).
+    if !applied {
+        return false;
+    }
+    // 2) new_messages (session / return path)
     for msg in new_messages.iter_mut().rev() {
         if let Message::ToolResult(tr) = msg {
-            // Avoid double-append if context and new_messages alias the same content
-            // via clone — they are separate clones, so both need the marker.
             let already = tr
                 .content
                 .iter()
                 .filter_map(|b| b.as_text())
                 .any(|t| t.contains("[user steer"));
             if !already {
-                tr.content.push(pirs_ai::ContentBlock::text(marker));
+                tr.content.push(pirs_ai::ContentBlock::text(marker.clone()));
             }
             break;
         }
     }
-    applied
+    // 3) batch results (TurnEnd event payload — must match history)
+    if let Some(tr) = batch_results.last_mut() {
+        let already = tr
+            .content
+            .iter()
+            .filter_map(|b| b.as_text())
+            .any(|t| t.contains("[user steer"));
+        if !already {
+            tr.content.push(pirs_ai::ContentBlock::text(marker));
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -500,9 +528,18 @@ mod soft_steer_tests {
             }),
         ];
         let mut news = ctx.clone();
+        let mut batch = vec![ToolResultMessage {
+            tool_call_id: "1".into(),
+            tool_name: "bash".into(),
+            content: vec![ContentBlock::text("ok")],
+            details: None,
+            is_error: false,
+            terminate: false,
+            timestamp: 0,
+        }];
         let steers = vec![Message::user("actually use cargo test")];
         assert!(apply_soft_steer_to_last_tool_result(
-            &mut ctx, &mut news, &steers
+            &mut ctx, &mut news, &mut batch, &steers
         ));
         let text = match &ctx[1] {
             Message::ToolResult(tr) => tr.model_text(),
@@ -517,6 +554,23 @@ mod soft_steer_tests {
             _ => panic!("expected tool result"),
         };
         assert!(ntext.contains("[user steer"), "{ntext}");
+        // TurnEnd batch stays in sync
+        assert!(
+            batch[0].model_text().contains("[user steer"),
+            "batch: {}",
+            batch[0].model_text()
+        );
+    }
+
+    #[test]
+    fn soft_steer_without_tool_result_returns_false() {
+        let mut ctx = vec![Message::user("go")];
+        let mut news = vec![];
+        let mut batch: Vec<ToolResultMessage> = vec![];
+        let steers = vec![Message::user("hey")];
+        assert!(!apply_soft_steer_to_last_tool_result(
+            &mut ctx, &mut news, &mut batch, &steers
+        ));
     }
 
     #[test]

@@ -106,45 +106,39 @@ pub async fn run_chat(
             &reply,
         )
         .await;
-        // Crystallize / improve off the hot path so chat reply latency stays low.
+        // CLI exits after this function — must await crystallize (spawn would die).
+        // Gateway uses spawn (long-lived runtime); see gateway_msg.
         let transcript = pirs_claw::learn::session_transcript(text, &reply, "");
-        let skills_owned: Vec<(String, String, String)> = skills
-            .iter()
-            .map(|sk| (sk.name.clone(), sk.description.clone(), sk.body.clone()))
-            .collect();
-        let text_l = text.to_ascii_lowercase();
-        let reply_l = reply.to_ascii_lowercase();
-        let provider_bg = provider.clone();
-        let model_bg = model.to_string();
-        let key_bg = key_for_learn.clone();
-        tokio::spawn(async move {
-            let crystallized = pirs_claw::learn::maybe_crystallize_skill(
-                provider_bg.clone(),
-                &model_bg,
-                key_bg.clone(),
-                &transcript,
-                800,
-            )
-            .await;
-            if crystallized.is_none() {
-                for (name, description, body) in skills_owned {
-                    if text_l.contains(&name) || reply_l.contains(&name) {
-                        let md =
-                            format!("---\nname: {name}\ndescription: {description}\n---\n\n{body}");
-                        let _ = pirs_claw::learn::maybe_improve_skill(
-                            provider_bg.clone(),
-                            &model_bg,
-                            key_bg.clone(),
-                            &name,
-                            &md,
-                            &transcript,
-                            400,
-                        )
-                        .await;
-                    }
+        let crystallized = pirs_claw::learn::maybe_crystallize_skill(
+            provider.clone(),
+            model,
+            key_for_learn.clone(),
+            &transcript,
+            800,
+        )
+        .await;
+        if crystallized.is_none() {
+            let text_l = text.to_ascii_lowercase();
+            let reply_l = reply.to_ascii_lowercase();
+            for sk in skills {
+                if text_l.contains(&sk.name) || reply_l.contains(&sk.name) {
+                    let md = format!(
+                        "---\nname: {}\ndescription: {}\n---\n\n{}",
+                        sk.name, sk.description, sk.body
+                    );
+                    let _ = pirs_claw::learn::maybe_improve_skill(
+                        provider.clone(),
+                        model,
+                        key_for_learn.clone(),
+                        &sk.name,
+                        &md,
+                        &transcript,
+                        400,
+                    )
+                    .await;
                 }
             }
-        });
+        }
     }
     CliChannel.deliver(&OutboundReply::to(&inbound, reply))?;
     eprintln!(

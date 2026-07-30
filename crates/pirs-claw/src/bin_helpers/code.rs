@@ -140,22 +140,17 @@ pub async fn run_code(
         let reply = extract_assistant_reply(driver.messages())
             .unwrap_or_else(|| "(strategy completed; no final assistant text)".into());
         if do_learn {
+            // CLI process exits after return — await so crystallize is not dropped.
             let transcript =
                 pirs_claw::learn::session_transcript(prompt, &reply, "code strategy run");
-            let provider_bg = provider.clone();
-            let model_bg = model.to_string();
-            let key_bg = key_for_learn.clone();
-            // Isolate crystallize from the reply path (Hermes background review).
-            tokio::spawn(async move {
-                let _ = pirs_claw::learn::maybe_crystallize_skill(
-                    provider_bg,
-                    &model_bg,
-                    key_bg,
-                    &transcript,
-                    400,
-                )
-                .await;
-            });
+            let _ = pirs_claw::learn::maybe_crystallize_skill(
+                provider.clone(),
+                model,
+                key_for_learn.clone(),
+                &transcript,
+                400,
+            )
+            .await;
         }
         println!("{reply}");
         return Ok(());
@@ -186,20 +181,16 @@ pub async fn run_code(
     let msgs = agent.prompt(prompt).await?;
     if let Some(reply) = extract_assistant_reply(&msgs) {
         if do_learn {
+            // CLI: await crystallize (spawn dies on process exit).
             let transcript = pirs_claw::learn::session_transcript(prompt, &reply, "code run");
-            let provider_bg = provider.clone();
-            let model_bg = model.to_string();
-            let key_bg = key_for_learn.clone();
-            tokio::spawn(async move {
-                let _ = pirs_claw::learn::maybe_crystallize_skill(
-                    provider_bg,
-                    &model_bg,
-                    key_bg,
-                    &transcript,
-                    400,
-                )
-                .await;
-            });
+            let _ = pirs_claw::learn::maybe_crystallize_skill(
+                provider,
+                model,
+                key_for_learn,
+                &transcript,
+                400,
+            )
+            .await;
         }
         println!("{reply}");
     } else {

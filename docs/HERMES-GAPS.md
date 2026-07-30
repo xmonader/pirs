@@ -26,7 +26,7 @@ Legend: **Spine** = production-usable path · **Stub** = thin · **Skip** = inte
 | Modal / Daytona / Singularity | **Skip** | rejected |
 | FTS memory + nudge | **Spine** | session-stable digest in system; turn recall on **user** msg |
 | **Soul / user profile** | **Spine** | `~/.pirs/soul.md`, session-frozen inject (prompt-cache stable) |
-| Skill crystallize + improve | **Spine** | learn loop; crystallize runs **off the hot path** (background) |
+| Skill crystallize + improve | **Spine** | learn loop; gateway bg / CLI awaited (no dropped tasks) |
 | Aux model (compact) | **Spine** | `pirs --aux-model` / `PIRS_AUX_MODEL` for compaction summarize |
 | Skills Hub | **Skip** | moat |
 | Browser navigate / screenshot | **Spine** | `browser_navigate`, `browser_screenshot` (Chromium/HTTP) |

@@ -270,7 +270,10 @@ async fn length_stop_reason_fails_tool_calls_without_executing() {
 }
 
 #[tokio::test]
-async fn steering_message_injected_mid_run() {
+async fn steering_prequeued_injects_as_user_before_tools() {
+    // Steers queued *before* the run drain at the first boundary as user
+    // messages (nothing to soft-append yet). Mid-tool steers use soft-inject
+    // (see steering_queue_primitive_injects_mid_run).
     let provider = MockProvider::new(vec![
         tool_call_msg("c1", "echo", json!({"text": "x"})),
         text_msg("answer"),
@@ -281,6 +284,9 @@ async fn steering_message_injected_mid_run() {
     assert!(new.iter().any(
         |m| matches!(m, Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t == "steered"))
     ));
+    assert!(new
+        .iter()
+        .any(|m| matches!(m, Message::Assistant(a) if a.text() == "answer")));
 }
 
 #[tokio::test]
@@ -333,21 +339,17 @@ async fn steering_queue_primitive_injects_mid_run() {
     )
     .await;
 
-    // The queued message was injected as a user turn...
-    let steer_idx = msgs.iter().position(|m| {
-        matches!(m, Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t) if t.contains("edge case")))
+    // Soft-steer: edge-case text is on the tool result, not a separate user msg.
+    let tool = msgs.iter().find_map(|m| match m {
+        Message::ToolResult(r) => Some(r.model_text()),
+        _ => None,
     });
-    let steer_idx = steer_idx.expect("steering message must be injected");
-    // ...and it landed AFTER the tool result (i.e. mid-run, not with the initial prompt).
-    let tool_idx = msgs
-        .iter()
-        .position(|m| matches!(m, Message::ToolResult(_)))
-        .expect("tool result present");
+    let tool = tool.expect("tool result present");
     assert!(
-        steer_idx > tool_idx,
-        "steering must inject after the tool ran, not before"
+        tool.contains("edge case") && tool.contains("[user steer"),
+        "steering must soft-inject into tool result mid-run: {tool}"
     );
-    // ...and the loop continued to the final answer because of it.
+    // Loop continued to the final answer (soft-steer does not cancel).
     assert!(msgs
         .iter()
         .any(|m| matches!(m, Message::Assistant(a) if a.text() == "answer")));

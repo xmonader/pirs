@@ -393,11 +393,13 @@ impl ScheduleStore {
             let snap = j.clone();
             j.last_run = Some(now);
             j.last_status = Some("running".into());
-            j.last_error = None;
+            // Keep last_error until mark_fired/mark_failed (observability).
             if j.cron.is_some() {
                 j.next_fire = next_fire_for_job(j, now).unwrap_or(now + 60);
             } else if j.every_secs == 0 {
-                // One-shot: disable immediately so a crash cannot re-dispatch.
+                // One-shot at-most-once: park disabled while running so a crash
+                // mid-fire cannot double-dispatch. mark_failed re-arms for retry
+                // (fail budget); mark_fired leaves disabled.
                 j.enabled = false;
             } else {
                 j.next_fire = now.saturating_add(j.every_secs);
@@ -451,6 +453,7 @@ impl ScheduleStore {
                 j.last_status = Some("error".into());
                 j.last_error = Some(truncate_err(err, 500));
                 j.fail_count = j.fail_count.saturating_add(1);
+                let is_oneshot = j.every_secs == 0 && j.cron.is_none();
                 // Backoff after 3+ consecutive failures.
                 if j.fail_count >= 3 {
                     let shift = (j.fail_count - 2).min(8); // 2^1 .. 2^8
@@ -463,7 +466,11 @@ impl ScheduleStore {
                     };
                     let backoff = base.saturating_mul(1u64 << shift).min(24 * 3600);
                     j.next_fire = now.saturating_add(backoff.max(60));
-                    if j.every_secs == 0 && j.cron.is_none() && j.fail_count >= 5 {
+                }
+                if is_oneshot {
+                    // claim_due parks one-shots disabled. Re-arm for retry under
+                    // the fail budget; permanently disable after 5 failures.
+                    if j.fail_count >= 5 {
                         j.enabled = false;
                         j.last_error = Some(truncate_err(
                             &format!(
@@ -472,6 +479,12 @@ impl ScheduleStore {
                             ),
                             500,
                         ));
+                    } else {
+                        j.enabled = true;
+                        // Early failures: due immediately (or after backoff if >=3).
+                        if j.fail_count < 3 {
+                            j.next_fire = now;
+                        }
                     }
                 }
             }
@@ -834,6 +847,34 @@ mod tests {
             "claimed job should not re-advance on mark_fired"
         );
         assert_eq!(store.list().unwrap()[0].last_status.as_deref(), Some("ok"));
+    }
+
+    #[test]
+    fn oneshot_claim_fail_rearms_for_retry() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScheduleStore::open(dir.path().join("schedule.json")).unwrap();
+        let job = store.add("once", 0, 0).unwrap();
+        let now = now_secs() + 1;
+        let claimed = store.claim_due(now).unwrap();
+        assert_eq!(claimed.len(), 1);
+        // Claim parks one-shot disabled (crash mid-fire = no double fire).
+        assert!(!store.list().unwrap()[0].enabled);
+        assert!(store.due(now).unwrap().is_empty());
+        // Clean failure re-arms under fail budget.
+        store.mark_failed(&job.id, now, "deliver down").unwrap();
+        let listed = store.list().unwrap();
+        assert!(listed[0].enabled, "should re-arm one-shot after fail");
+        assert_eq!(listed[0].fail_count, 1);
+        assert_eq!(listed[0].last_status.as_deref(), Some("error"));
+        assert_eq!(store.due(now).unwrap().len(), 1);
+        // Success after re-claim permanently completes one-shot.
+        let claimed2 = store.claim_due(now).unwrap();
+        assert_eq!(claimed2.len(), 1);
+        store.mark_fired(&job.id, now).unwrap();
+        let done = store.list().unwrap();
+        assert!(!done[0].enabled);
+        assert_eq!(done[0].last_status.as_deref(), Some("ok"));
+        assert_eq!(done[0].fail_count, 0);
     }
 
     #[test]

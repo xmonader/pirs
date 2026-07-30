@@ -48,9 +48,11 @@ pirs-claw skills remove my-skill
 After chat/code turns (default on for CLI; off on gateway unless `PIRS_CLAW_LEARN=1`):
 
 1. **Memory nudge** — if the user message looks durable, extract ≤3 facts into FTS memory (and fold into `soul.md`)  
-2. **Skill crystallize** — after substantial transcripts, write a new `~/.pirs/skills/<name>/SKILL.md` **in the background** (does not block the reply)  
+2. **Skill crystallize** — after substantial transcripts, write a new `~/.pirs/skills/<name>/SKILL.md`  
+   - **CLI** (`chat`/`code`): awaited before exit (so crystallize is not dropped)  
+   - **Gateway** (`serve`): background task (reply first; process is long-lived)
 
-**Session identity (Hermes-class):** soul + a memory digest are frozen into the system prompt once per process; turn-specific FTS hits go on the **user** message only (keeps prompt-cache prefixes stable).
+**Session identity (Hermes-class):** soul + a memory digest (recent durable rows) are frozen into the system prompt once per process; turn-specific FTS hits go on the **user** message only (keeps prompt-cache prefixes stable).
 
 ```bash
 pirs-claw --no-learn chat "…"     # disable for one run

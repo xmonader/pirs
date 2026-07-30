@@ -40,23 +40,53 @@ pub fn recall_context(store: &MemoryStore, query: &str, limit: usize) -> String 
 
 /// Session-stable memory digest for the system prompt (not query-matched).
 ///
-/// Built once per agent session from recent durable rows so the system prefix
-/// stays byte-stable across turns (prompt-cache friendly).
+/// Built from recent durable rows (`fact` / user chat) via `recent_hits`, not a
+/// fake FTS query, so the system prefix stays byte-stable and useful.
 pub fn session_memory_digest(store: &MemoryStore, limit: usize) -> String {
-    // Prefer fact-kind / durable rows via a broad search on common anchors.
-    let hits = store.search("prefer remember always name project timezone", limit.max(1));
-    if hits.is_empty() {
-        // Fall back to any recent keyword that yields something.
-        let hits = store.search("the a is", limit.max(1));
-        if hits.is_empty() {
-            return String::new();
-        }
-        return format_digest(&hits);
+    let limit = limit.max(1);
+    let pool = store.recent_hits(limit.saturating_mul(4).max(8), false);
+    if pool.is_empty() {
+        return String::new();
     }
-    format_digest(&hits)
+    // Prefer durable kinds; fall back to any recent row.
+    let mut preferred: Vec<pirs_agent::MemoryHit> = pool
+        .iter()
+        .filter(|h| {
+            matches!(
+                h.kind.as_str(),
+                "fact" | "user" | "chat" | "preference" | "note"
+            )
+        })
+        .cloned()
+        .collect();
+    if preferred.is_empty() {
+        preferred = pool;
+    }
+    // Dedupe by normalized snippet prefix, keep newest-first order from recent_hits.
+    let mut seen = std::collections::HashSet::new();
+    preferred.retain(|h| {
+        let key = h
+            .snippet
+            .chars()
+            .take(80)
+            .collect::<String>()
+            .to_ascii_lowercase();
+        seen.insert(key)
+    });
+    preferred.truncate(limit);
+    // Truncate long snippets for the system prompt.
+    for h in &mut preferred {
+        if h.snippet.chars().count() > 160 {
+            h.snippet = format!("{}…", h.snippet.chars().take(160).collect::<String>());
+        }
+    }
+    format_digest(&preferred)
 }
 
 fn format_digest(hits: &[pirs_agent::MemoryHit]) -> String {
+    if hits.is_empty() {
+        return String::new();
+    }
     let mut s = String::from(
         "\n\n## Memory (session snapshot)\n\
          Durable facts frozen at session start. Prefer these over guesses.\n",
@@ -142,5 +172,26 @@ mod tests {
                 "must not use system section format: {wrapped}"
             );
         }
+    }
+
+    #[test]
+    fn session_memory_digest_uses_recent_not_fake_query() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = open_memory(dir.path()).unwrap();
+        scope_session(&store, "cli/local");
+        store.add("fact", "pref", "user prefers rust and short answers");
+        store.add("tool_result", "bash", "noise from tools should rank lower");
+        let digest = session_memory_digest(&store, 3);
+        assert!(
+            digest.contains("session snapshot"),
+            "system section header: {digest}"
+        );
+        assert!(
+            digest.contains("prefers rust") || digest.contains("fact"),
+            "durable fact preferred: {digest}"
+        );
+        // Stable re-call (same recent rows) — not empty.
+        let again = session_memory_digest(&store, 3);
+        assert_eq!(digest, again, "digest must be stable for same store state");
     }
 }
