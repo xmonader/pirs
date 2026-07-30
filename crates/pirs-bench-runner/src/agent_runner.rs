@@ -339,10 +339,7 @@ mod tests {
     #[test]
     fn report_id_matches_unittest_label_and_leaf() {
         let req = "test_path_with_embedded_null_bytes (utils_tests.test_autoreload.TestIterModulesAndFiles)";
-        assert!(report_id_matches(
-            "test_path_with_embedded_null_bytes",
-            req
-        ));
+        assert!(report_id_matches("test_path_with_embedded_null_bytes", req));
         assert!(report_id_matches(req, req));
         assert!(report_id_matches(
             "utils_tests.test_autoreload.TestIterModulesAndFiles.test_path_with_embedded_null_bytes",
@@ -353,8 +350,12 @@ mod tests {
 
     #[test]
     fn report_id_matches_pytest_leaf() {
-        let req = "astropy/modeling/tests/test_separable.py::test_separable[compound_model6-result6]";
-        assert!(report_id_matches("test_separable[compound_model6-result6]", req));
+        let req =
+            "astropy/modeling/tests/test_separable.py::test_separable[compound_model6-result6]";
+        assert!(report_id_matches(
+            "test_separable[compound_model6-result6]",
+            req
+        ));
         assert!(report_id_matches(req, req));
     }
 

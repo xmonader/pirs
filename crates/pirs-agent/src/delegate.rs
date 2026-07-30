@@ -131,7 +131,10 @@ impl DelegateTool {
         *self.policy_hooks.lock().unwrap() = Some((before, after));
     }
 
-    pub fn with_default_budgets(self: &Arc<Self>, budgets: crate::agent_loop::Budgets) -> Arc<Self> {
+    pub fn with_default_budgets(
+        self: &Arc<Self>,
+        budgets: crate::agent_loop::Budgets,
+    ) -> Arc<Self> {
         // Rebuild via interior mutation isn't available; callers set on new().
         // Keep API for tests that construct via Arc::get_mut if needed.
         let _ = budgets;

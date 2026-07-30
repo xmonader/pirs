@@ -33,7 +33,11 @@ pub fn dashscope_coding_user_agent() -> String {
     std::env::var("PIRS_DASHSCOPE_UA")
         .ok()
         .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("PIRS_USER_AGENT").ok().filter(|s| !s.is_empty()))
+        .or_else(|| {
+            std::env::var("PIRS_USER_AGENT")
+                .ok()
+                .filter(|s| !s.is_empty())
+        })
         // Known-accepted coding-agent UA when pirs is not yet on the allowlist.
         // Honest product UA is preferred when DashScope adds pirs; until then
         // claude-cli is the most widely reported working client identity.

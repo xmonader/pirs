@@ -62,13 +62,20 @@ impl AuditLog {
         let _g = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let line = entry.to_string();
         let created = !self.path.exists();
-        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&self.path) {
+        if let Ok(mut f) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+        {
             // Owner-only when we create the file (table #18 partial: perms).
             if created {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
-                    let _ = std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600));
+                    let _ = std::fs::set_permissions(
+                        &self.path,
+                        std::fs::Permissions::from_mode(0o600),
+                    );
                 }
             }
             let _ = writeln!(f, "{line}");
@@ -189,8 +196,9 @@ pub fn looks_like_secret_string(s: &str) -> bool {
     }
     // Long hex / base64-ish blobs often used as tokens
     if t.len() >= 32
-        && t.chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '+' || c == '/' || c == '=')
+        && t.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '+' || c == '/' || c == '='
+        })
         && t.chars().any(|c| c.is_ascii_digit())
         && t.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 8
     {
@@ -228,33 +236,31 @@ pub fn redact_value(v: &Value) -> Value {
 
 /// Listener that writes tool/agent events to the audit log (subscribe on Agent).
 pub fn audit_listener(audit: AuditLog) -> Emit {
-    Arc::new(move |ev: AgentEvent| {
-        match &ev {
-            AgentEvent::ToolExecutionStart {
-                tool_call_id,
-                tool_name,
-                args,
-            } => {
-                audit.tool_start(tool_call_id, tool_name, args);
-            }
-            AgentEvent::ToolExecutionEnd {
-                tool_call_id,
-                tool_name,
-                result,
-            } => {
-                audit.tool_end(
-                    tool_call_id,
-                    tool_name,
-                    result.is_error,
-                    &result.display_text(),
-                    result.details.as_ref(),
-                );
-            }
-            AgentEvent::AgentEnd { messages } => {
-                audit.agent_end(messages.len());
-            }
-            _ => {}
+    Arc::new(move |ev: AgentEvent| match &ev {
+        AgentEvent::ToolExecutionStart {
+            tool_call_id,
+            tool_name,
+            args,
+        } => {
+            audit.tool_start(tool_call_id, tool_name, args);
         }
+        AgentEvent::ToolExecutionEnd {
+            tool_call_id,
+            tool_name,
+            result,
+        } => {
+            audit.tool_end(
+                tool_call_id,
+                tool_name,
+                result.is_error,
+                &result.display_text(),
+                result.details.as_ref(),
+            );
+        }
+        AgentEvent::AgentEnd { messages } => {
+            audit.agent_end(messages.len());
+        }
+        _ => {}
     })
 }
 

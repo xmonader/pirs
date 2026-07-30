@@ -105,10 +105,7 @@ pub(crate) fn render_welcome(
 
     if first_run {
         out.push(Line::from(""));
-        out.push(Line::from(Span::styled(
-            "  Getting started",
-            theme.heading,
-        )));
+        out.push(Line::from(Span::styled("  Getting started", theme.heading)));
         out.push(Line::from(Span::styled(
             "  1. Type a goal in plain English → Enter",
             theme.assistant_text,
@@ -160,4 +157,3 @@ pub(crate) fn render_welcome(
     out.push(Line::from(""));
     out
 }
-

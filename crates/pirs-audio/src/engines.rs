@@ -79,9 +79,7 @@ impl SttEngine for MockStt {
         let sz = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         Ok(format!(
             "[pirs-audio mock STT] received {} ({sz} bytes)",
-            path.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("audio")
+            path.file_name().and_then(|s| s.to_str()).unwrap_or("audio")
         ))
     }
 }
@@ -182,10 +180,7 @@ impl TtsEngine for EspeakTts {
         let out = run_with_timeout(cmd, DEFAULT_SUBPROCESS_TIMEOUT)
             .with_context(|| format!("spawn {}", self.bin.display()))?;
         if !out.status.success() || !wav.is_file() {
-            bail!(
-                "espeak failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
+            bail!("espeak failed: {}", String::from_utf8_lossy(&out.stderr));
         }
         if format == "wav" || format.is_empty() {
             return Ok(std::fs::read(&wav)?);
@@ -266,8 +261,7 @@ pub fn select_stt(cfg: &EngineConfig) -> anyhow::Result<Box<dyn SttEngine>> {
             return Ok(Box::new(CmdStt { template: tmpl }));
         }
         "whisper-cli" | "whisper" => {
-            let bin = find_whisper_cli()
-                .ok_or_else(|| anyhow!("whisper CLI not found on PATH"))?;
+            let bin = find_whisper_cli().ok_or_else(|| anyhow!("whisper CLI not found on PATH"))?;
             return Ok(Box::new(WhisperCliStt { bin }));
         }
         "auto" | "" => {}
@@ -412,10 +406,7 @@ mod tests {
 
     #[test]
     fn sanitize_audio_token_strips_metacharacters() {
-        assert_eq!(
-            sanitize_audio_token("en;rm -rf /", "en"),
-            "enrm-rf"
-        );
+        assert_eq!(sanitize_audio_token("en;rm -rf /", "en"), "enrm-rf");
         assert_eq!(sanitize_audio_token("", "wav"), "wav");
     }
 

@@ -15,7 +15,11 @@
 /// match keeps a genuine prompt that merely starts with the word "login"
 /// (e.g. `pirs "login and restart the box"`) out of the login path. An explicit
 /// `login <provider>` token wins over the ambient `--provider` value.
-pub fn parse_login_request(prompt: Option<&str>, mode: &str, provider: &str) -> Option<&'static str> {
+pub fn parse_login_request(
+    prompt: Option<&str>,
+    mode: &str,
+    provider: &str,
+) -> Option<&'static str> {
     let tokens: Vec<&str> = prompt
         .map(|s| s.split_whitespace().collect())
         .unwrap_or_default();
@@ -41,7 +45,10 @@ mod tests {
 
     #[test]
     fn login_bare_uses_ambient_provider() {
-        assert_eq!(parse_login_request(Some("login"), "repl", "openai"), Some("openai"));
+        assert_eq!(
+            parse_login_request(Some("login"), "repl", "openai"),
+            Some("openai")
+        );
         assert_eq!(
             parse_login_request(Some("login"), "repl", "anthropic"),
             Some("anthropic")
@@ -75,7 +82,10 @@ mod tests {
             parse_login_request(Some("login and restart the box"), "repl", "openai"),
             None
         );
-        assert_eq!(parse_login_request(Some("login foo"), "repl", "openai"), None);
+        assert_eq!(
+            parse_login_request(Some("login foo"), "repl", "openai"),
+            None
+        );
         assert_eq!(parse_login_request(None, "repl", "openai"), None);
     }
 }

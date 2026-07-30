@@ -6,18 +6,13 @@ use pirs_agent::Agent;
 use pirs_claw::channel::InboundMessage;
 use pirs_claw::memory_bridge;
 use pirs_claw::registry;
-use pirs_skills::{
-    skills_prompt_section, Skill,
-};
 use pirs_claw::{
-    claw_system_prompt,
-    empty_assistant_diag, extract_assistant_reply, require_llm_key, GatewayReply, SessionId,
-    SessionStore,
+    claw_system_prompt, empty_assistant_diag, extract_assistant_reply, require_llm_key,
+    GatewayReply, SessionId, SessionStore,
 };
+use pirs_skills::{skills_prompt_section, Skill};
 
-use super::tools::{
-    chat_safe_tools_with_state, install_claw_safety,
-};
+use super::tools::{chat_safe_tools_with_state, install_claw_safety};
 
 pub async fn handle_gateway_message(
     state: &Path,
@@ -155,4 +150,3 @@ pub async fn handle_gateway_message(
         attachments,
     })
 }
-

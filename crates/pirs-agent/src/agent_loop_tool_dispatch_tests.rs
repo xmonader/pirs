@@ -1,7 +1,6 @@
-use super::*;
 use super::freeform::*;
-use super::stream::*;
 use super::tool_exec::*;
+use super::*;
 use crate::tool::{AgentTool, ToolExecContext, ToolOutput};
 use async_trait::async_trait;
 use serde_json::json;
@@ -36,7 +35,9 @@ fn freeform_markdown_tool_text_detected() {
 ```"#;
     assert!(looks_like_freeform_tool_text(sample));
     assert!(looks_like_freeform_tool_text("> bash ls -la"));
-    assert!(!looks_like_freeform_tool_text("I'll fix the bug by editing txn.py"));
+    assert!(!looks_like_freeform_tool_text(
+        "I'll fix the bug by editing txn.py"
+    ));
 }
 
 #[test]
@@ -87,7 +88,10 @@ async fn execute_invalid_payload_returns_error_result_not_success() {
     );
     assert!(
         results[0].model_text().contains("Invalid arguments")
-            || results[0].model_text().to_ascii_lowercase().contains("required"),
+            || results[0]
+                .model_text()
+                .to_ascii_lowercase()
+                .contains("required"),
         "{}",
         results[0].model_text()
     );

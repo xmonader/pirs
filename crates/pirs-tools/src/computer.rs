@@ -95,10 +95,7 @@ impl AgentTool for ComputerScreenshotTool {
         let ok = if let Some(bin) = which("scrot") {
             Command::new(bin).args(["-o", &out_s]).status()?.success()
         } else if let Some(bin) = which("gnome-screenshot") {
-            Command::new(bin)
-                .args(["-f", &out_s])
-                .status()?
-                .success()
+            Command::new(bin).args(["-f", &out_s]).status()?.success()
         } else if let Some(bin) = which("import") {
             // ImageMagick
             Command::new(bin)
@@ -320,7 +317,10 @@ impl AgentTool for ComputerMoveTool {
         if !status.success() {
             anyhow::bail!("xdotool mousemove failed");
         }
-        Ok(ToolOutput::text(format!("moved to ({}, {})", args.x, args.y)))
+        Ok(ToolOutput::text(format!(
+            "moved to ({}, {})",
+            args.x, args.y
+        )))
     }
 }
 

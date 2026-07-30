@@ -14,8 +14,8 @@ use std::path::Path;
 use std::process::Command;
 
 use pirs_ai::{
-    resolve_speech_route, speak_with_failover, transcribe_with_failover, SpeakOptions, SpeechEndpoint,
-    SpeechKind, TranscribeOptions,
+    resolve_speech_route, speak_with_failover, transcribe_with_failover, SpeakOptions,
+    SpeechEndpoint, SpeechKind, TranscribeOptions,
 };
 
 /// Try to transcribe an audio file to text (async; prefers HTTP backends).
@@ -93,7 +93,9 @@ pub async fn synthesize_speech(
 ) -> anyhow::Result<(Vec<u8>, SpeechEndpoint)> {
     let route = resolve_speech_route(SpeechKind::Tts, None);
     let opts = SpeakOptions {
-        voice: voice.map(|s| s.to_string()).or_else(|| non_empty("PIRS_TTS_VOICE")),
+        voice: voice
+            .map(|s| s.to_string())
+            .or_else(|| non_empty("PIRS_TTS_VOICE")),
         response_format: format
             .map(|s| s.to_string())
             .or_else(|| non_empty("PIRS_TTS_FORMAT"))

@@ -1,18 +1,16 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::block::Padding;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Terminal;
 
 use super::app::App;
-use super::chat::{
-    render_markdown, render_thinking_live, ChatItem,
-};
-use super::model_picker::{draw_model_picker, ModelPicker};
+use super::chat::{render_markdown, render_thinking_live};
+use super::layout_util::*;
+use super::model_picker::draw_model_picker;
 use super::slash::*;
 use super::theme::*;
-use super::layout_util::*;
 use super::tools::*;
 
 // ── Drawing ─────────────────────────────────────────────────────────────────
@@ -144,7 +142,12 @@ pub(super) fn draw_ui(frame: &mut ratatui::Frame, app: &mut App) {
     }
 }
 
-pub(super) fn draw_slash_popup(frame: &mut ratatui::Frame, input_area: Rect, app: &App, theme: &Theme) {
+pub(super) fn draw_slash_popup(
+    frame: &mut ratatui::Frame,
+    input_area: Rect,
+    app: &App,
+    theme: &Theme,
+) {
     let matches = slash_filter(app.input.trim(), &app.ext_slash);
     if matches.is_empty() {
         return;
@@ -221,10 +224,7 @@ pub(super) fn draw_header(frame: &mut ratatui::Frame, area: Rect, app: &App, the
         left.push(Span::styled(stem.to_string(), theme.dim));
     }
     left.push(Span::styled("  ", theme.dim));
-    left.push(Span::styled(
-        format!("● {}", app.approval_mode),
-        mode_style,
-    ));
+    left.push(Span::styled(format!("● {}", app.approval_mode), mode_style));
     left.push(Span::styled("  ", theme.dim));
     let ctx = pirs_tools::current_work_context();
     if ctx.roots.len() > 1 {
@@ -302,11 +302,7 @@ pub(super) fn draw_chat(frame: &mut ratatui::Frame, area: Rect, app: &mut App, t
             ]),
         ];
         if !thinking.trim().is_empty() {
-            logical.extend(render_thinking_live(
-                thinking,
-                theme,
-                app.thinking_expanded,
-            ));
+            logical.extend(render_thinking_live(thinking, theme, app.thinking_expanded));
         }
         if !text.trim().is_empty() {
             logical.extend(render_markdown(text, theme, width.saturating_sub(4)));
@@ -496,10 +492,7 @@ pub(super) fn draw_status(frame: &mut ratatui::Frame, area: Rect, app: &mut App,
     }
 
     if app.scroll > 0 {
-        right.insert(
-            0,
-            Span::styled(format!(" ↑{} ", app.scroll), theme.accent),
-        );
+        right.insert(0, Span::styled(format!(" ↑{} ", app.scroll), theme.accent));
     }
     if !app.usage_summary.is_empty() && !app.running {
         right.insert(
@@ -617,7 +610,12 @@ pub(super) fn draw_input(frame: &mut ratatui::Frame, area: Rect, app: &mut App, 
     app.desired_cursor = Some((cursor_x, cursor_y));
 }
 
-pub(super) fn draw_approval_overlay(frame: &mut ratatui::Frame, area: Rect, app: &App, theme: &Theme) {
+pub(super) fn draw_approval_overlay(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    app: &App,
+    theme: &Theme,
+) {
     let question = app
         .pending_approval
         .lock()
@@ -655,7 +653,10 @@ pub(super) fn draw_approval_overlay(frame: &mut ratatui::Frame, area: Rect, app:
         )),
         Line::from(""),
         Line::from(Span::styled(
-            format!("  {}", truncate_chars(&question, (w as usize).saturating_sub(4))),
+            format!(
+                "  {}",
+                truncate_chars(&question, (w as usize).saturating_sub(4))
+            ),
             theme.command,
         )),
         Line::from(""),
@@ -671,10 +672,7 @@ pub(super) fn draw_approval_overlay(frame: &mut ratatui::Frame, area: Rect, app:
             Span::styled("  [n] ", theme.error),
             Span::styled("No / deny", theme.assistant_text),
         ]),
-        Line::from(Span::styled(
-            format!("  esc = deny{grace}"),
-            theme.dim,
-        )),
+        Line::from(Span::styled(format!("  esc = deny{grace}"), theme.dim)),
     ];
     frame.render_widget(Paragraph::new(lines), inner);
 }

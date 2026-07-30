@@ -612,11 +612,7 @@ fn tool_to_openai(tool: &crate::ToolDef) -> Value {
 fn inline_json_schema_refs(mut schema: Value) -> Value {
     let defs = schema
         .as_object()
-        .and_then(|o| {
-            o.get("$defs")
-                .or_else(|| o.get("definitions"))
-                .cloned()
-        })
+        .and_then(|o| o.get("$defs").or_else(|| o.get("definitions")).cloned())
         .unwrap_or(Value::Object(Default::default()));
     inline_refs_in_value(&mut schema, &defs);
     if let Some(obj) = schema.as_object_mut() {
@@ -943,10 +939,7 @@ mod tests {
         });
         let out = inline_json_schema_refs(schema);
         assert!(out.get("$defs").is_none());
-        assert_eq!(
-            out["properties"]["edits"]["items"]["type"],
-            "object"
-        );
+        assert_eq!(out["properties"]["edits"]["items"]["type"], "object");
         assert!(out["properties"]["edits"]["items"].get("$ref").is_none());
         assert_eq!(
             out["properties"]["edits"]["items"]["properties"]["oldText"]["type"],

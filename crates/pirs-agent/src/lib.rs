@@ -21,9 +21,10 @@ pub mod use_tool;
 pub mod validate;
 
 pub use agent::{Agent, AgentError, QueueMode};
+pub use agent_loop::{looks_like_freeform_tool_text, validate_tool_call_payload, ToolCallData};
 pub use audit::{
-    audit_enabled, audit_listener, default_audit_path, is_secret_key_name, looks_like_secret_string,
-    redact_value, wrap_emit, AuditLog,
+    audit_enabled, audit_listener, default_audit_path, is_secret_key_name,
+    looks_like_secret_string, redact_value, wrap_emit, AuditLog,
 };
 pub use control_pins::{
     enforce_tool_result_adjacency, is_reminder_kind, preserve_control_pins, reminder_kind,
@@ -31,16 +32,11 @@ pub use control_pins::{
 };
 pub use events::{AgentEvent, Emit, Hooks, ToolResultPatch};
 pub use gate::GreenEvidence;
-pub use strategy::pin_plan_model;
-pub use agent_loop::{
-    looks_like_freeform_tool_text, validate_tool_call_payload, ToolCallData,
-};
 pub use hybrid::{AskAdvisorTool, HybridConfig};
-pub use thrash::{
-    LoopDetectionTracker, MistakeTracker, ThrashGuard, ToolSignature,
-};
-pub use tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext, ToolOutput};
 pub use memory::{
     format_auto_recall_section, global as memory_global, init_global as memory_init_global,
     rank_auto_recall, set_session as memory_set_session, MemoryHit, MemoryStore,
 };
+pub use strategy::pin_plan_model;
+pub use thrash::{LoopDetectionTracker, MistakeTracker, ThrashGuard, ToolSignature};
+pub use tool::{tool_defs, AgentTool, ExecutionMode, ToolExecContext, ToolOutput};

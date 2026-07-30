@@ -91,10 +91,7 @@ fn auto_checkpoint_calls_core_create_on_mutate() {
     };
     let _ = after("1", "write", &result);
     let errs = host.drain_hook_errors();
-    assert!(
-        errs.is_empty(),
-        "on_tool_result should not error: {errs:?}"
-    );
+    assert!(errs.is_empty(), "on_tool_result should not error: {errs:?}");
 
     let list = pirs_tools::list_checkpoints(tmp.path());
     assert!(
@@ -103,9 +100,10 @@ fn auto_checkpoint_calls_core_create_on_mutate() {
         tmp.path().join(".pirs/checkpoints")
     );
     assert!(
-        list[0].copy_dir.as_ref().is_some_and(|d| {
-            std::path::Path::new(d).join("a.txt").is_file()
-        }),
+        list[0]
+            .copy_dir
+            .as_ref()
+            .is_some_and(|d| { std::path::Path::new(d).join("a.txt").is_file() }),
         "core checkpoint should snapshot a.txt: {:?}",
         list[0]
     );
@@ -114,7 +112,10 @@ fn auto_checkpoint_calls_core_create_on_mutate() {
     std::fs::write(tmp.path().join("a.txt"), b"dirty").unwrap();
     let msg = pirs_tools::restore_checkpoint(tmp.path(), Some(&list[0].id)).unwrap();
     assert!(msg.contains("restored"), "{msg}");
-    assert_eq!(std::fs::read_to_string(tmp.path().join("a.txt")).unwrap(), "v1");
+    assert_eq!(
+        std::fs::read_to_string(tmp.path().join("a.txt")).unwrap(),
+        "v1"
+    );
 
     std::env::set_current_dir(cwd).unwrap();
 }

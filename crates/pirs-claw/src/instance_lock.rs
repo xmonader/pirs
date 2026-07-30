@@ -111,7 +111,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let a = try_acquire(dir.path(), "telegram").unwrap();
         let err = try_acquire(dir.path(), "telegram").unwrap_err().to_string();
-        assert!(err.contains("already holds") || err.contains("lock"), "{err}");
+        assert!(
+            err.contains("already holds") || err.contains("lock"),
+            "{err}"
+        );
         let status = lock_status(dir.path(), "telegram");
         assert!(status.contains("held"), "{status}");
         drop(a);

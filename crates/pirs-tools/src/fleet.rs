@@ -47,7 +47,8 @@ impl AgentTool for FleetTool {
     }
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
-        let args: FleetArgs = serde_json::from_value(ctx.args).unwrap_or(FleetArgs { action: None });
+        let args: FleetArgs =
+            serde_json::from_value(ctx.args).unwrap_or(FleetArgs { action: None });
         let action = args.action.as_deref().unwrap_or("status");
         let sock = orchestrator_sock();
         if !sock.exists() {
@@ -62,9 +63,7 @@ impl AgentTool for FleetTool {
         }
         // Thin IPC: send a JSONL list request (matches orchestrator client protocol).
         let line = match action {
-            "list" | "status" => {
-                r#"{"type":"list"}"#
-            }
+            "list" | "status" => r#"{"type":"list"}"#,
             other => {
                 anyhow::bail!("unknown fleet action {other:?}; use status|list");
             }

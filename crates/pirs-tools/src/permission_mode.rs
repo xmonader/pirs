@@ -28,11 +28,7 @@ impl PermissionMode {
             "workspace-write" | "workspace_write" | "write" | "default" | "accept-edits" => {
                 Some(Self::WorkspaceWrite)
             }
-            "danger-full-access"
-            | "danger_full_access"
-            | "full"
-            | "danger"
-            | "yolo"
+            "danger-full-access" | "danger_full_access" | "full" | "danger" | "yolo"
             | "auto-approve" => Some(Self::DangerFullAccess),
             _ => None,
         }
@@ -243,13 +239,8 @@ mod tests {
 
     #[test]
     fn yolo_lifts_default_workspace_write_to_full_access() {
-        let lifted = apply_yolo_permission_default(
-            true,
-            None,
-            false,
-            false,
-            PermissionMode::WorkspaceWrite,
-        );
+        let lifted =
+            apply_yolo_permission_default(true, None, false, false, PermissionMode::WorkspaceWrite);
         assert_eq!(lifted, PermissionMode::DangerFullAccess);
         // Explicit pin wins.
         assert_eq!(
@@ -264,23 +255,11 @@ mod tests {
         );
         // Plan dial / plan profile stay restricted.
         assert_eq!(
-            apply_yolo_permission_default(
-                true,
-                None,
-                true,
-                false,
-                PermissionMode::ReadOnly,
-            ),
+            apply_yolo_permission_default(true, None, true, false, PermissionMode::ReadOnly,),
             PermissionMode::ReadOnly
         );
         assert_eq!(
-            apply_yolo_permission_default(
-                true,
-                None,
-                false,
-                true,
-                PermissionMode::WorkspaceWrite,
-            ),
+            apply_yolo_permission_default(true, None, false, true, PermissionMode::WorkspaceWrite,),
             PermissionMode::WorkspaceWrite
         );
         // Non-yolo unchanged.
@@ -298,13 +277,8 @@ mod tests {
 
     #[test]
     fn yolo_allows_bash_under_lifted_mode() {
-        let mode = apply_yolo_permission_default(
-            true,
-            None,
-            false,
-            false,
-            PermissionMode::WorkspaceWrite,
-        );
+        let mode =
+            apply_yolo_permission_default(true, None, false, false, PermissionMode::WorkspaceWrite);
         assert!(
             permission_deny_reason(mode, "bash").is_none(),
             "yolo default must not block bash"
@@ -353,7 +327,10 @@ mod tests {
 
     #[test]
     fn parse_aliases() {
-        assert_eq!(PermissionMode::parse("plan"), Some(PermissionMode::ReadOnly));
+        assert_eq!(
+            PermissionMode::parse("plan"),
+            Some(PermissionMode::ReadOnly)
+        );
         assert_eq!(
             PermissionMode::parse("workspace-write"),
             Some(PermissionMode::WorkspaceWrite)
@@ -387,13 +364,13 @@ mod tests {
     fn read_only_denies_checkpoint_restore_and_pr_create() {
         let restore = serde_json::json!({"action": "restore"});
         let create = serde_json::json!({"action": "create", "title": "x"});
-        assert!(permission_deny_reason_with_args(
-            PermissionMode::ReadOnly,
-            "checkpoint",
-            &restore
-        )
-        .is_some());
-        assert!(permission_deny_reason_with_args(PermissionMode::ReadOnly, "pr", &create).is_some());
+        assert!(
+            permission_deny_reason_with_args(PermissionMode::ReadOnly, "checkpoint", &restore)
+                .is_some()
+        );
+        assert!(
+            permission_deny_reason_with_args(PermissionMode::ReadOnly, "pr", &create).is_some()
+        );
         assert!(permission_deny_reason_with_args(
             PermissionMode::ReadOnly,
             "checkpoint",
@@ -401,17 +378,13 @@ mod tests {
         )
         .is_none());
         // pr create needs danger-full-access even under workspace-write
-        assert!(permission_deny_reason_with_args(
-            PermissionMode::WorkspaceWrite,
-            "pr",
-            &create
-        )
-        .is_some());
-        assert!(permission_deny_reason_with_args(
-            PermissionMode::DangerFullAccess,
-            "pr",
-            &create
-        )
-        .is_none());
+        assert!(
+            permission_deny_reason_with_args(PermissionMode::WorkspaceWrite, "pr", &create)
+                .is_some()
+        );
+        assert!(
+            permission_deny_reason_with_args(PermissionMode::DangerFullAccess, "pr", &create)
+                .is_none()
+        );
     }
 }

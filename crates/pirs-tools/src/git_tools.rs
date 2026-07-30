@@ -72,7 +72,10 @@ pub fn validate_git_rev(rev: &str) -> anyhow::Result<()> {
     // Keep charset tight: common rev-parse tokens only.
     if !rev.chars().all(|c| {
         c.is_ascii_alphanumeric()
-            || matches!(c, '/' | '.' | '_' | '-' | '~' | '^' | ':' | '@' | '{' | '}' | '*')
+            || matches!(
+                c,
+                '/' | '.' | '_' | '-' | '~' | '^' | ':' | '@' | '{' | '}' | '*'
+            )
     }) {
         anyhow::bail!("git rev contains disallowed characters: {rev:?}");
     }
@@ -237,9 +240,6 @@ mod tests {
             })
             .await
             .unwrap_err();
-        assert!(
-            err.to_string().contains("must not start with"),
-            "{err}"
-        );
+        assert!(err.to_string().contains("must not start with"), "{err}");
     }
 }

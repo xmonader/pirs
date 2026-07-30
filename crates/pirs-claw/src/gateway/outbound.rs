@@ -3,7 +3,6 @@ use serde_json::json;
 
 use super::telegram::TelegramBot;
 
-
 /// Surface a schedule-tick reply to the user-facing channel.
 ///
 /// For `DeliverTarget::Cli` this **must** print: tick runs chat with

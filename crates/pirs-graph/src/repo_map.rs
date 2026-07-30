@@ -65,9 +65,7 @@ pub fn render_sketch(graph: &Graph, root: &Path, max_chars: usize) -> Option<Str
     }
 
     let mut out = String::from("<repo_map>\n");
-    out.push_str(
-        "# Ranked symbols (PageRank). Prefer code_map/code_search for details.\n",
-    );
+    out.push_str("# Ranked symbols (PageRank). Prefer code_map/code_search for details.\n");
 
     let header_len = out.len();
     let mut used = header_len;
@@ -132,7 +130,10 @@ mod tests {
         .unwrap();
         let g = Graph::build(dir.path());
         let sketch = render_sketch(&g, dir.path(), 2000).expect("sketch");
-        assert!(sketch.contains("lib.rs") || sketch.contains("fn b"), "{sketch}");
+        assert!(
+            sketch.contains("lib.rs") || sketch.contains("fn b"),
+            "{sketch}"
+        );
         assert!(sketch.contains("<repo_map>"));
         assert!(sketch.contains("</repo_map>"));
     }

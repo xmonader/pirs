@@ -73,7 +73,9 @@ pub fn list_blueprints() -> String {
 }
 
 pub fn find_blueprint(key: &str) -> Option<&'static Blueprint> {
-    CATALOG.iter().find(|b| b.key == key || b.title.eq_ignore_ascii_case(key))
+    CATALOG
+        .iter()
+        .find(|b| b.key == key || b.title.eq_ignore_ascii_case(key))
 }
 
 /// Expand a blueprint into (cron_expr, prompt) with optional slot overrides.
@@ -141,12 +143,18 @@ pub fn parse_nl_schedule(s: &str) -> anyhow::Result<NlSchedule> {
     }
     // every N minutes/hours/days
     if let Some(rest) = l.strip_prefix("every ") {
-        if let Some(n) = rest.strip_suffix(" minutes").or_else(|| rest.strip_suffix(" minute")) {
+        if let Some(n) = rest
+            .strip_suffix(" minutes")
+            .or_else(|| rest.strip_suffix(" minute"))
+        {
             let n: u64 = n.trim().parse()?;
             anyhow::ensure!((1..=24 * 60).contains(&n), "minutes out of range");
             return Ok(NlSchedule::Cron(format!("*/{n} * * * *")));
         }
-        if let Some(n) = rest.strip_suffix(" hours").or_else(|| rest.strip_suffix(" hour")) {
+        if let Some(n) = rest
+            .strip_suffix(" hours")
+            .or_else(|| rest.strip_suffix(" hour"))
+        {
             let n: u64 = n.trim().parse()?;
             anyhow::ensure!((1..=48).contains(&n), "hours out of range");
             return Ok(NlSchedule::EverySecs(n * 3600));

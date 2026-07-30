@@ -71,7 +71,7 @@ fn strip_managed_speech_block(text: &str) -> String {
             let end = b + END.len();
             let mut out = String::new();
             out.push_str(&text[..a]);
-            out.push_str(&text[end..].trim_start_matches('\n'));
+            out.push_str(text[end..].trim_start_matches('\n'));
             return out;
         }
     }
@@ -126,9 +126,7 @@ base_url = "https://api.groq.com/openai/v1"
 api_key_env = "GROQ_API_KEY"
 "#,
         );
-        stt_serve.push(
-            r#"{ backend = "groq-speech", model = "whisper-large-v3-turbo" }"#.into(),
-        );
+        stt_serve.push(r#"{ backend = "groq-speech", model = "whisper-large-v3-turbo" }"#.into());
     }
 
     if opts.cloud && openai {
@@ -175,9 +173,7 @@ api_key_env = "OPENAI_API_KEY"
         }
         out.push_str("]\n");
     } else {
-        out.push_str(
-            "# (no TTS backend — add --local Kokoro or OPENAI_API_KEY for tts-1)\n",
-        );
+        out.push_str("# (no TTS backend — add --local Kokoro or OPENAI_API_KEY for tts-1)\n");
     }
     out.push_str("# END pirs-speech-managed\n");
     Ok(out)
@@ -218,9 +214,9 @@ fn bootstrap_local_daemon(local_url: &str) -> anyhow::Result<()> {
         .status();
     match status {
         Ok(s) if s.success() => println!("[speech setup] pirs-audio install finished OK"),
-        Ok(s) => eprintln!(
-            "[speech setup] install exited {s} — cloud STT still works if configured"
-        ),
+        Ok(s) => {
+            eprintln!("[speech setup] install exited {s} — cloud STT still works if configured")
+        }
         Err(e) => eprintln!("[speech setup] could not run install helper: {e}"),
     }
 
@@ -231,7 +227,10 @@ fn bootstrap_local_daemon(local_url: &str) -> anyhow::Result<()> {
 fn try_start_pirs_audio(dir: &std::path::Path, local_url: &str) {
     let run = dir.join("run.sh");
     if !run.is_file() {
-        eprintln!("[speech setup] no {} yet — start pirs-audio manually after install", run.display());
+        eprintln!(
+            "[speech setup] no {} yet — start pirs-audio manually after install",
+            run.display()
+        );
         return;
     }
     // Probe health: http://host:port/v1 → http://host:port/health

@@ -158,4 +158,3 @@ mod tool_output_tests {
         assert!(out.ui_text().is_none());
     }
 }
-

@@ -238,9 +238,9 @@ pub fn sanitize_export_patch(patch: &str) -> String {
         let header_end = part.find('\n').unwrap_or(part.len());
         let header = &part[..header_end];
         // paths are space-separated: `a/foo b/foo` (no spaces in normal git paths)
-        let drop = header.split_whitespace().any(|tok| {
-            is_agent_junk_path(tok) || is_likely_test_path(tok)
-        });
+        let drop = header
+            .split_whitespace()
+            .any(|tok| is_agent_junk_path(tok) || is_likely_test_path(tok));
         if drop {
             continue;
         }
@@ -585,8 +585,11 @@ index a308e27..45bea36 100644
             return;
         };
         std::fs::create_dir_all(dir.path().join("tests")).unwrap();
-        std::fs::write(dir.path().join("tests/test_add.py"), "def test_add():\n    pass\n")
-            .unwrap();
+        std::fs::write(
+            dir.path().join("tests/test_add.py"),
+            "def test_add():\n    pass\n",
+        )
+        .unwrap();
         run_capture("git add -A && git commit -qm tests", dir.path(), 60).unwrap();
         let ws = GitWorkspace::new(dir.path().to_path_buf());
         std::fs::write(

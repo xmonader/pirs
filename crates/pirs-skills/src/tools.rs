@@ -64,7 +64,9 @@ impl AgentTool for SkillListTool {
 
     async fn execute(&self, _ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {
         if self.skills.is_empty() {
-            return Ok(ToolOutput::text("(no skills installed under ~/.pirs/skills)"));
+            return Ok(ToolOutput::text(
+                "(no skills installed under ~/.pirs/skills)",
+            ));
         }
         let mut s = String::new();
         for sk in self.skills.iter() {

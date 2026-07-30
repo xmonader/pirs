@@ -22,17 +22,13 @@ pub fn atomic_write(path: &Path, data: impl AsRef<[u8]>) -> anyhow::Result<()> {
     let tag = format!("pirs-tmp-{}-{tid:?}-{seq}", std::process::id());
     let tmp = path.with_extension(format!(
         "{}.{tag}",
-        path.extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("tmp"),
+        path.extension().and_then(|e| e.to_str()).unwrap_or("tmp"),
     ));
     // Prefer a unique sibling name if extension dance collides.
     let tmp = if tmp == path {
         path.with_file_name(format!(
             ".{}.{tag}",
-            path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("file"),
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("file"),
         ))
     } else {
         tmp
@@ -43,13 +39,8 @@ pub fn atomic_write(path: &Path, data: impl AsRef<[u8]>) -> anyhow::Result<()> {
         f.write_all(data)
             .with_context(|| format!("write temp {}", tmp.display()))?;
         f.sync_all().ok();
-        std::fs::rename(&tmp, path).with_context(|| {
-            format!(
-                "atomic rename {} -> {}",
-                tmp.display(),
-                path.display()
-            )
-        })?;
+        std::fs::rename(&tmp, path)
+            .with_context(|| format!("atomic rename {} -> {}", tmp.display(), path.display()))?;
         Ok(())
     })();
     if write_result.is_err() {
@@ -171,12 +162,7 @@ pub fn resolve_contained(cwd: &Path, input: &str) -> anyhow::Result<PathBuf> {
     if let Some(p) = first_ok {
         return Ok(p);
     }
-    Err(last_err.unwrap_or_else(|| {
-        anyhow::anyhow!(
-            "path {} not found under any work root",
-            input
-        )
-    }))
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("path {} not found under any work root", input)))
 }
 
 /// Fold `.` and `..` away WITHOUT touching the filesystem.
@@ -357,11 +343,8 @@ mod tests {
         let a = tempfile::tempdir().unwrap();
         let b = tempfile::tempdir().unwrap();
         std::fs::write(b.path().join("only-b.txt"), b"hi").unwrap();
-        let ctx = WorkContext::from_paths(
-            a.path().to_path_buf(),
-            [b.path().to_path_buf()],
-        )
-        .unwrap();
+        let ctx =
+            WorkContext::from_paths(a.path().to_path_buf(), [b.path().to_path_buf()]).unwrap();
         let b_name = ctx.roots[1].name.clone();
         install_work_context(ctx);
         let p = resolve_contained(a.path(), &format!("//{b_name}/only-b.txt")).unwrap();

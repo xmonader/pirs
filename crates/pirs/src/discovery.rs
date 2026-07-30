@@ -158,7 +158,9 @@ mod tests {
 
     #[test]
     fn discovers_skills_and_commands() {
-        let _guard = crate::TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let skill_dir = dir.path().join(".claude/skills/review");
         std::fs::create_dir_all(&skill_dir).unwrap();
@@ -188,7 +190,9 @@ mod tests {
         let commands = discover_commands(dir.path());
         // path field is product-facing (/help shows it)
         assert!(
-            commands.iter().all(|c| c.path.extension().and_then(|e| e.to_str()) == Some("md")),
+            commands
+                .iter()
+                .all(|c| c.path.extension().and_then(|e| e.to_str()) == Some("md")),
             "file commands must retain source path"
         );
         assert_eq!(commands.len(), 1);

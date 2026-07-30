@@ -38,7 +38,14 @@ pub fn warn_if_allow_all() -> bool {
 /// Normalize peer input: trim, strip common channel prefixes.
 pub fn normalize_peer_id(peer: &str) -> String {
     let p = peer.trim();
-    for prefix in ["telegram:", "tg:", "discord:", "slack:", "whatsapp:", "signal:"] {
+    for prefix in [
+        "telegram:",
+        "tg:",
+        "discord:",
+        "slack:",
+        "whatsapp:",
+        "signal:",
+    ] {
         if let Some(rest) = p
             .strip_prefix(prefix)
             .or_else(|| p.strip_prefix(&prefix.to_ascii_uppercase()))

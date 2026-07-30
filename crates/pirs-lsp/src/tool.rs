@@ -168,9 +168,8 @@ impl AgentTool for LspTool {
                 Ok(ToolOutput::text(format_symbols(&result)))
             }
             "workspace_symbols" => {
-                let q = name.ok_or_else(|| {
-                    anyhow::anyhow!("workspace_symbols requires name= or query=")
-                })?;
+                let q = name
+                    .ok_or_else(|| anyhow::anyhow!("workspace_symbols requires name= or query="))?;
                 let client = if let Some(path_s) = args.path.as_deref() {
                     let path = pirs_tools::paths::resolve_contained(&self.root, path_s)?;
                     let c = self.client_for(&path).await?;
@@ -182,8 +181,7 @@ impl AgentTool for LspTool {
                 };
                 let result = client.workspace_symbols(q).await?;
                 Ok(ToolOutput::text(format_workspace_symbols(
-                    &result,
-                    &self.root,
+                    &result, &self.root,
                 )))
             }
             "find_symbol" => {
@@ -213,13 +211,8 @@ impl AgentTool for LspTool {
                 }
                 Ok(ToolOutput::text(out.join("\n\n")))
             }
-            action @ ("definition"
-            | "references"
-            | "hover"
-            | "implementations"
-            | "type_definition"
-            | "incoming_calls"
-            | "outgoing_calls") => {
+            action @ ("definition" | "references" | "hover" | "implementations"
+            | "type_definition" | "incoming_calls" | "outgoing_calls") => {
                 let path_s = args
                     .path
                     .as_deref()
@@ -409,10 +402,7 @@ fn format_diagnostics(params: &Value, root: &Path) -> String {
 
 fn uri_to_rel(uri: &str, root: &Path) -> String {
     let p = path_from_uri(uri);
-    p.strip_prefix(root)
-        .unwrap_or(&p)
-        .to_string_lossy()
-        .into()
+    p.strip_prefix(root).unwrap_or(&p).to_string_lossy().into()
 }
 
 fn format_locations(result: &Value, root: &Path) -> String {

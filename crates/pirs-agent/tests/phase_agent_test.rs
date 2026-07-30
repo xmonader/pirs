@@ -219,18 +219,8 @@ async fn pin_plan_model_strong_plan_weak_exec_reaches_provider() {
         persist_across_attempts: false,
         hybrid: false,
         steps: vec![
-            Step::Solo(ph(
-                "plan-sys",
-                "plan {issue}",
-                ToolScope::ReadOnly,
-                None,
-            )),
-            Step::Solo(ph(
-                "critic-sys",
-                "critic {prev}",
-                ToolScope::ReadOnly,
-                None,
-            )),
+            Step::Solo(ph("plan-sys", "plan {issue}", ToolScope::ReadOnly, None)),
+            Step::Solo(ph("critic-sys", "critic {prev}", ToolScope::ReadOnly, None)),
             Step::Solo(ph("exec-sys", "exec {prev}", ToolScope::Full, None)),
         ],
     };

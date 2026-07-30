@@ -45,14 +45,17 @@ pub(super) enum ChatItem {
 }
 
 impl ChatItem {
-    pub(super) fn render(&self, theme: &Theme, width: usize, thinking_expanded: bool) -> Vec<Line<'static>> {
+    pub(super) fn render(
+        &self,
+        theme: &Theme,
+        width: usize,
+        thinking_expanded: bool,
+    ) -> Vec<Line<'static>> {
         match self {
             ChatItem::System(text) => {
                 let mut out: Vec<Line<'static>> = text
                     .lines()
-                    .map(|l| {
-                        Line::from(Span::styled(format!("    {l}"), theme.system))
-                    })
+                    .map(|l| Line::from(Span::styled(format!("    {l}"), theme.system)))
                     .collect();
                 out.push(Line::from(""));
                 out
@@ -438,4 +441,3 @@ pub(super) fn find_closing(chars: &[char], start: usize, needle: &[char]) -> Opt
     }
     None
 }
-

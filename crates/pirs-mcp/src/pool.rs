@@ -11,10 +11,10 @@ use anyhow::{bail, Context as _};
 use tokio::sync::Mutex;
 
 use crate::catalog::McpCatalog;
+use crate::client::StdioClient;
 use crate::client::{CallResult, Client, McpToolDef};
 use crate::config::{ServerSpec, ServerTransport};
 use crate::http::{HttpClient, LegacySseClient};
-use crate::client::StdioClient;
 
 /// Default max concurrent live MCP clients (stdio processes + HTTP sessions).
 pub const DEFAULT_MAX_LIVE: usize = 16;
@@ -226,21 +226,18 @@ impl McpPool {
         self.enable(server).await
     }
 
-    pub async fn describe_tool(
-        &self,
-        server: &str,
-        tool: &str,
-    ) -> anyhow::Result<McpToolDef> {
+    pub async fn describe_tool(&self, server: &str, tool: &str) -> anyhow::Result<McpToolDef> {
         let tools = self.list_tools_cached(server).await?;
         // If schema-less cache miss, force live list.
-        let tools = if tools.iter().any(|t| t.name == tool && t.input_schema.is_object()) {
+        let tools = if tools
+            .iter()
+            .any(|t| t.name == tool && t.input_schema.is_object())
+        {
             tools
         } else {
             self.ensure_live(server).await?;
             let live = self.live.lock().await;
-            live.get(server)
-                .map(|ls| ls.tools.clone())
-                .unwrap_or(tools)
+            live.get(server).map(|ls| ls.tools.clone()).unwrap_or(tools)
         };
         tools
             .into_iter()
@@ -266,11 +263,7 @@ impl McpPool {
         client.call_tool(tool, args).await
     }
 
-    pub async fn search(
-        &self,
-        query: &str,
-        limit: usize,
-    ) -> Vec<crate::catalog::CatalogEntry> {
+    pub async fn search(&self, query: &str, limit: usize) -> Vec<crate::catalog::CatalogEntry> {
         let cat = self.catalog.lock().await;
         cat.search(query, limit).into_iter().cloned().collect()
     }
@@ -300,10 +293,7 @@ mod tests {
     use crate::config::ServerTransport;
 
     fn mock_script() -> String {
-        format!(
-            "{}/tests/mcp_echo.py",
-            env!("CARGO_MANIFEST_DIR")
-        )
+        format!("{}/tests/mcp_echo.py", env!("CARGO_MANIFEST_DIR"))
     }
 
     fn echo_spec(name: &str) -> ServerSpec {

@@ -83,8 +83,8 @@ fn phase_from_map(pm: &Map, where_: &str) -> anyhow::Result<Phase> {
     // Optional per-phase model override — the Oracle lever.
     let model = get_str(pm, "model");
     // Optional free skip: e.g. skip fixup when review returned APPROVE.
-    let skip_if_prev_prefix = get_str(pm, "skip_if_prev_prefix")
-        .or_else(|| get_str(pm, "skip_if_prev_starts_with"));
+    let skip_if_prev_prefix =
+        get_str(pm, "skip_if_prev_prefix").or_else(|| get_str(pm, "skip_if_prev_starts_with"));
     Ok(Phase {
         system,
         prompt,

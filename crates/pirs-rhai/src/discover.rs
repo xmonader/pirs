@@ -107,13 +107,13 @@ pub fn builtin_profile_names() -> Vec<&'static str> {
 /// Look up a built-in profile by name.
 pub fn builtin_profile(name: &str) -> Option<Profile> {
     match name {
-        "default" => crate::profile_script::load_profile_str(
-            crate::weak_packs::DEFAULT_PROFILE,
-            "default",
-        )
-        .ok(),
-        "weak" => crate::profile_script::load_profile_str(crate::weak_packs::WEAK_PROFILE, "weak")
-            .ok(),
+        "default" => {
+            crate::profile_script::load_profile_str(crate::weak_packs::DEFAULT_PROFILE, "default")
+                .ok()
+        }
+        "weak" => {
+            crate::profile_script::load_profile_str(crate::weak_packs::WEAK_PROFILE, "weak").ok()
+        }
         _ => None,
     }
 }
@@ -277,10 +277,10 @@ mod tests {
     fn falls_back_to_builtin_default_and_weak_profiles() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join(".pirs");
-        let d = resolve_profile_in("default", &[root.clone()]).unwrap();
+        let d = resolve_profile_in("default", std::slice::from_ref(&root)).unwrap();
         assert_eq!(d.name, "default");
         assert_eq!(d.packs, Some(vec!["*".to_string()]));
-        let w = resolve_profile_in("weak", &[root]).unwrap();
+        let w = resolve_profile_in("weak", std::slice::from_ref(&root)).unwrap();
         assert_eq!(w.name, "weak");
         assert_eq!(w.packs.as_ref().map(|p| p.len()), Some(4));
     }

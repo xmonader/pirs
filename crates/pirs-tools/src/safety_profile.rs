@@ -112,14 +112,10 @@ pub fn mutating_action_deny(tool: &str, args: &serde_json::Value) -> Option<Stri
         ),
         // project(list|packages) is observation-only; test/lint/build/run spawn
         // processes and must not run under plan/read-only.
-        "project"
-            if !matches!(action.as_str(), "list" | "packages" | "") =>
-        {
-            Some(format!(
-                "tool `project` action `{action}` runs a process \
+        "project" if !matches!(action.as_str(), "list" | "packages" | "") => Some(format!(
+            "tool `project` action `{action}` runs a process \
                  (not allowed under plan/read-only; use list/packages or leave plan mode)"
-            ))
-        }
+        )),
         _ => None,
     }
 }

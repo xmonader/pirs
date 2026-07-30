@@ -7,7 +7,6 @@ pub enum TrustDecision {
     Skip,
 }
 
-
 pub(crate) fn trust_store_path() -> Option<std::path::PathBuf> {
     std::env::var("HOME")
         .ok()

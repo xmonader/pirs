@@ -2,11 +2,8 @@
 use std::path::Path;
 
 use pirs_claw::registry;
-use pirs_skills::{
-    skills_full_section, Skill,
-};
 use pirs_claw::require_llm_key;
-
+use pirs_skills::{skills_full_section, Skill};
 
 pub async fn fire_schedule_job(
     job: &pirs_claw::ScheduleEntry,
@@ -27,11 +24,7 @@ pub async fn fire_schedule_job(
     let prompt = if attached.is_empty() {
         job.prompt.clone()
     } else {
-        format!(
-            "{}\n\n{}",
-            skills_full_section(&attached),
-            job.prompt
-        )
+        format!("{}\n\n{}", skills_full_section(&attached), job.prompt)
     };
     // Isolated job chat: use a temp state subdir so schedule doesn't pollute cli/local.
     let job_state = state.join("schedule-runs").join(&job.id);
@@ -91,10 +84,7 @@ pub async fn fire_schedule_job(
             let _ = child.wait().await;
             out_task.abort();
             err_task.abort();
-            eprintln!(
-                "[tick] job {} timed out after {timeout_secs}s",
-                job.id
-            );
+            eprintln!("[tick] job {} timed out after {timeout_secs}s", job.id);
             return Ok(false);
         }
     };
@@ -124,4 +114,3 @@ pub async fn fire_schedule_job(
     }
     Ok(true)
 }
-

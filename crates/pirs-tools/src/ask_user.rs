@@ -39,10 +39,7 @@ pub struct AskUserArgs {
 ///
 /// Accepts option ids and (case-insensitive) full labels. Multi-select:
 /// comma/space separated ids.
-pub fn resolve_answer(
-    args: &AskUserArgs,
-    answer: &str,
-) -> Result<ResolvedAnswer, String> {
+pub fn resolve_answer(args: &AskUserArgs, answer: &str) -> Result<ResolvedAnswer, String> {
     if args.options.is_empty() {
         return Err("ask_user requires at least one option".into());
     }
@@ -206,8 +203,7 @@ impl AgentTool for AskUserTool {
             anyhow::bail!("ask_user requires options");
         }
         let raw = (self.source)(&args).map_err(|e| anyhow::anyhow!(e))?;
-        let resolved =
-            resolve_answer(&args, &raw).map_err(|e| anyhow::anyhow!("ask_user: {e}"))?;
+        let resolved = resolve_answer(&args, &raw).map_err(|e| anyhow::anyhow!("ask_user: {e}"))?;
         Ok(ToolOutput::text(resolved.tool_content(&args.question)))
     }
 }
@@ -242,7 +238,10 @@ mod tests {
         let content = r.tool_content(&args.question);
         assert!(content.contains("Refactor module"), "{content}");
         assert!(content.contains("selected_ids: a"), "{content}");
-        assert!(content.contains("selected_labels: Refactor module"), "{content}");
+        assert!(
+            content.contains("selected_labels: Refactor module"),
+            "{content}"
+        );
     }
 
     #[test]

@@ -12,7 +12,6 @@ use crate::tool::{tool_defs, AgentTool};
 
 use super::{is_visible, LoopConfig};
 
-
 pub(super) async fn stream_assistant(
     context: &mut Context,
     tools: &[Arc<dyn AgentTool>],
@@ -190,5 +189,3 @@ pub(super) fn append_delta_to_last(context: &mut Context, delta: &str, thinking:
         }
     }
 }
-
-

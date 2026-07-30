@@ -200,9 +200,9 @@ pub fn materialize_fenced_files(reply: &str, out_dir: &Path) -> Vec<PathBuf> {
             if part.contains('.')
                 && part.len() < 120
                 && !part.starts_with("http")
-                && part.chars().all(|c| {
-                    c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+')
-                })
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+'))
             {
                 filename = Some(part.to_string());
                 break;
@@ -212,18 +212,6 @@ pub fn materialize_fenced_files(reply: &str, out_dir: &Path) -> Vec<PathBuf> {
         if filename.is_none() {
             if let Some(first) = body.lines().next() {
                 let f = first.trim();
-                for prefix in ["# file:", "#file:", "// file:", "//file:", "/* file:"] {
-                    if let Some(rest) = f
-                        .to_ascii_lowercase()
-                        .strip_prefix(&prefix.to_ascii_lowercase())
-                        .or_else(|| {
-                            // case-sensitive variants already lowercased line
-                            None
-                        })
-                    {
-                        let _ = rest;
-                    }
-                }
                 let lower = f.to_ascii_lowercase();
                 for prefix in ["# file:", "#file:", "// file:", "//file:"] {
                     if let Some(idx) = lower.find(prefix) {

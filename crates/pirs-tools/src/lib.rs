@@ -38,8 +38,8 @@ pub fn scratch_dir() -> &'static Path {
 
 pub mod ask_user;
 pub mod audit_tool;
+pub mod autonomy;
 pub mod bash;
-pub mod work_context;
 pub mod browser;
 #[cfg(feature = "cdp")]
 pub mod browser_cdp;
@@ -55,13 +55,11 @@ pub mod fleet;
 pub mod git_tools;
 pub mod grep;
 pub mod job_tools;
-pub mod autonomy;
-pub mod permission_mode;
-pub mod tool_preset;
 pub mod ls;
 pub mod office;
 pub mod office_write;
 pub mod paths;
+pub mod permission_mode;
 pub mod pr_tools;
 pub mod project;
 pub mod read;
@@ -72,9 +70,11 @@ pub mod safety_profile;
 pub mod sandbox;
 pub mod session_rewind;
 pub mod todo_tool;
+pub mod tool_preset;
 pub mod truncate;
 pub mod vision;
 pub mod web;
+pub mod work_context;
 pub mod worktree;
 pub mod write;
 
@@ -82,36 +82,11 @@ pub use ask_user::{
     env_or_stdin_answer_source, queue_answer_source, resolve_answer, AskUserArgs, AskUserTool,
     ResolvedAnswer,
 };
+pub use autonomy::{apply_autonomy, autonomy_status_line, resolve_autonomy, Autonomy};
 pub use bash::BashTool;
-pub use edit::EditTool;
-pub use edit_block::EditBlockTool;
-pub use find::FindTool;
-pub use grep::GrepTool;
-pub use ls::LsTool;
-pub use office::{extract_document, is_office_ext};
-pub use office_write::{
-    create_docx, create_pptx, create_xlsx, office_tools, update_docx, update_pptx, update_xlsx,
-    OfficeDocumentTool, SlideSpec,
-};
-pub use read::ReadTool;
-pub use recall::RecallTool;
-pub use project::{
-    detect_native_checks, detect_profile, detect_toolchain_label, detect_verify_from_profile,
-    discover_packages, format_verify_for_tool_result, is_post_edit_verify_tool,
-    post_edit_verify, post_edit_verify_enabled, post_edit_verify_for_path, preferred_verify_action,
-    rust_workspace_package, ProjectProfile, ProjectTool, VerifyOutcome,
-};
-pub use run_tests::RunTestsTool;
-pub use safety_profile::{
-    is_readonly_tool, mutating_action_deny, profile_deny_reason, profile_deny_reason_with_args,
-    profile_hook, profile_skips_approval, SafetyProfile,
-};
-pub use todo_tool::{TodoStore, TodoTool};
 pub use browser::browser_tools;
 #[cfg(feature = "cdp")]
 pub use browser_cdp::cdp_tools;
-pub use computer::computer_tools;
-pub use vision::vision_tools;
 pub use checkpoint::{
     create_checkpoint, list_checkpoints, maybe_auto_checkpoint, restore_checkpoint, CheckpointTool,
 };
@@ -119,37 +94,61 @@ pub use code_review::{
     attach_finding_slices, build_rubric, decide_gate_action, enrich_units, filter_dismissed,
     filter_precision, finding_dismiss_key, format_report_json, format_report_text,
     format_reviewer_context, host_review_report, is_noise_path, is_safe_repo_rel_path,
-    load_dismissed_keys, merge_llm_verdicts, partition_units, plan_fingerprint, review_tool_allowed,
-    review_tool_diet, run_review, scan_added_line, select_changed_files, unit_content_hash,
-    unit_risk_score, Finding, FindingSeverity, GateAction, ReviewReport, ReviewRubric,
-    ReviewSelectOpts, ReviewUnit, HYSTERESIS_MS, LLM_RESIDUAL_RISK_THRESHOLD, REVIEW_ALLOWED_TOOLS,
-    REVIEW_DENIED_TOOLS,
+    load_dismissed_keys, merge_llm_verdicts, partition_units, plan_fingerprint,
+    review_tool_allowed, review_tool_diet, run_review, scan_added_line, select_changed_files,
+    unit_content_hash, unit_risk_score, Finding, FindingSeverity, GateAction, ReviewReport,
+    ReviewRubric, ReviewSelectOpts, ReviewUnit, HYSTERESIS_MS, LLM_RESIDUAL_RISK_THRESHOLD,
+    REVIEW_ALLOWED_TOOLS, REVIEW_DENIED_TOOLS,
 };
+pub use computer::computer_tools;
 pub use doctor::{doctor_report, DoctorTool};
+pub use edit::EditTool;
+pub use edit_block::EditBlockTool;
+pub use find::FindTool;
 pub use fleet::fleet_tools;
 pub use git_tools::git_tools;
-pub use autonomy::{
-    apply_autonomy, autonomy_status_line, resolve_autonomy, Autonomy,
+pub use grep::GrepTool;
+pub use ls::LsTool;
+pub use office::{extract_document, is_office_ext};
+pub use office_write::{
+    create_docx, create_pptx, create_xlsx, office_tools, update_docx, update_pptx, update_xlsx,
+    OfficeDocumentTool, SlideSpec,
 };
 pub use permission_mode::{
     apply_yolo_permission_default, init_live_permission_mode, live_permission_hook,
-    live_permission_mode, permission_deny_reason, permission_deny_reason_with_args, permission_hook,
-    required_mode_for_tool, set_live_permission_mode, with_live_permission_mode, PermissionMode,
+    live_permission_mode, permission_deny_reason, permission_deny_reason_with_args,
+    permission_hook, required_mode_for_tool, set_live_permission_mode, with_live_permission_mode,
+    PermissionMode,
 };
-pub use tool_preset::{apply_tool_preset, ToolPreset, ToolPresetConfig};
 pub use pr_tools::pr_tools;
+pub use project::{
+    detect_native_checks, detect_profile, detect_toolchain_label, detect_verify_from_profile,
+    discover_packages, format_verify_for_tool_result, is_post_edit_verify_tool, post_edit_verify,
+    post_edit_verify_enabled, post_edit_verify_for_path, preferred_verify_action,
+    rust_workspace_package, ProjectProfile, ProjectTool, VerifyOutcome,
+};
+pub use read::ReadTool;
+pub use recall::RecallTool;
 pub use research::research_tools;
+pub use run_tests::RunTestsTool;
+pub use safety_profile::{
+    is_readonly_tool, mutating_action_deny, profile_deny_reason, profile_deny_reason_with_args,
+    profile_hook, profile_skips_approval, SafetyProfile,
+};
 pub use session_rewind::{host_undo, snapshot as rewind_snapshot, RewindTool};
+pub use todo_tool::{TodoStore, TodoTool};
+pub use tool_preset::{apply_tool_preset, ToolPreset, ToolPresetConfig};
+pub use vision::vision_tools;
 pub use web::life_tools;
+pub use work_context::{
+    clear_work_context, current_work_context, install_work_context, load_named_context,
+    work_context_summary, WorkContext, WorkRoot,
+};
 pub use worktree::{
     bind_session_worktree, ensure_worktree, git_repo_root, sanitize_worktree_name,
     worktree_path_for, WorktreeSession,
 };
 pub use write::WriteTool;
-pub use work_context::{
-    clear_work_context, current_work_context, install_work_context, load_named_context,
-    work_context_summary, WorkContext, WorkRoot,
-};
 
 /// Session-aware tools (ask_user, todo) plus coding defaults.
 ///

@@ -421,7 +421,10 @@ mod tests {
         std::fs::write(cwd.join("hello.txt"), b"dirty").unwrap();
         let msg = restore_checkpoint(cwd, Some(&meta.id)).unwrap();
         assert!(msg.contains("restored"));
-        assert_eq!(std::fs::read_to_string(cwd.join("hello.txt")).unwrap(), "from-cp");
+        assert_eq!(
+            std::fs::read_to_string(cwd.join("hello.txt")).unwrap(),
+            "from-cp"
+        );
     }
 
     #[test]

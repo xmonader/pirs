@@ -227,7 +227,12 @@ enum StrategyKind {
     SparkEmber,
     /// Weak executor drives; strong model only at plan + review checkpoints.
     /// CLI aliases: `advisor`, `weak-strong`, `advise-exec`.
-    #[value(alias = "advisor", alias = "weak-strong", alias = "advise-exec", alias = "weak-advisor")]
+    #[value(
+        alias = "advisor",
+        alias = "weak-strong",
+        alias = "advise-exec",
+        alias = "weak-advisor"
+    )]
     WeakDrive,
 }
 
@@ -570,10 +575,7 @@ fn git_reset_to(dir: &std::path::Path, base_sha: &str) -> anyhow::Result<()> {
         .output()
         .context("git clean")?;
     if !st.status.success() {
-        bail!(
-            "git clean failed: {}",
-            String::from_utf8_lossy(&st.stderr)
-        );
+        bail!("git clean failed: {}", String::from_utf8_lossy(&st.stderr));
     }
     Ok(())
 }
@@ -870,8 +872,7 @@ fn run_solve(a: SolveArgs) -> anyhow::Result<bool> {
         }
         match &a.out {
             Some(path) => {
-                std::fs::write(path, &patch)
-                    .with_context(|| format!("write patch to {path:?}"))?;
+                std::fs::write(path, &patch).with_context(|| format!("write patch to {path:?}"))?;
                 eprintln!("patch written to {path:?} ({} bytes)", patch.len());
             }
             None => println!("{patch}"),
@@ -1041,6 +1042,8 @@ mod tests {
             no_strategy,
             profile: None,
             trace: None,
+            hide_targets: false,
+            agent_only: false,
         }
     }
 

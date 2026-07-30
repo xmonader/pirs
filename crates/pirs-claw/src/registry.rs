@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use pirs_ai::{
     api_key_for_alias, build_routing_provider, first_available_backend_key, load_user_registry,
-    OpenAiCompat, RegistryFile, LlmProvider,
+    LlmProvider, OpenAiCompat, RegistryFile,
 };
 
 pub use pirs_ai::{

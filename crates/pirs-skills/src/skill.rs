@@ -116,7 +116,8 @@ pub fn validate_skill_name(name: &str) -> Result<(), String> {
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     {
         return Err(
-            "skill name must be lowercase letters, digits, and hyphens only (agentskills.io)".into(),
+            "skill name must be lowercase letters, digits, and hyphens only (agentskills.io)"
+                .into(),
         );
     }
     Ok(())
@@ -294,9 +295,7 @@ pub fn skills_full_section(skills: &[Skill]) -> String {
     for sk in skills {
         s.push_str(&format!(
             "\n### {}\n{}\n\n{}\n",
-            sk.name,
-            sk.description,
-            sk.body
+            sk.name, sk.description, sk.body
         ));
         record_usage(&sk.name);
     }
@@ -481,7 +480,10 @@ mod tests {
         assert_eq!(sk.description, "when cargo fails");
         assert_eq!(sk.license.as_deref(), Some("MIT"));
         assert!(sk.body.contains("cargo test"));
-        assert!(sk.metadata.iter().any(|(k, v)| k == "author" && v == "pirs"));
+        assert!(sk
+            .metadata
+            .iter()
+            .any(|(k, v)| k == "author" && v == "pirs"));
     }
 
     #[test]

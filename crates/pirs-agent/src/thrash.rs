@@ -32,7 +32,10 @@ fn compact_args(v: &serde_json::Value) -> String {
         // poisoning it, which in a long-lived process (--serve / --mode rpc / ACP) made every
         // SUBSEQUENT tool call panic at the same lock().unwrap(). Every other truncation in this
         // crate is already char-safe; this was the outlier.
-        let cut = (0..=400).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
+        let cut = (0..=400)
+            .rev()
+            .find(|&i| s.is_char_boundary(i))
+            .unwrap_or(0);
         format!("{}…", &s[..cut])
     }
 }
@@ -250,7 +253,10 @@ mod tests {
         let args = json!({"x": 1});
         assert!(g.observe_tool_start("bash", &args).is_none());
         assert!(g.observe_tool_start("bash", &args).is_none());
-        assert!(g.observe_tool_start("bash", &args).unwrap().contains("loop"));
+        assert!(g
+            .observe_tool_start("bash", &args)
+            .unwrap()
+            .contains("loop"));
         assert!(g.peek_stop().is_some());
     }
 

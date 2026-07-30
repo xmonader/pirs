@@ -2,7 +2,6 @@
 use rhai::Dynamic;
 use serde_json::Value;
 
-
 pub(crate) fn dynamic_to_messages(d: &Dynamic) -> Vec<pirs_ai::Message> {
     if d.is_unit() {
         return vec![];

@@ -155,10 +155,7 @@ pub(crate) fn render_tool_call(
             } else {
                 default_style
             };
-            out.push(Line::from(Span::styled(
-                format!("    {border} {l}"),
-                style,
-            )));
+            out.push(Line::from(Span::styled(format!("    {border} {l}"), style)));
         }
         if total > TOOL_BODY_SHOW {
             out.push(Line::from(Span::styled(
@@ -216,4 +213,3 @@ pub(crate) fn render_tool_group(
     }
     out
 }
-

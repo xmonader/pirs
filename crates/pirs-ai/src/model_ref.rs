@@ -10,10 +10,7 @@ use crate::routing::ServeTarget;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModelSpec {
     /// Force one subscription: `backend` + remote id (may contain `/`).
-    Pin {
-        backend: String,
-        remote: String,
-    },
+    Pin { backend: String, remote: String },
     /// Logical model name; resolved via portable index / aliases.
     Portable(String),
 }

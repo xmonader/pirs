@@ -34,10 +34,10 @@ pub type SubagentRunner =
 pub mod builtins;
 pub mod caps;
 mod convert;
-mod trust;
 pub mod discover;
 pub mod profile_script;
 pub mod strategy_script;
+mod trust;
 pub mod weak_packs;
 
 /// Immutable per-extension hook presence, hoisted OUT of `Mutex<Extension>` so
@@ -169,7 +169,11 @@ pub fn register_core_host_apis() {
     // Optional cwd: "label|/abs/cwd" or "id|/abs/cwd" so packs aren't cwd-racey.
     register_query_fn("checkpoint_create", |arg| {
         let (label, cwd) = split_label_cwd(arg);
-        let label = if label.is_empty() { "auto".into() } else { label };
+        let label = if label.is_empty() {
+            "auto".into()
+        } else {
+            label
+        };
         match pirs_tools::create_checkpoint(&cwd, &label, 0) {
             Ok(m) => vec![m.id, m.kind, format!("label={}", m.label)],
             Err(e) => vec![format!("error:{e}")],
@@ -177,7 +181,11 @@ pub fn register_core_host_apis() {
     });
     register_query_fn("checkpoint_restore", |arg| {
         let (id, cwd) = split_label_cwd(arg);
-        let id_opt = if id.is_empty() { None } else { Some(id.as_str()) };
+        let id_opt = if id.is_empty() {
+            None
+        } else {
+            Some(id.as_str())
+        };
         match pirs_tools::restore_checkpoint(&cwd, id_opt) {
             Ok(msg) => vec![msg],
             Err(e) => vec![format!("error:{e}")],
@@ -196,7 +204,7 @@ pub fn register_core_host_apis() {
     });
     // Deterministic review plan + reviewer context for review-gate and packs.
     // Arg: "" | "cwd" | "cwd|from|to". Returns [json_report, reviewer_context] or [error:…].
-    register_query_fn("review_report", |arg| pirs_tools::host_review_report(arg));
+    register_query_fn("review_report", pirs_tools::host_review_report);
 }
 
 #[cfg(test)]
@@ -260,7 +268,9 @@ mod review_host_tests {
         );
         assert!(lines.len() >= 2);
         assert!(
-            lines[1].contains("DENIED") || lines[1].contains("denied") || lines[1].contains("write"),
+            lines[1].contains("DENIED")
+                || lines[1].contains("denied")
+                || lines[1].contains("write"),
             "context missing diet: {}",
             lines[1]
         );
@@ -274,8 +284,7 @@ mod review_host_tests {
 /// arbitrary host trees.
 fn split_label_cwd(arg: &str) -> (String, std::path::PathBuf) {
     let arg = arg.trim();
-    let process_cwd =
-        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let process_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     if let Some((label, cwd)) = arg.rsplit_once('|') {
         let cand = std::path::PathBuf::from(cwd.trim());
         if cand.is_absolute() || cwd.starts_with('.') {
@@ -441,7 +450,7 @@ fn exec_capped(caps: &caps::Caps, command: &str, timeout_secs: u64) -> rhai::Map
 fn exec_impl(command: &str, timeout_secs: u64) -> rhai::Map {
     let mut map = rhai::Map::new();
     // Cap absurd timeouts (i64::MAX → Instant panic / multi-day wedges).
-    let timeout_secs = timeout_secs.min(7 * 86400).max(1);
+    let timeout_secs = timeout_secs.clamp(1, 7 * 86400);
     let spawned = std::process::Command::new("/bin/bash")
         .arg("-c")
         .arg(command)
@@ -1286,7 +1295,7 @@ pub const MAX_PARALLEL_MAP: usize = 32;
 
 /// Clamp parallel_map concurrency for tests and host registration.
 pub fn clamp_parallel_concurrency(requested: usize) -> usize {
-    requested.max(1).min(MAX_PARALLEL_MAP)
+    requested.clamp(1, MAX_PARALLEL_MAP)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1348,7 +1357,6 @@ fn parallel_map_impl(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-
 
 enum ExtensionFlag {
     Context,
@@ -1466,7 +1474,10 @@ mod host_api_tests {
                 assert!(rows[0].contains("restored"), "{rows:?}");
             }
         }
-        assert_eq!(std::fs::read_to_string(dir.path().join("f.txt")).unwrap(), "v1");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+            "v1"
+        );
         std::env::set_current_dir(prev).unwrap();
     }
 
@@ -1482,7 +1493,9 @@ mod host_api_tests {
             if name == "project_profile" {
                 let lines = f(root.to_str().unwrap());
                 assert!(
-                    lines.iter().any(|l| l.contains("cargo") || l.starts_with("test=")),
+                    lines
+                        .iter()
+                        .any(|l| l.contains("cargo") || l.starts_with("test=")),
                     "project_profile lines: {lines:?}"
                 );
                 found = true;
@@ -1491,7 +1504,6 @@ mod host_api_tests {
         assert!(found, "project_profile query not registered");
     }
 }
-
 
 #[cfg(test)]
 mod parallel_map_clamp_tests {
@@ -1503,7 +1515,6 @@ mod parallel_map_clamp_tests {
         assert_eq!(clamp_parallel_concurrency(1), 1);
         assert_eq!(clamp_parallel_concurrency(8), 8);
         assert_eq!(clamp_parallel_concurrency(10_000), MAX_PARALLEL_MAP);
-        assert!(MAX_PARALLEL_MAP <= 64);
         // Registration site uses MAX_PARALLEL_MAP
         let src = include_str!("lib.rs");
         assert!(src.contains("MAX_PARALLEL_MAP"));

@@ -82,8 +82,12 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    Code { prompt: Vec<String> },
-    Chat { message: Vec<String> },
+    Code {
+        prompt: Vec<String>,
+    },
+    Chat {
+        message: Vec<String>,
+    },
     History {
         #[arg(long, default_value_t = 20)]
         last: usize,
@@ -247,11 +251,19 @@ pub enum ScheduleCmd {
         #[command(subcommand)]
         cmd: Option<BlueprintCmd>,
     },
-    Pause { id: String },
-    Resume { id: String },
-    Remove { id: String },
+    Pause {
+        id: String,
+    },
+    Resume {
+        id: String,
+    },
+    Remove {
+        id: String,
+    },
     /// Fire one job immediately (does not wait for next_fire).
-    Run { id: String },
+    Run {
+        id: String,
+    },
     Tick {
         #[arg(long)]
         run: bool,

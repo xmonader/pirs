@@ -454,7 +454,10 @@ mod evolution_mode_tests {
 
     #[test]
     fn parse_and_default() {
-        assert_eq!(EvolutionMode::parse("observe"), Some(EvolutionMode::Observe));
+        assert_eq!(
+            EvolutionMode::parse("observe"),
+            Some(EvolutionMode::Observe)
+        );
         assert_eq!(EvolutionMode::parse("draft"), Some(EvolutionMode::Draft));
         assert_eq!(EvolutionMode::parse("apply"), Some(EvolutionMode::Apply));
         assert_eq!(EvolutionMode::Draft.name(), "draft");

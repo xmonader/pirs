@@ -143,7 +143,6 @@ impl Theme {
     }
 }
 
-
 /// Composer border color by mode + session state.
 ///
 /// Uses live permission (autonomy ladder) first so we don't paint default

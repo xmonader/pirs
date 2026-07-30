@@ -1,5 +1,5 @@
-use super::*;
 use super::tool_exec::*;
+use super::*;
 use pirs_ai::ContentBlock;
 
 #[test]
@@ -56,22 +56,26 @@ fn finalize_result_caps_ok_output() {
     let r = finalize_result("c1", "mcp_tool", Ok(out), &Hooks::default());
     assert!(!r.is_error);
     assert!(r.model_text().chars().count() <= MODEL_MAX_TOOL_RESULT_CHARS + 120);
-    assert!(r
-        .details
-        .as_ref()
-        .and_then(|d| d.get("uiText"))
-        .is_some());
+    assert!(r.details.as_ref().and_then(|d| d.get("uiText")).is_some());
 }
 
 #[test]
 fn transient_tool_error_classifier() {
-    assert!(is_transient_tool_error(&anyhow::anyhow!("connection reset by peer")));
-    assert!(is_transient_tool_error(&anyhow::anyhow!("request timed out")));
+    assert!(is_transient_tool_error(&anyhow::anyhow!(
+        "connection reset by peer"
+    )));
+    assert!(is_transient_tool_error(&anyhow::anyhow!(
+        "request timed out"
+    )));
     // Bare "503" / "try again" no longer trigger retries (mutating tool hazard).
     assert!(!is_transient_tool_error(&anyhow::anyhow!("HTTP 503")));
-    assert!(!is_transient_tool_error(&anyhow::anyhow!("please try again later")));
+    assert!(!is_transient_tool_error(&anyhow::anyhow!(
+        "please try again later"
+    )));
     assert!(!is_transient_tool_error(&anyhow::anyhow!("file not found")));
-    assert!(!is_transient_tool_error(&anyhow::anyhow!("Invalid arguments")));
+    assert!(!is_transient_tool_error(&anyhow::anyhow!(
+        "Invalid arguments"
+    )));
 }
 
 #[test]

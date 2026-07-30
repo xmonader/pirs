@@ -22,7 +22,11 @@ pub struct SessionHit {
 /// When `peer_scope` is set (e.g. `telegram/12345` or `telegram/`), only sessions
 /// whose key starts with that prefix are searched — prevents cross-peer leaks on
 /// a shared gateway by default.
-pub fn search_sessions(state_dir: &Path, query: &str, limit: usize) -> anyhow::Result<Vec<SessionHit>> {
+pub fn search_sessions(
+    state_dir: &Path,
+    query: &str,
+    limit: usize,
+) -> anyhow::Result<Vec<SessionHit>> {
     search_sessions_scoped(state_dir, query, limit, None)
 }
 
@@ -267,8 +271,8 @@ mod tests {
         let b = SessionStore::open_for(dir.path(), SessionId::new("telegram", "2")).unwrap();
         a.append("user", "secret alpha token zebra").unwrap();
         b.append("user", "secret beta token zebra").unwrap();
-        let scoped = search_sessions_scoped(dir.path(), "zebra secret", 10, Some("telegram/1"))
-            .unwrap();
+        let scoped =
+            search_sessions_scoped(dir.path(), "zebra secret", 10, Some("telegram/1")).unwrap();
         assert!(!scoped.is_empty());
         assert!(
             scoped
@@ -308,19 +312,18 @@ mod tests {
         let scoped =
             search_sessions_scoped(dir.path(), "confidential marker", 20, Some("telegram/1"))
                 .unwrap();
+        assert!(!scoped.is_empty(), "peer 1 should have hits: {scoped:?}");
         assert!(
-            !scoped.is_empty(),
-            "peer 1 should have hits: {scoped:?}"
-        );
-        assert!(
-            scoped.iter().all(|h| h.session_key == "telegram/1"
-                || h.session_key.starts_with("telegram/1/")),
+            scoped
+                .iter()
+                .all(|h| h.session_key == "telegram/1" || h.session_key.starts_with("telegram/1/")),
             "only telegram/1 keys: {:?}",
             scoped.iter().map(|h| &h.session_key).collect::<Vec<_>>()
         );
         assert!(
-            !scoped.iter().any(|h| h.session_key == "telegram/10"
-                || h.snippet.contains("marker-ten")),
+            !scoped
+                .iter()
+                .any(|h| h.session_key == "telegram/10" || h.snippet.contains("marker-ten")),
             "telegram/1 scope must not include telegram/10: {scoped:?}"
         );
 
@@ -404,15 +407,15 @@ mod tests {
         // not bare session_search_tool(state) / env-only scope.
         // Handler lives in bin_helpers after the binary main split.
         let main_src = concat!(
-    include_str!("main.rs"),
-    include_str!("bin_helpers/mod.rs"),
-    include_str!("bin_helpers/schedule_fire.rs"),
-    include_str!("bin_helpers/gateway_msg.rs"),
-    include_str!("bin_helpers/chat.rs"),
-    include_str!("bin_helpers/code.rs"),
-    include_str!("bin_helpers/tools.rs"),
-    include_str!("bin_helpers/status.rs"),
-);
+            include_str!("main.rs"),
+            include_str!("bin_helpers/mod.rs"),
+            include_str!("bin_helpers/schedule_fire.rs"),
+            include_str!("bin_helpers/gateway_msg.rs"),
+            include_str!("bin_helpers/chat.rs"),
+            include_str!("bin_helpers/code.rs"),
+            include_str!("bin_helpers/tools.rs"),
+            include_str!("bin_helpers/status.rs"),
+        );
         assert!(
             main_src.contains("gateway_session_search_tool"),
             "gateway tool assembly must use gateway_session_search_tool"

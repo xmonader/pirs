@@ -3,8 +3,6 @@ use std::sync::{Arc, Mutex};
 use pirs_agent::AgentEvent;
 use pirs_ai::Message;
 
-use crate::approval::ApprovalMode;
-
 use super::app::{App, TuiOptions};
 use super::chat::ChatItem;
 use super::tools::*;
@@ -65,7 +63,9 @@ pub(super) fn apply_agent_event(app: &mut App, event: AgentEvent) {
             let summary = crate::summarize_args(&tool_name, &args);
             app.start_tool(tool_name, summary);
         }
-        AgentEvent::ToolExecutionEnd { result, tool_name, .. } => {
+        AgentEvent::ToolExecutionEnd {
+            result, tool_name, ..
+        } => {
             app.clock.mark_tool(result.is_error);
             // Prefer details.uiText (full) over model-capped content for display.
             let text = result.display_text();
@@ -124,9 +124,9 @@ pub(super) fn extract_thinking(a: &pirs_ai::AssistantMessage) -> String {
         .content
         .iter()
         .filter_map(|b| match b {
-            pirs_ai::ContentBlock::Thinking { thinking, redacted, .. }
-                if !thinking.trim().is_empty() =>
-            {
+            pirs_ai::ContentBlock::Thinking {
+                thinking, redacted, ..
+            } if !thinking.trim().is_empty() => {
                 if *redacted {
                     Some(String::from("[redacted thinking]"))
                 } else {
@@ -191,4 +191,3 @@ pub(super) fn approval_bridge(
     }
     (pending, Arc::new(tx))
 }
-

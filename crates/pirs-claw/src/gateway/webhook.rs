@@ -1,6 +1,5 @@
 //! HTTP webhooks: Discord / Slack / WhatsApp ingress + signature verify.
 
-
 use crate::channel::{InboundMessage, CHANNEL_DISCORD, CHANNEL_SLACK, CHANNEL_WHATSAPP};
 use crate::pairing::PairingAllowlist;
 use crate::GatewayReply;
@@ -11,7 +10,6 @@ use super::outbound::{send_discord, send_slack, send_whatsapp};
 use super::MessageHandler;
 
 type SendFuture = std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
-
 
 pub(super) async fn run_webhook_listener(
     channel: &'static str,
@@ -49,9 +47,7 @@ pub(super) async fn run_webhook_listener(
         Ok("1") | Ok("true") | Ok("yes")
     ) && webhook_secret_for(channel).is_none()
     {
-        anyhow::bail!(
-            "{channel}: PIRS_WEBHOOK_REQUIRE_SECRET=1 but no webhook secret configured"
-        );
+        anyhow::bail!("{channel}: PIRS_WEBHOOK_REQUIRE_SECRET=1 but no webhook secret configured");
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
     eprintln!(
@@ -170,9 +166,7 @@ pub const WEBHOOK_MAX_BODY: usize = 1024 * 1024;
 ///
 /// Replaces a single 64 KiB `read()` that mis-parsed fragmented or large
 /// bodies behind reverse proxies (review M-32).
-pub async fn read_http_request(
-    sock: &mut tokio::net::TcpStream,
-) -> anyhow::Result<String> {
+pub async fn read_http_request(sock: &mut tokio::net::TcpStream) -> anyhow::Result<String> {
     use tokio::io::AsyncReadExt;
     let mut buf: Vec<u8> = Vec::with_capacity(4096);
     let mut tmp = [0u8; 4096];
@@ -217,7 +211,7 @@ pub async fn read_http_request(
 }
 
 pub(super) fn find_header_end(buf: &[u8]) -> Option<usize> {
-    buf.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i)
+    buf.windows(4).position(|w| w == b"\r\n\r\n")
 }
 
 pub(super) fn parse_content_length(headers: &str) -> Option<usize> {
@@ -241,12 +235,13 @@ pub const SLACK_TIMESTAMP_SKEW_SECS: i64 = 5 * 60;
 ///
 /// If no secret is configured, returns Ok (pairing allowlist remains the gate).
 /// If a secret is configured and the signature is missing/wrong, returns Err.
-pub fn verify_webhook_signature(
-    channel: &str,
-    headers: &str,
-    body: &str,
-) -> Result<(), String> {
-    verify_webhook_signature_at(channel, headers, body, crate::channel::now_secs_pub() as i64)
+pub fn verify_webhook_signature(channel: &str, headers: &str, body: &str) -> Result<(), String> {
+    verify_webhook_signature_at(
+        channel,
+        headers,
+        body,
+        crate::channel::now_secs_pub() as i64,
+    )
 }
 
 /// Same as [`verify_webhook_signature`] with injectable clock (tests).
@@ -413,7 +408,11 @@ pub(super) fn extract_discord(v: &serde_json::Value) -> Option<(String, String)>
         .get("author_id")
         .or_else(|| v.pointer("/author/id"))
         .or_else(|| v.get("user_id"))
-        .and_then(|x| x.as_str().map(|s| s.to_string()).or_else(|| x.as_i64().map(|n| n.to_string())))?;
+        .and_then(|x| {
+            x.as_str()
+                .map(|s| s.to_string())
+                .or_else(|| x.as_i64().map(|n| n.to_string()))
+        })?;
     let text = v
         .get("content")
         .or_else(|| v.get("text"))
@@ -447,10 +446,7 @@ pub(super) fn extract_whatsapp(v: &serde_json::Value) -> Option<(String, String)
     let msg = v
         .pointer("/entry/0/changes/0/value/messages/0")
         .or_else(|| v.get("messages").and_then(|m| m.get(0)))?;
-    let peer = msg
-        .get("from")
-        .and_then(|x| x.as_str())?
-        .to_string();
+    let peer = msg.get("from").and_then(|x| x.as_str())?.to_string();
     let text = msg
         .pointer("/text/body")
         .and_then(|x| x.as_str())
@@ -458,7 +454,6 @@ pub(super) fn extract_whatsapp(v: &serde_json::Value) -> Option<(String, String)
         .to_string();
     Some((peer, text))
 }
-
 
 pub(super) async fn run_discord_webhook_mode(
     allowlist: &PairingAllowlist,

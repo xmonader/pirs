@@ -92,13 +92,19 @@ impl AgentTool for PrTool {
                 match self.run("git", &["diff", "--stat", &range]) {
                     Ok(s) if !s.trim().is_empty() => {
                         let full = self.run("git", &["diff", &range])?;
-                        format!("## diff --stat {range}\n{s}\n## diff (truncated)\n{}", truncate(&full, 12000))
+                        format!(
+                            "## diff --stat {range}\n{s}\n## diff (truncated)\n{}",
+                            truncate(&full, 12000)
+                        )
                     }
                     _ => {
                         let range2 = format!("{base}...HEAD");
                         let s = self.run("git", &["diff", "--stat", &range2])?;
                         let full = self.run("git", &["diff", &range2])?;
-                        format!("## diff --stat {range2}\n{s}\n## diff (truncated)\n{}", truncate(&full, 12000))
+                        format!(
+                            "## diff --stat {range2}\n{s}\n## diff (truncated)\n{}",
+                            truncate(&full, 12000)
+                        )
                     }
                 }
             }
@@ -109,14 +115,7 @@ impl AgentTool for PrTool {
                     .ok_or_else(|| anyhow::anyhow!("pr create requires title"))?;
                 let body = args.body.unwrap_or_default();
                 let mut cmd_args = vec![
-                    "pr",
-                    "create",
-                    "--title",
-                    &title,
-                    "--body",
-                    &body,
-                    "--base",
-                    base,
+                    "pr", "create", "--title", &title, "--body", &body, "--base", base,
                 ];
                 if args.draft {
                     cmd_args.push("--draft");
@@ -138,7 +137,9 @@ impl AgentTool for PrTool {
                     ),
                 }
             }
-            other => anyhow::bail!("unknown pr action {other:?}; use status|diff|create|checks|view"),
+            other => {
+                anyhow::bail!("unknown pr action {other:?}; use status|diff|create|checks|view")
+            }
         };
         Ok(ToolOutput::text(text))
     }

@@ -5,18 +5,13 @@ use pirs_agent::Agent;
 use pirs_claw::channel::{Channel, CliChannel, InboundMessage, OutboundReply};
 use pirs_claw::memory_bridge;
 use pirs_claw::registry;
-use pirs_skills::{
-    skills_prompt_section, Skill,
-};
 use pirs_claw::{
-    claw_system_prompt, describe_exec_backend,
-    empty_assistant_diag, extract_assistant_reply, require_llm_key, SessionId,
-    SessionStore,
+    claw_system_prompt, describe_exec_backend, empty_assistant_diag, extract_assistant_reply,
+    require_llm_key, SessionId, SessionStore,
 };
+use pirs_skills::{skills_prompt_section, Skill};
 
-use super::tools::{
-    chat_safe_tools, install_claw_safety, load_claw_extensions,
-};
+use super::tools::{chat_safe_tools, install_claw_safety, load_claw_extensions};
 
 pub async fn run_chat(
     state: &Path,
@@ -148,4 +143,3 @@ pub async fn run_chat(
     );
     Ok(())
 }
-

@@ -155,7 +155,10 @@ fn serve_rejects_unknown_channel() {
     let (code, stdout, stderr) = run(&["serve", "--channel", "irc"]);
     assert_ne!(code, 0);
     let text = format!("{stdout}{stderr}").to_lowercase();
-    assert!(text.contains("unknown") || text.contains("supported"), "{text}");
+    assert!(
+        text.contains("unknown") || text.contains("supported"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -163,7 +166,10 @@ fn exec_rejects_modal() {
     let (code, stdout, stderr) = run(&["--exec", "modal", "chat", "x"]);
     assert_ne!(code, 0);
     let text = format!("{stdout}{stderr}").to_lowercase();
-    assert!(text.contains("unsupported") || text.contains("modal"), "{text}");
+    assert!(
+        text.contains("unsupported") || text.contains("modal"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -182,7 +188,10 @@ fn pair_add_list_remove_against_state_dir() {
     assert_eq!(c4, 0, "remove: {o4}{e4}");
     let (c5, o5, e5) = run(&["--state-dir", state, "pair", "list"]);
     assert_eq!(c5, 0, "list2: {o5}{e5}");
-    assert!(!o5.contains("peer-aaa"), "should not list removed peer: {o5}");
+    assert!(
+        !o5.contains("peer-aaa"),
+        "should not list removed peer: {o5}"
+    );
     assert!(o5.contains("peer-bbb"), "{o5}");
 }
 
@@ -209,7 +218,10 @@ fn schedule_dry_run_tick_leaves_job_enabled() {
         "delivery-proof-job",
     ]);
     assert_eq!(c1, 0, "add: {o1}{e1}");
-    assert!(o1.contains("scheduled") || o1.contains("job-"), "add out: {o1}");
+    assert!(
+        o1.contains("scheduled") || o1.contains("job-"),
+        "add out: {o1}"
+    );
 
     let (c2, o2, e2) = run(&["--state-dir", state, "schedule", "tick"]);
     assert_eq!(c2, 0, "tick dry-run: {o2}{e2}");
@@ -293,7 +305,11 @@ fn code_without_api_key_fails_closed() {
     // Fake cargo project so auto-profile would prefer code if bare prompt used.
     let repo = dir.path().join("repo");
     std::fs::create_dir_all(&repo).unwrap();
-    std::fs::write(repo.join("Cargo.toml"), "[package]\nname=\"t\"\nversion=\"0.1.0\"\n").unwrap();
+    std::fs::write(
+        repo.join("Cargo.toml"),
+        "[package]\nname=\"t\"\nversion=\"0.1.0\"\n",
+    )
+    .unwrap();
 
     let out = Command::new(claw_bin())
         .env("HOME", &home)
@@ -395,7 +411,10 @@ fn skills_list_and_add_show() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(out.status.success(), "{text}");
-    assert!(text.contains("demo-skill"), "list should show skill: {text}");
+    assert!(
+        text.contains("demo-skill"),
+        "list should show skill: {text}"
+    );
 
     let out = Command::new(claw_bin())
         .env("HOME", &home)
@@ -408,7 +427,10 @@ fn skills_list_and_add_show() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(out.status.success(), "{text}");
-    assert!(text.contains("body here") || text.contains("Demo"), "{text}");
+    assert!(
+        text.contains("body here") || text.contains("Demo"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -430,7 +452,10 @@ fn help_mentions_pair_and_skills() {
     let text = format!("{stdout}{stderr}").to_lowercase();
     assert!(text.contains("pair"), "help should list pair: {text}");
     assert!(text.contains("skills"), "help should list skills: {text}");
-    assert!(text.contains("sessions"), "help should list sessions: {text}");
+    assert!(
+        text.contains("sessions"),
+        "help should list sessions: {text}"
+    );
 }
 
 #[test]
@@ -502,11 +527,7 @@ fn skills_validate_rejects_bad_name() {
     let home = dir.path().join("home");
     std::fs::create_dir_all(home.join(".pirs")).unwrap();
     let bad = dir.path().join("BadName.md");
-    std::fs::write(
-        &bad,
-        "---\nname: BadName\ndescription: x\n---\nbody\n",
-    )
-    .unwrap();
+    std::fs::write(&bad, "---\nname: BadName\ndescription: x\n---\nbody\n").unwrap();
     let out = Command::new(claw_bin())
         .env("HOME", &home)
         .args(["skills", "validate", bad.to_str().unwrap()])

@@ -170,7 +170,11 @@ pub fn curator_report(skills_dir: &Path) -> String {
     out.push_str(&format!(
         "\nsoul: {} ({})\n",
         soul.display(),
-        if soul.is_file() { "present" } else { "missing — will use template" }
+        if soul.is_file() {
+            "present"
+        } else {
+            "missing — will use template"
+        }
     ));
     out
 }

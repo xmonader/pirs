@@ -86,10 +86,10 @@ fn test_id_to_protected_path(id: &str) -> Option<String> {
     }
     // Pytest node id
     if let Some(path) = id.split("::").next() {
-        if path.contains('/') || path.ends_with(".py") || path.ends_with(".rs") {
-            if !path.is_empty() {
-                return Some(path.to_string());
-            }
+        if (path.contains('/') || path.ends_with(".py") || path.ends_with(".rs"))
+            && !path.is_empty()
+        {
+            return Some(path.to_string());
         }
     }
     // Already a path
@@ -286,26 +286,20 @@ impl AgentExecutor {
         use pirs_bench::Verdict;
         match v {
             Verdict::Done => "verification passed — required tests are green".into(),
-            Verdict::NotYet(_) => {
-                "previous attempt incomplete: some required tests still fail \
+            Verdict::NotYet(_) => "previous attempt incomplete: some required tests still fail \
                  (test names withheld — re-diagnose from the issue and repository)"
-                    .into()
-            }
-            Verdict::Regressed(_) => {
-                "previous attempt regressed something that must stay green \
+                .into(),
+            Verdict::Regressed(_) => "previous attempt regressed something that must stay green \
                  (test names withheld)"
-                    .into()
-            }
+                .into(),
             Verdict::TargetNotCollected(_) => {
                 "previous attempt: harness could not collect a required test \
                  (test names withheld)"
                     .into()
             }
-            Verdict::Flaky(_) => {
-                "previous attempt looked fixed once but did not reconfirm \
+            Verdict::Flaky(_) => "previous attempt looked fixed once but did not reconfirm \
                  (test names withheld)"
-                    .into()
-            }
+                .into(),
         }
     }
 

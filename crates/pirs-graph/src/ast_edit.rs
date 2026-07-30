@@ -184,16 +184,12 @@ fn find_fn_inner<'a>(
     target_kinds: &[&str],
     name: &str,
 ) -> Option<tree_sitter::Node<'a>> {
-    if target_kinds.contains(&node.kind()) {
-        if function_name(node, source) == Some(name) {
-            return Some(node);
-        }
+    if target_kinds.contains(&node.kind()) && function_name(node, source) == Some(name) {
+        return Some(node);
     }
     if cursor.goto_first_child() {
         loop {
-            if let Some(found) =
-                find_fn_inner(cursor.node(), source, cursor, target_kinds, name)
-            {
+            if let Some(found) = find_fn_inner(cursor.node(), source, cursor, target_kinds, name) {
                 return Some(found);
             }
             if !cursor.goto_next_sibling() {
@@ -214,7 +210,10 @@ fn function_name<'a>(node: tree_sitter::Node<'a>, source: &'a str) -> Option<&'a
     if c.goto_first_child() {
         loop {
             let n = c.node();
-            if matches!(n.kind(), "identifier" | "property_identifier" | "field_identifier") {
+            if matches!(
+                n.kind(),
+                "identifier" | "property_identifier" | "field_identifier"
+            ) {
                 if let Ok(t) = n.utf8_text(source.as_bytes()) {
                     return Some(t);
                 }
@@ -229,10 +228,9 @@ fn function_name<'a>(node: tree_sitter::Node<'a>, source: &'a str) -> Option<&'a
 
 fn body_node<'a>(func: tree_sitter::Node<'a>, lang: Lang) -> Option<tree_sitter::Node<'a>> {
     match lang {
-        Lang::Rust | Lang::Python | Lang::TypeScript | Lang::Tsx | Lang::Go => {
-            func.child_by_field_name("body")
-                .or_else(|| func.child_by_field_name("statement_block"))
-        }
+        Lang::Rust | Lang::Python | Lang::TypeScript | Lang::Tsx | Lang::Go => func
+            .child_by_field_name("body")
+            .or_else(|| func.child_by_field_name("statement_block")),
     }
 }
 
@@ -836,8 +834,11 @@ mod tests {
     async fn replace_body_typescript() {
         let dir = tempfile::tempdir().unwrap();
         let f = dir.path().join("a.ts");
-        std::fs::write(&f, "function add(a: number, b: number): number {\n  return 0;\n}\n")
-            .unwrap();
+        std::fs::write(
+            &f,
+            "function add(a: number, b: number): number {\n  return 0;\n}\n",
+        )
+        .unwrap();
         run(
             &tool(dir.path()),
             json!({
@@ -915,8 +916,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let a = dir.path().join("a.ts");
         let b = dir.path().join("b.ts");
-        std::fs::write(&a, "function keep() {}\nexport function gone() {\n  return 1;\n}\n")
-            .unwrap();
+        std::fs::write(
+            &a,
+            "function keep() {}\nexport function gone() {\n  return 1;\n}\n",
+        )
+        .unwrap();
         run(
             &tool(dir.path()),
             json!({"op": "move_function", "path": "a.ts", "name": "gone", "value": "b.ts"}),

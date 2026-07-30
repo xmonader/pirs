@@ -5,8 +5,8 @@ mod stream;
 mod tool_exec;
 
 pub use freeform::looks_like_freeform_tool_text;
-pub use tool_exec::validate_tool_call_payload;
 pub use tool_exec::execute_tool_calls_for_test;
+pub use tool_exec::validate_tool_call_payload;
 
 use std::sync::Arc;
 
@@ -132,7 +132,8 @@ pub async fn run_agent_loop(
             }
 
             let assistant =
-                stream::stream_assistant(context, tools, provider, config, emit, cancel.clone()).await;
+                stream::stream_assistant(context, tools, provider, config, emit, cancel.clone())
+                    .await;
             emit(AgentEvent::MessageEnd {
                 message: Box::new(Message::Assistant(assistant.clone())),
             });
@@ -279,8 +280,7 @@ pub async fn run_agent_loop(
                 if let Some(guard) = &config.thrash {
                     if let Some(msg) = guard.take_stop() {
                         if let Some(hybrid) = &config.hybrid {
-                            if let Some(guidance) =
-                                hybrid.on_thrash(&msg, &context.messages).await
+                            if let Some(guidance) = hybrid.on_thrash(&msg, &context.messages).await
                             {
                                 let advise = Message::user(guidance);
                                 emit(AgentEvent::MessageStart {

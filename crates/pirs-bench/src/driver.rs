@@ -232,15 +232,7 @@ pub fn verify_model_patch(
         }
     }
     let mut exec = PatchAlreadyApplied;
-    drive_with_red_targets(
-        &targets,
-        &scope,
-        &baseline,
-        runner,
-        &mut exec,
-        1,
-        timings,
-    )
+    drive_with_red_targets(&targets, &scope, &baseline, runner, &mut exec, 1, timings)
 }
 
 #[cfg(test)]

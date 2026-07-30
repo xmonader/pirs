@@ -143,7 +143,9 @@ pub fn build_system_prompt_full(
 
 /// Pure helper: non-empty map string means structural inject is ready for the session prefix.
 pub fn map_inject_is_material(repo_map: Option<&str>) -> bool {
-    repo_map.map(|m| !m.trim().is_empty() && m.contains("<repo_map>")).unwrap_or(false)
+    repo_map
+        .map(|m| !m.trim().is_empty() && m.contains("<repo_map>"))
+        .unwrap_or(false)
 }
 
 pub fn read_project_context(cwd: &Path) -> Option<String> {

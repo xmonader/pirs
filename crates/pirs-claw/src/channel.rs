@@ -44,7 +44,13 @@ impl InboundMessage {
         let peer = self
             .peer_id
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' { c } else { '_' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect::<String>();
         format!("{}/{}", self.channel_id, peer)
     }

@@ -6,15 +6,12 @@ use anyhow::Context as _;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::channel::{
-    Channel, InboundMessage, OutboundReply, CHANNEL_TELEGRAM,
-};
+use crate::channel::{Channel, InboundMessage, OutboundReply, CHANNEL_TELEGRAM};
 use crate::pairing::PairingAllowlist;
 
 use super::allow::require_allowlist_for_state;
 use super::utf8::utf8_chunks;
 use super::MessageHandler;
-
 
 pub(super) fn telegram_token_present() -> bool {
     std::env::var("TELEGRAM_BOT_TOKEN")
@@ -22,7 +19,6 @@ pub(super) fn telegram_token_present() -> bool {
         .map(|t| !t.trim().is_empty())
         .unwrap_or(false)
 }
-
 
 // ─── Telegram ───────────────────────────────────────────────────────────────
 
@@ -109,7 +105,9 @@ impl TelegramBot {
         // Fallback: send as document (works for mp3/wav/etc.).
         self.send_document_bytes(chat_id, audio, filename, None)
             .await
-            .map_err(|e| anyhow::anyhow!("telegram sendVoice/sendDocument failed: {err_body} / {e}"))
+            .map_err(|e| {
+                anyhow::anyhow!("telegram sendVoice/sendDocument failed: {err_body} / {e}")
+            })
     }
 
     /// Send a local file as a Telegram document attachment.
@@ -232,9 +230,7 @@ impl TelegramBot {
                             chat_id,
                             &format!(
                                 "(could not send attachment {}: {e})",
-                                path.file_name()
-                                    .and_then(|s| s.to_str())
-                                    .unwrap_or("file")
+                                path.file_name().and_then(|s| s.to_str()).unwrap_or("file")
                             ),
                         )
                         .await;
@@ -289,7 +285,6 @@ impl TelegramBot {
     }
 }
 
-
 impl Channel for TelegramBot {
     fn channel_id(&self) -> &str {
         CHANNEL_TELEGRAM
@@ -306,13 +301,15 @@ impl Channel for TelegramBot {
                 }))
                 .send()?;
             if !resp.status().is_success() {
-                anyhow::bail!("telegram sendMessage failed: {}", resp.text().unwrap_or_default());
+                anyhow::bail!(
+                    "telegram sendMessage failed: {}",
+                    resp.text().unwrap_or_default()
+                );
             }
         }
         Ok(())
     }
 }
-
 
 #[derive(Debug, Deserialize)]
 pub(super) struct TgUpdate {
@@ -395,7 +392,12 @@ pub(super) async fn telegram_message_to_text(
     msg: &TgMessage,
 ) -> Option<TgInbound> {
     let wrap = |text: String, from_voice: bool| Some(TgInbound { text, from_voice });
-    if let Some(t) = msg.text.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+    if let Some(t) = msg
+        .text
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
         return wrap(t.to_string(), false);
     }
 
@@ -410,51 +412,56 @@ pub(super) async fn telegram_message_to_text(
 
     // Voice / audio → download + multi-backend STT (HTTP registry → CLI).
     if let Some(v) = msg.voice.as_ref().or(msg.audio.as_ref()) {
-        let kind = if msg.voice.is_some() { "voice" } else { "audio" };
-        let dur = v.duration.map(|d| format!("{d}s")).unwrap_or_else(|| "?s".into());
+        let kind = if msg.voice.is_some() {
+            "voice"
+        } else {
+            "audio"
+        };
+        let dur = v
+            .duration
+            .map(|d| format!("{d}s"))
+            .unwrap_or_else(|| "?s".into());
         let mime = v.mime_type.as_deref().unwrap_or("?");
         eprintln!(
             "[telegram] {kind} message duration={dur} mime={mime} size={:?}",
             v.file_size
         );
         match bot.download_file(&v.file_id, &media_dir).await {
-            Ok(path) => {
-                match crate::voice::transcribe_audio(&path).await {
-                    Ok(Some(transcript)) if !transcript.trim().is_empty() => {
-                        let mut t = format!("[transcribed {kind}] {}", transcript.trim());
-                        if let Some(c) = caption {
-                            t.push_str("\n[caption] ");
-                            t.push_str(&c);
-                        }
-                        return wrap(t, true);
+            Ok(path) => match crate::voice::transcribe_audio(&path).await {
+                Ok(Some(transcript)) if !transcript.trim().is_empty() => {
+                    let mut t = format!("[transcribed {kind}] {}", transcript.trim());
+                    if let Some(c) = caption {
+                        t.push_str("\n[caption] ");
+                        t.push_str(&c);
                     }
-                    Ok(_) => {
-                        let mut t = format!(
-                            "[{kind} note received, {dur}, saved as {} — no STT backend available \
+                    return wrap(t, true);
+                }
+                Ok(_) => {
+                    let mut t = format!(
+                        "[{kind} note received, {dur}, saved as {} — no STT backend available \
                              (configure [[models]] caps=[\"stt\"], PIRS_SPEECH_BASE_URL, \
                              whisper CLI, or PIRS_CLAW_TRANSCRIBE_CMD)]",
-                            path.display()
-                        );
-                        if let Some(c) = caption {
-                            t.push_str("\n[caption] ");
-                            t.push_str(&c);
-                        }
-                        return wrap(t, true);
+                        path.display()
+                    );
+                    if let Some(c) = caption {
+                        t.push_str("\n[caption] ");
+                        t.push_str(&c);
                     }
-                    Err(e) => {
-                        eprintln!("[telegram] transcribe error: {e}");
-                        let mut t = format!(
-                            "[{kind} note received, {dur}, file {} — transcription failed: {e}]",
-                            path.display()
-                        );
-                        if let Some(c) = caption {
-                            t.push_str("\n[caption] ");
-                            t.push_str(&c);
-                        }
-                        return wrap(t, true);
-                    }
+                    return wrap(t, true);
                 }
-            }
+                Err(e) => {
+                    eprintln!("[telegram] transcribe error: {e}");
+                    let mut t = format!(
+                        "[{kind} note received, {dur}, file {} — transcription failed: {e}]",
+                        path.display()
+                    );
+                    if let Some(c) = caption {
+                        t.push_str("\n[caption] ");
+                        t.push_str(&c);
+                    }
+                    return wrap(t, true);
+                }
+            },
             Err(e) => {
                 eprintln!("[telegram] download {kind}: {e}");
                 return wrap(
@@ -584,18 +591,12 @@ pub(super) async fn run_telegram(
         allowlist.len()
     );
     loop {
-        let url = format!(
-            "{}?timeout=25&offset={}",
-            bot.api("getUpdates"),
-            offset
-        );
+        let url = format!("{}?timeout=25&offset={}", bot.api("getUpdates"), offset);
         let resp = bot.client.get(&url).send().await;
         let resp = match resp {
             Ok(r) => r,
             Err(e) => {
-                eprintln!(
-                    "[telegram] getUpdates transport error: {e}; retry in {backoff_secs}s"
-                );
+                eprintln!("[telegram] getUpdates transport error: {e}; retry in {backoff_secs}s");
                 tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
                 backoff_secs = (backoff_secs.saturating_mul(2)).min(60);
                 continue;
@@ -662,10 +663,7 @@ pub(super) async fn run_telegram(
                         allowlist = al;
                     }
                     let _ = bot
-                        .send_with_retry(
-                            &peer,
-                            "pirs-claw: paired successfully. You can chat now.",
-                        )
+                        .send_with_retry(&peer, "pirs-claw: paired successfully. You can chat now.")
                         .await;
                     offset = upd.update_id + 1;
                     continue;
@@ -683,9 +681,7 @@ pub(super) async fn run_telegram(
                 continue;
             }
             let Some(parsed) = telegram_message_to_text(&bot, state_dir, &msg).await else {
-                eprintln!(
-                    "[telegram] skip message with no text/media we understand (chat={peer})"
-                );
+                eprintln!("[telegram] skip message with no text/media we understand (chat={peer})");
                 let _ = bot
                     .send_with_retry(
                         &peer,
@@ -752,9 +748,7 @@ pub(super) async fn run_telegram(
                     }
                 }
                 Err(e) => {
-                    let _ = bot
-                        .send_with_retry(&peer, &format!("error: {e}"))
-                        .await;
+                    let _ = bot.send_with_retry(&peer, &format!("error: {e}")).await;
                 }
             }
             offset = upd.update_id + 1;

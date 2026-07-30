@@ -1,14 +1,12 @@
 //! signal-cli channel loop.
 use std::time::Duration;
 
-
 use crate::channel::{InboundMessage, CHANNEL_SIGNAL};
 use crate::pairing::PairingAllowlist;
 use crate::GatewayReply;
 
 use super::allow::require_allowlist;
 use super::MessageHandler;
-
 
 // ─── Signal via signal-cli ──────────────────────────────────────────────────
 

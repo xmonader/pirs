@@ -24,3 +24,7 @@ libc = { workspace = true }
 tempfile = "3"
 futures = "0.3"
 async-trait = "0.1"
+
+[lints]
+workspace = true
+

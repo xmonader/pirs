@@ -185,7 +185,10 @@ async fn stop_gate_forces_verify_after_edit_before_finish() {
             )
         })
     });
-    assert!(has_gate, "expected STOP GATE follow-up in context: {calls:?}");
+    assert!(
+        has_gate,
+        "expected STOP GATE follow-up in context: {calls:?}"
+    );
 }
 
 #[tokio::test]
@@ -265,7 +268,10 @@ async fn bash_failure_steers_different_command() {
     agent.prompt("go").await.unwrap();
 
     let calls = seen.lock().unwrap();
-    assert!(calls.len() >= 2, "cmd_fail should trigger a steered second turn");
+    assert!(
+        calls.len() >= 2,
+        "cmd_fail should trigger a steered second turn"
+    );
     let has_cmd_fail = calls.iter().any(|round| {
         round.iter().any(|m| {
             matches!(

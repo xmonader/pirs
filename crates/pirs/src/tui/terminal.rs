@@ -30,7 +30,8 @@ pub(super) fn mouse_capture_enabled() -> bool {
 /// but the returned `Terminal` renders into an in-memory buffer, not real
 /// stdout — see `TuiWriter` for why. Terminal-size and cursor-position queries
 /// still hit the real tty regardless of what the backend's writer is.
-pub(super) fn setup_terminal() -> anyhow::Result<Terminal<ratatui::backend::CrosstermBackend<Vec<u8>>>> {
+pub(super) fn setup_terminal(
+) -> anyhow::Result<Terminal<ratatui::backend::CrosstermBackend<Vec<u8>>>> {
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     stdout.execute(crossterm::terminal::EnterAlternateScreen)?;
@@ -281,4 +282,3 @@ pub(super) fn install_panic_hook() {
         prev(info);
     }));
 }
-

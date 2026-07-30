@@ -92,8 +92,7 @@ impl LspClient {
         let stdout = child.stdout.take().context("no stdout on LSP server")?;
 
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
-        let diagnostics: Arc<Mutex<HashMap<String, Value>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let diagnostics: Arc<Mutex<HashMap<String, Value>>> = Arc::new(Mutex::new(HashMap::new()));
         {
             let pending = Arc::clone(&pending);
             let diagnostics = Arc::clone(&diagnostics);
@@ -756,10 +755,7 @@ mod uri_tests {
                 "range": {"start": {"line": 4, "character": 4}}
             }]
         }]);
-        assert_eq!(
-            find_name_in_symbols(&syms, "method_a"),
-            Some((5, 8))
-        );
+        assert_eq!(find_name_in_symbols(&syms, "method_a"), Some((5, 8)));
         assert_eq!(
             find_name_in_symbols(&syms, "MyStruct::method_a"),
             Some((5, 8))

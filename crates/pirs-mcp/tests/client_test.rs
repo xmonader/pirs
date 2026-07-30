@@ -90,10 +90,7 @@ async fn spawn_failure_is_reported() {
 }
 
 fn email_calendar_script() -> String {
-    format!(
-        "{}/tests/mcp_email_calendar.py",
-        env!("CARGO_MANIFEST_DIR")
-    )
+    format!("{}/tests/mcp_email_calendar.py", env!("CARGO_MANIFEST_DIR"))
 }
 
 /// End-to-end product path: `~/.pirs/mcp.json` is always trusted → load_servers
@@ -152,13 +149,14 @@ async fn email_calendar_via_user_mcp_json_load_servers() {
         result.tools.len() >= 4,
         "expected email+calendar tools, got {} tools {:?}",
         result.tools.len(),
-        result.tools.iter().map(|t| t.name().to_string()).collect::<Vec<_>>()
+        result
+            .tools
+            .iter()
+            .map(|t| t.name().to_string())
+            .collect::<Vec<_>>()
     );
     let names: Vec<_> = result.tools.iter().map(|t| t.name().to_string()).collect();
-    assert!(
-        names.iter().any(|n| n.contains("email_list")),
-        "{names:?}"
-    );
+    assert!(names.iter().any(|n| n.contains("email_list")), "{names:?}");
     assert!(
         names.iter().any(|n| n.contains("calendar_list")),
         "{names:?}"
@@ -192,7 +190,10 @@ async fn email_calendar_list_and_read_tools() {
         .unwrap();
     assert!(!list.is_error);
     let body = list.content[0].as_text().unwrap();
-    assert!(body.contains("Q3 plan") || body.contains("alice@example.com"), "{body}");
+    assert!(
+        body.contains("Q3 plan") || body.contains("alice@example.com"),
+        "{body}"
+    );
 
     let msg = client
         .call_tool("email_read", serde_json::json!({"id": "m1"}))

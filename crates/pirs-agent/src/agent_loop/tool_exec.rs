@@ -15,8 +15,6 @@ use super::{is_visible, ToolCallData, VisibleTools, MODEL_MAX_TOOL_RESULT_CHARS}
 /// Cap for error result bodies so a failed bash dump cannot blow the next turn.
 pub(super) const MODEL_MAX_ERROR_CHARS: usize = 8_000;
 
-
-
 pub(super) fn cap_chars_tail(s: &str, max_chars: usize) -> String {
     let n = s.chars().count();
     if n <= max_chars {
@@ -26,7 +24,10 @@ pub(super) fn cap_chars_tail(s: &str, max_chars: usize) -> String {
     s.chars().skip(skip).collect()
 }
 
-pub(super) fn merge_result_details(details: &mut Option<serde_json::Value>, extra: serde_json::Value) {
+pub(super) fn merge_result_details(
+    details: &mut Option<serde_json::Value>,
+    extra: serde_json::Value,
+) {
     match details {
         Some(serde_json::Value::Object(existing)) => {
             if let serde_json::Value::Object(add) = extra {
@@ -55,10 +56,7 @@ pub(super) fn apply_model_result_cap(result: &mut ToolResultMessage) {
         .map(|s| !s.is_empty())
         .unwrap_or(false);
     if !has_ui {
-        merge_result_details(
-            &mut result.details,
-            serde_json::json!({ "uiText": text }),
-        );
+        merge_result_details(&mut result.details, serde_json::json!({ "uiText": text }));
     }
     let capped = cap_chars_tail(&text, MODEL_MAX_TOOL_RESULT_CHARS);
     result.content = vec![ContentBlock::text(format!(
@@ -66,7 +64,12 @@ pub(super) fn apply_model_result_cap(result: &mut ToolResultMessage) {
     ))];
 }
 
-pub(super) fn error_result_kind(id: &str, name: &str, message: &str, kind: &str) -> ToolResultMessage {
+pub(super) fn error_result_kind(
+    id: &str,
+    name: &str,
+    message: &str,
+    kind: &str,
+) -> ToolResultMessage {
     let message = if message.chars().count() > MODEL_MAX_ERROR_CHARS {
         format!(
             "[error truncated]\n{}",
@@ -347,6 +350,7 @@ pub(super) fn finalize_result(
 }
 
 /// Sequential tool batch with optional mid-batch skip (unit-test entry point).
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_tool_calls_for_test(
     calls: Vec<ToolCallData>,
     tools: &[Arc<dyn AgentTool>],
@@ -371,6 +375,7 @@ pub async fn execute_tool_calls_for_test(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn execute_tool_calls(
     calls: Vec<ToolCallData>,
     tools: &[Arc<dyn AgentTool>],
@@ -727,7 +732,6 @@ pub(super) fn is_transient_tool_error(e: &anyhow::Error) -> bool {
         || s.contains("error sending request")
         || s.contains("error decoding response")
 }
-
 
 /// Validate a single tool call against the registered tools without executing it.
 ///

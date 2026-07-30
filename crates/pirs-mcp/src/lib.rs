@@ -12,7 +12,9 @@ pub mod router;
 pub mod tool;
 
 pub use catalog::{CatalogEntry, CatalogTool, McpCatalog};
-pub use pool::{eager_max_from_env, max_live_from_env, McpPool, PoolStatus, DEFAULT_EAGER_MAX, DEFAULT_MAX_LIVE};
+pub use pool::{
+    eager_max_from_env, max_live_from_env, McpPool, PoolStatus, DEFAULT_EAGER_MAX, DEFAULT_MAX_LIVE,
+};
 pub use router::{router_tools, ROUTER_TOOL_NAMES};
 
 pub struct McpServerHandle {
@@ -73,7 +75,7 @@ impl McpDegradedReport {
             .collect();
         let (live_count, max_live) = if let Some(pool) = &result.pool {
             // Best-effort sync snapshot is not available; use handle count / env.
-            (working.len().max(0), pool.max_live())
+            (working.len(), pool.max_live())
         } else {
             (working.len(), max_live_from_env())
         };
@@ -211,10 +213,7 @@ async fn connect(spec: &config::ServerSpec) -> anyhow::Result<std::sync::Arc<cli
 }
 
 /// Eager connect-all (legacy path for small configs).
-async fn load_eager(
-    specs: Vec<config::ServerSpec>,
-    mut errors: Vec<String>,
-) -> McpLoadResult {
+async fn load_eager(specs: Vec<config::ServerSpec>, mut errors: Vec<String>) -> McpLoadResult {
     let catalog_size = specs.len();
     let mut tools: Vec<Arc<dyn AgentTool>> = Vec::new();
     let mut handles = Vec::new();
@@ -260,10 +259,7 @@ async fn load_eager(
 }
 
 /// Catalog + lazy pool: only router tools; no connect until mcp_enable/mcp_call.
-fn load_catalog_router(
-    specs: Vec<config::ServerSpec>,
-    errors: Vec<String>,
-) -> McpLoadResult {
+fn load_catalog_router(specs: Vec<config::ServerSpec>, errors: Vec<String>) -> McpLoadResult {
     let catalog_size = specs.len();
     if catalog_size == 0 {
         return McpLoadResult {
@@ -365,11 +361,15 @@ mod scale_load_tests {
         assert_eq!(result.tools.len(), ROUTER_TOOL_NAMES.len());
         let names: Vec<_> = result.tools.iter().map(|t| t.name().to_string()).collect();
         for want in ROUTER_TOOL_NAMES {
-            assert!(names.iter().any(|n| n == *want), "missing {want} in {names:?}");
+            assert!(
+                names.iter().any(|n| n == *want),
+                "missing {want} in {names:?}"
+            );
         }
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // env exclusivity spans the await by design
     async fn load_servers_respects_force_router() {
         let _guard = config::TEST_ENV_LOCK
             .lock()

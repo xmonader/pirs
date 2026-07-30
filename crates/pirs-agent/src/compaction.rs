@@ -553,8 +553,7 @@ mod tests {
         let cut = find_cut_point(&msgs, 10).unwrap();
         // Prefer a user boundary; tool-pair snap may advance past orphan results.
         assert!(
-            matches!(msgs[cut], Message::User(_))
-                || !matches!(msgs[cut], Message::ToolResult(_)),
+            matches!(msgs[cut], Message::User(_)) || !matches!(msgs[cut], Message::ToolResult(_)),
             "cut={cut}"
         );
     }
@@ -678,7 +677,10 @@ mod tests {
             "emergency/token cut must keep tool pairs intact cut={cut}"
         );
         let kept = estimate_tokens(&msgs[cut..]);
-        assert!(kept < tokens, "kept {kept} should be less than full {tokens}");
+        assert!(
+            kept < tokens,
+            "kept {kept} should be less than full {tokens}"
+        );
     }
 
     #[test]
@@ -810,11 +812,7 @@ mod demote_tests {
             panic!("expected tool result");
         };
         assert!(tr.model_text().chars().count() <= 100 + 50);
-        assert!(tr
-            .details
-            .as_ref()
-            .and_then(|d| d.get("uiText"))
-            .is_some());
+        assert!(tr.details.as_ref().and_then(|d| d.get("uiText")).is_some());
     }
 
     /// Compaction demotes the dropped range into the memory store instead of

@@ -28,16 +28,14 @@ pub fn normalize_cron_expr(expr: &str) -> anyhow::Result<String> {
         ),
     };
     // Validate parse
-    Schedule::from_str(&six)
-        .map_err(|e| anyhow::anyhow!("invalid cron {expr:?}: {e}"))?;
+    Schedule::from_str(&six).map_err(|e| anyhow::anyhow!("invalid cron {expr:?}: {e}"))?;
     Ok(six)
 }
 
 /// Next fire time as unix seconds (local timezone), strictly after `after_unix`.
 pub fn next_fire_after(expr: &str, after_unix: u64) -> anyhow::Result<u64> {
     let six = normalize_cron_expr(expr)?;
-    let schedule = Schedule::from_str(&six)
-        .map_err(|e| anyhow::anyhow!("invalid cron: {e}"))?;
+    let schedule = Schedule::from_str(&six).map_err(|e| anyhow::anyhow!("invalid cron: {e}"))?;
     let after = Utc
         .timestamp_opt(after_unix as i64, 0)
         .single()

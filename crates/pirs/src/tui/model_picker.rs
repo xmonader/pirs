@@ -169,8 +169,7 @@ pub(crate) fn build_universe_with_aliases(preferred_aliases: &[String]) -> Vec<M
         .collect();
 
     let mut out = order_portable_hits(preferred_aliases, &registry_models);
-    let mut seen: std::collections::HashSet<String> =
-        out.iter().map(|h| h.id.clone()).collect();
+    let mut seen: std::collections::HashSet<String> = out.iter().map(|h| h.id.clone()).collect();
 
     // Cached catalogs → pin strings (backend/id).
     for b in &reg.backends {
@@ -327,10 +326,7 @@ pub(crate) fn draw_model_picker(
             picker.universe.len()
         )
     };
-    frame.render_widget(
-        Paragraph::new(Span::styled(meta, theme.dim)),
-        chunks[1],
-    );
+    frame.render_widget(Paragraph::new(Span::styled(meta, theme.dim)), chunks[1]);
 
     let max_rows = chunks[2].height as usize;
     let sel = picker.sel.min(picker.hits.len().saturating_sub(1));
@@ -361,19 +357,12 @@ pub(crate) fn draw_model_picker(
                 theme.dim
             };
             let mark = if selected { "›" } else { " " };
-            let kind_tag = if hit.kind == "portable" {
-                "any"
-            } else {
-                "pin"
-            };
+            let kind_tag = if hit.kind == "portable" { "any" } else { "pin" };
             lines.push(Line::from(vec![
                 Span::styled(format!(" {mark} "), style),
                 Span::styled(format!("{kind_tag:<4} "), kind_style),
                 Span::styled(truncate(&hit.id, (w as usize).saturating_sub(24)), style),
-                Span::styled(
-                    format!("  {}", truncate(&hit.detail, 20)),
-                    kind_style,
-                ),
+                Span::styled(format!("  {}", truncate(&hit.detail, 20)), kind_style),
             ]));
         }
     }
@@ -409,7 +398,10 @@ mod tests {
     fn fuzzy_prefers_prefix() {
         let a = fuzzy_score("qwen", "qwen-plus").unwrap();
         let b = fuzzy_score("qwen", "openrouter/qwen/qwen3.5-plus").unwrap();
-        assert!(a > b, "prefix portable should rank above long pin: {a} vs {b}");
+        assert!(
+            a > b,
+            "prefix portable should rank above long pin: {a} vs {b}"
+        );
     }
 
     #[test]
@@ -427,7 +419,7 @@ mod tests {
     #[test]
     fn preferred_unknown_aliases_lead_with_session_label() {
         let special = "codesweep-test-alias-xyz".to_string();
-        let hits = order_portable_hits(&[special.clone()], &[]);
+        let hits = order_portable_hits(std::slice::from_ref(&special), &[]);
         assert_eq!(hits[0].id, special);
         assert!(
             hits[0].detail.contains("session"),
@@ -437,7 +429,7 @@ mod tests {
         let picker = ModelPicker::open_with_aliases(
             ModelPickerTarget::Exec,
             "",
-            &[special.clone()],
+            std::slice::from_ref(&special),
         );
         assert!(
             picker.universe.iter().any(|h| h.id == special),

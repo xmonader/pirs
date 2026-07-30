@@ -147,11 +147,13 @@ impl AgentTool for EditTool {
         } else {
             format!("{summary}\n\n{patch}")
         };
-        Ok(ToolOutput::text_with_ui(summary, Some(ui)).with_details(json!({
-            "path": path.display().to_string(),
-            "patch": patch,
-            "firstChangedLine": first_changed,
-        })))
+        Ok(
+            ToolOutput::text_with_ui(summary, Some(ui)).with_details(json!({
+                "path": path.display().to_string(),
+                "patch": patch,
+                "firstChangedLine": first_changed,
+            })),
+        )
     }
 }
 
@@ -226,7 +228,11 @@ fn locate(content: &str, old_text: &str) -> Option<(usize, usize)> {
 
 /// Apply a single old→new replacement to file contents (LF-normalized body).
 /// Shared by `edit` and `edit_block`. Returns the new full file text.
-pub fn apply_one_replacement(original: &str, old_text: &str, new_text: &str) -> anyhow::Result<String> {
+pub fn apply_one_replacement(
+    original: &str,
+    old_text: &str,
+    new_text: &str,
+) -> anyhow::Result<String> {
     if old_text.is_empty() {
         bail!("search/oldText must not be empty");
     }
@@ -281,7 +287,9 @@ fn not_found_error(content: &str, old_text: &str) -> anyhow::Error {
     } else {
         ""
     };
-    msg.push_str(&format!("\n\nYour oldText began with:\n  | {preview}{ellipsis}"));
+    msg.push_str(&format!(
+        "\n\nYour oldText began with:\n  | {preview}{ellipsis}"
+    ));
 
     // Suggest nearest lines by fuzzy-normalized token overlap (cheap, no deps).
     let candidates = similar_line_candidates(content, old_text, 3);
@@ -289,7 +297,11 @@ fn not_found_error(content: &str, old_text: &str) -> anyhow::Error {
         msg.push_str("\n\nClosest lines in the file (did you mean one of these?):");
         for (line_no, line) in candidates {
             let shown: String = line.chars().take(100).collect();
-            let e = if line.chars().count() > 100 { "…" } else { "" };
+            let e = if line.chars().count() > 100 {
+                "…"
+            } else {
+                ""
+            };
             msg.push_str(&format!("\n  L{line_no}: {shown}{e}"));
         }
         msg.push_str(

@@ -66,7 +66,10 @@ pub fn attach_agent_trace(
     phase: Arc<std::sync::Mutex<String>>,
 ) {
     agent.subscribe(Arc::new(move |event: AgentEvent| {
-        let phase = phase.lock().map(|p| p.clone()).unwrap_or_else(|_| "main".into());
+        let phase = phase
+            .lock()
+            .map(|p| p.clone())
+            .unwrap_or_else(|_| "main".into());
         // Skip high-volume streaming deltas to keep traces usable; still capture
         // starts/ends, tools, turns, compaction.
         match &event {

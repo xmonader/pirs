@@ -1,9 +1,7 @@
-use super::*;
-use super::freeform::*;
-use super::stream::*;
 use super::tool_exec::*;
-use async_trait::async_trait;
+use super::*;
 use crate::tool::{AgentTool, ToolExecContext, ToolOutput};
+use async_trait::async_trait;
 use serde_json::json;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -33,16 +31,37 @@ impl AgentTool for CountTool {
 async fn sequential_skips_remaining_when_predicate_true() {
     let hits = Arc::new(AtomicUsize::new(0));
     let tools: Vec<Arc<dyn AgentTool>> = vec![
-        Arc::new(CountTool { name: "a".into(), hits: Arc::clone(&hits) }),
-        Arc::new(CountTool { name: "b".into(), hits: Arc::clone(&hits) }),
-        Arc::new(CountTool { name: "c".into(), hits: Arc::clone(&hits) }),
+        Arc::new(CountTool {
+            name: "a".into(),
+            hits: Arc::clone(&hits),
+        }),
+        Arc::new(CountTool {
+            name: "b".into(),
+            hits: Arc::clone(&hits),
+        }),
+        Arc::new(CountTool {
+            name: "c".into(),
+            hits: Arc::clone(&hits),
+        }),
     ];
     let hits_for_pred = Arc::clone(&hits);
     let pred = Arc::new(move || hits_for_pred.load(Ordering::SeqCst) >= 1);
     let calls = vec![
-        ToolCallData { id: "1".into(), name: "a".into(), arguments: json!({}) },
-        ToolCallData { id: "2".into(), name: "b".into(), arguments: json!({}) },
-        ToolCallData { id: "3".into(), name: "c".into(), arguments: json!({}) },
+        ToolCallData {
+            id: "1".into(),
+            name: "a".into(),
+            arguments: json!({}),
+        },
+        ToolCallData {
+            id: "2".into(),
+            name: "b".into(),
+            arguments: json!({}),
+        },
+        ToolCallData {
+            id: "3".into(),
+            name: "c".into(),
+            arguments: json!({}),
+        },
     ];
     let emit: Emit = Arc::new(|_| {});
     let results = execute_tool_calls_for_test(
@@ -92,7 +111,9 @@ async fn thrash_blocks_identical_sequential_tools() {
     )
     .await;
     // First two run, third trips loop (max_repeats=3 means trip on 3rd observe)
-    assert!(results.iter().any(|r| r.model_text().contains("loop detection") || r.model_text().contains("Skipped")));
+    assert!(results
+        .iter()
+        .any(|r| r.model_text().contains("loop detection") || r.model_text().contains("Skipped")));
     assert!(hits.load(Ordering::SeqCst) <= 3);
 }
 
@@ -133,8 +154,7 @@ async fn thrash_blocks_identical_parallel_tools() {
         results.iter().map(|r| r.model_text()).collect::<Vec<_>>()
     );
     assert!(
-        thrash.peek_stop().is_some()
-            || results.iter().any(|r| r.model_text().contains("loop")),
+        thrash.peek_stop().is_some() || results.iter().any(|r| r.model_text().contains("loop")),
         "thrash stop should be set after parallel identical signatures"
     );
 }
@@ -174,8 +194,7 @@ async fn parallel_batch_honors_steer_skip_remaining() {
     .await;
     assert_eq!(results.len(), 3);
     assert!(
-        results[1].model_text().contains("Skipped")
-            || results[2].model_text().contains("Skipped"),
+        results[1].model_text().contains("Skipped") || results[2].model_text().contains("Skipped"),
         "parallel path must skip remaining on steer: {:?}",
         results.iter().map(|r| r.model_text()).collect::<Vec<_>>()
     );

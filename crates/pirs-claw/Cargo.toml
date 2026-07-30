@@ -50,3 +50,7 @@ tokio-util = { workspace = true }
 [[test]]
 name = "cli_delivery"
 path = "tests/cli_delivery.rs"
+
+[lints]
+workspace = true
+

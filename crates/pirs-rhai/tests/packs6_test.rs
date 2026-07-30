@@ -6,6 +6,8 @@ use serde_json::json;
 static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn load(name: &str, runner: Option<pirs_rhai::SubagentRunner>) -> Arc<ExtensionHost> {
+    // review-gate (and peers) call host queries like review_report — register once.
+    pirs_rhai::register_core_host_apis();
     let path = format!("{}/../../extensions/{name}", env!("CARGO_MANIFEST_DIR"));
     let mut host = ExtensionHost::new();
     if let Some(r) = runner {
@@ -32,17 +34,20 @@ fn user_msg(t: &str) -> pirs_ai::Message {
     pirs_ai::Message::user(t)
 }
 
-#[test]
-fn review_gate_blocks_critical_and_releases_on_sound() {
-    let _g = ENV_LOCK.lock().unwrap();
-    let tmp = std::env::temp_dir().join(format!("pirs-rg-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp).unwrap();
+/// Build a dirty git tree whose residual risk is high enough that
+/// `review-gate` takes the dual-LLM path (`CASCADE:needs_llm`) rather than
+/// `CASCADE:skip_llm` on a trivial text-file edit.
+fn init_risky_dirty_repo(label: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+    let tmp = std::env::temp_dir().join(format!("pirs-rg-{label}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(tmp.join("src")).unwrap();
     std::process::Command::new("git")
         .args(["init", "-q"])
         .current_dir(&tmp)
         .output()
         .unwrap();
-    std::fs::write(tmp.join("f.txt"), "v1\n").unwrap();
+    // Baseline: empty lib so the dirty change is a high-risk auth path.
+    std::fs::write(tmp.join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
     std::process::Command::new("git")
         .args(["add", "-A"])
         .current_dir(&tmp)
@@ -61,9 +66,22 @@ fn review_gate_blocks_critical_and_releases_on_sound() {
         .current_dir(&tmp)
         .output()
         .unwrap();
-    std::fs::write(tmp.join("f.txt"), "v2\n").unwrap();
-    let cwd = std::env::current_dir().unwrap();
+    // Path needles (auth/password) + unwrap heuristics push residual ≥ LLM threshold.
+    // Unique body per label so process-local review hysteresis doesn't skip sibling tests.
+    std::fs::write(
+        tmp.join("src/auth_password.rs"),
+        format!("pub fn login_{label}(tok: Option<String>) -> String {{\n    tok.unwrap()\n}}\n"),
+    )
+    .unwrap();
+    let prev = std::env::current_dir().unwrap();
     std::env::set_current_dir(&tmp).unwrap();
+    (tmp, prev)
+}
+
+#[test]
+fn review_gate_blocks_critical_and_releases_on_sound() {
+    let _g = ENV_LOCK.lock().unwrap();
+    let (_tmp, cwd) = init_risky_dirty_repo("crit");
 
     let critical: pirs_rhai::SubagentRunner =
         Arc::new(|_, _| Ok("CRITICAL\n- changes the wrong thing".to_string()));
@@ -78,7 +96,12 @@ fn review_gate_blocks_critical_and_releases_on_sound() {
     after("1", "edit", &tr("edit", "ok", false));
 
     let msgs = follow();
-    assert_eq!(msgs.len(), 1, "blocked message injected: {msgs:?}");
+    assert_eq!(
+        msgs.len(),
+        1,
+        "blocked message injected: {msgs:?}; hook errors: {:?}",
+        host.drain_hook_errors()
+    );
     let pirs_ai::Message::User(u) = &msgs[0] else {
         panic!()
     };
@@ -97,16 +120,7 @@ fn review_gate_blocks_critical_and_releases_on_sound() {
 #[test]
 fn review_gate_sound_releases() {
     let _g = ENV_LOCK.lock().unwrap();
-    let tmp = std::env::temp_dir().join(format!("pirs-rg2-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp).unwrap();
-    std::process::Command::new("git")
-        .args(["init", "-q"])
-        .current_dir(&tmp)
-        .output()
-        .unwrap();
-    std::fs::write(tmp.join("f.txt"), "v2\n").unwrap();
-    let cwd = std::env::current_dir().unwrap();
-    std::env::set_current_dir(&tmp).unwrap();
+    let (_tmp, cwd) = init_risky_dirty_repo("sound");
 
     let sound: pirs_rhai::SubagentRunner = Arc::new(|_, _| Ok("SOUND".to_string()));
     let host = load("review-gate.rhai", Some(sound));

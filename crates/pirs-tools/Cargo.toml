@@ -37,3 +37,7 @@ cdp = ["dep:chromiumoxide"]
 
 [dev-dependencies]
 tempfile = "3"
+
+[lints]
+workspace = true
+

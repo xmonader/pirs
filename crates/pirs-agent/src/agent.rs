@@ -166,11 +166,7 @@ impl Agent {
     }
 
     /// Test/diagnostics: record a tool start on this agent's thrash guard.
-    pub fn thrash_observe_start(
-        &self,
-        name: &str,
-        args: &serde_json::Value,
-    ) -> Option<String> {
+    pub fn thrash_observe_start(&self, name: &str, args: &serde_json::Value) -> Option<String> {
         self.thrash.observe_tool_start(name, args)
     }
 
@@ -441,14 +437,11 @@ fn drain_queue(queue: &Arc<Mutex<VecDeque<Message>>>, mode: QueueMode) -> Vec<Me
     }
 }
 
-
 #[cfg(test)]
 mod fork_tests {
     use super::*;
     use async_trait::async_trait;
-    use pirs_ai::{
-        AssistantMessage, ContentBlock, Context, LlmProvider, StopReason, StreamEvent,
-    };
+    use pirs_ai::{AssistantMessage, ContentBlock, Context, LlmProvider, StopReason, StreamEvent};
     use serde_json::json;
 
     struct Mock;

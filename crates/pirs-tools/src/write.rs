@@ -99,11 +99,13 @@ impl AgentTool for WriteTool {
             };
             format!("{summary}\n\n{p}")
         };
-        Ok(ToolOutput::text_with_ui(summary, Some(ui)).with_details(serde_json::json!({
-            "path": path.display().to_string(),
-            "patch": patch,
-            "bytes": bytes,
-        })))
+        Ok(
+            ToolOutput::text_with_ui(summary, Some(ui)).with_details(serde_json::json!({
+                "path": path.display().to_string(),
+                "patch": patch,
+                "bytes": bytes,
+            })),
+        )
     }
 }
 
@@ -149,10 +151,7 @@ mod tests {
         // No leftover temp siblings.
         for e in std::fs::read_dir(dir.path()).unwrap() {
             let n = e.unwrap().file_name().to_string_lossy().into_owned();
-            assert!(
-                !n.contains("pirs-tmp"),
-                "temp file left behind: {n}"
-            );
+            assert!(!n.contains("pirs-tmp"), "temp file left behind: {n}");
         }
         // atomic_write helper itself
         crate::paths::atomic_write(&path, b"second").unwrap();

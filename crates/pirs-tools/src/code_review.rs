@@ -140,7 +140,13 @@ pub fn merge_llm_verdicts(a: &str, b: &str) -> &'static str {
 
 fn first_verdict_line(s: &str) -> String {
     s.lines()
-        .map(|l| l.trim().trim_start_matches('#').trim().trim_matches('*').to_ascii_uppercase())
+        .map(|l| {
+            l.trim()
+                .trim_start_matches('#')
+                .trim()
+                .trim_matches('*')
+                .to_ascii_uppercase()
+        })
         .find(|l| !l.is_empty())
         .unwrap_or_default()
 }
@@ -340,8 +346,23 @@ pub fn is_noise_path(path: &str) -> bool {
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or(""),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "ico" | "pdf" | "zip" | "gz" | "tar" | "wasm"
-            | "so" | "dylib" | "dll" | "exe" | "o" | "a"
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "ico"
+            | "pdf"
+            | "zip"
+            | "gz"
+            | "tar"
+            | "wasm"
+            | "so"
+            | "dylib"
+            | "dll"
+            | "exe"
+            | "o"
+            | "a"
     )
 }
 
@@ -360,14 +381,14 @@ pub fn is_safe_repo_rel_path(path: &str) -> bool {
 /// Whether `tool` is allowed under the default review diet.
 pub fn review_tool_allowed(tool: &str) -> bool {
     let t = tool.trim();
-    if REVIEW_DENIED_TOOLS.iter().any(|d| *d == t) {
+    if REVIEW_DENIED_TOOLS.contains(&t) {
         return false;
     }
     if crate::safety_profile::is_file_mutation_tool(t) || crate::safety_profile::is_shell_tool(t) {
         return false;
     }
     // Allowlist-only (plus lsp* namespace).
-    REVIEW_ALLOWED_TOOLS.iter().any(|a| *a == t) || t.starts_with("lsp")
+    REVIEW_ALLOWED_TOOLS.contains(&t) || t.starts_with("lsp")
 }
 
 pub fn review_tool_diet() -> ReviewToolDiet {
@@ -476,8 +497,24 @@ pub fn unit_risk_score(repo: &Path, paths: &[String]) -> u32 {
             score = score.saturating_add(2);
         }
         for needle in [
-            "auth", "crypto", "password", "secret", "token", "oauth", "login", "session", "unsafe",
-            "ffi", "socket", "http", "tls", "ssh", "sandbox", "permission", "path", "exec",
+            "auth",
+            "crypto",
+            "password",
+            "secret",
+            "token",
+            "oauth",
+            "login",
+            "session",
+            "unsafe",
+            "ffi",
+            "socket",
+            "http",
+            "tls",
+            "ssh",
+            "sandbox",
+            "permission",
+            "path",
+            "exec",
         ] {
             if lower.contains(needle) {
                 score = score.saturating_add(4);
@@ -531,10 +568,7 @@ pub fn apply_unit_cache(units: &[ReviewUnit]) -> usize {
     }
     // Cap cache size
     if cache.len() > 512 {
-        let mut keys: Vec<(u64, String)> = cache
-            .iter()
-            .map(|(k, t)| (*t, k.clone()))
-            .collect();
+        let mut keys: Vec<(u64, String)> = cache.iter().map(|(k, t)| (*t, k.clone())).collect();
         keys.sort_by_key(|(t, _)| *t);
         for (_, k) in keys.into_iter().take(cache.len().saturating_sub(256)) {
             cache.remove(&k);
@@ -616,9 +650,7 @@ pub fn build_rubric(
     let mut test_gaming = 0u8;
     for f in findings {
         match f.kind.as_str() {
-            "unwrap" | "panic" | "todo_macro" => {
-                correctness = correctness.saturating_add(1).min(3)
-            }
+            "unwrap" | "panic" | "todo_macro" => correctness = correctness.saturating_add(1).min(3),
             "todo" => {}
             "unsafe" | "dynamic_exec" | "shell_injection" | "secret" => {
                 security = security.saturating_add(2).min(3)
@@ -790,8 +822,10 @@ fn looks_like_status(s: &str) -> bool {
     if b.is_empty() {
         return false;
     }
-    matches!(b[0], b'M' | b'A' | b'D' | b'T' | b'U' | b'R' | b'C' | b'X' | b'B')
-        && b.iter().skip(1).all(|c| c.is_ascii_digit() || *c == b' ')
+    matches!(
+        b[0],
+        b'M' | b'A' | b'D' | b'T' | b'U' | b'R' | b'C' | b'X' | b'B'
+    ) && b.iter().skip(1).all(|c| c.is_ascii_digit() || *c == b' ')
 }
 
 fn name_status(repo: &Path, extra: &[&str]) -> anyhow::Result<Vec<String>> {
@@ -872,7 +906,10 @@ pub fn select_changed_files(repo: &Path, opts: &ReviewSelectOpts) -> anyhow::Res
 }
 
 /// Collect (path, new_line_no, line_text) for **added** lines only (`+` hunks).
-pub fn added_lines_from_diff(repo: &Path, opts: &ReviewSelectOpts) -> anyhow::Result<Vec<(String, u32, String)>> {
+pub fn added_lines_from_diff(
+    repo: &Path,
+    opts: &ReviewSelectOpts,
+) -> anyhow::Result<Vec<(String, u32, String)>> {
     let mut args = vec!["diff", "-U0", "--no-color", "--no-ext-diff"];
     let range_owned: String;
     match (&opts.from, &opts.to) {
@@ -888,12 +925,14 @@ pub fn added_lines_from_diff(repo: &Path, opts: &ReviewSelectOpts) -> anyhow::Re
         (None, None) => {
             // Staged then unstaged: two diffs
             let mut all = Vec::new();
-            all.extend(parse_unified_added(
-                &git(repo, &["diff", "-U0", "--no-color", "--cached"])?,
-            ));
-            all.extend(parse_unified_added(
-                &git(repo, &["diff", "-U0", "--no-color"])?,
-            ));
+            all.extend(parse_unified_added(&git(
+                repo,
+                &["diff", "-U0", "--no-color", "--cached"],
+            )?));
+            all.extend(parse_unified_added(&git(
+                repo,
+                &["diff", "-U0", "--no-color"],
+            )?));
             // Untracked: treat every line as added at its line number
             if opts.include_untracked {
                 let files = select_changed_files(repo, opts)?;
@@ -933,7 +972,11 @@ fn parse_unified_added(diff: &str) -> Vec<(String, u32, String)> {
         if let Some(rest) = line.strip_prefix("@@ ") {
             // @@ -a,b +c,d @@
             if let Some(plus) = rest.split_whitespace().find(|t| t.starts_with('+')) {
-                let num = plus.trim_start_matches('+').split(',').next().unwrap_or("0");
+                let num = plus
+                    .trim_start_matches('+')
+                    .split(',')
+                    .next()
+                    .unwrap_or("0");
                 new_line = num.parse().unwrap_or(0);
                 // When +0,0 (file deleted) stay 0
                 if new_line == 0 {
@@ -957,10 +1000,8 @@ fn parse_unified_added(diff: &str) -> Vec<(String, u32, String)> {
             }
         } else if line.starts_with('-') {
             // removed line: do not advance new_line
-        } else if line.starts_with(' ') {
-            if new_line > 0 {
-                new_line += 1;
-            }
+        } else if line.starts_with(' ') && new_line > 0 {
+            new_line += 1;
         }
     }
     out
@@ -1104,7 +1145,12 @@ fn looks_like_hardcoded_secret(line: &str) -> Option<String> {
     let has_key = keys.iter().any(|k| lower.contains(k));
     if !has_key {
         // sk-… style tokens
-        if line.contains("sk-") && line.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').count() > 20
+        if line.contains("sk-")
+            && line
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+                .count()
+                > 20
         {
             return Some("possible API key literal in source".into());
         }
@@ -1383,14 +1429,9 @@ pub fn format_reviewer_context(
     parts.push(format_report_text(report));
     parts.push(String::new());
     parts.push("## tool diet (hard constraints)".into());
-    parts.push(format!(
-        "ALLOWED: {}",
-        report.tool_diet.allowed.join(", ")
-    ));
+    parts.push(format!("ALLOWED: {}", report.tool_diet.allowed.join(", ")));
     parts.push(format!("DENIED: {}", report.tool_diet.denied.join(", ")));
-    parts.push(
-        "You MUST NOT request or assume write/edit/bash/ast_edit. Observation only.".into(),
-    );
+    parts.push("You MUST NOT request or assume write/edit/bash/ast_edit. Observation only.".into());
     if report.findings.iter().any(|f| f.is_blocking()) {
         parts.push(String::new());
         parts.push("AUTO_BLOCK: structured error-severity findings present.".into());
@@ -1487,8 +1528,12 @@ fn collect_diff_text(
             if let Ok(s) = git(repo, &s1) {
                 out.push_str(&s);
             }
-            let mut a2: Vec<String> =
-                vec!["diff".into(), "--no-color".into(), "-U3".into(), "--".into()];
+            let mut a2: Vec<String> = vec![
+                "diff".into(),
+                "--no-color".into(),
+                "-U3".into(),
+                "--".into(),
+            ];
             a2.extend(files.iter().cloned());
             let s2: Vec<&str> = a2.iter().map(|s| s.as_str()).collect();
             if let Ok(s) = git(repo, &s2) {
@@ -1498,7 +1543,9 @@ fn collect_diff_text(
             for f in files {
                 if git(repo, &["ls-files", "--error-unmatch", f]).is_err() {
                     if let Ok(body) = std::fs::read_to_string(repo.join(f)) {
-                        out.push_str(&format!("diff --git a/{f} b/{f}\n--- /dev/null\n+++ b/{f}\n"));
+                        out.push_str(&format!(
+                            "diff --git a/{f} b/{f}\n--- /dev/null\n+++ b/{f}\n"
+                        ));
                         for (i, line) in body.lines().enumerate() {
                             if i == 0 {
                                 out.push_str(&format!("@@ -0,0 +1,{} @@\n", body.lines().count()));
@@ -1549,7 +1596,7 @@ pub fn parse_review_cli_args(args: &[&str]) -> ReviewSelectOpts {
 }
 
 pub fn wants_json(args: &[&str]) -> bool {
-    args.iter().any(|a| *a == "--json")
+    args.contains(&"--json")
 }
 
 /// Host-query entry: arg is `cwd` or `cwd|from|to` or empty (process cwd).
@@ -1681,8 +1728,7 @@ mod tests {
             "pub fn ok() {}\n// pre-existing TODO: ignore\npub fn old() { y.unwrap(); }\n// TODO: only-this\n",
         )
         .unwrap();
-        let findings =
-            heuristic_findings(dir.path(), &ReviewSelectOpts::dirty_default()).unwrap();
+        let findings = heuristic_findings(dir.path(), &ReviewSelectOpts::dirty_default()).unwrap();
         assert!(
             findings
                 .iter()
@@ -1873,10 +1919,7 @@ mod tests {
         std::fs::write(dir.path().join("src/auth/login.rs"), "unsafe fn x() {}\n").unwrap();
         std::fs::create_dir_all(dir.path().join("tests")).unwrap();
         std::fs::write(dir.path().join("tests/t.rs"), "fn t() {}\n").unwrap();
-        let mut units = partition_units(&[
-            "src/auth/login.rs".into(),
-            "tests/t.rs".into(),
-        ]);
+        let mut units = partition_units(&["src/auth/login.rs".into(), "tests/t.rs".into()]);
         enrich_units(dir.path(), &mut units);
         assert!(units[0].risk_score >= units[1].risk_score, "{units:?}");
         assert!(
@@ -2001,7 +2044,10 @@ pub fn run_cmd(cmd: &str) {
             &ReviewSelectOpts::dirty_default(),
             12_000,
         );
-        assert!(ctx.contains("### file:"), "full file context missing: {ctx}");
+        assert!(
+            ctx.contains("### file:"),
+            "full file context missing: {ctx}"
+        );
         assert!(ctx.contains("AUTO_BLOCK") || ctx.contains("gate_action"));
     }
 
@@ -2060,7 +2106,10 @@ pub fn run_cmd(cmd: &str) {
 
     #[test]
     fn merge_verdicts_requires_both_critical() {
-        assert_eq!(merge_llm_verdicts("CRITICAL\n- x", "CRITICAL\n- y"), "CRITICAL");
+        assert_eq!(
+            merge_llm_verdicts("CRITICAL\n- x", "CRITICAL\n- y"),
+            "CRITICAL"
+        );
         assert_eq!(merge_llm_verdicts("CRITICAL\n- x", "SOUND\n- ok"), "SOUND");
         assert_eq!(merge_llm_verdicts("SOUND", "SOUND"), "SOUND");
         assert_eq!(

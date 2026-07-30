@@ -116,10 +116,12 @@ mod tests {
     fn compaction_extra_usage_is_reported() {
         // Simulates M-16 credit path: compact-out tokens live in compaction_usage.
         let msgs = vec![assistant("m", 10, 0, 5)];
-        let mut compact = Usage::default();
-        compact.input = 1000;
-        compact.output = 50;
-        compact.total_tokens = 1050;
+        let compact = Usage {
+            input: 1000,
+            output: 50,
+            total_tokens: 1050,
+            ..Default::default()
+        };
         let report = usage_report(&msgs, compact);
         assert_eq!(report.compaction_usage.input, 1000);
         assert_eq!(report.main_usage.input, 10);

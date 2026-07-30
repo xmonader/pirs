@@ -146,7 +146,7 @@ impl RoutingProvider {
                     }];
                 }
                 // Unknown pin backend → empty (stream emits error).
-                return Vec::new();
+                Vec::new()
             }
             ModelSpec::Portable(name) => {
                 if let Some(route) = self.routes.get(&name) {
@@ -378,7 +378,9 @@ impl LlmProvider for RoutingProvider {
         Box::pin(futures_util::stream::iter(vec![
             StreamEvent::Error(last_err.clone()),
             StreamEvent::Done(Box::new(AssistantMessage {
-                content: vec![ContentBlock::text(format!("all serve targets failed: {last_err}"))],
+                content: vec![ContentBlock::text(format!(
+                    "all serve targets failed: {last_err}"
+                ))],
                 stop_reason: StopReason::Error,
                 error_message: Some(last_err),
                 ..Default::default()
@@ -690,10 +692,7 @@ mod tests {
             None,
             vec![],
             backends,
-            vec![route(
-                "flash",
-                vec![("a", "model-a"), ("b", "model-b")],
-            )],
+            vec![route("flash", vec![("a", "model-a"), ("b", "model-b")])],
         );
 
         let mut stream = router

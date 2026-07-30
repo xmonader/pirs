@@ -146,7 +146,9 @@ mod tests {
 
     #[test]
     fn set_secret_roundtrip() {
-        let _g = crate::TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
         let path = set_secret_env("OPENROUTER_API_KEY", "sk-test").unwrap();
@@ -165,7 +167,9 @@ mod tests {
 
     #[test]
     fn append_backend_writes_block() {
-        let _g = crate::TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
         let path = append_backend(

@@ -11,6 +11,15 @@ Power tools (not separate products): `pirs-bench`, `pirs-orchestrator`.
 
 Also: [docs/PRODUCTS.md](docs/PRODUCTS.md) · [docs/pirs-claw.md](docs/pirs-claw.md) · [docs/TUI-JOURNEY.md](docs/TUI-JOURNEY.md) · [docs/shrimp-transfer.md](docs/shrimp-transfer.md)
 
+### Working on this repo
+
+| Who | Start here |
+|-----|------------|
+| **Agents** | **[AGENTS.md](AGENTS.md)** (also injected into the system prompt) |
+| **Humans** | **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** + [docs/README.md](docs/README.md) |
+| Strategies / hybrid | [docs/STRATEGIES.md](docs/STRATEGIES.md) |
+| SWE-bench campaigns | [docs/SWE-QA.md](docs/SWE-QA.md) · [qa/…/LEADERBOARD.md](qa/bench-swebench-5x5/LEADERBOARD.md) |
+
 A Rust port of the [pi agent harness](https://github.com/earendil-works/pi): an OpenAI-compatible coding agent with a streaming agent loop, built-in coding tools, [rhai](https://rhai.rs)-script extensibility, a headless RPC mode, and a multi-instance orchestrator.
 
 Status: **alpha**. The core is ported and tested (150+ tests); Google provider and sandboxing are not yet ported.
@@ -51,7 +60,7 @@ pirs --mode tui          # first launch shows Getting started
 
 REPL / TUI slash: `/tour`, `/model`, `/plan`, `/act`, `/undo`, `/doctor`, `/audit`, `/image <path>`, `/profile`, `/compact`, `/help`, `/quit`; `!cmd` runs a local command and records it in context (`!!cmd` skips recording). Type while the agent is working to steer it. Sessions persist as JSONL under `~/.pirs/sessions/` (`--resume`). Runtime diagnostics: `pirs --doctor`. Action audit: `~/.pirs/audit.jsonl` (disable with `PIRS_AUDIT=0`).
 
-**Strategies (product set):** `monolithic` (one growing loop on `--model`), `plan-exec` (read-only plan → fresh exec), `plan-critic-exec` / alias `plan-exec-critic` (plan → critic → exec). **Also:** `spark-ember` / aliases `dual`, `soul-dual` — soulrs dual-mode analogue (parallel read-only **spark** explore fan → **ember** code); pair with `--plan-model` for spark and `--model` for ember. **Strong plan / weak exec:** `--model <cheap> --plan-model <strong> --strategy plan-exec` (or `plan-critic-exec` / `spark-ember`) — read-only phases run on `--plan-model`, the executor keeps `--model`. Measured results and caveats: [docs/hybrid-model-economics.md](docs/hybrid-model-economics.md).
+**Strategies (product set):** `monolithic` (one growing loop on `--model`), `plan-exec` (read-only plan → fresh exec), `plan-critic-exec` / alias `plan-exec-critic` (plan → critic → exec). **Also:** `spark-ember` / aliases `dual`, `soul-dual` — soulrs dual-mode analogue (parallel read-only **spark** explore fan → **ember** code); pair with `--plan-model` for spark and `--model` for ember. **`weak-drive`** / aliases `advisor`, `weak-strong`, `advise-exec` — strong plan → weak exec → strong review → weak fixup (`hybrid: true`: thrash→advisor on the product path). **Strong plan / weak exec:** `--model <cheap> --plan-model <strong> --strategy plan-exec` (or `plan-critic-exec` / `spark-ember` / `weak-drive`) — read-only phases run on `--plan-model`, the executor keeps `--model`. Full catalog: [docs/STRATEGIES.md](docs/STRATEGIES.md). Measured hybrid economics: [docs/hybrid-model-economics.md](docs/hybrid-model-economics.md). Strict SWE Lite-50 weak-drive (flash+pro): **34/50** — [docs/SWE-QA.md](docs/SWE-QA.md).
 
 ### Multi-backend models (pin + portable)
 

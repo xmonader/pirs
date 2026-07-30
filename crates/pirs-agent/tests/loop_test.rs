@@ -1086,10 +1086,9 @@ async fn host_restores_stop_gate_when_transform_strips_all_reminders() {
         "stop_gate",
         "STOP GATE: run tests before finishing",
     )));
-    agent.messages.push(Message::user(wrap_reminder(
-        "plan",
-        "1. edit\n2. verify",
-    )));
+    agent
+        .messages
+        .push(Message::user(wrap_reminder("plan", "1. edit\n2. verify")));
 
     agent.prompt("I am done").await.unwrap();
 

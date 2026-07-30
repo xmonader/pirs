@@ -123,10 +123,7 @@ pub fn rank_auto_recall(
         .flat_map(|p| {
             let p = p.replace('\\', "/");
             let mut v = vec![p.to_ascii_lowercase()];
-            if let Some(name) = Path::new(&p)
-                .file_name()
-                .and_then(|s| s.to_str())
-            {
+            if let Some(name) = Path::new(&p).file_name().and_then(|s| s.to_str()) {
                 v.push(name.to_ascii_lowercase());
             }
             v
@@ -427,9 +424,10 @@ impl MemoryStore {
             if v.len() < limit {
                 let recent = self.recent_hits(pool_limit, true);
                 for h in recent {
-                    if !v.iter().any(|x| {
-                        x.kind == h.kind && x.name == h.name && x.snippet == h.snippet
-                    }) {
+                    if !v
+                        .iter()
+                        .any(|x| x.kind == h.kind && x.name == h.name && x.snippet == h.snippet)
+                    {
                         v.push(h);
                     }
                 }
@@ -915,7 +913,11 @@ mod tests {
     fn auto_recall_empty_query_uses_recent_rows() {
         let tmp = tempfile::tempdir().unwrap();
         let store = MemoryStore::open(&tmp.path().join("m.db")).unwrap();
-        store.add("tool_result", "bash", "Tool call blocked: tool `bash` blocked by autonomy");
+        store.add(
+            "tool_result",
+            "bash",
+            "Tool call blocked: tool `bash` blocked by autonomy",
+        );
         store.add(
             "tool_result",
             "code_search",
@@ -1034,10 +1036,7 @@ mod tests {
             store.add("user", "u", &format!("memory row number {i} unique"));
         }
         let n = store.row_count();
-        assert!(
-            n <= 50,
-            "expected eviction to cap at 50 rows, got {n}"
-        );
+        assert!(n <= 50, "expected eviction to cap at 50 rows, got {n}");
         assert!(n >= 40, "should keep most recent rows, got {n}");
         assert_eq!(store.max_rows(), 50);
     }

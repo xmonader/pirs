@@ -1,18 +1,14 @@
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Context as _};
-use clap::{CommandFactory, FromArgMatches, Parser};
+use clap::{CommandFactory, FromArgMatches};
 use pirs_agent::{Agent, AgentEvent, AgentTool, Hooks};
 use pirs_ai::{CompletionOptions, Message, OpenAiCompat};
-use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
 
 mod acp_mode;
 mod approval;
-mod runtime_features;
-mod runtime_safety;
 mod auth;
 mod blame;
 mod cli;
@@ -20,22 +16,24 @@ mod config_file;
 mod discovery;
 mod gates;
 mod login;
+mod models_cmd;
+mod observability;
 mod pack;
 mod printer;
-mod replay;
+mod registry;
 mod repl;
+mod replay;
 mod rpc_mode;
+mod runtime_features;
+mod runtime_safety;
+mod secrets_edit;
 mod serve;
 mod session;
+mod session_stats;
 mod subagent;
 mod system_prompt;
 mod tui;
 mod turn;
-mod observability;
-mod models_cmd;
-mod registry;
-mod secrets_edit;
-mod session_stats;
 mod weak_compose;
 
 use cli::Cli;
@@ -124,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
     }
     // Optional git worktree bind (Vibe --worktree class) before tools use cwd.
     if let Some(ref wt) = cli.worktree.clone() {
-        match pirs_tools::bind_session_worktree(&cwd, &wt) {
+        match pirs_tools::bind_session_worktree(&cwd, wt) {
             Ok(sess) => {
                 eprintln!(
                     "[worktree: branch={} cwd={} created={}]",
@@ -147,20 +145,15 @@ async fn main() -> anyhow::Result<()> {
     // Multi-root work context: primary = cwd, plus --also / --context roots.
     {
         let mut ctx = if let Some(ref name) = cli.context {
-            pirs_tools::load_named_context(name)
-                .with_context(|| format!("--context {name}"))?
+            pirs_tools::load_named_context(name).with_context(|| format!("--context {name}"))?
         } else {
             pirs_tools::WorkContext::single(cwd.clone())
         };
         if !also_dirs.is_empty() {
             // Merge --also into context (primary stays first from context or cwd).
             let primary = ctx.primary.clone();
-            let mut extra: Vec<PathBuf> = ctx
-                .roots
-                .iter()
-                .skip(1)
-                .map(|r| r.path.clone())
-                .collect();
+            let mut extra: Vec<PathBuf> =
+                ctx.roots.iter().skip(1).map(|r| r.path.clone()).collect();
             extra.extend(also_dirs);
             ctx = pirs_tools::WorkContext::from_paths(primary, extra)?;
         } else if cli.context.is_some() {
@@ -545,9 +538,11 @@ async fn main() -> anyhow::Result<()> {
     }
     let cwd = std::env::current_dir()?;
 
-    if let Some(provider) =
-        parse_login_request(cli.prompt.first().map(|s| s.as_str()), &cli.mode, &cli.provider)
-    {
+    if let Some(provider) = parse_login_request(
+        cli.prompt.first().map(|s| s.as_str()),
+        &cli.mode,
+        &cli.provider,
+    ) {
         return crate::auth::login(provider);
     }
 
@@ -578,9 +573,7 @@ async fn main() -> anyhow::Result<()> {
         .or_else(|| crate::registry::first_available_backend_key(&model_registry))
         .or(compat_key)
         .with_context(|| {
-            let mut hint = format!(
-                "no API key: pass --api-key, run `pirs login`, set {env_var}"
-            );
+            let mut hint = format!("no API key: pass --api-key, run `pirs login`, set {env_var}");
             let mut envs = crate::registry::expected_key_envs(&model_registry);
             for k in pirs_ai::well_known_key_envs() {
                 if !envs.iter().any(|e| e == k) {
@@ -590,7 +583,9 @@ async fn main() -> anyhow::Result<()> {
             if !envs.is_empty() {
                 hint.push_str(&format!(" (also tried {})", envs.join(" / ")));
             }
-            hint.push_str(" — ensure ~/.pirs/secrets.env is loaded (HOME must point at your user home)");
+            hint.push_str(
+                " — ensure ~/.pirs/secrets.env is loaded (HOME must point at your user home)",
+            );
             hint
         })?;
 
@@ -652,20 +647,20 @@ async fn main() -> anyhow::Result<()> {
     };
     // Multi-backend registry: pin `backend/model` or portable bare names.
     // Builtins + user config; see `pirs backends` / `pirs models`.
-    let provider: Arc<dyn pirs_ai::LlmProvider> =
-        if let Some(router) = crate::registry::build_routing_provider(
+    let provider: Arc<dyn pirs_ai::LlmProvider> = if let Some(router) =
+        crate::registry::build_routing_provider(
             &model_registry,
             Arc::clone(&default_provider),
             Some(api_key.clone()),
             cli.max_retries,
         )? {
-            let active_n = pirs_ai::active_backends(&model_registry).len();
-            let portable: Vec<_> = pirs_ai::active_portable_models(&model_registry)
-                .into_iter()
-                .map(|m| m.alias.as_str())
-                .take(12)
-                .collect();
-            eprintln!(
+        let active_n = pirs_ai::active_backends(&model_registry).len();
+        let portable: Vec<_> = pirs_ai::active_portable_models(&model_registry)
+            .into_iter()
+            .map(|m| m.alias.as_str())
+            .take(12)
+            .collect();
+        eprintln!(
                 "[model registry: {} backend(s), {} with keys; portable: {}{} — pin with backend/model]",
                 model_registry.backends.len(),
                 active_n,
@@ -676,10 +671,10 @@ async fn main() -> anyhow::Result<()> {
                     ""
                 }
             );
-            router
-        } else {
-            default_provider
-        };
+        router
+    } else {
+        default_provider
+    };
     let usage_slot: std::sync::Arc<std::sync::Mutex<pirs_ai::Usage>> =
         std::sync::Arc::new(std::sync::Mutex::new(pirs_ai::Usage::default()));
 
@@ -973,8 +968,8 @@ async fn main() -> anyhow::Result<()> {
         }
         tools.extend(h.tools());
         let ext_hooks = h.hooks();
-        let yolo =
-            crate::approval::ApprovalMode::parse(&cli.approval) == Some(crate::approval::ApprovalMode::Yolo);
+        let yolo = crate::approval::ApprovalMode::parse(&cli.approval)
+            == Some(crate::approval::ApprovalMode::Yolo);
         // Subagents inherit gate+extension policy. Previously required BOTH
         // before and after hooks, so packs with only on_tool_call (strict-plan,
         // session-discipline, weak-model) never reached subagents.
@@ -984,25 +979,20 @@ async fn main() -> anyhow::Result<()> {
             yolo,
             safety,
         );
-        let after_for_sub = ext_hooks.after_tool_call.clone().unwrap_or_else(|| {
-            std::sync::Arc::new(|_id, _name, _result| None)
-        });
+        let after_for_sub = ext_hooks
+            .after_tool_call
+            .clone()
+            .unwrap_or_else(|| std::sync::Arc::new(|_id, _name, _result| None));
         if chained_before.is_some() || ext_hooks.after_tool_call.is_some() {
-            let b = chained_before.unwrap_or_else(|| {
-                std::sync::Arc::new(|_id, _name, _args| None)
-            });
+            let b = chained_before.unwrap_or_else(|| std::sync::Arc::new(|_id, _name, _args| None));
             *policy_slot.lock().unwrap() = Some((b, after_for_sub));
             policy_hooks = policy_slot.lock().unwrap().clone();
         }
         // Extension before/after hooks always install (weak-model loop detection,
         // verify-after-edit tracking). YOLO skips interactive approval prompts
         // but still chains `--agent-profile` hard denials when profile != default.
-        hooks.before_tool_call = chain_gate_with_extensions(
-            gate_hook.clone(),
-            ext_hooks.before_tool_call,
-            yolo,
-            safety,
-        );
+        hooks.before_tool_call =
+            chain_gate_with_extensions(gate_hook.clone(), ext_hooks.before_tool_call, yolo, safety);
         {
             let rhai_after = ext_hooks.after_tool_call;
             let graph_after = graph.clone().map(|g| {
@@ -1115,16 +1105,12 @@ async fn main() -> anyhow::Result<()> {
     // Subagents must inherit profile/approval even when --no-extensions left
     // policy_slot empty (previously only filled inside the extensions branch).
     {
-        let yolo =
-            crate::approval::ApprovalMode::parse(&cli.approval) == Some(crate::approval::ApprovalMode::Yolo);
+        let yolo = crate::approval::ApprovalMode::parse(&cli.approval)
+            == Some(crate::approval::ApprovalMode::Yolo);
         if policy_slot.lock().unwrap().is_none() {
-            if let Some(b) =
-                chain_gate_with_extensions(gate_hook.clone(), None, yolo, safety)
-            {
-                *policy_slot.lock().unwrap() = Some((
-                    b,
-                    std::sync::Arc::new(|_id, _name, _result| None),
-                ));
+            if let Some(b) = chain_gate_with_extensions(gate_hook.clone(), None, yolo, safety) {
+                *policy_slot.lock().unwrap() =
+                    Some((b, std::sync::Arc::new(|_id, _name, _result| None)));
             }
         }
     }
@@ -1219,15 +1205,20 @@ async fn main() -> anyhow::Result<()> {
         }
         v
     };
-    let has_lsp = ["rust-analyzer", "typescript-language-server", "pyright-langserver", "gopls"]
-        .iter()
-        .any(|b| {
-            std::process::Command::new("sh")
-                .args(["-c", &format!("command -v {b} >/dev/null 2>&1")])
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false)
-        });
+    let has_lsp = [
+        "rust-analyzer",
+        "typescript-language-server",
+        "pyright-langserver",
+        "gopls",
+    ]
+    .iter()
+    .any(|b| {
+        std::process::Command::new("sh")
+            .args(["-c", &format!("command -v {b} >/dev/null 2>&1")])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    });
     let ui_mode = if cli.mode == "tui" {
         "tui"
     } else if cli.prompt.is_empty() {
@@ -1423,12 +1414,11 @@ async fn main() -> anyhow::Result<()> {
     );
     // TUI can enable strategy mid-session, so keep a full tool clone whenever
     // we might run phases (strategy/profile mode or TUI).
-    let strategy_tools: Vec<Arc<dyn AgentTool>> =
-        if strategy_mode || cli.mode == "tui" {
-            tools.clone()
-        } else {
-            Vec::new()
-        };
+    let strategy_tools: Vec<Arc<dyn AgentTool>> = if strategy_mode || cli.mode == "tui" {
+        tools.clone()
+    } else {
+        Vec::new()
+    };
 
     let mut agent = Agent::new(provider, &cli.model)
         .with_system_prompt(system)
@@ -1729,8 +1719,7 @@ async fn main() -> anyhow::Result<()> {
                     _ => None,
                 })
                 .unwrap_or_default();
-            let transcript =
-                pirs_skills::session_transcript(&prompt, &reply, "pirs one-shot");
+            let transcript = pirs_skills::session_transcript(&prompt, &reply, "pirs one-shot");
             let _ = pirs_skills::maybe_crystallize_skill(
                 agent.provider.clone(),
                 &agent.model,
@@ -1765,7 +1754,6 @@ async fn main() -> anyhow::Result<()> {
     )
     .await
 }
-
 
 fn generate_serve_token() -> String {
     let mut buf = [0u8; 32];

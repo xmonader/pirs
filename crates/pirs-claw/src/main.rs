@@ -3,34 +3,31 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use pirs_claw::learn;
 use pirs_claw::memory_bridge;
 use pirs_claw::pairing::PairingAllowlist;
-use pirs_claw::presets::looks_like_repo;
-use pirs_claw::learn;
-use pirs_skills::{
-    default_skills_dir, find_skill, install_skill, install_skill_url, remove_skill, usage_counts, validate_skill,
-};
 use pirs_claw::parse_duration_secs;
+use pirs_claw::presets::looks_like_repo;
 use pirs_claw::{
-    apply_exec_backend, default_state_dir, load_secrets_env,
-    should_mark_schedule_fired, DeliverTarget, ScheduleStore, SessionId,
-    SessionStore,
+    apply_exec_backend, default_state_dir, load_secrets_env, should_mark_schedule_fired,
+    DeliverTarget, ScheduleStore, SessionId, SessionStore,
+};
+use pirs_skills::{
+    default_skills_dir, find_skill, install_skill, install_skill_url, remove_skill, usage_counts,
+    validate_skill,
 };
 
 mod bin_helpers;
 mod cli;
 
 use bin_helpers::*;
-use cli::{
-    Cli, Commands, PairCmd, ScheduleCmd, SessionsCmd, SkillsCmd, SoulCmd, SpeechCmd,
-};
+use cli::{Cli, Commands, PairCmd, ScheduleCmd, SessionsCmd, SkillsCmd, SoulCmd, SpeechCmd};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "warn".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
 
@@ -89,9 +86,7 @@ async fn main() -> anyhow::Result<()> {
                 PairCmd::Code { ttl } => {
                     let code = pirs_claw::pairing::mint_pairing_code(&state, ttl)?;
                     println!("pairing code: {code}");
-                    println!(
-                        "unpaired peers: DM this code to the bot within {ttl}s to self-pair"
-                    );
+                    println!("unpaired peers: DM this code to the bot within {ttl}s to self-pair");
                     println!("allowlist file: {}", path.display());
                 }
             }
@@ -105,28 +100,23 @@ async fn main() -> anyhow::Result<()> {
             let skills_c = skills.clone();
             let gateway_code = cli.gateway_code;
             let ch = channel.clone();
-            pirs_claw::gateway::run_gateway(
-                &ch,
-                &state,
-                &allowlist,
-                move |inbound| {
-                    let model = model.clone();
-                    let state_c = state_c.clone();
-                    let cwd_c = cwd_c.clone();
-                    let skills_c = skills_c.clone();
-                    Box::pin(async move {
-                        handle_gateway_message(
-                            &state_c,
-                            &cwd_c,
-                            &model,
-                            &inbound,
-                            &skills_c,
-                            gateway_code,
-                        )
-                        .await
-                    })
-                },
-            )
+            pirs_claw::gateway::run_gateway(&ch, &state, &allowlist, move |inbound| {
+                let model = model.clone();
+                let state_c = state_c.clone();
+                let cwd_c = cwd_c.clone();
+                let skills_c = skills_c.clone();
+                Box::pin(async move {
+                    handle_gateway_message(
+                        &state_c,
+                        &cwd_c,
+                        &model,
+                        &inbound,
+                        &skills_c,
+                        gateway_code,
+                    )
+                    .await
+                })
+            })
             .await?;
         }
         Some(Commands::Code { prompt }) => {
@@ -297,10 +287,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("wrote soul → {}", p.display());
             }
             SoulCmd::Curator => {
-                print!(
-                    "{}",
-                    pirs_skills::curator_report(&default_skills_dir())
-                );
+                print!("{}", pirs_skills::curator_report(&default_skills_dir()));
             }
         },
         Some(Commands::Transcribe { path }) => {
@@ -325,7 +312,9 @@ async fn main() -> anyhow::Result<()> {
                 force,
             } => {
                 if !cloud && !local {
-                    anyhow::bail!("pass --cloud and/or --local (see pirs-claw speech setup --help)");
+                    anyhow::bail!(
+                        "pass --cloud and/or --local (see pirs-claw speech setup --help)"
+                    );
                 }
                 pirs_claw::speech_setup::run_setup(pirs_claw::speech_setup::SetupOpts {
                     cloud,
@@ -365,7 +354,11 @@ async fn main() -> anyhow::Result<()> {
                         let (c, prompt_bp) = pirs_claw::cron_blueprints::expand_blueprint(
                             &bp,
                             &map,
-                            if p.trim().is_empty() { None } else { Some(p.as_str()) },
+                            if p.trim().is_empty() {
+                                None
+                            } else {
+                                Some(p.as_str())
+                            },
                         )?;
                         cron = Some(c);
                         if p.trim().is_empty() {
@@ -384,14 +377,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                     let deliver = DeliverTarget::parse(&deliver);
                     let e = store.add_full_cron(
-                        &p,
-                        every,
-                        in_secs,
-                        cron,
-                        deliver,
-                        name,
-                        job_skills,
-                        model,
+                        &p, every, in_secs, cron, deliver, name, job_skills, model,
                     )?;
                     println!(
                         "scheduled {} name={:?} next_fire={} every_secs={} cron={:?} deliver={} skills={:?}",
@@ -562,4 +548,3 @@ async fn main() -> anyhow::Result<()> {
     }
     Ok(())
 }
-

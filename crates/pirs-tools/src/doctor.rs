@@ -21,7 +21,10 @@ pub const DOCTOR_KEY_ENVS: &[&str] = &[
 pub fn doctor_api_keys_set() -> Vec<&'static str> {
     let mut keys = Vec::new();
     for &k in DOCTOR_KEY_ENVS {
-        if std::env::var(k).map(|v| !v.trim().is_empty()).unwrap_or(false) {
+        if std::env::var(k)
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false)
+        {
             keys.push(k);
         }
     }
@@ -60,7 +63,10 @@ pub fn doctor_mcp_config_lines(cwd: &Path, home: Option<&Path>) -> Vec<String> {
 }
 
 /// Pure: browser/CDP readiness lines (PATH probe + env URL set/absent).
-pub fn doctor_browser_lines(which_bin: impl Fn(&str) -> bool, cdp_url: Option<&str>) -> Vec<String> {
+pub fn doctor_browser_lines(
+    which_bin: impl Fn(&str) -> bool,
+    cdp_url: Option<&str>,
+) -> Vec<String> {
     let mut lines = Vec::new();
     let mut chrome = false;
     for n in [
@@ -207,7 +213,11 @@ pub fn doctor_report(cwd: &Path) -> Vec<String> {
     let display_ok = !display.trim().is_empty() && display_reachable(&display);
     lines.push(format!(
         "computer_use: {} (scrot={} xdotool={} DISPLAY={}{})",
-        if cu { "enabled" } else { "off (set PIRS_COMPUTER_USE=1)" },
+        if cu {
+            "enabled"
+        } else {
+            "off (set PIRS_COMPUTER_USE=1)"
+        },
         which("scrot"),
         which("xdotool"),
         if display.is_empty() {
@@ -358,7 +368,9 @@ mod tests {
         std::fs::write(home.join(".pirs").join("mcp.json"), "{}").unwrap();
         let present = doctor_mcp_config_lines(dir.path(), Some(&home));
         assert!(present.iter().any(|l| l.contains("mcp_config: present")));
-        assert!(present.iter().any(|l| l.contains("mcp_user_config: present")));
+        assert!(present
+            .iter()
+            .any(|l| l.contains("mcp_user_config: present")));
         assert!(present.iter().any(|l| l.contains("MCP connectors only")));
     }
 
@@ -369,7 +381,9 @@ mod tests {
         assert!(unset.iter().any(|l| l.contains("browser_cdp_url: unset")));
         // PATH miss may still find snap binary on this host.
         assert!(
-            unset.iter().any(|l| l.contains("no chromium") || l.contains("/snap/bin/chromium")),
+            unset
+                .iter()
+                .any(|l| l.contains("no chromium") || l.contains("/snap/bin/chromium")),
             "{unset:?}"
         );
         let set = doctor_browser_lines(|b| b == "chromium", Some("http://127.0.0.1:9222"));
@@ -383,10 +397,14 @@ mod tests {
     fn doctor_channel_policy_labels_stubs_and_telegram() {
         let with = doctor_channel_policy_lines(true);
         let without = doctor_channel_policy_lines(false);
-        assert!(with.iter().any(|l| l.contains("channel_telegram: token set")));
+        assert!(with
+            .iter()
+            .any(|l| l.contains("channel_telegram: token set")));
         assert!(without.iter().any(|l| l.contains("token missing")));
         assert!(with.iter().any(|l| l.contains("channel_discord: stub")));
-        assert!(with.iter().any(|l| l.contains("schedule_fires: require an LLM")));
+        assert!(with
+            .iter()
+            .any(|l| l.contains("schedule_fires: require an LLM")));
         assert!(with.iter().any(|l| l.contains("allowlist peer ids")));
     }
 

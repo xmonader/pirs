@@ -158,9 +158,8 @@ fn prep_ooxml_paragraphs(xml: &str) -> String {
 
 fn extract_docx(path: &Path) -> anyhow::Result<String> {
     let mut archive = open_zip(path)?;
-    let xml = read_zip_entry(&mut archive, "word/document.xml").ok_or_else(|| {
-        anyhow::anyhow!("docx missing word/document.xml — file may be corrupt")
-    })?;
+    let xml = read_zip_entry(&mut archive, "word/document.xml")
+        .ok_or_else(|| anyhow::anyhow!("docx missing word/document.xml — file may be corrupt"))?;
     let text = xml_text_content(&prep_ooxml_paragraphs(&xml));
     let mut out = format!(
         "[docx extracted from {}]\n\n{}\n",
@@ -194,7 +193,7 @@ fn extract_pptx(path: &Path) -> anyhow::Result<String> {
             n.starts_with("ppt/slides/slide") && n.ends_with(".xml") && !n.contains("_rels")
         })
         .collect();
-    slides.sort_by(|a, b| nat_slide(a).cmp(&nat_slide(b)));
+    slides.sort_by_key(|a| nat_slide(a));
     let mut out = format!("[pptx extracted from {}]\n", path.display());
     if slides.is_empty() {
         out.push_str("\n[no slides found]\n");
@@ -279,7 +278,9 @@ fn parse_shared_strings(xml: &str) -> Vec<String> {
             let t_rest = &r[t0..];
             let Some(gt) = t_rest.find('>') else { break };
             let after_t = &t_rest[gt + 1..];
-            let Some(close) = after_t.find("</t>") else { break };
+            let Some(close) = after_t.find("</t>") else {
+                break;
+            };
             s.push_str(&after_t[..close]);
             r = &after_t[close + 4..];
         }
@@ -316,7 +317,9 @@ fn sheet_to_tsv(sheet_xml: &str, shared: &[String]) -> String {
     let mut rest = sheet_xml;
     while let Some(c0) = rest.find("<c ") {
         let after = &rest[c0..];
-        let Some(tag_end) = after.find('>') else { break };
+        let Some(tag_end) = after.find('>') else {
+            break;
+        };
         let open = &after[..tag_end];
         let self_close = open.ends_with('/');
         let r = attr(open, "r").unwrap_or("");
@@ -411,9 +414,8 @@ fn parse_cell_ref(r: &str) -> (u32, u32) {
 
 fn extract_opendocument(path: &Path) -> anyhow::Result<String> {
     let mut archive = open_zip(path)?;
-    let xml = read_zip_entry(&mut archive, "content.xml").ok_or_else(|| {
-        anyhow::anyhow!("OpenDocument missing content.xml")
-    })?;
+    let xml = read_zip_entry(&mut archive, "content.xml")
+        .ok_or_else(|| anyhow::anyhow!("OpenDocument missing content.xml"))?;
     let text = xml_text_content(
         &xml.replace("</text:p>", "</text:p>\n")
             .replace("</text:h>", "</text:h>\n")
@@ -560,7 +562,8 @@ mod tests {
         let mut zip = ZipWriter::new(file);
         let opts = SimpleFileOptions::default();
         zip.start_file("[Content_Types].xml", opts).unwrap();
-        zip.write_all(br#"<?xml version="1.0"?><Types></Types>"#).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><Types></Types>"#)
+            .unwrap();
         zip.start_file("word/document.xml", opts).unwrap();
         let xml = format!(
             r#"<?xml version="1.0"?>
@@ -597,7 +600,8 @@ mod tests {
         let mut zip = ZipWriter::new(file);
         let opts = SimpleFileOptions::default();
         zip.start_file("[Content_Types].xml", opts).unwrap();
-        zip.write_all(br#"<?xml version="1.0"?><Types></Types>"#).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><Types></Types>"#)
+            .unwrap();
         zip.start_file("ppt/slides/slide1.xml", opts).unwrap();
         let xml = format!(
             r#"<?xml version="1.0"?>

@@ -1,12 +1,10 @@
 //! Interactive rustyline REPL and slash-like colon commands.
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{bail, Context as _};
 use pirs_agent::{Agent, AgentTool};
 use pirs_ai::Message;
-use pirs_rhai::ExtensionHost;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
@@ -83,7 +81,8 @@ pub async fn repl(
                 clock.agent_end();
                 clock.absorb_messages(&agent.messages[before..]);
                 // Long-term memory of the user (soul + memory.db) when durable.
-                if pirs_skills::learn_enabled_interactive() || pirs_skills::looks_durable(&user_line)
+                if pirs_skills::learn_enabled_interactive()
+                    || pirs_skills::looks_durable(&user_line)
                 {
                     let reply = agent
                         .messages
@@ -105,10 +104,7 @@ pub async fn repl(
                     let key = session_path
                         .lock()
                         .ok()
-                        .and_then(|p| {
-                            p.file_stem()
-                                .map(|s| s.to_string_lossy().into_owned())
-                        })
+                        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
                         .unwrap_or_else(|| "repl".into());
                     pirs_skills::maybe_memory_nudge(
                         agent.provider.clone(),
@@ -298,11 +294,12 @@ pub async fn handle_command(
                         println!("{} {} {:?}", m.id, m.kind, m.label);
                     }
                 }
-                "create" => match pirs_tools::create_checkpoint(&cwd, "manual", agent.messages.len())
-                {
-                    Ok(m) => println!("created {}", m.id),
-                    Err(e) => eprintln!("[checkpoint] {e}"),
-                },
+                "create" => {
+                    match pirs_tools::create_checkpoint(&cwd, "manual", agent.messages.len()) {
+                        Ok(m) => println!("created {}", m.id),
+                        Err(e) => eprintln!("[checkpoint] {e}"),
+                    }
+                }
                 s if s.starts_with("restore") => {
                     let id = s.split_whitespace().nth(1);
                     match pirs_tools::restore_checkpoint(&cwd, id) {
@@ -365,7 +362,10 @@ pub async fn handle_command(
                 *approval_shared.lock().unwrap() = m;
                 if m == crate::approval::ApprovalMode::Yolo {
                     pirs_tools::apply_autonomy(pirs_tools::Autonomy::Full);
-                    println!("{}", pirs_tools::autonomy_status_line(pirs_tools::Autonomy::Full));
+                    println!(
+                        "{}",
+                        pirs_tools::autonomy_status_line(pirs_tools::Autonomy::Full)
+                    );
                 } else {
                     println!(
                         "approval prompts → {}  ({})",
@@ -456,7 +456,8 @@ pub async fn handle_command(
                     let sp = session_path.lock().unwrap().clone();
                     // false: handle_command runs inside the interactive REPL loop,
                     // so a rustyline readline follows -- same stdin race as above.
-                    if let Err(e) = run_turn(agent, &prompt, printer, &sp, mode, host, false).await {
+                    if let Err(e) = run_turn(agent, &prompt, printer, &sp, mode, host, false).await
+                    {
                         eprintln!("[error: {e}]");
                     }
                 } else {

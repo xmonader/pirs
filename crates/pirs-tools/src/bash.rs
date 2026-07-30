@@ -112,10 +112,7 @@ impl AgentTool for BashTool {
                     )
                     .await
                     .map_err(|e| {
-                        anyhow::anyhow!(
-                            "pre-commit checks failed to run ({}): {e}",
-                            sandbox.name()
-                        )
+                        anyhow::anyhow!("pre-commit checks failed to run ({}): {e}", sandbox.name())
                     })?;
                 if !matches!(pre.code, Some(0)) || pre.timed_out {
                     let body = format!("{}{}", pre.stdout, pre.stderr);
@@ -609,18 +606,23 @@ mod tests {
             .await
             .unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("exited with code 127") || msg.contains("command not found") || msg.contains("[hint]"));
         assert!(
-            msg.contains("Do NOT re-run the same command")
-                || msg.contains("wrong/invalid command"),
+            msg.contains("exited with code 127")
+                || msg.contains("command not found")
+                || msg.contains("[hint]")
+        );
+        assert!(
+            msg.contains("Do NOT re-run the same command") || msg.contains("wrong/invalid command"),
             "wrong-invocation should hard-nudge different command: {msg}"
         );
     }
 
     #[test]
     fn failure_hint_classifies_wrong_invocation() {
-        assert!(command_failure_hint(Some(127), "bash: foo: command not found")
-            .contains("wrong/invalid"));
+        assert!(
+            command_failure_hint(Some(127), "bash: foo: command not found")
+                .contains("wrong/invalid")
+        );
         assert!(command_failure_hint(Some(1), "FAILED test_foo\n1 failed")
             .contains("tests/build failed"));
     }

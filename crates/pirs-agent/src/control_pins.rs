@@ -146,8 +146,8 @@ pub fn enforce_tool_result_adjacency(messages: &mut Vec<Message>) {
         // Only touch a group that actually interleaves results with non-results.
         if has_result && has_other {
             let (results, others): (Vec<Message>, Vec<Message>) = messages[start..end]
-                .to_vec()
-                .into_iter()
+                .iter()
+                .cloned()
                 .partition(|m| matches!(m, Message::ToolResult(_)));
             let reordered: Vec<Message> = results.into_iter().chain(others).collect();
             messages.splice(start..end, reordered);
@@ -260,7 +260,10 @@ mod tests {
         assert!(matches!(msgs[0], Message::Assistant(_)));
         assert!(is_tool_result(&msgs[1]));
         assert!(matches!(msgs[2], Message::Assistant(_)));
-        assert!(is_reminder_kind(&msgs[3], "plan"), "pin stays in its own turn");
+        assert!(
+            is_reminder_kind(&msgs[3], "plan"),
+            "pin stays in its own turn"
+        );
     }
 
     #[test]

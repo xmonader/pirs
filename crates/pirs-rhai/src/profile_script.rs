@@ -252,11 +252,7 @@ mod tests {
     fn packs_star_and_array_parse() {
         let star = load_profile_str(r#"#{ packs: "*" }"#, "d").unwrap();
         assert_eq!(star.packs, Some(vec!["*".to_string()]));
-        let list = load_profile_str(
-            r#"#{ packs: ["goal", "btw", "guardrails"] }"#,
-            "m",
-        )
-        .unwrap();
+        let list = load_profile_str(r#"#{ packs: ["goal", "btw", "guardrails"] }"#, "m").unwrap();
         assert_eq!(
             list.packs,
             Some(vec![

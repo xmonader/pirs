@@ -136,10 +136,9 @@ async fn live_dual_backend_plan_openrouter_exec_dashscope() {
             .with_max_retries(1),
     );
     let dashscope = Arc::new(
-        OpenAiCompat::new(Some(
-            std::env::var("DASHSCOPE_BASE_URL")
-                .unwrap_or_else(|_| "https://coding-intl.dashscope.aliyuncs.com/v1".into()),
-        ))
+        OpenAiCompat::new(Some(std::env::var("DASHSCOPE_BASE_URL").unwrap_or_else(
+            |_| "https://coding-intl.dashscope.aliyuncs.com/v1".into(),
+        )))
         .with_provider_name("dashscope")
         .with_max_retries(1),
     );
@@ -274,10 +273,9 @@ async fn live_deepseek_plan_dashscope_exec() {
         .with_max_retries(1),
     );
     let dashscope = Arc::new(
-        OpenAiCompat::new(Some(
-            std::env::var("DASHSCOPE_BASE_URL")
-                .unwrap_or_else(|_| "https://coding-intl.dashscope.aliyuncs.com/v1".into()),
-        ))
+        OpenAiCompat::new(Some(std::env::var("DASHSCOPE_BASE_URL").unwrap_or_else(
+            |_| "https://coding-intl.dashscope.aliyuncs.com/v1".into(),
+        )))
         .with_provider_name("dashscope")
         .with_max_retries(1),
     );
@@ -364,12 +362,7 @@ async fn live_deepseek_plan_dashscope_exec() {
     );
 }
 
-async fn complete_alias(
-    router: &RoutingProvider,
-    alias: &str,
-    system: &str,
-    user: &str,
-) -> String {
+async fn complete_alias(router: &RoutingProvider, alias: &str, system: &str, user: &str) -> String {
     let mut stream = router
         .stream(
             alias,

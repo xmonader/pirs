@@ -31,7 +31,9 @@ pub fn which(name: &str) -> Option<PathBuf> {
 /// Unbounded `Command::output()` can hang the audio server forever on a stuck
 /// engine (review AC3). All speech/ffmpeg spawns should go through this.
 pub fn run_with_timeout(mut command: Command, timeout: Duration) -> anyhow::Result<Output> {
-    let timeout = timeout.min(Duration::from_secs(600)).max(Duration::from_secs(1));
+    let timeout = timeout
+        .min(Duration::from_secs(600))
+        .max(Duration::from_secs(1));
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     // Own process group: kill(-pid) reaps shell + grandchildren (CmdStt/CmdTts).
     #[cfg(unix)]
@@ -88,10 +90,7 @@ pub fn run_with_timeout(mut command: Command, timeout: Duration) -> anyhow::Resu
     let stdout = out_rx.recv_timeout(join_budget).unwrap_or_default();
     let stderr = err_rx.recv_timeout(join_budget).unwrap_or_default();
     if timed_out {
-        bail!(
-            "subprocess timed out after {}s",
-            timeout.as_secs()
-        );
+        bail!("subprocess timed out after {}s", timeout.as_secs());
     }
     Ok(Output {
         status,
@@ -185,7 +184,9 @@ mod tests {
         let mut cmd = Command::new("sleep");
         cmd.arg("30");
         let start = Instant::now();
-        let err = run_with_timeout(cmd, Duration::from_secs(1)).unwrap_err().to_string();
+        let err = run_with_timeout(cmd, Duration::from_secs(1))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("timed out"), "{err}");
         assert!(
             start.elapsed() < Duration::from_secs(5),

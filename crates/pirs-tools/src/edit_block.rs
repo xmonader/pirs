@@ -63,9 +63,7 @@ impl AgentTool for EditBlockTool {
     }
 
     fn prompt_snippet(&self) -> Option<&str> {
-        Some(
-            "edit_block: one SEARCH/REPLACE change (aider format; best for weak models)",
-        )
+        Some("edit_block: one SEARCH/REPLACE change (aider format; best for weak models)")
     }
 
     async fn execute(&self, ctx: ToolExecContext) -> anyhow::Result<ToolOutput> {

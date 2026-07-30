@@ -142,7 +142,10 @@ impl SessionStore {
         };
         // Single-write + exclusive flock so concurrent gateway tasks cannot
         // interleave JSON and brick load() forever (review M-30).
-        let mut f = OpenOptions::new().create(true).append(true).open(&self.path)?;
+        let mut f = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
         #[cfg(unix)]
         {
             use std::os::unix::io::AsRawFd;
@@ -168,10 +171,7 @@ impl SessionStore {
     /// Sidecar metadata next to the jsonl (`*.meta.json`).
     pub fn meta_path(&self) -> PathBuf {
         let mut p = self.path.clone();
-        let stem = p
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("session");
+        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("session");
         p.set_file_name(format!("{stem}.meta.json"));
         p
     }
@@ -297,8 +297,10 @@ mod tests {
         assert!(!b_lines.iter().any(|l| l.text.contains("alice")));
         // Distinct paths
         assert_ne!(a.path(), b.path());
-        assert!(a.path().ends_with("sessions/telegram/111.jsonl")
-            || a.path().to_string_lossy().contains("telegram"));
+        assert!(
+            a.path().ends_with("sessions/telegram/111.jsonl")
+                || a.path().to_string_lossy().contains("telegram")
+        );
     }
 
     #[test]
@@ -328,7 +330,10 @@ mod tests {
         };
         let id = SessionId::from_inbound(&m);
         assert_eq!(id.key(), "telegram/42");
-        assert_eq!(id.path(Path::new("/s")), PathBuf::from("/s/sessions/telegram/42.jsonl"));
+        assert_eq!(
+            id.path(Path::new("/s")),
+            PathBuf::from("/s/sessions/telegram/42.jsonl")
+        );
     }
 
     #[test]

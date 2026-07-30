@@ -6,12 +6,7 @@
 
 /// Pack names from the built-in `weak` profile (`packs` field).
 /// Full catalog: profile `default` with `packs: "*"`.
-pub const WEAK_BUNDLED_PACKS: &[&str] = &[
-    "weak-model",
-    "context-janitor",
-    "env-doctor",
-    "goal",
-];
+pub const WEAK_BUNDLED_PACKS: &[&str] = &["weak-model", "context-janitor", "env-doctor", "goal"];
 
 /// Inputs that affect how `--weak` rewrites runtime flags.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,7 +188,10 @@ mod tests {
             Some(("rust".into(), "cargo test --workspace".into())),
         );
         assert_eq!(out.verify.as_deref(), Some("cargo test --workspace"));
-        assert!(out.auto_verify_note.unwrap().contains("cargo test --workspace"));
+        assert!(out
+            .auto_verify_note
+            .unwrap()
+            .contains("cargo test --workspace"));
         assert!(out.max_retries >= 3);
         assert!(out.sequential);
         assert!(out.tool_diet);

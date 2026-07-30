@@ -4,12 +4,8 @@ use std::sync::Arc;
 
 use pirs_agent::Agent;
 use pirs_claw::presets::coding_tools;
-use pirs_skills::{
-    default_skills_dir, load_skills,
-    skill_tools, Skill,
-};
+use pirs_skills::{default_skills_dir, load_skills, skill_tools, Skill};
 use pirs_tools::life_tools;
-
 
 pub fn load_all_skills(cwd: &Path, extra: Option<&Path>) -> Vec<Skill> {
     let mut skills = pirs_skills::discover_skills(cwd);
@@ -29,8 +25,6 @@ pub fn load_all_skills(cwd: &Path, extra: Option<&Path>) -> Vec<Skill> {
     skills
 }
 
-
-
 /// Chat-safe tool set: recall + progressive skills + life tools (+ optional code tools).
 pub fn chat_safe_tools(
     cwd: &Path,
@@ -40,8 +34,6 @@ pub fn chat_safe_tools(
 ) -> Vec<Arc<dyn pirs_agent::AgentTool>> {
     chat_safe_tools_with_state(cwd, skills, allow_code, allow_skill_manage, None, None)
 }
-
-
 
 /// Gateway/chat tools. When `state_dir` is set, `peer_scope` must be the caller's
 /// `SessionId::key()` so `session_search` cannot read other peers' transcripts.
@@ -95,8 +87,6 @@ pub fn chat_safe_tools_with_state(
     tools
 }
 
-
-
 pub fn which_bin(name: &str) -> Option<std::path::PathBuf> {
     let path = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path) {
@@ -107,8 +97,6 @@ pub fn which_bin(name: &str) -> Option<std::path::PathBuf> {
     }
     None
 }
-
-
 
 /// Load optional Rhai packs for claw chat/code (not gateway unless flagged).
 pub fn load_claw_extensions(cwd: &Path, enabled: bool) -> Option<Arc<pirs_rhai::ExtensionHost>> {
@@ -138,8 +126,6 @@ pub fn load_claw_extensions(cwd: &Path, enabled: bool) -> Option<Arc<pirs_rhai::
     }
     Some(host)
 }
-
-
 
 /// Profile denials + optional extension packs + audit log (Opus review §2.4).
 ///
@@ -201,4 +187,3 @@ pub fn install_claw_safety(
     agent.subscribe(pirs_agent::audit_listener(audit));
     agent
 }
-

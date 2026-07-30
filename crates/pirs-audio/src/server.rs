@@ -162,10 +162,11 @@ async fn transcribe(
     let stt = Arc::clone(&state);
     let lang = language.clone();
     let path_for_job = wav.clone();
-    let text = tokio::task::spawn_blocking(move || stt.stt.transcribe(&path_for_job, lang.as_deref()))
-        .await
-        .map_err(|e| ApiError::server(format!("join: {e}")))?
-        .map_err(|e| ApiError::server(e.to_string()))?;
+    let text =
+        tokio::task::spawn_blocking(move || stt.stt.transcribe(&path_for_job, lang.as_deref()))
+            .await
+            .map_err(|e| ApiError::server(format!("join: {e}")))?
+            .map_err(|e| ApiError::server(e.to_string()))?;
 
     Ok(Json(json!({ "text": text })))
 }
@@ -215,12 +216,7 @@ async fn speech(
         "aac" => "audio/aac",
         _ => "audio/wav",
     };
-    Ok((
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, ct)],
-        audio,
-    )
-        .into_response())
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, ct)], audio).into_response())
 }
 
 struct ApiError {

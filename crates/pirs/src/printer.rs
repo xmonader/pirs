@@ -1,6 +1,5 @@
 //! Event printer for REPL / one-shot stdout streaming.
-use std::io::Write;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use pirs_agent::AgentEvent;
 use pirs_ai::Message;

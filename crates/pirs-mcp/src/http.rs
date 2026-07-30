@@ -329,7 +329,7 @@ impl LegacySseClient {
                         "rejecting cross-origin MCP SSE endpoint redirect"
                     );
                     // Fall back to relative join on original base (ignore redirect).
-                    format!("{base}")
+                    base.clone()
                 }
             } else if endpoint.starts_with("http") {
                 // Reject non http(s) schemes that start with "http" (e.g. httpanything://).
@@ -721,10 +721,7 @@ mod tests {
 
     #[test]
     fn same_origin_rejects_cross_origin_and_fake_schemes() {
-        assert!(same_origin(
-            "http://host:3000",
-            "http://host:3000/messages"
-        ));
+        assert!(same_origin("http://host:3000", "http://host:3000/messages"));
         assert!(!same_origin(
             "http://host:3000",
             "http://evil.example/steal"
@@ -738,8 +735,10 @@ mod tests {
 
     #[test]
     fn sse_buffer_cap_is_finite() {
-        assert!(MAX_SSE_BUFFER_BYTES >= 64 * 1024);
-        assert!(MAX_SSE_BUFFER_BYTES <= 16 * 1024 * 1024);
+        // Cap is a const; assert bounds once so a future retune fails loudly.
+        const MIN: usize = 64 * 1024;
+        const MAX: usize = 16 * 1024 * 1024;
+        assert!((MIN..=MAX).contains(&MAX_SSE_BUFFER_BYTES));
         // Drain helper must reference the cap (structural — real stream test is e2e).
         let src = include_str!("http.rs");
         assert!(src.contains("MAX_SSE_BUFFER_BYTES"));

@@ -16,9 +16,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use futures::StreamExt;
-use pirs_ai::{
-    CompletionOptions, Context, LlmProvider, Message, StreamEvent,
-};
+use pirs_ai::{CompletionOptions, Context, LlmProvider, Message, StreamEvent};
 use serde_json::{json, Value};
 use tokio_util::sync::CancellationToken;
 
@@ -92,11 +90,7 @@ impl HybridConfig {
 
     /// Called when thrash fires mid-loop. Returns guidance to inject and continue,
     /// or `None` to hard-stop (budget exhausted / stages done).
-    pub async fn on_thrash(
-        &self,
-        thrash_msg: &str,
-        recent_messages: &[Message],
-    ) -> Option<String> {
+    pub async fn on_thrash(&self, thrash_msg: &str, recent_messages: &[Message]) -> Option<String> {
         let calls = self.inner.advisor_calls.load(Ordering::Relaxed);
         if calls >= self.inner.max_advisor_calls {
             eprintln!(
@@ -162,8 +156,7 @@ impl HybridConfig {
         if calls > self.inner.max_advisor_calls {
             // Undo the bump conceptually — still refuse.
             return Ok(
-                "Advisor budget exhausted. Continue on your own with the tools you have."
-                    .into(),
+                "Advisor budget exhausted. Continue on your own with the tools you have.".into(),
             );
         }
 
@@ -380,9 +373,7 @@ mod tests {
     #[tokio::test]
     async fn budget_exhaustion_stops_escalate() {
         let h = HybridConfig::new(
-            Arc::new(FakeProvider {
-                reply: "ok".into(),
-            }),
+            Arc::new(FakeProvider { reply: "ok".into() }),
             "strong",
             None,
             "task",

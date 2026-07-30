@@ -38,3 +38,6 @@ base64 = "0.22"
 
 [dev-dependencies]
 
+[lints]
+workspace = true
+

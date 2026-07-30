@@ -51,7 +51,12 @@ fn now_secs() -> u64 {
 
 pub fn catalog_cache_dir() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
-    Some(PathBuf::from(home).join(".pirs").join("cache").join("catalogs"))
+    Some(
+        PathBuf::from(home)
+            .join(".pirs")
+            .join("cache")
+            .join("catalogs"),
+    )
 }
 
 pub fn catalog_path(backend: &str) -> Option<PathBuf> {
@@ -105,7 +110,9 @@ pub fn fetch_catalog(backend: &BackendEntry) -> anyhow::Result<CatalogFile> {
         .filter(|s| !s.is_empty());
 
     let models = match kind {
-        BackendKind::OpenaiCompatible => fetch_openai_compatible_models(backend, api_key.as_deref())?,
+        BackendKind::OpenaiCompatible => {
+            fetch_openai_compatible_models(backend, api_key.as_deref())?
+        }
         BackendKind::Anthropic => anthropic_static_models(),
     };
 
@@ -267,9 +274,7 @@ pub fn refresh_backend(reg: &RegistryFile, name: &str) -> anyhow::Result<(Catalo
         })?;
     if let Some(env) = &backend.api_key_env {
         if std::env::var(env).ok().filter(|s| !s.is_empty()).is_none() {
-            bail!(
-                "backend {name:?} needs {env} set (env or ~/.pirs/secrets.env) before refresh"
-            );
+            bail!("backend {name:?} needs {env} set (env or ~/.pirs/secrets.env) before refresh");
         }
     }
     let cat = fetch_catalog(backend)?;

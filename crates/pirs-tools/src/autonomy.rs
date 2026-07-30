@@ -223,7 +223,14 @@ mod tests {
     fn autonomy_flag_wins_over_yolo_and_permission() {
         // Explicit --autonomy plan still wins (user asked for read-only).
         assert_eq!(
-            resolve_autonomy(None, Some("plan"), None, Some("danger-full-access"), "yolo", "default"),
+            resolve_autonomy(
+                None,
+                Some("plan"),
+                None,
+                Some("danger-full-access"),
+                "yolo",
+                "default"
+            ),
             Autonomy::Plan
         );
         assert_eq!(

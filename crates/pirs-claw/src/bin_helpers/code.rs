@@ -9,17 +9,12 @@ use pirs_claw::presets::{
     resolve_code_strategy, CodeOptions,
 };
 use pirs_claw::registry;
-use pirs_skills::{
-    skills_prompt_section, Skill,
-};
 use pirs_claw::{
-    describe_exec_backend,
-    empty_assistant_diag, extract_assistant_reply, require_llm_key,
+    describe_exec_backend, empty_assistant_diag, extract_assistant_reply, require_llm_key,
 };
+use pirs_skills::{skills_prompt_section, Skill};
 
-use super::tools::{
-    chat_safe_tools, install_claw_safety, load_claw_extensions,
-};
+use super::tools::{chat_safe_tools, install_claw_safety, load_claw_extensions};
 
 pub async fn run_code(
     cwd: &Path,
@@ -145,7 +140,8 @@ pub async fn run_code(
         let reply = extract_assistant_reply(driver.messages())
             .unwrap_or_else(|| "(strategy completed; no final assistant text)".into());
         if do_learn {
-            let transcript = pirs_claw::learn::session_transcript(prompt, &reply, "code strategy run");
+            let transcript =
+                pirs_claw::learn::session_transcript(prompt, &reply, "code strategy run");
             let _ = pirs_claw::learn::maybe_crystallize_skill(
                 provider,
                 model,
@@ -196,11 +192,7 @@ pub async fn run_code(
         }
         println!("{reply}");
     } else {
-        anyhow::bail!(
-            "empty assistant reply ({})",
-            empty_assistant_diag(&msgs)
-        );
+        anyhow::bail!("empty assistant reply ({})", empty_assistant_diag(&msgs));
     }
     Ok(())
 }
-

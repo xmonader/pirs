@@ -48,11 +48,17 @@ impl WorkContext {
     }
 
     /// Build from primary + additional directories (deduped).
-    pub fn from_paths(primary: PathBuf, also: impl IntoIterator<Item = PathBuf>) -> anyhow::Result<Self> {
+    pub fn from_paths(
+        primary: PathBuf,
+        also: impl IntoIterator<Item = PathBuf>,
+    ) -> anyhow::Result<Self> {
         let mut roots = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
-        let push = |roots: &mut Vec<WorkRoot>, seen: &mut std::collections::HashSet<PathBuf>, p: PathBuf| -> anyhow::Result<()> {
+        let push = |roots: &mut Vec<WorkRoot>,
+                    seen: &mut std::collections::HashSet<PathBuf>,
+                    p: PathBuf|
+         -> anyhow::Result<()> {
             let abs = if p.is_absolute() {
                 p
             } else {
@@ -113,7 +119,11 @@ impl WorkContext {
             .iter()
             .map(|r| format!("{}={}", r.name, r.path.display()))
             .collect();
-        format!("work context ({} roots): {}", self.roots.len(), parts.join(" · "))
+        format!(
+            "work context ({} roots): {}",
+            self.roots.len(),
+            parts.join(" · ")
+        )
     }
 
     pub fn prompt_section(&self) -> String {
@@ -127,7 +137,11 @@ impl WorkContext {
         ));
         s.push_str("- Additional roots:\n");
         for r in &self.roots {
-            let mark = if r.path == self.primary { " (primary)" } else { "" };
+            let mark = if r.path == self.primary {
+                " (primary)"
+            } else {
+                ""
+            };
             s.push_str(&format!("  - //{} → {}{mark}\n", r.name, r.path.display()));
         }
         s.push_str(
@@ -221,10 +235,7 @@ pub fn load_named_context(name: &str) -> anyhow::Result<WorkContext> {
         .and_then(|v| v.as_array())
         .context("no [[context]] table in contexts.toml")?;
     for entry in arr {
-        let n = entry
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let n = entry.get("name").and_then(|v| v.as_str()).unwrap_or("");
         if n != name {
             continue;
         }
@@ -284,7 +295,8 @@ mod tests {
     fn from_paths_dedupes_and_names() {
         let a = tempfile::tempdir().unwrap();
         let b = tempfile::tempdir().unwrap();
-        let ctx = WorkContext::from_paths(a.path().to_path_buf(), [b.path().to_path_buf()]).unwrap();
+        let ctx =
+            WorkContext::from_paths(a.path().to_path_buf(), [b.path().to_path_buf()]).unwrap();
         assert_eq!(ctx.roots.len(), 2);
         assert_eq!(ctx.primary, ctx.roots[0].path);
     }

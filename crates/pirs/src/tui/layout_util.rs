@@ -122,4 +122,3 @@ pub(super) fn clip_spans(spans: Vec<Span<'static>>, width: usize) -> Vec<Span<'s
     }
     out
 }
-

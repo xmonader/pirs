@@ -5,16 +5,23 @@
 //!
 //! Split modules: app, chat, draw, events, input, slash_exec, terminal (+ existing theme/slash/tools/...).
 
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::Event;
 use pirs_agent::{Agent, AgentEvent};
 use pirs_ai::Message;
-use ratatui::Terminal;
 
-use crate::approval::ApprovalMode;
 use crate::session_stats::{self, SessionClock};
+
+// Test-only / re-export surface for tests_all.
+#[cfg(test)]
+#[allow(unused_imports)]
+use {
+    crate::approval::ApprovalMode,
+    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+    ratatui::Terminal,
+    std::path::PathBuf,
+};
 
 mod journey;
 mod model_picker;
@@ -25,27 +32,31 @@ mod tools;
 mod app;
 mod chat;
 mod draw;
-mod layout_util;
 mod events;
 mod input;
+mod layout_util;
 mod slash_exec;
 mod terminal;
 
 pub use app::TuiOptions;
 
-use app::*;
-use chat::*;
-use draw::*;
-use layout_util::*;
-use events::*;
-use input::*;
-use journey::*;
-use model_picker::{ModelPicker, ModelPickerTarget};
-use slash::*;
-use slash_exec::*;
-use terminal::*;
-use theme::*;
-use tools::*;
+// Re-exports for submodule + tests_all (`use super::*`). Unused in the non-test binary target.
+#[allow(unused_imports)]
+use {
+    app::*,
+    chat::*,
+    draw::*,
+    events::*,
+    input::*,
+    journey::*,
+    layout_util::*,
+    model_picker::{ModelPicker, ModelPickerTarget},
+    slash::*,
+    slash_exec::*,
+    terminal::*,
+    theme::*,
+    tools::*,
+};
 
 pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     install_panic_hook();
@@ -129,11 +140,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
         // Expand with `t` / ctrl-o.
         thinking_expanded: false,
         slash_sel: 0,
-        ext_slash: opts
-            .host
-            .as_ref()
-            .map(|h| h.commands())
-            .unwrap_or_default(),
+        ext_slash: opts.host.as_ref().map(|h| h.commands()).unwrap_or_default(),
         first_run_session: is_first_tui_run(),
         should_quit: false,
         item_caches: Vec::new(),
@@ -160,8 +167,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
     let (prompt_tx, prompt_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let (done_tx, mut done_rx) = tokio::sync::mpsc::unbounded_channel::<bool>();
     // (command, output, record_in_agent_context)
-    let (shell_tx, mut shell_rx) =
-        tokio::sync::mpsc::unbounded_channel::<(String, String, bool)>();
+    let (shell_tx, mut shell_rx) = tokio::sync::mpsc::unbounded_channel::<(String, String, bool)>();
     let agent = Arc::new(tokio::sync::Mutex::new(opts.agent));
     {
         // Strategy runner is `!Send` (Rc in gate/phases). Drive the agent on a
@@ -399,11 +405,8 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
             match agent.try_lock() {
                 Ok(a) => a.usage_report(),
                 Err(_) => {
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(2),
-                        agent.lock(),
-                    )
-                    .await
+                    match tokio::time::timeout(std::time::Duration::from_secs(2), agent.lock())
+                        .await
                     {
                         Ok(a) => a.usage_report(),
                         Err(_) => pirs_agent::usage::UsageReport::default(),
@@ -412,12 +415,7 @@ pub async fn run(mut opts: TuiOptions) -> anyhow::Result<()> {
             }
         };
         let pins = app.report_pins();
-        session_stats::print_session_stats_pins(
-            &app.clock,
-            &report,
-            &app.model,
-            &pins,
-        );
+        session_stats::print_session_stats_pins(&app.clock, &report, &app.model, &pins);
     }
 
     if let Some(h) = &opts.host {
@@ -451,10 +449,7 @@ fn compact_num(n: u64) -> String {
 
 /// Cancel in-flight work and deny pending approvals so quit cannot deadlock
 /// on `agent.lock()` (review C-5).
-async fn tui_prepare_exit(
-    app: &App,
-    agent: &Arc<tokio::sync::Mutex<Agent>>,
-) {
+async fn tui_prepare_exit(app: &App, agent: &Arc<tokio::sync::Mutex<Agent>>) {
     // Answer any pending approval with deny so the worker unblocks.
     {
         let mut pending = app.pending_approval.lock().unwrap();
@@ -470,7 +465,6 @@ async fn tui_prepare_exit(
         let _ = a; // cancel already fired via shared CancelSlot
     }
 }
-
 
 #[cfg(test)]
 #[path = "tests_all.rs"]

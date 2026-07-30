@@ -129,9 +129,7 @@ fn model_matches(recorded: &str, want: &str) -> bool {
         return true;
     }
     let bare = recorded.strip_prefix("delegate:").unwrap_or(recorded);
-    bare == want
-        || bare.ends_with(&format!("/{want}"))
-        || want.ends_with(&format!("/{bare}"))
+    bare == want || bare.ends_with(&format!("/{want}")) || want.ends_with(&format!("/{bare}"))
 }
 
 /// Look up usage + call count for a model pin (exact, backend/id, or delegate:).
@@ -273,19 +271,13 @@ pub fn format_session_stats(
 
     let mut lines = Vec::new();
     lines.push("── session stats ─────────────────────────────".into());
-    lines.push(format!(
-        "  wall time      {}",
-        format_duration(wall)
-    ));
+    lines.push(format!("  wall time      {}", format_duration(wall)));
     lines.push(format!(
         "  agent time     {}  (idle {})",
         format_duration(agent),
         format_duration(idle)
     ));
-    lines.push(format!(
-        "  user turns     {}",
-        clock.user_turns()
-    ));
+    lines.push(format!("  user turns     {}", clock.user_turns()));
     lines.push(format!(
         "  api calls      {}  ({} delegate)",
         report.calls.len().saturating_sub(report.delegate_calls()),
@@ -314,7 +306,9 @@ pub fn format_session_stats(
         ));
     }
     if cost_known && cost_total > 0.0 {
-        lines.push(format!("  est. cost      ${cost_total:.4}  (builtin price table)"));
+        lines.push(format!(
+            "  est. cost      ${cost_total:.4}  (builtin price table)"
+        ));
     } else if !report.by_model.is_empty() {
         lines.push("  est. cost      n/a  (unknown model rates)".into());
     }
@@ -331,9 +325,11 @@ pub fn format_session_stats(
     if !report.by_model.is_empty() {
         lines.push("  by model".into());
         for (m, u) in &report.by_model {
-            let calls = report.calls.iter().filter(|c| {
-                c.model == *m || c.model == format!("delegate:{m}")
-            }).count();
+            let calls = report
+                .calls
+                .iter()
+                .filter(|c| c.model == *m || c.model == format!("delegate:{m}"))
+                .count();
             let c = prices.cost(m, u);
             let cost_s = c.map(|x| format!("  ${x:.4}")).unwrap_or_default();
             lines.push(format!(
@@ -489,13 +485,22 @@ mod tests {
         report.main_usage.input = 1000;
         report.main_usage.output = 200;
         report.main_usage.cache_read = 100;
-        *report.by_model.entry("deepseek-v4-flash".into()).or_default() = Usage {
+        *report
+            .by_model
+            .entry("deepseek-v4-flash".into())
+            .or_default() = Usage {
             input: 1000,
             output: 200,
             cache_read: 100,
             ..Default::default()
         };
-        let s = format_session_stats(&clock, &report, "qwen3.5-plus", Some("deepseek-v4-pro"), Some("plan-exec"));
+        let s = format_session_stats(
+            &clock,
+            &report,
+            "qwen3.5-plus",
+            Some("deepseek-v4-pro"),
+            Some("plan-exec"),
+        );
         assert!(s.contains("session stats"));
         assert!(s.contains("wall time"));
         assert!(s.contains("agent time"));
@@ -503,7 +508,10 @@ mod tests {
         assert!(s.contains("deepseek-v4-flash"));
         assert!(s.contains("plan-exec"));
         assert!(s.contains("qwen3.5-plus"));
-        assert!(s.contains("by role"), "hybrid report must include by-role split: {s}");
+        assert!(
+            s.contains("by role"),
+            "hybrid report must include by-role split: {s}"
+        );
         assert!(s.contains("planner"), "{s}");
         assert!(s.contains("executor"), "{s}");
     }
@@ -551,7 +559,10 @@ mod tests {
         assert!(text.contains("planner (strong-planner)"), "{text}");
         assert!(text.contains("executor (weak-executor)"), "{text}");
         // Executor should show the larger token total.
-        assert!(text.contains("9.4k") || text.contains("9400") || text.contains("9.0k"), "{text}");
+        assert!(
+            text.contains("9.4k") || text.contains("9400") || text.contains("9.0k"),
+            "{text}"
+        );
         let full = format_session_stats(
             &SessionClock::new(),
             &report,
@@ -652,17 +663,10 @@ mod tests {
     #[test]
     fn one_shot_and_session_stats_share_role_split_lines() {
         let report = hybrid_multi_model_report();
-        let pins = ReportPins::new(
-            Some("strong-planner".into()),
-            Some("plan-exec".into()),
-        );
+        let pins = ReportPins::new(Some("strong-planner".into()), Some("plan-exec".into()));
         let footer = format_usage_end_pins(&report, "weak-executor", &pins);
-        let session = format_session_stats_pins(
-            &SessionClock::new(),
-            &report,
-            "weak-executor",
-            &pins,
-        );
+        let session =
+            format_session_stats_pins(&SessionClock::new(), &report, "weak-executor", &pins);
         let shared = format_role_split_lines(&report, "weak-executor", "strong-planner");
         let shared_text = shared.join("\n");
         assert!(shared_text.contains("by role") && shared_text.contains("planner"));

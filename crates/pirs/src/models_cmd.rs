@@ -72,7 +72,10 @@ fn cmd_key(args: &[&str]) -> anyhow::Result<()> {
         bail!("usage: pirs key NAME=value   or   pirs key NAME value");
     };
     let path = crate::secrets_edit::set_secret_env(name, &value)?;
-    println!("wrote {name} → {} (mode 600); process env updated", path.display());
+    println!(
+        "wrote {name} → {} (mode 600); process env updated",
+        path.display()
+    );
     Ok(())
 }
 
@@ -103,10 +106,7 @@ fn load_reg(cwd: &Path) -> pirs_ai::RegistryFile {
 fn cmd_backends(cwd: &Path) -> anyhow::Result<()> {
     let reg = load_reg(cwd);
     println!("backends (builtin + ~/.pirs/config.toml):");
-    println!(
-        "  {:<18} {:<12} {:<28} {}",
-        "NAME", "KEY", "ENV", "BASE"
-    );
+    println!("  {:<18} {:<12} {:<28} BASE", "NAME", "KEY", "ENV");
     for b in &reg.backends {
         let env = b.api_key_env.as_deref().unwrap_or("-");
         let has = pirs_ai::backend_key_present(b);
@@ -143,14 +143,9 @@ fn cmd_models(cwd: &Path, args: &[&str]) -> anyhow::Result<()> {
                 let name = args[1].to_string();
                 print!("refreshing {name}… ");
                 let reg = reg.clone();
-                let (cat, path) = tokio::task::block_in_place(|| {
-                    pirs_ai::refresh_backend(&reg, &name)
-                })?;
-                println!(
-                    "ok — {} models → {}",
-                    cat.models.len(),
-                    path.display()
-                );
+                let (cat, path) =
+                    tokio::task::block_in_place(|| pirs_ai::refresh_backend(&reg, &name))?;
+                println!("ok — {} models → {}", cat.models.len(), path.display());
             } else {
                 println!("refreshing active backends (keys present)…");
                 let reg = reg.clone();
@@ -228,10 +223,7 @@ fn cmd_models(cwd: &Path, args: &[&str]) -> anyhow::Result<()> {
             Ok(())
         }
         other => {
-            bail!(
-                "unknown models subcommand {other:?}\n{}",
-                help_text()
-            );
+            bail!("unknown models subcommand {other:?}\n{}", help_text());
         }
     }
 }
@@ -260,11 +252,7 @@ fn print_models_summary(reg: &pirs_ai::RegistryFile) {
             continue;
         }
         let tier = m.tier.as_deref().unwrap_or("-");
-        println!(
-            "  {:<22} [{tier}]  {}",
-            m.alias,
-            targets.join("  ")
-        );
+        println!("  {:<22} [{tier}]  {}", m.alias, targets.join("  "));
     }
     println!("  (* = key present)");
     println!();
@@ -284,7 +272,10 @@ fn print_models_summary(reg: &pirs_ai::RegistryFile) {
                     if stale { " (stale)" } else { "" }
                 );
             }
-            None => println!("  {:<18} (not cached — pirs models refresh {})", b.name, b.name),
+            None => println!(
+                "  {:<18} (not cached — pirs models refresh {})",
+                b.name, b.name
+            ),
         }
     }
     println!();

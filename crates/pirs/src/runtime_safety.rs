@@ -98,13 +98,12 @@ pub fn compose_safety_before_hook(
         cfg.cwd.clone(),
         cfg.profile,
     ));
-    let mut gate_hook = if cfg.approval == ApprovalMode::Ask
-        || cfg.profile != SafetyProfile::Default
-    {
-        Some(gate.hook())
-    } else {
-        None
-    };
+    let mut gate_hook =
+        if cfg.approval == ApprovalMode::Ask || cfg.profile != SafetyProfile::Default {
+            Some(gate.hook())
+        } else {
+            None
+        };
     // Always install live permission ladder (plan/act mid-session).
     gate_hook = Hooks::chain_before(gate_hook, Some(pirs_tools::live_permission_hook()));
     gate_hook = Hooks::chain_before(gate_hook, extra_before);
@@ -148,9 +147,8 @@ pub fn fill_subagent_policy_slot(
     ext_after: Option<AfterToolCallHook>,
 ) {
     let (hook, gate) = compose_safety_before_hook(cfg, ext_before);
-    let after: AfterToolCallHook = ext_after.unwrap_or_else(|| {
-        Arc::new(|_id, _name, _result| None)
-    });
+    let after: AfterToolCallHook =
+        ext_after.unwrap_or_else(|| Arc::new(|_id, _name, _result| None));
     *slot.lock().unwrap() = Some((hook, after));
     std::mem::forget(gate);
 }
@@ -177,6 +175,7 @@ mod tests {
 
     #[test]
     fn from_resolved_prefers_cli_strings_not_env() {
+        let _g = crate::TEST_ENV_LOCK.lock().unwrap();
         std::env::set_var("PIRS_PROVIDER", "anthropic");
         let cfg = SafetyConfig::from_resolved(
             PathBuf::from("/work"),
@@ -193,6 +192,7 @@ mod tests {
 
     #[test]
     fn from_env_reads_process_env() {
+        let _g = crate::TEST_ENV_LOCK.lock().unwrap();
         std::env::set_var("PIRS_PROVIDER", "anthropic");
         std::env::set_var("PIRS_APPROVAL", "yolo");
         std::env::set_var("PIRS_AGENT_PROFILE", "plan");
@@ -265,8 +265,7 @@ mod tests {
             cwd: PathBuf::from("/tmp"),
             provider: "openai".into(),
         };
-        let slot: Mutex<Option<(BeforeToolCallHook, AfterToolCallHook)>> =
-            Mutex::new(None);
+        let slot: Mutex<Option<(BeforeToolCallHook, AfterToolCallHook)>> = Mutex::new(None);
         fill_subagent_policy_slot(&slot, &cfg, None, None);
         let guard = slot.lock().unwrap();
         let (before, _after) = guard.as_ref().expect("slot must be filled without packs");

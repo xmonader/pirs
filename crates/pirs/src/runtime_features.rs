@@ -158,10 +158,7 @@ impl RuntimeFeatures {
                 s.push_str(&format!("- /{name}: {desc}\n"));
             }
             if self.slash_commands.len() > 12 {
-                s.push_str(&format!(
-                    "- … +{} more\n",
-                    self.slash_commands.len() - 12
-                ));
+                s.push_str(&format!("- … +{} more\n", self.slash_commands.len() - 12));
             }
         }
 
@@ -237,13 +234,7 @@ impl RuntimeFeatures {
         let tools: Vec<String> = self
             .tools
             .iter()
-            .map(|(n, d)| {
-                format!(
-                    "{{\"name\":{},\"desc\":{}}}",
-                    json_str(n),
-                    json_str(d)
-                )
-            })
+            .map(|(n, d)| format!("{{\"name\":{},\"desc\":{}}}", json_str(n), json_str(d)))
             .collect();
         let caps: Vec<String> = self
             .capabilities
@@ -325,8 +316,7 @@ pub fn collect(
         pirs_tools::PermissionMode::WorkspaceWrite => "edit".into(),
         pirs_tools::PermissionMode::DangerFullAccess => "full".into(),
     });
-    let agent_profile =
-        std::env::var("PIRS_AGENT_PROFILE").unwrap_or_else(|_| "default".into());
+    let agent_profile = std::env::var("PIRS_AGENT_PROFILE").unwrap_or_else(|_| "default".into());
 
     let mut capabilities = vec![
         cap(

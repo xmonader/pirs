@@ -3,9 +3,7 @@ use std::path::Path;
 
 use pirs_claw::channel::GATEWAY_CHANNELS;
 use pirs_claw::pairing::PairingAllowlist;
-use pirs_claw::presets::{
-    DEFAULT_MODEL, DEFAULT_PLAN_MODEL, DEFAULT_STRATEGY,
-};
+use pirs_claw::presets::{DEFAULT_MODEL, DEFAULT_PLAN_MODEL, DEFAULT_STRATEGY};
 use pirs_claw::ScheduleStore;
 
 use super::tools::which_bin;
@@ -26,7 +24,10 @@ pub async fn print_runtime_status(state: &Path, schedule_path: &Path) -> anyhow:
         .or_else(|_| std::env::var("PIRS_TELEGRAM_BOT_TOKEN"))
         .map(|t| !t.trim().is_empty())
         .unwrap_or(false);
-    println!("telegram_token: {}", if tg_token { "set" } else { "missing" });
+    println!(
+        "telegram_token: {}",
+        if tg_token { "set" } else { "missing" }
+    );
     println!(
         "telegram_lock: {}",
         pirs_claw::instance_lock::lock_status(state, "telegram")
@@ -69,16 +70,22 @@ pub async fn print_runtime_status(state: &Path, schedule_path: &Path) -> anyhow:
         .or_else(|_| std::env::var("BROWSER_CDP_URL"))
         .or_else(|_| std::env::var("CDP_URL"))
         .ok();
-    let chrome_bin = ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome"]
-        .into_iter()
-        .find(|n| which_bin(n).is_some())
-        .or_else(|| {
-            if std::path::Path::new("/snap/bin/chromium").is_file() {
-                Some("chromium")
-            } else {
-                None
-            }
-        });
+    let chrome_bin = [
+        "chromium",
+        "chromium-browser",
+        "google-chrome",
+        "google-chrome-stable",
+        "chrome",
+    ]
+    .into_iter()
+    .find(|n| which_bin(n).is_some())
+    .or_else(|| {
+        if std::path::Path::new("/snap/bin/chromium").is_file() {
+            Some("chromium")
+        } else {
+            None
+        }
+    });
     println!(
         "browser_cdp: {} chrome={}",
         cdp.as_deref().unwrap_or("(auto-launch or default :9222)"),
@@ -95,8 +102,6 @@ pub async fn print_runtime_status(state: &Path, schedule_path: &Path) -> anyhow:
     );
     Ok(())
 }
-
-
 
 pub fn walkdir_sessions(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
@@ -136,8 +141,6 @@ pub fn walkdir_sessions(root: &Path) -> Vec<String> {
     out
 }
 
-
-
 pub fn print_usage() {
     eprintln!(
         "pirs-claw — code + chat + schedule + gateway\n\
@@ -161,4 +164,3 @@ pub fn print_usage() {
         GATEWAY_CHANNELS.join(", ")
     );
 }
-

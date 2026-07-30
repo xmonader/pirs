@@ -38,9 +38,15 @@ pub use channel::{
     Channel, CliChannel, InboundMessage, OutboundReply, CHANNEL_CLI, CHANNEL_DISCORD,
     CHANNEL_SIGNAL, CHANNEL_SLACK, CHANNEL_TELEGRAM, CHANNEL_WHATSAPP, GATEWAY_CHANNELS,
 };
+pub use duration_parse::parse_duration_secs;
 pub use exec_env::{apply_exec_backend, describe_active as describe_exec_backend};
 pub use pairing::{
     allow_all_enabled, warn_if_allow_all, PairingAllowlist, ALLOW_ALL_ENV, ALLOW_ALL_WARNING,
+};
+pub use pirs_skills::{
+    default_skills_dir, discover_skills, find_skill, install_skill, install_skill_url, load_skills,
+    remove_skill, skills_full_section, skills_prompt_section, usage_counts, validate_skill,
+    validate_skill_name, write_skill, Skill,
 };
 pub use presets::{
     apply_code_defaults, build_code_agent, coding_system_prompt, coding_tools, is_unattended,
@@ -48,25 +54,29 @@ pub use presets::{
     unattended_tools, CodeOptions, DEFAULT_MODEL, DEFAULT_PLAN_MODEL, DEFAULT_STRATEGY,
     UNATTENDED_ENV,
 };
-pub use duration_parse::parse_duration_secs;
 pub use secrets::{load_secrets_env, resolve_provider_and_key};
 pub use session::{migrate_legacy_cli_session, SessionId, SessionLine, SessionMeta, SessionStore};
-pub use pirs_skills::{
-    default_skills_dir, discover_skills, find_skill, install_skill, install_skill_url, load_skills,
-    remove_skill, skills_full_section, skills_prompt_section, usage_counts, validate_skill,
-    validate_skill_name, write_skill, Skill,
-};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliverTarget {
     #[default]
     Cli,
-    Telegram { chat_id: String },
-    Discord { peer: String },
-    Slack { peer: String },
-    Whatsapp { peer: String },
-    Signal { peer: String },
+    Telegram {
+        chat_id: String,
+    },
+    Discord {
+        peer: String,
+    },
+    Slack {
+        peer: String,
+    },
+    Whatsapp {
+        peer: String,
+    },
+    Signal {
+        peer: String,
+    },
 }
 
 impl DeliverTarget {
@@ -416,7 +426,10 @@ impl ScheduleStore {
                     if j.every_secs == 0 && j.cron.is_none() && j.fail_count >= 5 {
                         j.enabled = false;
                         j.last_error = Some(truncate_err(
-                            &format!("{err}; disabled after {} consecutive failures", j.fail_count),
+                            &format!(
+                                "{err}; disabled after {} consecutive failures",
+                                j.fail_count
+                            ),
                             500,
                         ));
                     }
@@ -473,16 +486,13 @@ impl ScheduleStore {
             if overdue <= threshold {
                 continue;
             }
-            match next_fire_for_job(j, now) {
-                Ok(next) => {
-                    j.next_fire = next;
-                    j.last_error = Some(truncate_err(
-                        &format!("skipped overdue fire ({overdue}s late); advanced next_fire"),
-                        500,
-                    ));
-                    n += 1;
-                }
-                Err(_) => {}
+            if let Ok(next) = next_fire_for_job(j, now) {
+                j.next_fire = next;
+                j.last_error = Some(truncate_err(
+                    &format!("skipped overdue fire ({overdue}s late); advanced next_fire"),
+                    500,
+                ));
+                n += 1;
             }
         }
         if n > 0 {
@@ -770,7 +780,9 @@ mod tests {
         let job = store.add("pulse", 60, 0).unwrap();
         let now = now_secs() + 1;
         store.mark_failed(&job.id, now, "first").unwrap();
-        store.mark_failed(&job.id, now + 1, "second failure is longer than needed").unwrap();
+        store
+            .mark_failed(&job.id, now + 1, "second failure is longer than needed")
+            .unwrap();
         let j = store.find(&job.id).unwrap().unwrap();
         assert_eq!(j.fail_count, 2);
         assert_eq!(j.last_status.as_deref(), Some("error"));
@@ -807,7 +819,6 @@ mod tests {
         assert!(store.due(now).unwrap().is_empty());
     }
 
-
     #[test]
     fn schedule_status_lines_show_fail_and_llm_note() {
         let dir = tempfile::tempdir().unwrap();
@@ -834,21 +845,21 @@ mod tests {
         // Structural: fire_schedule_job must use tokio timeout (M-28).
         // Lives in bin_helpers after the main.rs split.
         let src = concat!(
-    include_str!("main.rs"),
-    include_str!("bin_helpers/mod.rs"),
-    include_str!("bin_helpers/schedule_fire.rs"),
-    include_str!("bin_helpers/gateway_msg.rs"),
-    include_str!("bin_helpers/chat.rs"),
-    include_str!("bin_helpers/code.rs"),
-    include_str!("bin_helpers/tools.rs"),
-    include_str!("bin_helpers/status.rs"),
-);
+            include_str!("main.rs"),
+            include_str!("bin_helpers/mod.rs"),
+            include_str!("bin_helpers/schedule_fire.rs"),
+            include_str!("bin_helpers/gateway_msg.rs"),
+            include_str!("bin_helpers/chat.rs"),
+            include_str!("bin_helpers/code.rs"),
+            include_str!("bin_helpers/tools.rs"),
+            include_str!("bin_helpers/status.rs"),
+        );
         assert!(src.contains("PIRS_CLAW_SCHEDULE_TIMEOUT_SECS") || src.contains("timeout_secs"));
         assert!(src.contains("tokio::time::timeout"));
         assert!(src.contains("start_kill") || src.contains("kill_on_drop"));
     }
 
-        #[test]
+    #[test]
     fn session_load_skips_corrupt_lines() {
         let dir = tempfile::tempdir().unwrap();
         let s = SessionStore::open_for(dir.path(), SessionId::cli_local()).unwrap();
@@ -880,12 +891,18 @@ not json
                 },
             )
             .unwrap();
-        store.mark_failed(&job.id, now_secs(), "send failed").unwrap();
+        store
+            .mark_failed(&job.id, now_secs(), "send failed")
+            .unwrap();
         let listed = store.list().unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].last_status.as_deref(), Some("error"));
         assert_eq!(listed[0].fail_count, 1);
-        assert!(listed[0].last_error.as_ref().unwrap().contains("send failed"));
+        assert!(listed[0]
+            .last_error
+            .as_ref()
+            .unwrap()
+            .contains("send failed"));
         assert_eq!(
             listed[0].deliver,
             DeliverTarget::Telegram {
@@ -929,7 +946,11 @@ not json
         let n = store.recover_missed(now).unwrap();
         assert_eq!(n, 1);
         let j = store.find(&job.id).unwrap().unwrap();
-        assert!(j.next_fire > now - 10, "next_fire should be near/future, got {}", j.next_fire);
+        assert!(
+            j.next_fire > now - 10,
+            "next_fire should be near/future, got {}",
+            j.next_fire
+        );
         // One-shot overdue should not be skipped.
         let oneshot = store.add("once", 0, 0).unwrap();
         {
@@ -964,9 +985,7 @@ not json
         );
         assert_eq!(
             DeliverTarget::parse("slack:C01"),
-            DeliverTarget::Slack {
-                peer: "C01".into()
-            }
+            DeliverTarget::Slack { peer: "C01".into() }
         );
     }
 
@@ -1014,7 +1033,7 @@ not json
             }],
             ..Default::default()
         });
-        assert!(extract_assistant_reply(&[only_think.clone()]).is_none());
+        assert!(extract_assistant_reply(std::slice::from_ref(&only_think)).is_none());
         let diag = empty_assistant_diag(&[only_think]);
         assert!(diag.contains("thinking_len=3"), "{diag}");
         assert!(diag.contains("text_len=0"), "{diag}");

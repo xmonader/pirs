@@ -1,15 +1,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use pirs_agent::Agent;
-use pirs_ai::Message;
 use std::sync::{Arc, Mutex};
 
 use super::app::{App, SessionControls};
 use super::chat::ChatItem;
-use super::model_picker::{ModelPicker, ModelPickerTarget};
 use super::slash::*;
-use super::slash_exec::{
-    attach_image_to_agent, handle_model_picker_key, handle_slash_command,
-};
+use super::slash_exec::{handle_model_picker_key, handle_slash_command};
 use super::theme::*;
 
 // ── Input handling ──────────────────────────────────────────────────────────
@@ -502,10 +498,7 @@ pub(super) fn submit_input(
         app.clock.agent_start();
         // Snapshot conversation before this turn for /undo.
         if let Ok(a) = agent.try_lock() {
-            pirs_tools::rewind_snapshot(
-                &text.chars().take(80).collect::<String>(),
-                &a.messages,
-            );
+            pirs_tools::rewind_snapshot(&text.chars().take(80).collect::<String>(), &a.messages);
         }
         let _ = prompt_tx.send(text);
     }
@@ -540,7 +533,10 @@ pub(super) fn run_shell_command(cwd: &std::path::Path, cmd: &str) -> String {
                 // Cap huge dumps so the chat stays usable.
                 const MAX: usize = 16_000;
                 if s.len() > MAX {
-                    let tail: String = s.chars().skip(s.chars().count().saturating_sub(MAX)).collect();
+                    let tail: String = s
+                        .chars()
+                        .skip(s.chars().count().saturating_sub(MAX))
+                        .collect();
                     format!("…(truncated)\n{tail}")
                 } else {
                     s
@@ -550,4 +546,3 @@ pub(super) fn run_shell_command(cwd: &std::path::Path, cmd: &str) -> String {
         Err(e) => format!("error: {e}"),
     }
 }
-

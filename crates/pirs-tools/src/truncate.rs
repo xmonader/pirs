@@ -116,9 +116,7 @@ pub fn cap_for_model(full: &str) -> (String, bool) {
         );
         truncated = true;
     } else if truncated {
-        text = format!(
-            "[earlier output truncated for model context]\n{text}"
-        );
+        text = format!("[earlier output truncated for model context]\n{text}");
     }
     (text, truncated)
 }

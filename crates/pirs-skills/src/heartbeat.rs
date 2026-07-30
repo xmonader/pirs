@@ -21,9 +21,7 @@ pub fn heartbeat_path() -> PathBuf {
 
 fn stamp_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home)
-        .join(".pirs")
-        .join("heartbeat.last")
+    PathBuf::from(home).join(".pirs").join("heartbeat.last")
 }
 
 fn now_secs() -> u64 {

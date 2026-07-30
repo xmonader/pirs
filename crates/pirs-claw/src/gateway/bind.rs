@@ -1,7 +1,6 @@
 //! Webhook bind address helpers.
 use std::net::SocketAddr;
 
-
 /// Env: set to `1`/`true` to bind webhook listeners on `0.0.0.0`.
 pub const PUBLIC_BIND_ENV: &str = "PIRS_CLAW_PUBLIC_BIND";
 /// Env: explicit bind host (`127.0.0.1` default, `0.0.0.0` for public).

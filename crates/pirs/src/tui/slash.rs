@@ -19,7 +19,10 @@ const BUILTIN: &[(&str, &str)] = &[
     ("/thoughts", "expand/collapse model thinking"),
     ("/context", "show multi-root work context"),
     ("/plan-model", "planner fuzzy picker or set"),
-    ("/strategy", "plan-exec | plan-critic-exec | weak-drive | monolithic | none"),
+    (
+        "/strategy",
+        "plan-exec | plan-critic-exec | weak-drive | monolithic | none",
+    ),
     ("/stats", "session usage + timing"),
     ("/usage", "alias for /stats"),
     ("/status", "runtime features, autonomy, packs, caps"),
@@ -54,8 +57,7 @@ pub(crate) fn slash_catalog(ext_cmds: &[(String, String)]) -> Vec<SlashCmd> {
             desc: (*d).to_string(),
         })
         .collect();
-    let builtin_names: std::collections::HashSet<&str> =
-        BUILTIN.iter().map(|(n, _)| *n).collect();
+    let builtin_names: std::collections::HashSet<&str> = BUILTIN.iter().map(|(n, _)| *n).collect();
     for (name, desc) in ext_cmds {
         let slash = if name.starts_with('/') {
             name.clone()

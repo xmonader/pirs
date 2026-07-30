@@ -106,7 +106,11 @@ pub struct Cli {
 
     /// Low-level safety profile (prefer `--autonomy`): default | plan |
     /// accept-edits | auto-approve.
-    #[arg(long = "agent-profile", env = "PIRS_AGENT_PROFILE", default_value = "default")]
+    #[arg(
+        long = "agent-profile",
+        env = "PIRS_AGENT_PROFILE",
+        default_value = "default"
+    )]
     pub agent_profile: String,
 
     /// Working directory for the session (project root). Equivalent to `cd DIR && pirs …`.

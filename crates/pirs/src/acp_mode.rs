@@ -201,10 +201,8 @@ pub async fn run(opts: AcpOptions) -> anyhow::Result<()> {
     ext_for_install.get_steering_messages = ext_hooks.get_steering_messages.clone();
     ext_for_install.get_follow_up_messages = ext_hooks.get_follow_up_messages.clone();
     // Chain: safety gate → ACP permission → extension before hooks
-    let before_ext = pirs_agent::Hooks::chain_before(
-        Some(acp_perm),
-        ext_hooks.before_tool_call.clone(),
-    );
+    let before_ext =
+        pirs_agent::Hooks::chain_before(Some(acp_perm), ext_hooks.before_tool_call.clone());
     agent = crate::runtime_safety::install_safety_floor(
         agent,
         &safety_cfg,
@@ -478,24 +476,15 @@ async fn handle_method(
         // Client may call these on us if it treats the agent as an fs provider;
         // we also implement them so ACP tools/tests can round-trip.
         "fs/read_text_file" => {
-            let path = params
-                .get("path")
-                .and_then(|p| p.as_str())
-                .unwrap_or("");
+            let path = params.get("path").and_then(|p| p.as_str()).unwrap_or("");
             match std::fs::read_to_string(path) {
                 Ok(content) => respond(out, id, json!({"content": content})),
                 Err(e) => respond_error(out, id, -32000, &format!("read {path}: {e}")),
             }
         }
         "fs/write_text_file" => {
-            let path = params
-                .get("path")
-                .and_then(|p| p.as_str())
-                .unwrap_or("");
-            let content = params
-                .get("content")
-                .and_then(|c| c.as_str())
-                .unwrap_or("");
+            let path = params.get("path").and_then(|p| p.as_str()).unwrap_or("");
+            let content = params.get("content").and_then(|c| c.as_str()).unwrap_or("");
             if path.is_empty() {
                 respond_error(out, id, -32602, "path required");
                 return;

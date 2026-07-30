@@ -310,8 +310,8 @@ impl AgentTool for WebSearchTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("query required"))?;
         let encoded: String = urlencoding_minimal(q);
-        let url = if let Ok(tmpl) = std::env::var(SEARCH_URL_ENV)
-            .or_else(|_| std::env::var("PIRS_CLAW_SEARCH_URL"))
+        let url = if let Ok(tmpl) =
+            std::env::var(SEARCH_URL_ENV).or_else(|_| std::env::var("PIRS_CLAW_SEARCH_URL"))
         {
             tmpl.replace("{query}", &encoded)
         } else {
@@ -321,7 +321,9 @@ impl AgentTool for WebSearchTool {
         let client = ssrf_safe_client(20).map_err(|e| anyhow::anyhow!(e))?;
         let body = client.get(&url).send().await?.text().await?;
         let text = truncate_chars(&html_to_text(&body), MAX_SEARCH_CHARS);
-        Ok(ToolOutput::text(format!("Search results for {q:?}:\n\n{text}")))
+        Ok(ToolOutput::text(format!(
+            "Search results for {q:?}:\n\n{text}"
+        )))
     }
 }
 
@@ -364,7 +366,11 @@ impl AgentTool for HttpJsonTool {
             .unwrap_or("GET");
         let client = ssrf_safe_client(20).map_err(|e| anyhow::anyhow!(e))?;
         let resp = if method.eq_ignore_ascii_case("POST") {
-            let body = ctx.args.get("body").and_then(|v| v.as_str()).unwrap_or("{}");
+            let body = ctx
+                .args
+                .get("body")
+                .and_then(|v| v.as_str())
+                .unwrap_or("{}");
             client
                 .post(url)
                 .header("content-type", "application/json")
@@ -448,4 +454,3 @@ mod tests {
         assert!(truncate_chars(s, 2).contains("truncated"));
     }
 }
-

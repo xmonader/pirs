@@ -3,8 +3,8 @@
 //! Large fleets (hundreds–thousands of configured servers) are indexed here.
 //! Live connections live in [`crate::pool::McpPool`].
 
-use crate::config::{ServerSpec, ServerTransport};
 use crate::client::McpToolDef;
+use crate::config::{ServerSpec, ServerTransport};
 
 /// One tool known for a catalog entry (may be empty until first connect).
 #[derive(Debug, Clone)]
@@ -92,7 +92,11 @@ impl CatalogEntry {
         if self.summary.to_ascii_lowercase().contains(&q) {
             return true;
         }
-        if self.tags.iter().any(|t| t.contains(&q) || q.contains(t.as_str())) {
+        if self
+            .tags
+            .iter()
+            .any(|t| t.contains(&q) || q.contains(t.as_str()))
+        {
             return true;
         }
         self.known_tools.iter().any(|t| {
@@ -163,7 +167,7 @@ impl McpCatalog {
 
     /// Search by name / summary / tags / known tool text. Empty query = all (capped).
     pub fn search(&self, query: &str, limit: usize) -> Vec<&CatalogEntry> {
-        let limit = limit.max(1).min(500);
+        let limit = limit.clamp(1, 500);
         self.entries
             .iter()
             .filter(|e| e.matches_query(query))
@@ -253,7 +257,7 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].name, "github");
         let all = cat.search("", 5);
-        assert_eq!(all.len(), 3.min(5));
+        assert_eq!(all.len(), 3);
     }
 
     #[test]

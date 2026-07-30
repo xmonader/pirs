@@ -158,10 +158,10 @@ fn strict_caps() -> bool {
 /// Binaries that become full FS/network RCE when only argv[0] is allowlisted
 /// and the rest of the line is free-form (review C-3).
 const SHELL_CAPABLE: &[&str] = &[
-    "cat", "head", "tail", "less", "more", "curl", "wget", "fetch", "nc", "ncat",
-    "dd", "base64", "xxd", "od", "scp", "rsync", "tar", "zip", "unzip", "python",
-    "python3", "perl", "ruby", "node", "php", "lua", "bash", "sh", "zsh", "fish",
-    "env", "xargs", "find", "grep", "rg", "sed", "awk",
+    "cat", "head", "tail", "less", "more", "curl", "wget", "fetch", "nc", "ncat", "dd", "base64",
+    "xxd", "od", "scp", "rsync", "tar", "zip", "unzip", "python", "python3", "perl", "ruby",
+    "node", "php", "lua", "bash", "sh", "zsh", "fish", "env", "xargs", "find", "grep", "rg", "sed",
+    "awk",
 ];
 
 /// Check a command against the exec capability. Returns Err(reason) when
@@ -194,7 +194,7 @@ pub fn check_exec(caps: &Caps, command: &str) -> Result<(), String> {
     }
     // argv0-only allowlist is not a free pass for absolute paths / URLs / ..
     // (cat /etc/passwd, curl evil, python -c …).
-    if SHELL_CAPABLE.iter().any(|b| *b == base) {
+    if SHELL_CAPABLE.contains(&base) {
         for arg in parts {
             if arg.starts_with('/')
                 || arg.contains("..")

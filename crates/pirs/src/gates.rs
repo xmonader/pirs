@@ -17,7 +17,8 @@ pub fn install_gate_if_absent(
     gate_hook: &Option<pirs_agent::events::BeforeToolCallHook>,
     approval: &str,
 ) {
-    let yolo = crate::approval::ApprovalMode::parse(approval) == Some(crate::approval::ApprovalMode::Yolo);
+    let yolo =
+        crate::approval::ApprovalMode::parse(approval) == Some(crate::approval::ApprovalMode::Yolo);
     if !yolo && hooks.before_tool_call.is_none() {
         hooks.before_tool_call = gate_hook.clone();
     }
@@ -31,11 +32,9 @@ pub fn install_profile_under_yolo_if_needed(
     approval: &str,
     safety: pirs_tools::SafetyProfile,
 ) {
-    let yolo = crate::approval::ApprovalMode::parse(approval) == Some(crate::approval::ApprovalMode::Yolo);
-    if yolo
-        && safety != pirs_tools::SafetyProfile::Default
-        && hooks.before_tool_call.is_none()
-    {
+    let yolo =
+        crate::approval::ApprovalMode::parse(approval) == Some(crate::approval::ApprovalMode::Yolo);
+    if yolo && safety != pirs_tools::SafetyProfile::Default && hooks.before_tool_call.is_none() {
         hooks.before_tool_call = gate_hook.clone();
     }
 }
@@ -53,7 +52,7 @@ pub fn chain_gate_with_extensions(
     safety: pirs_tools::SafetyProfile,
 ) -> Option<pirs_agent::events::BeforeToolCallHook> {
     let _ = (yolo, safety); // gate_hook already encodes profile/permission; always chain.
-    // Gate first (permission ladder / profile denials / optional prompts), then ext.
+                            // Gate first (permission ladder / profile denials / optional prompts), then ext.
     pirs_agent::Hooks::chain_before(gate_hook, ext_before)
 }
 
@@ -129,8 +128,7 @@ pub fn install_post_edit_verify_hook(hooks: &mut Hooks, cwd: &Path) {
             } else {
                 let edited = extract_edit_path(result, &cwd);
                 let started = Instant::now();
-                let outcome =
-                    pirs_tools::post_edit_verify_for_path(&cwd, edited.as_deref(), 90);
+                let outcome = pirs_tools::post_edit_verify_for_path(&cwd, edited.as_deref(), 90);
                 mark_post_edit_run(&last_run_ms);
                 let note = pirs_tools::format_verify_for_tool_result(&outcome);
                 eprintln!(

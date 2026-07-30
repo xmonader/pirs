@@ -213,17 +213,13 @@ impl AgentTool for BrowserScreenshotTool {
             anyhow::bail!("url must be http(s)");
         }
         crate::web::url_allowed(&url).map_err(|e| anyhow::anyhow!("{e}"))?;
-        let rel = args
-            .path
-            .unwrap_or_else(|| ".pirs/browser-shot.png".into());
+        let rel = args.path.unwrap_or_else(|| ".pirs/browser-shot.png".into());
         let out_path = crate::paths::resolve_contained(&self.cwd, &rel)?;
         if let Some(parent) = out_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
         let Some(bin) = chromium_bin() else {
-            anyhow::bail!(
-                "no chromium/chrome on PATH; install chromium or set PIRS_BROWSER_CMD"
-            );
+            anyhow::bail!("no chromium/chrome on PATH; install chromium or set PIRS_BROWSER_CMD");
         };
         let status = Command::new(&bin)
             .args([
@@ -233,11 +229,7 @@ impl AgentTool for BrowserScreenshotTool {
                 "--screenshot",
                 &url,
             ])
-            .current_dir(
-                out_path
-                    .parent()
-                    .unwrap_or_else(|| Path::new(".")),
-            )
+            .current_dir(out_path.parent().unwrap_or_else(|| Path::new(".")))
             .status()?;
         // Chromium writes screenshot.png in cwd
         let default_shot = out_path
@@ -247,9 +239,7 @@ impl AgentTool for BrowserScreenshotTool {
         if default_shot.is_file() {
             std::fs::rename(&default_shot, &out_path)?;
         } else if !out_path.is_file() {
-            anyhow::bail!(
-                "chromium screenshot failed (status {status}); no output file"
-            );
+            anyhow::bail!("chromium screenshot failed (status {status}); no output file");
         }
         Ok(ToolOutput::text(format!(
             "Screenshot saved to {}",

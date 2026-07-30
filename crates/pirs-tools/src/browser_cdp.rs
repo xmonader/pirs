@@ -173,10 +173,10 @@ impl CdpSession {
         let Some(page) = self.active_page() else {
             return false;
         };
-        match tokio::time::timeout(Duration::from_secs(2), page.evaluate("1")).await {
-            Ok(Ok(_)) => true,
-            _ => false,
-        }
+        matches!(
+            tokio::time::timeout(Duration::from_secs(2), page.evaluate("1")).await,
+            Ok(Ok(_))
+        )
     }
 
     async fn ensure_connected(&mut self, url_override: Option<&str>) -> anyhow::Result<()> {
@@ -214,7 +214,8 @@ impl CdpSession {
                  (Playwright: chromium.launch({{args:['--remote-debugging-port=9222']}}))"
             )
         })?;
-        let user_data = tempfile::tempdir().map_err(|e| anyhow::anyhow!("user-data tempdir: {e}"))?;
+        let user_data =
+            tempfile::tempdir().map_err(|e| anyhow::anyhow!("user-data tempdir: {e}"))?;
         let user_data_path = user_data.path().to_path_buf();
         // Keep path; TempDir would delete on drop of local — persist via forget of guard only after success.
         let mut child = Command::new(&bin)
@@ -626,7 +627,10 @@ impl AgentTool for BrowserCdpTool {
                 el.type_str(&text)
                     .await
                     .map_err(|e| anyhow::anyhow!("type: {e}"))?;
-                Ok(ToolOutput::text(format!("typed {} chars into {sel}", text.len())))
+                Ok(ToolOutput::text(format!(
+                    "typed {} chars into {sel}",
+                    text.len()
+                )))
             }
             CdpAction::Eval => {
                 let expr = args
@@ -733,7 +737,8 @@ mod tests {
 
     #[test]
     fn status_action_deserializes() {
-        let args: CdpArgs = serde_json::from_value(serde_json::json!({"action": "status"})).unwrap();
+        let args: CdpArgs =
+            serde_json::from_value(serde_json::json!({"action": "status"})).unwrap();
         assert!(matches!(args.action, CdpAction::Status));
     }
 
@@ -773,7 +778,9 @@ mod tests {
             }
         };
 
-        let connect = exec(serde_json::json!({"action": "connect"})).await.unwrap();
+        let connect = exec(serde_json::json!({"action": "connect"}))
+            .await
+            .unwrap();
         let c = connect.content[0].as_text().unwrap();
         assert!(c.contains("connected") || c.contains("CDP"), "{c}");
 
@@ -798,10 +805,16 @@ mod tests {
 
         let status = exec(serde_json::json!({"action": "status"})).await.unwrap();
         let s = status.content[0].as_text().unwrap();
-        assert!(s.contains("connected=true") || s.contains("alive=true"), "{s}");
+        assert!(
+            s.contains("connected=true") || s.contains("alive=true"),
+            "{s}"
+        );
 
         let _ = exec(serde_json::json!({"action": "close"})).await;
         let _ = tool; // keep type alive for name check
-        assert_eq!(BrowserCdpTool::new(dir.path().to_path_buf()).name(), "browser_cdp");
+        assert_eq!(
+            BrowserCdpTool::new(dir.path().to_path_buf()).name(),
+            "browser_cdp"
+        );
     }
 }

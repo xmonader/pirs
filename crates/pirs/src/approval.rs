@@ -243,16 +243,8 @@ mod tests {
         assert!(!is_sensitive("edit", &json!({"path": "src/main.rs"}), cwd));
         assert!(is_sensitive("mcp_fs_delete", &json!({}), cwd));
         assert!(!is_sensitive("read", &json!({"path": "x"}), cwd));
-        assert!(!is_sensitive(
-            "project",
-            &json!({"action": "list"}),
-            cwd
-        ));
-        assert!(is_sensitive(
-            "project",
-            &json!({"action": "test"}),
-            cwd
-        ));
+        assert!(!is_sensitive("project", &json!({"action": "list"}), cwd));
+        assert!(is_sensitive("project", &json!({"action": "test"}), cwd));
     }
 
     #[test]
@@ -354,7 +346,12 @@ mod tests {
         .with_prompter(|_| "n".into());
         let hook = gate.hook();
         // write outside cwd would be sensitive, but profile skips approval for file tools
-        assert!(hook("1", "write", &json!({"path": "/etc/passwd", "content": "x"})).is_none());
+        assert!(hook(
+            "1",
+            "write",
+            &json!({"path": "/etc/passwd", "content": "x"})
+        )
+        .is_none());
         // bash still asked / denied
         assert_eq!(
             hook("2", "bash", &json!({"command": "rm -rf x"})).as_deref(),

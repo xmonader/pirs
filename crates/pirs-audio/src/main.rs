@@ -23,15 +23,30 @@ struct Cli {
     #[command(subcommand)]
     cmd: Option<Commands>,
     /// Shorthand: `pirs-audio --port 8090` ≈ `pirs-audio serve --port 8090`
-    #[arg(long, global = true, default_value = "127.0.0.1", env = "PIRS_AUDIO_HOST")]
+    #[arg(
+        long,
+        global = true,
+        default_value = "127.0.0.1",
+        env = "PIRS_AUDIO_HOST"
+    )]
     host: String,
     #[arg(long, global = true, default_value_t = 8090, env = "PIRS_AUDIO_PORT")]
     port: u16,
     /// STT engine: auto | mock | whisper-cli | cmd
-    #[arg(long, global = true, default_value = "auto", env = "PIRS_AUDIO_STT_ENGINE")]
+    #[arg(
+        long,
+        global = true,
+        default_value = "auto",
+        env = "PIRS_AUDIO_STT_ENGINE"
+    )]
     stt_engine: String,
     /// TTS engine: auto | mock | espeak | cmd
-    #[arg(long, global = true, default_value = "auto", env = "PIRS_AUDIO_TTS_ENGINE")]
+    #[arg(
+        long,
+        global = true,
+        default_value = "auto",
+        env = "PIRS_AUDIO_TTS_ENGINE"
+    )]
     tts_engine: String,
 }
 
@@ -73,11 +88,12 @@ async fn main() -> anyhow::Result<()> {
             println!("tts_engine={}", tts.name());
             println!("stt_model_id={}", cfg.stt_model_id);
             println!("tts_model_id={}", cfg.tts_model_id);
-            println!("ffmpeg={}", if ffmpeg::have_ffmpeg() { "yes" } else { "no" });
+            println!(
+                "ffmpeg={}",
+                if ffmpeg::have_ffmpeg() { "yes" } else { "no" }
+            );
             Ok(())
         }
-        Commands::Serve => {
-            server::serve(&cli.host, cli.port, cfg).await
-        }
+        Commands::Serve => server::serve(&cli.host, cli.port, cfg).await,
     }
 }

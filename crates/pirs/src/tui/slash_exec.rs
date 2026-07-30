@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -6,15 +5,11 @@ use pirs_agent::Agent;
 use pirs_ai::Message;
 
 use crate::session_stats;
-use crate::approval::ApprovalMode;
 
-use super::app::{App, SessionControls, TuiOptions};
+use super::app::{App, SessionControls};
 use super::chat::ChatItem;
 use super::model_picker::{ModelPicker, ModelPickerTarget};
-use super::slash::*;
 use super::terminal::{copy_to_clipboard, last_assistant_text};
-use super::theme::*;
-use super::tools::*;
 
 pub(super) fn handle_slash_command(
     app: &mut App,
@@ -236,7 +231,9 @@ pub(super) fn handle_slash_command(
                 } else {
                     "portable"
                 };
-                app.notice(format!("plan-model → {arg} ({kind}) · /plan-model for picker"));
+                app.notice(format!(
+                    "plan-model → {arg} ({kind}) · /plan-model for picker"
+                ));
             }
         }
         "/strategy" => {
@@ -251,7 +248,10 @@ pub(super) fn handle_slash_command(
                 app.notice("strategy cleared (plain agent loop)");
             } else {
                 // Validate strategy resolves (builtin or file).
-                match pirs_rhai::discover::resolve_strategy(arg, &std::env::current_dir().unwrap_or_default()) {
+                match pirs_rhai::discover::resolve_strategy(
+                    arg,
+                    &std::env::current_dir().unwrap_or_default(),
+                ) {
                     Ok(s) => {
                         app.strategy = Some(s.name.clone());
                         controls.lock().unwrap().strategy = Some(s.name.clone());
@@ -267,22 +267,16 @@ pub(super) fn handle_slash_command(
                 }
             }
         }
-        "/usage" | "/stats" => {
-            match agent.try_lock() {
-                Ok(a) => {
-                    let r = a.usage_report();
-                    let pins = app.report_pins();
-                    let text = session_stats::format_session_stats_pins(
-                        &app.clock,
-                        &r,
-                        &app.model,
-                        &pins,
-                    );
-                    app.notice(text);
-                }
-                Err(_) => app.notice("busy — try /stats after the run finishes"),
+        "/usage" | "/stats" => match agent.try_lock() {
+            Ok(a) => {
+                let r = a.usage_report();
+                let pins = app.report_pins();
+                let text =
+                    session_stats::format_session_stats_pins(&app.clock, &r, &app.model, &pins);
+                app.notice(text);
             }
-        }
+            Err(_) => app.notice("busy — try /stats after the run finishes"),
+        },
         "/status" | "/features" | "/runtime" => {
             if let Some(mut snap) = crate::runtime_features::live() {
                 snap.refresh_live_dials();
@@ -464,15 +458,13 @@ pub(super) fn handle_slash_command(
                     pirs_tools::PermissionMode::DangerFullAccess => pirs_tools::Autonomy::Full,
                 };
                 app.notice(pirs_tools::autonomy_status_line(a));
-            } else if let Some(a) = pirs_tools::Autonomy::parse(arg)
-                .or_else(|| {
-                    pirs_tools::PermissionMode::parse(arg).map(|m| match m {
-                        pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
-                        pirs_tools::PermissionMode::WorkspaceWrite => pirs_tools::Autonomy::Edit,
-                        pirs_tools::PermissionMode::DangerFullAccess => pirs_tools::Autonomy::Full,
-                    })
+            } else if let Some(a) = pirs_tools::Autonomy::parse(arg).or_else(|| {
+                pirs_tools::PermissionMode::parse(arg).map(|m| match m {
+                    pirs_tools::PermissionMode::ReadOnly => pirs_tools::Autonomy::Plan,
+                    pirs_tools::PermissionMode::WorkspaceWrite => pirs_tools::Autonomy::Edit,
+                    pirs_tools::PermissionMode::DangerFullAccess => pirs_tools::Autonomy::Full,
                 })
-            {
+            }) {
                 pirs_tools::apply_autonomy(a);
                 if a.is_yolo() {
                     app.approval_mode = "yolo".into();
@@ -498,11 +490,8 @@ pub(super) fn handle_slash_command(
                     }
                 }
                 "create" => match agent.try_lock() {
-                    Ok(a) => match pirs_tools::create_checkpoint(
-                        &app.cwd,
-                        "tui",
-                        a.messages.len(),
-                    ) {
+                    Ok(a) => match pirs_tools::create_checkpoint(&app.cwd, "tui", a.messages.len())
+                    {
                         Ok(m) => app.notice(format!("checkpoint {}", m.id)),
                         Err(e) => app.notice(format!("checkpoint: {e}")),
                     },
@@ -534,9 +523,7 @@ pub(super) fn handle_slash_command(
                     return;
                 }
             }
-            app.notice(format!(
-                "unknown command {other} — /help for slash list"
-            ));
+            app.notice(format!("unknown command {other} — /help for slash list"));
         }
     }
 }
@@ -587,7 +574,11 @@ pub(super) fn attach_image_to_agent(
         ]),
         timestamp: pirs_ai::now_millis(),
     }));
-    Ok(format!("attached {} ({} bytes)", abs.display(), bytes.len()))
+    Ok(format!(
+        "attached {} ({} bytes)",
+        abs.display(),
+        bytes.len()
+    ))
 }
 
 // ── Model picker key handling (shared with input) ─────────────
@@ -703,6 +694,7 @@ pub(super) fn open_model_picker(app: &mut App, target: ModelPickerTarget, query:
         .as_ref()
         .map(|p| p.universe.len())
         .unwrap_or(0);
-    app.set_status(format!("model picker · {n} candidates · type to fuzzy filter"));
+    app.set_status(format!(
+        "model picker · {n} candidates · type to fuzzy filter"
+    ));
 }
-

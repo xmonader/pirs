@@ -32,7 +32,6 @@ pub use webhook::{
     whatsapp_verify_challenge,
 };
 
-
 /// Async handler for one inbound gateway message → text + optional file attachments.
 pub(super) type MessageHandler = Arc<
     dyn Fn(
@@ -51,7 +50,9 @@ pub async fn run_gateway(
     channel: &str,
     state_dir: &Path,
     allowlist: &PairingAllowlist,
-    on_message: impl Fn(InboundMessage) -> std::pin::Pin<
+    on_message: impl Fn(
+            InboundMessage,
+        ) -> std::pin::Pin<
             Box<dyn std::future::Future<Output = anyhow::Result<GatewayReply>> + Send>,
         > + Send
         + Sync
@@ -67,7 +68,9 @@ pub async fn run_gateway_channels(
     channels: &[String],
     state_dir: &Path,
     allowlist: &PairingAllowlist,
-    on_message: impl Fn(InboundMessage) -> std::pin::Pin<
+    on_message: impl Fn(
+            InboundMessage,
+        ) -> std::pin::Pin<
             Box<dyn std::future::Future<Output = anyhow::Result<GatewayReply>> + Send>,
         > + Send
         + Sync
@@ -176,10 +179,7 @@ pub async fn run_gateway_channels(
     }
 
     if handles.is_empty() {
-        anyhow::bail!(
-            "no gateway channels started.\n{}",
-            errors.join("\n")
-        );
+        anyhow::bail!("no gateway channels started.\n{}", errors.join("\n"));
     }
     for e in &errors {
         eprintln!("[gateway] skip: {e}");
@@ -198,11 +198,11 @@ pub async fn run_gateway_channels(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::telegram::TgMessage;
     use super::webhook::{
         extract_discord, extract_slack, extract_whatsapp, find_header_end, parse_content_length,
     };
+    use super::*;
     use serde_json::json;
 
     #[test]
@@ -293,7 +293,10 @@ mod tests {
             "caption": "my file"
         }))
         .unwrap();
-        assert_eq!(d.document.as_ref().unwrap().file_name.as_deref(), Some("hello.py"));
+        assert_eq!(
+            d.document.as_ref().unwrap().file_name.as_deref(),
+            Some("hello.py")
+        );
         assert_eq!(d.caption.as_deref(), Some("my file"));
     }
 
@@ -339,10 +342,7 @@ mod tests {
     #[test]
     fn extract_discord_simple() {
         let v = json!({"author_id": "99", "content": "hello"});
-        assert_eq!(
-            extract_discord(&v),
-            Some(("99".into(), "hello".into()))
-        );
+        assert_eq!(extract_discord(&v), Some(("99".into(), "hello".into())));
     }
 
     #[test]
@@ -401,7 +401,10 @@ mod tests {
         let _g = webhook_secret_env_lock();
         std::env::set_var("PIRS_WEBHOOK_SECRET", "s3cret");
         let err = verify_webhook_signature("slack", "POST /\r\nHost: x\r\n", "{}").unwrap_err();
-        assert!(err.contains("no X-Pirs") || err.contains("Signature"), "{err}");
+        assert!(
+            err.contains("no X-Pirs") || err.contains("Signature"),
+            "{err}"
+        );
         std::env::remove_var("PIRS_WEBHOOK_SECRET");
     }
 
@@ -451,14 +454,10 @@ mod tests {
         let mut mac = Hmac::<Sha256>::new_from_slice(secret).unwrap();
         mac.update(base_old.as_bytes());
         let sig_old = format!("v0={}", hex::encode(mac.finalize().into_bytes()));
-        let hdr_old = format!(
-            "POST /\r\nX-Slack-Signature: {sig_old}\r\nX-Slack-Request-Timestamp: {old}"
-        );
+        let hdr_old =
+            format!("POST /\r\nX-Slack-Signature: {sig_old}\r\nX-Slack-Request-Timestamp: {old}");
         let err = verify_webhook_signature_at("slack", &hdr_old, body, now).unwrap_err();
-        assert!(
-            err.contains("skew") || err.contains("timestamp"),
-            "{err}"
-        );
+        assert!(err.contains("skew") || err.contains("timestamp"), "{err}");
 
         // Missing timestamp header
         let hdr_no_ts = format!("POST /\r\nX-Slack-Signature: {sig}");
@@ -475,7 +474,7 @@ mod tests {
         );
         let raw = b"POST / HTTP/1.1\r\nContent-Length: 2\r\n\r\nOK";
         assert_eq!(find_header_end(raw), Some(raw.len() - 6)); // before \r\n\r\n... wait
-        // "\r\n\r\n" starts at index of double CRLF
+                                                               // "\r\n\r\n" starts at index of double CRLF
         let pos = find_header_end(raw).unwrap();
         assert_eq!(&raw[pos..pos + 4], b"\r\n\r\n");
         assert_eq!(&raw[pos + 4..], b"OK");

@@ -85,7 +85,8 @@ pub fn ensure_worktree(repo_root: &Path, name: &str) -> anyhow::Result<WorktreeS
             "add",
             "-B",
             &branch,
-            cwd.to_str().ok_or_else(|| anyhow::anyhow!("non-utf8 path"))?,
+            cwd.to_str()
+                .ok_or_else(|| anyhow::anyhow!("non-utf8 path"))?,
         ])
         .current_dir(repo_root)
         .output()
@@ -163,10 +164,7 @@ mod tests {
         let s1 = ensure_worktree(repo, "feature-x").unwrap();
         assert!(s1.created);
         assert!(s1.cwd.is_dir());
-        assert_ne!(
-            s1.cwd.canonicalize().unwrap(),
-            repo.canonicalize().unwrap()
-        );
+        assert_ne!(s1.cwd.canonicalize().unwrap(), repo.canonicalize().unwrap());
         assert!(s1.cwd.starts_with(repo.join(".pirs").join("worktrees")));
 
         let s2 = ensure_worktree(repo, "feature-x").unwrap();

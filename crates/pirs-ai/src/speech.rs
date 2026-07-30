@@ -215,10 +215,7 @@ fn normalize_audio_upload_name(raw_name: &str) -> (String, &'static str) {
     let lower = raw_name.to_ascii_lowercase();
     let filename = if lower.ends_with(".oga") || lower.ends_with(".ogx") {
         // Groq/OpenAI accept "ogg"/"opus", not "oga".
-        let stem = raw_name
-            .rsplit_once('.')
-            .map(|(s, _)| s)
-            .unwrap_or("audio");
+        let stem = raw_name.rsplit_once('.').map(|(s, _)| s).unwrap_or("audio");
         format!("{stem}.ogg")
     } else if !raw_name.contains('.') {
         match mime {
@@ -284,11 +281,7 @@ pub fn resolve_speech_route_in(
     let cap = kind.cap();
     let wanted = alias
         .map(|s| s.to_string())
-        .or_else(|| {
-            kind.env_model_keys()
-                .iter()
-                .find_map(|k| non_empty_env(k))
-        })
+        .or_else(|| kind.env_model_keys().iter().find_map(|k| non_empty_env(k)))
         .or_else(|| first_alias_with_cap(reg, cap));
 
     if let Some(name) = wanted {
@@ -320,7 +313,7 @@ pub fn resolve_speech_route_in(
         SpeechKind::Stt => non_empty_env("PIRS_STT_MODEL")
             .or_else(|| non_empty_env("STT_OPENAI_MODEL"))
             .or_else(|| non_empty_env("STT_GROQ_MODEL"))
-            .unwrap_or_else(|| default_stt_model()),
+            .unwrap_or_else(default_stt_model),
         SpeechKind::Tts => non_empty_env("PIRS_TTS_MODEL")
             .or_else(|| non_empty_env("TTS_OPENAI_MODEL"))
             .unwrap_or_else(|| "tts-1".into()),
@@ -374,10 +367,7 @@ fn endpoints_for_alias(reg: &RegistryFile, alias: &str) -> Option<Vec<SpeechEndp
 }
 
 fn endpoint_from_backend(b: &BackendEntry, model: &str) -> SpeechEndpoint {
-    let api_key = b
-        .api_key_env
-        .as_ref()
-        .and_then(|e| non_empty_env(e));
+    let api_key = b.api_key_env.as_ref().and_then(|e| non_empty_env(e));
     SpeechEndpoint {
         backend_name: b.name.clone(),
         base_url: b.base_url.trim_end_matches('/').to_string(),
@@ -391,11 +381,15 @@ pub fn env_speech_endpoints(kind: SpeechKind) -> Vec<SpeechEndpoint> {
     env_speech_endpoints_for_model(kind, None)
 }
 
-fn env_speech_endpoints_for_model(kind: SpeechKind, model_override: Option<&str>) -> Vec<SpeechEndpoint> {
+fn env_speech_endpoints_for_model(
+    kind: SpeechKind,
+    model_override: Option<&str>,
+) -> Vec<SpeechEndpoint> {
     let mut out = Vec::new();
 
     // 1) Explicit local/custom OpenAI-compatible speech daemon.
-    if let Some(base) = non_empty_env("PIRS_SPEECH_BASE_URL").or_else(|| non_empty_env("SPEECH_BASE_URL"))
+    if let Some(base) =
+        non_empty_env("PIRS_SPEECH_BASE_URL").or_else(|| non_empty_env("SPEECH_BASE_URL"))
     {
         let model = model_override
             .map(|s| s.to_string())
@@ -499,7 +493,9 @@ pub async fn speech_status_lines_probed() -> Vec<String> {
     speech_status_lines_inner(Some(&health))
 }
 
-fn speech_status_lines_inner(health: Option<&std::collections::HashMap<String, String>>) -> Vec<String> {
+fn speech_status_lines_inner(
+    health: Option<&std::collections::HashMap<String, String>>,
+) -> Vec<String> {
     let reg = load_user_registry();
     let stt = resolve_speech_route_in(&reg, SpeechKind::Stt, None);
     let tts = resolve_speech_route_in(&reg, SpeechKind::Tts, None);
@@ -595,7 +591,10 @@ pub async fn probe_speech_base_health(base_url: &str) -> String {
                 if bl.contains("ok") || bl.contains("healthy") || body.trim().is_empty() {
                     return "ok".into();
                 }
-                return format!("ok({})", body.chars().take(40).collect::<String>().replace('\n', " "));
+                return format!(
+                    "ok({})",
+                    body.chars().take(40).collect::<String>().replace('\n', " ")
+                );
             }
             Ok(resp) => {
                 // Cloud OpenAI often 404s on /health — treat as reachable-unknown.

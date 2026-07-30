@@ -131,8 +131,10 @@ pub fn build_code_agent(provider: Arc<dyn LlmProvider>, opts: &CodeOptions) -> A
     // Normalize env so Rhai packs (strict-plan) see the same profile as the gate.
     std::env::set_var("PIRS_AGENT_PROFILE", profile.name());
     {
-        let mut hooks = pirs_agent::Hooks::default();
-        hooks.before_tool_call = Some(pirs_tools::profile_hook(profile));
+        let hooks = pirs_agent::Hooks {
+            before_tool_call: Some(pirs_tools::profile_hook(profile)),
+            ..Default::default()
+        };
         agent = agent.with_hooks(hooks);
     }
     // Always-on audit for code path (same as chat/gateway).

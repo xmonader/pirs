@@ -28,3 +28,7 @@ tree-sitter-go = "0.23"
 tempfile = "3"
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+
+[lints]
+workspace = true
+

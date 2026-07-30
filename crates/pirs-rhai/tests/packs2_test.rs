@@ -331,10 +331,7 @@ fn cmd_hello(args) {
     )
     .unwrap();
     let host = Arc::new(host);
-    assert!(host
-        .commands()
-        .iter()
-        .any(|(n, _)| n == "hello"));
+    assert!(host.commands().iter().any(|(n, _)| n == "hello"));
     assert_eq!(host.run_command("hello", "pi").unwrap(), "override pi");
     assert!(host.run_command("nope", "").is_err());
 }

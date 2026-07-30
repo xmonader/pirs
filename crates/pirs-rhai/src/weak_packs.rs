@@ -65,64 +65,206 @@ pub const BUNDLED_ORDER: &[&str] = &[
 
 /// Full embedded catalog (includes opt-in packs not in [`BUNDLED_ORDER`]).
 pub const BUNDLED: &[(&str, &str)] = &[
-    ("bundled:weak-model.rhai", include_str!("../../../extensions/weak-model.rhai")),
-    ("bundled:context-janitor.rhai", include_str!("../../../extensions/context-janitor.rhai")),
-    ("bundled:env-doctor.rhai", include_str!("../../../extensions/env-doctor.rhai")),
-    ("bundled:goal.rhai", include_str!("../../../extensions/goal.rhai")),
-    ("bundled:audit-log.rhai", include_str!("../../../extensions/audit-log.rhai")),
-    ("bundled:auto-checkpoint.rhai", include_str!("../../../extensions/auto-checkpoint.rhai")),
-    ("bundled:blame.rhai", include_str!("../../../extensions/blame.rhai")),
-    ("bundled:blast-radius-judge.rhai", include_str!("../../../extensions/blast-radius-judge.rhai")),
-    ("bundled:browser-cdp-workflow.rhai", include_str!("../../../extensions/browser-cdp-workflow.rhai")),
-    ("bundled:btw.rhai", include_str!("../../../extensions/btw.rhai")),
-    ("bundled:chapter-spine.rhai", include_str!("../../../extensions/chapter-spine.rhai")),
-    ("bundled:conductor.rhai", include_str!("../../../extensions/conductor.rhai")),
-    ("bundled:cost-sentinel.rhai", include_str!("../../../extensions/cost-sentinel.rhai")),
-    ("bundled:critic-arena.rhai", include_str!("../../../extensions/critic-arena.rhai")),
-    ("bundled:critic.rhai", include_str!("../../../extensions/critic.rhai")),
-    ("bundled:diff-shield.rhai", include_str!("../../../extensions/diff-shield.rhai")),
-    ("bundled:dirty-guard.rhai", include_str!("../../../extensions/dirty-guard.rhai")),
-    ("bundled:dmail.rhai", include_str!("../../../extensions/dmail.rhai")),
-    ("bundled:file-checkpoints.rhai", include_str!("../../../extensions/file-checkpoints.rhai")),
-    ("bundled:fork.rhai", include_str!("../../../extensions/fork.rhai")),
-    ("bundled:guardrails.rhai", include_str!("../../../extensions/guardrails.rhai")),
-    ("bundled:hive-note.rhai", include_str!("../../../extensions/hive-note.rhai")),
-    ("bundled:instincts.rhai", include_str!("../../../extensions/instincts.rhai")),
-    ("bundled:mutation-guard.rhai", include_str!("../../../extensions/mutation-guard.rhai")),
-    ("bundled:path-guard.rhai", include_str!("../../../extensions/path-guard.rhai")),
-    ("bundled:project-discipline.rhai", include_str!("../../../extensions/project-discipline.rhai")),
-    ("bundled:relay-race.rhai", include_str!("../../../extensions/relay-race.rhai")),
-    ("bundled:repo-pulse.rhai", include_str!("../../../extensions/repo-pulse.rhai")),
-    ("bundled:review-gate.rhai", include_str!("../../../extensions/review-gate.rhai")),
-    ("bundled:runs.rhai", include_str!("../../../extensions/runs.rhai")),
-    ("bundled:safe-edit.rhai", include_str!("../../../extensions/safe-edit.rhai")),
-    ("bundled:sandbox.rhai", include_str!("../../../extensions/sandbox.rhai")),
-    ("bundled:semantic-bookmarks.rhai", include_str!("../../../extensions/semantic-bookmarks.rhai")),
-    ("bundled:session-discipline.rhai", include_str!("../../../extensions/session-discipline.rhai")),
-    ("bundled:session-handoff.rhai", include_str!("../../../extensions/session-handoff.rhai")),
-    ("bundled:shadow-verify.rhai", include_str!("../../../extensions/shadow-verify.rhai")),
-    ("bundled:skill-crystallizer.rhai", include_str!("../../../extensions/skill-crystallizer.rhai")),
-    ("bundled:spec-check.rhai", include_str!("../../../extensions/spec-check.rhai")),
-    ("bundled:spend-caps.rhai", include_str!("../../../extensions/spend-caps.rhai")),
-    ("bundled:stash-checkpoint.rhai", include_str!("../../../extensions/stash-checkpoint.rhai")),
-    ("bundled:strict-plan.rhai", include_str!("../../../extensions/strict-plan.rhai")),
-    ("bundled:subagents.rhai", include_str!("../../../extensions/subagents.rhai")),
-    ("bundled:swarm.rhai", include_str!("../../../extensions/swarm.rhai")),
-    ("bundled:telemetry.rhai", include_str!("../../../extensions/telemetry.rhai")),
-    ("bundled:verify-guard.rhai", include_str!("../../../extensions/verify-guard.rhai")),
-    ("bundled:verify-impact.rhai", include_str!("../../../extensions/verify-impact.rhai")),
-    ("bundled:web-tools.rhai", include_str!("../../../extensions/web-tools.rhai")),
-    ("bundled:word-count.rhai", include_str!("../../../extensions/word-count.rhai")),
-    ("bundled:workflow.rhai", include_str!("../../../extensions/workflow.rhai"))
+    (
+        "bundled:weak-model.rhai",
+        include_str!("../../../extensions/weak-model.rhai"),
+    ),
+    (
+        "bundled:context-janitor.rhai",
+        include_str!("../../../extensions/context-janitor.rhai"),
+    ),
+    (
+        "bundled:env-doctor.rhai",
+        include_str!("../../../extensions/env-doctor.rhai"),
+    ),
+    (
+        "bundled:goal.rhai",
+        include_str!("../../../extensions/goal.rhai"),
+    ),
+    (
+        "bundled:audit-log.rhai",
+        include_str!("../../../extensions/audit-log.rhai"),
+    ),
+    (
+        "bundled:auto-checkpoint.rhai",
+        include_str!("../../../extensions/auto-checkpoint.rhai"),
+    ),
+    (
+        "bundled:blame.rhai",
+        include_str!("../../../extensions/blame.rhai"),
+    ),
+    (
+        "bundled:blast-radius-judge.rhai",
+        include_str!("../../../extensions/blast-radius-judge.rhai"),
+    ),
+    (
+        "bundled:browser-cdp-workflow.rhai",
+        include_str!("../../../extensions/browser-cdp-workflow.rhai"),
+    ),
+    (
+        "bundled:btw.rhai",
+        include_str!("../../../extensions/btw.rhai"),
+    ),
+    (
+        "bundled:chapter-spine.rhai",
+        include_str!("../../../extensions/chapter-spine.rhai"),
+    ),
+    (
+        "bundled:conductor.rhai",
+        include_str!("../../../extensions/conductor.rhai"),
+    ),
+    (
+        "bundled:cost-sentinel.rhai",
+        include_str!("../../../extensions/cost-sentinel.rhai"),
+    ),
+    (
+        "bundled:critic-arena.rhai",
+        include_str!("../../../extensions/critic-arena.rhai"),
+    ),
+    (
+        "bundled:critic.rhai",
+        include_str!("../../../extensions/critic.rhai"),
+    ),
+    (
+        "bundled:diff-shield.rhai",
+        include_str!("../../../extensions/diff-shield.rhai"),
+    ),
+    (
+        "bundled:dirty-guard.rhai",
+        include_str!("../../../extensions/dirty-guard.rhai"),
+    ),
+    (
+        "bundled:dmail.rhai",
+        include_str!("../../../extensions/dmail.rhai"),
+    ),
+    (
+        "bundled:file-checkpoints.rhai",
+        include_str!("../../../extensions/file-checkpoints.rhai"),
+    ),
+    (
+        "bundled:fork.rhai",
+        include_str!("../../../extensions/fork.rhai"),
+    ),
+    (
+        "bundled:guardrails.rhai",
+        include_str!("../../../extensions/guardrails.rhai"),
+    ),
+    (
+        "bundled:hive-note.rhai",
+        include_str!("../../../extensions/hive-note.rhai"),
+    ),
+    (
+        "bundled:instincts.rhai",
+        include_str!("../../../extensions/instincts.rhai"),
+    ),
+    (
+        "bundled:mutation-guard.rhai",
+        include_str!("../../../extensions/mutation-guard.rhai"),
+    ),
+    (
+        "bundled:path-guard.rhai",
+        include_str!("../../../extensions/path-guard.rhai"),
+    ),
+    (
+        "bundled:project-discipline.rhai",
+        include_str!("../../../extensions/project-discipline.rhai"),
+    ),
+    (
+        "bundled:relay-race.rhai",
+        include_str!("../../../extensions/relay-race.rhai"),
+    ),
+    (
+        "bundled:repo-pulse.rhai",
+        include_str!("../../../extensions/repo-pulse.rhai"),
+    ),
+    (
+        "bundled:review-gate.rhai",
+        include_str!("../../../extensions/review-gate.rhai"),
+    ),
+    (
+        "bundled:runs.rhai",
+        include_str!("../../../extensions/runs.rhai"),
+    ),
+    (
+        "bundled:safe-edit.rhai",
+        include_str!("../../../extensions/safe-edit.rhai"),
+    ),
+    (
+        "bundled:sandbox.rhai",
+        include_str!("../../../extensions/sandbox.rhai"),
+    ),
+    (
+        "bundled:semantic-bookmarks.rhai",
+        include_str!("../../../extensions/semantic-bookmarks.rhai"),
+    ),
+    (
+        "bundled:session-discipline.rhai",
+        include_str!("../../../extensions/session-discipline.rhai"),
+    ),
+    (
+        "bundled:session-handoff.rhai",
+        include_str!("../../../extensions/session-handoff.rhai"),
+    ),
+    (
+        "bundled:shadow-verify.rhai",
+        include_str!("../../../extensions/shadow-verify.rhai"),
+    ),
+    (
+        "bundled:skill-crystallizer.rhai",
+        include_str!("../../../extensions/skill-crystallizer.rhai"),
+    ),
+    (
+        "bundled:spec-check.rhai",
+        include_str!("../../../extensions/spec-check.rhai"),
+    ),
+    (
+        "bundled:spend-caps.rhai",
+        include_str!("../../../extensions/spend-caps.rhai"),
+    ),
+    (
+        "bundled:stash-checkpoint.rhai",
+        include_str!("../../../extensions/stash-checkpoint.rhai"),
+    ),
+    (
+        "bundled:strict-plan.rhai",
+        include_str!("../../../extensions/strict-plan.rhai"),
+    ),
+    (
+        "bundled:subagents.rhai",
+        include_str!("../../../extensions/subagents.rhai"),
+    ),
+    (
+        "bundled:swarm.rhai",
+        include_str!("../../../extensions/swarm.rhai"),
+    ),
+    (
+        "bundled:telemetry.rhai",
+        include_str!("../../../extensions/telemetry.rhai"),
+    ),
+    (
+        "bundled:verify-guard.rhai",
+        include_str!("../../../extensions/verify-guard.rhai"),
+    ),
+    (
+        "bundled:verify-impact.rhai",
+        include_str!("../../../extensions/verify-impact.rhai"),
+    ),
+    (
+        "bundled:web-tools.rhai",
+        include_str!("../../../extensions/web-tools.rhai"),
+    ),
+    (
+        "bundled:word-count.rhai",
+        include_str!("../../../extensions/word-count.rhai"),
+    ),
+    (
+        "bundled:workflow.rhai",
+        include_str!("../../../extensions/workflow.rhai"),
+    ),
 ];
 
 /// Subset used by the built-in `weak` profile.
-pub const WEAK_ORDER: &[&str] = &[
-    "weak-model",
-    "context-janitor",
-    "env-doctor",
-    "goal",
-];
+pub const WEAK_ORDER: &[&str] = &["weak-model", "context-janitor", "env-doctor", "goal"];
 
 /// Built-in profile source for `--profile default` / implicit session packs.
 pub const DEFAULT_PROFILE: &str = include_str!("../builtins/default.profile.rhai");
@@ -245,7 +387,10 @@ mod tests {
             "default * loads BUNDLED_ORDER only"
         );
         let cmds: Vec<_> = host.commands().into_iter().map(|(n, _)| n).collect();
-        assert!(cmds.iter().any(|n| n == "goal"), "goal cmd missing: {cmds:?}");
+        assert!(
+            cmds.iter().any(|n| n == "goal"),
+            "goal cmd missing: {cmds:?}"
+        );
         assert!(cmds.iter().any(|n| n == "btw"), "btw cmd missing: {cmds:?}");
     }
 

@@ -37,8 +37,7 @@ pub fn create_docx(path: &Path, paragraphs: &[String]) -> anyhow::Result<()> {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("create parent {}", parent.display()))?;
     }
-    let file = std::fs::File::create(path)
-        .with_context(|| format!("create {}", path.display()))?;
+    let file = std::fs::File::create(path).with_context(|| format!("create {}", path.display()))?;
     let mut zip = ZipWriter::new(file);
     let opts = zip_opts();
 
@@ -511,7 +510,10 @@ fn resolve_format(path: &Path, fmt: Option<OfficeFormat>) -> anyhow::Result<&'st
                 "docx" | "dotx" | "docm" => Ok("docx"),
                 "xlsx" | "xlsm" | "xltx" => Ok("xlsx"),
                 "pptx" | "pptm" | "potx" => Ok("pptx"),
-                _ => bail!("cannot infer office format from path {}; set format=docx|xlsx|pptx", path.display()),
+                _ => bail!(
+                    "cannot infer office format from path {}; set format=docx|xlsx|pptx",
+                    path.display()
+                ),
             }
         }
     }
@@ -588,7 +590,8 @@ impl AgentTool for OfficeDocumentTool {
         }
 
         // Round-trip verify via extract so the model sees what was written.
-        let preview = crate::office::extract_document(&path).unwrap_or_else(|e| format!("(extract failed: {e})"));
+        let preview = crate::office::extract_document(&path)
+            .unwrap_or_else(|e| format!("(extract failed: {e})"));
         let preview: String = preview.chars().take(4000).collect();
         Ok(ToolOutput::text(format!(
             "office_document wrote {} ({kind})\n\n{preview}",

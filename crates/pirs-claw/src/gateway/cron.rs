@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use super::outbound::deliver_outbound;
 
-
 /// Background schedule runner used by the gateway daemon.
 pub(super) async fn cron_ticker_loop(state_dir: PathBuf) {
     let schedule_path = state_dir.join("schedule.json");

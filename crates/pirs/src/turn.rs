@@ -1,11 +1,9 @@
 //! One agent turn (simple + strategy) and stdin steer handle.
-use std::io::Write as _;
-use std::path::{Path, PathBuf};
 use anyhow::Context as _;
-use std::sync::{Arc, Mutex};
 use pirs_agent::{Agent, AgentTool};
 use pirs_ai::Message;
-use pirs_rhai::ExtensionHost;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crate::printer::Printer;
 
@@ -82,7 +80,10 @@ const READONLY_PHASE_TOOLS: &[&str] = &[
 pub async fn run_verify_command(cmd: String, cwd: PathBuf) -> (bool, String) {
     let result = tokio::task::spawn_blocking(move || {
         let ev = pirs_agent::GreenEvidence::from_command(&cmd, &cwd);
-        (ev.passed, format!("{}\n{}", ev.summary_line(), ev.output_tail))
+        (
+            ev.passed,
+            format!("{}\n{}", ev.summary_line(), ev.output_tail),
+        )
     })
     .await;
     match result {
@@ -114,12 +115,10 @@ pub async fn run_strategy_turn(
     recorder: Option<&Arc<pirs_agent::trace::Recorder>>,
     trace_phase: Option<Arc<Mutex<String>>>,
 ) -> anyhow::Result<(pirs_agent::usage::UsageReport, bool)> {
-use pirs_agent::gate::{run_gated, GateOutcome};
-use pirs_agent::phase_agent::AgentPhaseDriver;
-use pirs_agent::profile::Profile;
-use pirs_agent::strategy::{
-        pin_plan_model, run_strategy_async, AsyncPhaseDriver, PhaseReq, Task, ToolScope,
-    };
+    use pirs_agent::gate::{run_gated, GateOutcome};
+    use pirs_agent::phase_agent::AgentPhaseDriver;
+    use pirs_agent::profile::Profile;
+    use pirs_agent::strategy::{pin_plan_model, run_strategy_async, PhaseReq, Task, ToolScope};
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -292,11 +291,9 @@ use pirs_agent::strategy::{
                         Message::Assistant(a) => a.text().len(),
                         Message::User(u) => match &u.content {
                             pirs_ai::UserContent::Text(t) => t.len(),
-                            pirs_ai::UserContent::Blocks(bs) => bs
-                                .iter()
-                                .filter_map(|b| b.as_text())
-                                .map(|t| t.len())
-                                .sum(),
+                            pirs_ai::UserContent::Blocks(bs) => {
+                                bs.iter().filter_map(|b| b.as_text()).map(|t| t.len()).sum()
+                            }
                         },
                         Message::ToolResult(r) => r
                             .content
@@ -379,10 +376,7 @@ struct HybridPlanCapture<D> {
 impl<D: pirs_agent::strategy::AsyncPhaseDriver> pirs_agent::strategy::AsyncPhaseDriver
     for HybridPlanCapture<D>
 {
-    async fn run_phase(
-        &mut self,
-        req: &pirs_agent::strategy::PhaseReq,
-    ) -> anyhow::Result<String> {
+    async fn run_phase(&mut self, req: &pirs_agent::strategy::PhaseReq) -> anyhow::Result<String> {
         let out = self.inner.run_phase(req).await?;
         if req.scope == pirs_agent::strategy::ToolScope::ReadOnly {
             if let Some(h) = &self.hybrid {

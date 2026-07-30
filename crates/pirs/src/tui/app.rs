@@ -9,8 +9,7 @@ use crate::session_stats::{self, SessionClock};
 
 use super::chat::ChatItem;
 use super::journey::*;
-use super::model_picker::{ModelPicker, ModelPickerTarget};
-use super::theme::Theme;
+use super::model_picker::ModelPicker;
 use super::tools::*;
 
 // ── App state ───────────────────────────────────────────────────────────────
@@ -183,7 +182,12 @@ impl App {
                 }
                 let estimate = if self.thinking_expanded {
                     // Rough pre-measure so scroll math doesn't clamp before paint.
-                    thinking.lines().filter(|l| !l.trim().is_empty()).count().min(80) + 6
+                    thinking
+                        .lines()
+                        .filter(|l| !l.trim().is_empty())
+                        .count()
+                        .min(80)
+                        + 6
                 } else {
                     4
                 };
@@ -397,7 +401,6 @@ impl App {
         }
     }
 
-
     /// Live hybrid pin snapshot for session-end reporting (plan-model + strategy).
     /// Built from app state so `/plan-model` / `/strategy` updates stay on the
     /// same path as CLI-seeded pins — never hardcode empty at print sites.
@@ -432,4 +435,3 @@ impl App {
         self.set_status(String::new());
     }
 }
-

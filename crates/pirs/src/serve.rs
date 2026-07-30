@@ -174,10 +174,7 @@ fn env_flag(name: &str) -> bool {
 
 /// If `text` is a registered extension slash command, run it and return output.
 /// Built-in TUI/REPL commands are not handled here (web UI is chat + ext cmds).
-fn try_extension_slash(
-    host: &Option<Arc<pirs_rhai::ExtensionHost>>,
-    text: &str,
-) -> Option<String> {
+fn try_extension_slash(host: &Option<Arc<pirs_rhai::ExtensionHost>>, text: &str) -> Option<String> {
     let t = text.trim();
     if !t.starts_with('/') {
         return None;

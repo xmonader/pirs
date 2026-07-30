@@ -82,11 +82,8 @@ fn has_ext(root: &Path, ext: &str) -> bool {
     let Ok(rd) = std::fs::read_dir(root) else {
         return false;
     };
-    rd.flatten().any(|e| {
-        e.file_name()
-            .to_string_lossy()
-            .ends_with(ext)
-    })
+    rd.flatten()
+        .any(|e| e.file_name().to_string_lossy().ends_with(ext))
 }
 
 fn read_package_scripts(root: &Path) -> std::collections::HashMap<String, String> {
@@ -280,13 +277,11 @@ pub fn detect_profile(cwd: &Path) -> ProjectProfile {
         p.toolchain = Some("go".into());
         p.test = Some("go test ./...".into());
         p.build = Some("go build ./...".into());
-        p.lint = Some(
-            if has(cwd, ".golangci.yml") || has(cwd, ".golangci.yaml") {
-                "golangci-lint run".into()
-            } else {
-                "go vet ./...".into()
-            },
-        );
+        p.lint = Some(if has(cwd, ".golangci.yml") || has(cwd, ".golangci.yaml") {
+            "golangci-lint run".into()
+        } else {
+            "go vet ./...".into()
+        });
         p.typecheck = Some("go build ./...".into());
         p.run = Some("go run .".into());
         p.format = Some("gofmt -w .".into());
@@ -593,8 +588,11 @@ fn push_package(packages: &mut Vec<PackageInfo>, pkg_dir: &Path, root: &Path) {
         std::fs::read_to_string(pkg_dir.join("Cargo.toml"))
             .ok()
             .and_then(|t| {
-                t.lines()
-                    .find_map(|l| l.trim().strip_prefix("name = ").map(|n| n.trim_matches('"').to_string()))
+                t.lines().find_map(|l| {
+                    l.trim()
+                        .strip_prefix("name = ")
+                        .map(|n| n.trim_matches('"').to_string())
+                })
             })
             .unwrap_or_else(|| rel.clone())
     } else {
@@ -752,7 +750,11 @@ fn ecosystem_label(p: &ProjectProfile) -> String {
     match p.toolchain.as_deref().unwrap_or("") {
         s if s.contains("rust") || s.contains("cargo") => "rust".into(),
         s if s.starts_with("go") => "go".into(),
-        s if s.contains("python") || s.contains("uv") || s.contains("poetry") || s.contains("pip") => {
+        s if s.contains("python")
+            || s.contains("uv")
+            || s.contains("poetry")
+            || s.contains("pip") =>
+        {
             "python".into()
         }
         "bun" | "deno" | "pnpm" | "yarn" | "npm" => "node".into(),
@@ -846,7 +848,7 @@ pub fn format_verify_for_tool_result(o: &VerifyOutcome) -> String {
     }
     if !o.passed && !o.summary.is_empty() {
         let tail: String = o.summary.chars().take(1_200).collect();
-        s.push_str("\n");
+        s.push('\n');
         s.push_str(&tail);
     }
     s
@@ -1208,7 +1210,11 @@ impl AgentTool for ProjectTool {
         let tail = tail_lines(&combined, 50);
         let text = format!(
             "[{action}] {cmd} — {verdict}\n\n{tail}",
-            tail = if tail.is_empty() { "(no output)" } else { &tail }
+            tail = if tail.is_empty() {
+                "(no output)"
+            } else {
+                &tail
+            }
         );
         Ok(ToolOutput::text(text).with_details(json!({
             "action": action,
@@ -1243,7 +1249,10 @@ mod tests {
         let p = detect_profile(dir.path());
         assert_eq!(p.toolchain.as_deref(), Some("cargo (rust)"));
         assert_eq!(p.test.as_deref(), Some("cargo test"));
-        assert_eq!(p.lint.as_deref(), Some("cargo clippy --all-targets -- -D warnings"));
+        assert_eq!(
+            p.lint.as_deref(),
+            Some("cargo clippy --all-targets -- -D warnings")
+        );
         assert!(p.prompt_section().contains("cargo test"));
     }
 
@@ -1266,7 +1275,11 @@ mod tests {
     #[test]
     fn detects_pnpm_and_eslint_fallback() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("package.json"), r#"{"scripts":{"test":"vitest"}}"#).unwrap();
+        fs::write(
+            dir.path().join("package.json"),
+            r#"{"scripts":{"test":"vitest"}}"#,
+        )
+        .unwrap();
         fs::write(dir.path().join("pnpm-lock.yaml"), "").unwrap();
         fs::write(dir.path().join("eslint.config.js"), "export default []").unwrap();
         let p = detect_profile(dir.path());
@@ -1291,7 +1304,11 @@ mod tests {
     #[test]
     fn detects_go_vet_fallback() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("go.mod"), "module example.com/x\n\ngo 1.21\n").unwrap();
+        fs::write(
+            dir.path().join("go.mod"),
+            "module example.com/x\n\ngo 1.21\n",
+        )
+        .unwrap();
         let p = detect_profile(dir.path());
         assert_eq!(p.lint.as_deref(), Some("go vet ./..."));
     }
@@ -1336,7 +1353,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let o = post_edit_verify(dir.path(), 5);
         assert!(o.skipped);
-        assert!(o.skip_reason.as_deref().unwrap_or("").contains("no project"));
+        assert!(o
+            .skip_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("no project"));
     }
 
     #[test]
@@ -1434,7 +1455,11 @@ mod tests {
     #[test]
     fn monorepo_pnpm_workspace() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n").unwrap();
+        fs::write(
+            dir.path().join("pnpm-workspace.yaml"),
+            "packages:\n  - 'packages/*'\n",
+        )
+        .unwrap();
         fs::write(dir.path().join("package.json"), "{}").unwrap();
         fs::create_dir_all(dir.path().join("packages/web")).unwrap();
         fs::write(
@@ -1478,7 +1503,8 @@ mod tests {
             pkgs.iter().map(|p| &p.path).collect::<Vec<_>>()
         );
         assert!(
-            pkgs.iter().any(|p| p.path.contains("pirs-tools") || p.name.contains("pirs-tools")),
+            pkgs.iter()
+                .any(|p| p.path.contains("pirs-tools") || p.name.contains("pirs-tools")),
             "packages={pkgs:?}"
         );
     }

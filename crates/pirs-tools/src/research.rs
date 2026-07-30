@@ -136,7 +136,9 @@ fn extract_http_links(html: &str) -> Vec<String> {
         let end = slice
             .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == '<' || c == '>')
             .unwrap_or(slice.len().min(200));
-        let u = slice[..end].trim_end_matches(['.', ',', ')', ']']).to_string();
+        let u = slice[..end]
+            .trim_end_matches(['.', ',', ')', ']'])
+            .to_string();
         if (u.starts_with("http://") || u.starts_with("https://")) && !out.contains(&u) {
             // Skip duckduckgo chrome
             if !u.contains("duckduckgo.com") {

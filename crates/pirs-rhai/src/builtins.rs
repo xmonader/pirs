@@ -181,12 +181,18 @@ mod tests {
                 assert_eq!(plan.scope, ToolScope::ReadOnly);
                 assert_eq!(exec.scope, ToolScope::Full);
                 assert!(
-                    plan.system.contains("short fix plan") || plan.system.contains("SELF-CONTAINED"),
+                    plan.system.contains("short fix plan")
+                        || plan.system.contains("SELF-CONTAINED"),
                     "weak plan system should be simple: {}",
                     plan.system
                 );
-                assert!(exec.system.contains("One edit") || exec.system.contains("one edit") || exec.system.contains("After each"),
-                    "weak exec should stress step-by-step: {}", exec.system);
+                assert!(
+                    exec.system.contains("One edit")
+                        || exec.system.contains("one edit")
+                        || exec.system.contains("After each"),
+                    "weak exec should stress step-by-step: {}",
+                    exec.system
+                );
             }
             _ => panic!("plan-exec-weak is two solo phases"),
         }
