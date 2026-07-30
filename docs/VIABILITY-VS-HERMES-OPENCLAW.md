@@ -23,7 +23,7 @@
 | Email/calendar | Channels / MCP | Often channel | **MCP connectors** (documented + mock) | Viable via MCP |
 | MCP load + doctor | Yes | Yes | **Yes** (trust gate, doctor lines) | Parity |
 | Sandbox / Modal | Modal/Daytona | Docker sandbox | Local/docker/ssh; **no Modal** | Intentional |
-| Pairing / DM safety | Yes | Pairing codes | Allowlist fail-closed | Parity (different UX) |
+| Pairing / DM safety | Yes | Pairing codes | Allowlist + short codes (`pair code`) | Parity |
 
 ## What “viable alternative” means here
 
@@ -74,7 +74,7 @@ pirs-claw pair add <chat_id>
 3. **No Skills Hub marketplace.**  
 4. **Snap Chromium** needs `--no-sandbox` (we pass it on auto-launch).  
 5. **Schedule fires still need an LLM key** for chat body (same class as Hermes).  
-6. **Pairing UX** is allowlist ids, not OpenClaw pairing codes.  
+6. **Pairing codes** exist (`pirs-claw pair code`); multi-device OpenClaw product still out of scope.  
 7. **Audit secret redaction** is pragmatic key-name denylist, not full DLP.
 
 Plan forward: [PLAN-FORWARD.md](PLAN-FORWARD.md). Smoke: `scripts/viability-smoke.sh`.

@@ -1314,6 +1314,7 @@ async fn main() -> anyhow::Result<()> {
     } else {
         Some(pirs_agent::compaction::CompactionConfig {
             context_window: cli.context_window,
+            aux_model: cli.aux_model.clone(),
             ..Default::default()
         })
     };

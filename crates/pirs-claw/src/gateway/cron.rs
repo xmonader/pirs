@@ -61,21 +61,22 @@ pub(super) async fn cron_ticker_loop(state_dir: PathBuf) {
                 Err(e) => eprintln!("[heartbeat] spawn: {e}"),
             }
         }
-        let due = match store.due(now) {
+        // At-most-once: advance next_fire before execute (Hermes claim order).
+        let claimed = match store.claim_due(now) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("[cron] due: {e}");
+                eprintln!("[cron] claim_due: {e}");
                 continue;
             }
         };
-        if due.is_empty() {
+        if claimed.is_empty() {
             continue;
         }
         let mut ok_n = 0u32;
         let mut fail_n = 0u32;
-        for j in due {
+        for j in claimed {
             eprintln!(
-                "[cron] due {} deliver={}: {}",
+                "[cron] claimed {} deliver={}: {}",
                 j.id,
                 j.deliver.as_config_str(),
                 j.prompt
@@ -125,11 +126,13 @@ pub(super) async fn cron_ticker_loop(state_dir: PathBuf) {
             };
             match fire_result {
                 Ok(()) => {
+                    // next_fire already advanced by claim_due; just clear running.
                     let _ = store.mark_fired(&j.id, now);
                     ok_n += 1;
                 }
                 Err(err) => {
                     eprintln!("[cron] job {} failed: {err}", j.id);
+                    // next_fire already advanced — fail records status + backoff only.
                     let _ = store.mark_failed(&j.id, now, &err);
                     fail_n += 1;
                 }

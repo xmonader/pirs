@@ -478,42 +478,53 @@ async fn main() -> anyhow::Result<()> {
                     if run && _cron_lock.is_none() {
                         anyhow::bail!("could not acquire cron lock (another tick/serve running?)");
                     }
-                    let due = store.due(now)?;
-                    if due.is_empty() {
-                        println!("no due jobs");
-                    }
-                    let mut ok_n = 0u32;
-                    let mut fail_n = 0u32;
-                    for j in due {
-                        println!(
-                            "due {} deliver={}: {}",
-                            j.id,
-                            j.deliver.as_config_str(),
-                            j.prompt
-                        );
-                        if !run {
-                            continue;
+                    if !run {
+                        let due = store.due(now)?;
+                        if due.is_empty() {
+                            println!("no due jobs");
                         }
-                        match fire_schedule_job(&j, &state, &cli.model, &skills).await {
-                            Ok(true) if should_mark_schedule_fired(true, true) => {
-                                store.mark_fired(&j.id, now)?;
-                                ok_n += 1;
-                            }
-                            Ok(true) => {}
-                            Ok(false) => {
-                                store.mark_failed(&j.id, now, "fire returned false")?;
-                                fail_n += 1;
-                            }
-                            Err(e) => {
-                                store.mark_failed(&j.id, now, &e.to_string())?;
-                                eprintln!("[tick] job {} error: {e}", j.id);
-                                fail_n += 1;
+                        for j in due {
+                            println!(
+                                "due {} deliver={}: {}",
+                                j.id,
+                                j.deliver.as_config_str(),
+                                j.prompt
+                            );
+                        }
+                    } else {
+                        // At-most-once: claim (advance next_fire) before fire.
+                        let claimed = store.claim_due(now)?;
+                        if claimed.is_empty() {
+                            println!("no due jobs");
+                        }
+                        let mut ok_n = 0u32;
+                        let mut fail_n = 0u32;
+                        for j in claimed {
+                            println!(
+                                "claimed {} deliver={}: {}",
+                                j.id,
+                                j.deliver.as_config_str(),
+                                j.prompt
+                            );
+                            match fire_schedule_job(&j, &state, &cli.model, &skills).await {
+                                Ok(true) if should_mark_schedule_fired(true, true) => {
+                                    store.mark_fired(&j.id, now)?;
+                                    ok_n += 1;
+                                }
+                                Ok(true) => {}
+                                Ok(false) => {
+                                    store.mark_failed(&j.id, now, "fire returned false")?;
+                                    fail_n += 1;
+                                }
+                                Err(e) => {
+                                    store.mark_failed(&j.id, now, &e.to_string())?;
+                                    eprintln!("[tick] job {} error: {e}", j.id);
+                                    fail_n += 1;
+                                }
                             }
                         }
-                    }
-                    if run {
                         println!(
-                            "[tick summary] ok={ok_n} failed={fail_n} (failed jobs stay due for retry)"
+                            "[tick summary] ok={ok_n} failed={fail_n} (next_fire advanced at claim; fail does not re-fire same slot)"
                         );
                     }
                 }

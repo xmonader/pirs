@@ -28,7 +28,8 @@ pub use skill::{
     usage_counts, validate_description, validate_skill, validate_skill_name, write_skill, Skill,
 };
 pub use soul::{
-    curator_report, default_soul_path, default_soul_template, merge_soul_updates, read_soul,
-    soul_prompt_section, write_soul,
+    curator_report, default_soul_path, default_soul_template, invalidate_session_identity,
+    merge_soul_updates, read_soul, session_identity, session_soul_prompt_section,
+    set_session_identity, soul_prompt_section, write_soul, SessionIdentitySnapshot,
 };
 pub use tools::{skill_tools, skill_write_allowed, SKILL_WRITE_ENV};

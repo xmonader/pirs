@@ -267,6 +267,17 @@ pub async fn run_agent_loop(
                     });
                     new_messages.push(msg);
                 }
+                // Soft-steer (Hermes): append pending user guidance to the last
+                // tool result instead of a separate user message. Does not cancel
+                // the run — preserves role alternation and reduces re-send thrash.
+                let steers = config.hooks.steering();
+                if !steers.is_empty() {
+                    apply_soft_steer_to_last_tool_result(
+                        &mut context.messages,
+                        &mut new_messages,
+                        &steers,
+                    );
+                }
             }
 
             emit(AgentEvent::TurnEnd {
@@ -396,6 +407,124 @@ pub async fn run_agent_loop(
     }
 
     (new_messages, budget_hit)
+}
+
+/// Marker appended to the last tool result when the user steers mid-batch.
+/// Models treat this as user guidance, not tool output.
+pub fn format_soft_steer_marker(texts: &[String]) -> String {
+    let body = texts.join("\n");
+    format!("\n\n---\n[user steer — not tool output]\n{body}\n---\n")
+}
+
+/// Extract plain text from steer messages (user role preferred).
+fn steer_texts(msgs: &[Message]) -> Vec<String> {
+    use pirs_ai::UserContent;
+    msgs.iter()
+        .filter_map(|m| match m {
+            Message::User(u) => match &u.content {
+                UserContent::Text(t) if !t.trim().is_empty() => Some(t.clone()),
+                UserContent::Blocks(bs) => {
+                    let t: String = bs.iter().filter_map(|b| b.as_text()).collect();
+                    if t.trim().is_empty() {
+                        None
+                    } else {
+                        Some(t)
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
+}
+
+/// Append soft-steer text to the last tool-result message in history.
+///
+/// Returns true if the steer was applied. If there is no tool result to attach
+/// to, returns false and the caller should deliver steers as normal user msgs.
+pub fn apply_soft_steer_to_last_tool_result(
+    context_messages: &mut [Message],
+    new_messages: &mut [Message],
+    steers: &[Message],
+) -> bool {
+    let texts = steer_texts(steers);
+    if texts.is_empty() {
+        return false;
+    }
+    let marker = format_soft_steer_marker(&texts);
+    let mut applied = false;
+    // Prefer mutating the last tool result in context (API history).
+    for msg in context_messages.iter_mut().rev() {
+        if let Message::ToolResult(tr) = msg {
+            tr.content.push(pirs_ai::ContentBlock::text(marker.clone()));
+            applied = true;
+            break;
+        }
+    }
+    // Keep new_messages in sync (session append / events).
+    for msg in new_messages.iter_mut().rev() {
+        if let Message::ToolResult(tr) = msg {
+            // Avoid double-append if context and new_messages alias the same content
+            // via clone — they are separate clones, so both need the marker.
+            let already = tr
+                .content
+                .iter()
+                .filter_map(|b| b.as_text())
+                .any(|t| t.contains("[user steer"));
+            if !already {
+                tr.content.push(pirs_ai::ContentBlock::text(marker));
+            }
+            break;
+        }
+    }
+    applied
+}
+
+#[cfg(test)]
+mod soft_steer_tests {
+    use super::*;
+    use pirs_ai::{ContentBlock, ToolResultMessage};
+
+    #[test]
+    fn soft_steer_appends_to_last_tool_result() {
+        let mut ctx = vec![
+            Message::user("go"),
+            Message::ToolResult(ToolResultMessage {
+                tool_call_id: "1".into(),
+                tool_name: "bash".into(),
+                content: vec![ContentBlock::text("ok")],
+                details: None,
+                is_error: false,
+                terminate: false,
+                timestamp: 0,
+            }),
+        ];
+        let mut news = ctx.clone();
+        let steers = vec![Message::user("actually use cargo test")];
+        assert!(apply_soft_steer_to_last_tool_result(
+            &mut ctx, &mut news, &steers
+        ));
+        let text = match &ctx[1] {
+            Message::ToolResult(tr) => tr.model_text(),
+            _ => panic!("expected tool result"),
+        };
+        assert!(text.contains("ok"), "{text}");
+        assert!(text.contains("[user steer"), "{text}");
+        assert!(text.contains("cargo test"), "{text}");
+        // new_messages also updated
+        let ntext = match &news[1] {
+            Message::ToolResult(tr) => tr.model_text(),
+            _ => panic!("expected tool result"),
+        };
+        assert!(ntext.contains("[user steer"), "{ntext}");
+    }
+
+    #[test]
+    fn soft_steer_marker_format() {
+        let m = format_soft_steer_marker(&["stop editing".into()]);
+        assert!(m.contains("[user steer — not tool output]"));
+        assert!(m.contains("stop editing"));
+    }
 }
 
 #[cfg(test)]

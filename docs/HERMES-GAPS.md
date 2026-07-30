@@ -15,16 +15,19 @@ Legend: **Spine** = production-usable path · **Stub** = thin · **Skip** = inte
 | Discord / Slack | **Stub** | deferred |
 | WhatsApp / Signal | **Thin** | present, not productized |
 | Multi-channel daemon | **Spine** | `serve` + 60s cron ticker |
-| Pairing allowlist | **Spine** | fail closed |
-| Sessions + search | **Spine** | JSONL + `sessions search` + `session_search` tool |
+| Pairing allowlist + **codes** | **Spine** | fail closed; `pirs-claw pair code` self-pair |
+| Sessions + search | **Spine** | JSONL + `sessions search` + peer-scoped `session_search` tool |
 | Cron intervals + expressions | **Spine** | `--every` / `--cron` |
 | Cron **blueprints** | **Spine** | `schedule blueprint list`, `--blueprint morning-brief` |
 | Cron **NL schedule** | **Spine** | `--nl "weekdays at 9:00"` |
+| Cron **deliver_to + at-most-once** | **Spine** | `deliver=telegram:…`; `claim_due` advances next_fire before execute |
+| Soft steer (no cancel) | **Spine** | mid-batch steer appends to last tool result (Hermes-class) |
 | Local / Docker / SSH | **Spine** | `--exec` |
 | Modal / Daytona / Singularity | **Skip** | rejected |
-| FTS memory + nudge | **Spine** | recall + durable extract |
-| **Soul / user profile** | **Spine** | `~/.pirs/soul.md`, `soul show/set/curator`, prompt inject |
-| Skill crystallize + improve | **Spine** | learn loop |
+| FTS memory + nudge | **Spine** | session-stable digest in system; turn recall on **user** msg |
+| **Soul / user profile** | **Spine** | `~/.pirs/soul.md`, session-frozen inject (prompt-cache stable) |
+| Skill crystallize + improve | **Spine** | learn loop; crystallize runs **off the hot path** (background) |
+| Aux model (compact) | **Spine** | `pirs --aux-model` / `PIRS_AUX_MODEL` for compaction summarize |
 | Skills Hub | **Skip** | moat |
 | Browser navigate / screenshot | **Spine** | `browser_navigate`, `browser_screenshot` (Chromium/HTTP) |
 | Browser **CDP** (Playwright-compatible) | **Spine** | `browser_cdp` via pure-Rust **chromiumoxide** (no Node) |
@@ -113,6 +116,7 @@ Feature: `pirs-tools` / `pirs-claw` default **`cdp`**. Build without: `--no-defa
 |-----|------|
 | `PIRS_CLAW_LEARN` | Learning on gateway |
 | `PIRS_SOUL_PATH` | Override soul file |
+| `PIRS_AUX_MODEL` | Cheap model for compaction summarize (`pirs --aux-model`) |
 | `PIRS_BROWSER=0` | Disable browser tools |
 | `PIRS_BROWSER_CDP_URL` | CDP endpoint (`BROWSER_CDP_URL` / `CDP_URL` aliases) |
 | `PIRS_COMPUTER_USE=1` | Enable desktop screenshot/click/type |

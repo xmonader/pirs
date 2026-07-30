@@ -34,6 +34,79 @@ pub fn soul_prompt_section() -> String {
     )
 }
 
+/// Session-frozen identity block (Hermes volatile tier: built once per process
+/// session, not re-read every turn — keeps prompt-cache prefixes stable).
+///
+/// Soul text is snapshotted on first capture. Mid-session soul writes (learn
+/// loop) do **not** mutate this until [`invalidate_session_identity`].
+#[derive(Debug, Clone, Default)]
+pub struct SessionIdentitySnapshot {
+    /// Frozen `## User profile (soul)` section (or empty).
+    pub soul_section: String,
+    /// Optional frozen memory digest (not query-specific).
+    pub memory_section: String,
+}
+
+impl SessionIdentitySnapshot {
+    /// Capture soul from disk once. Call at agent session start.
+    pub fn capture() -> Self {
+        Self {
+            soul_section: soul_prompt_section(),
+            memory_section: String::new(),
+        }
+    }
+
+    /// Attach a pre-built memory digest (session-stable, not turn query).
+    pub fn with_memory(mut self, memory_section: impl Into<String>) -> Self {
+        self.memory_section = memory_section.into();
+        self
+    }
+
+    /// Concatenated sections for the system prompt.
+    pub fn prompt_sections(&self) -> String {
+        let mut s = self.soul_section.clone();
+        s.push_str(&self.memory_section);
+        s
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.soul_section.trim().is_empty() && self.memory_section.trim().is_empty()
+    }
+}
+
+use std::sync::{Mutex, OnceLock};
+
+static SESSION_IDENTITY: OnceLock<Mutex<Option<SessionIdentitySnapshot>>> = OnceLock::new();
+
+fn session_identity_slot() -> &'static Mutex<Option<SessionIdentitySnapshot>> {
+    SESSION_IDENTITY.get_or_init(|| Mutex::new(None))
+}
+
+/// Return the process-session identity snapshot, capturing soul on first call.
+pub fn session_identity() -> SessionIdentitySnapshot {
+    let slot = session_identity_slot();
+    let mut guard = slot.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(SessionIdentitySnapshot::capture());
+    }
+    guard.clone().unwrap_or_default()
+}
+
+/// Replace / refresh the frozen identity (after soul curator edits, tests).
+pub fn set_session_identity(snap: SessionIdentitySnapshot) {
+    *session_identity_slot().lock().unwrap() = Some(snap);
+}
+
+/// Drop the frozen snapshot so the next [`session_identity`] re-reads soul.
+pub fn invalidate_session_identity() {
+    *session_identity_slot().lock().unwrap() = None;
+}
+
+/// Soul section for system prompts: process-session frozen (not re-read every turn).
+pub fn session_soul_prompt_section() -> String {
+    session_identity().soul_section
+}
+
 pub fn write_soul(body: &str) -> anyhow::Result<PathBuf> {
     let path = default_soul_path();
     if let Some(parent) = path.parent() {
@@ -192,5 +265,21 @@ mod tests {
         // Second merge into same section does not duplicate.
         let m2 = merge_soul_updates(&m, "- timezone UTC+2\n");
         assert_eq!(m2.matches("timezone UTC+2").count(), 1);
+    }
+
+    #[test]
+    fn session_identity_freezes_across_calls() {
+        invalidate_session_identity();
+        let a = session_identity();
+        // Second capture must be the same frozen object, not a fresh re-read
+        // that could diverge after a concurrent write.
+        let b = session_identity();
+        assert_eq!(a.soul_section, b.soul_section);
+        invalidate_session_identity();
+        let c = SessionIdentitySnapshot::capture().with_memory("\n## mem\n- fact\n");
+        set_session_identity(c.clone());
+        assert_eq!(session_identity().memory_section, c.memory_section);
+        assert!(session_identity().prompt_sections().contains("fact"));
+        invalidate_session_identity();
     }
 }

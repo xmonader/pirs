@@ -6,8 +6,8 @@ use pirs_claw::channel::{Channel, CliChannel, InboundMessage, OutboundReply};
 use pirs_claw::memory_bridge;
 use pirs_claw::registry;
 use pirs_claw::{
-    claw_system_prompt, describe_exec_backend, empty_assistant_diag, extract_assistant_reply,
-    require_llm_key, SessionId, SessionStore,
+    describe_exec_backend, empty_assistant_diag, extract_assistant_reply, require_llm_key,
+    SessionId, SessionStore,
 };
 use pirs_skills::{skills_prompt_section, Skill};
 
@@ -41,12 +41,15 @@ pub async fn run_chat(
         api_key: key,
         ..Default::default()
     };
-    let mut sys = claw_system_prompt();
+    // Session-stable system: soul (frozen) + memory digest (not query-matched).
+    // Query-specific recall goes on the user envelope only (Hermes cache rule).
+    let mem_digest = mem
+        .as_ref()
+        .map(|m| memory_bridge::session_memory_digest(m, 5))
+        .unwrap_or_default();
+    let mut sys = pirs_claw::claw_system_prompt_with_memory(&mem_digest);
     sys.push_str(&skills_prompt_section(skills));
     sys.push_str(&pirs_tools::detect_profile(cwd).prompt_section());
-    if let Some(ref m) = mem {
-        sys.push_str(&memory_bridge::recall_context(m, text, 5));
-    }
     // Cron/heartbeat set PIRS_CLAW_UNATTENDED=1 — never install unrestricted bash
     // unless the operator opts in with PIRS_CLAW_SCHEDULE_CODE=1.
     let mut tools = if pirs_claw::is_unattended() {
@@ -77,8 +80,9 @@ pub async fn run_chat(
         agent.messages = msgs;
     }
 
+    let prompt_text = memory_bridge::user_text_with_turn_recall(mem.as_deref(), text, 5);
     let new_msgs = agent
-        .prompt(text)
+        .prompt(prompt_text)
         .await
         .map_err(|e| anyhow::anyhow!("agent error (no assistant reply recorded): {e}"))?;
     let reply = extract_assistant_reply(&new_msgs).ok_or_else(|| {
@@ -102,38 +106,45 @@ pub async fn run_chat(
             &reply,
         )
         .await;
+        // Crystallize / improve off the hot path so chat reply latency stays low.
         let transcript = pirs_claw::learn::session_transcript(text, &reply, "");
-        let crystallized = pirs_claw::learn::maybe_crystallize_skill(
-            provider.clone(),
-            model,
-            key_for_learn.clone(),
-            &transcript,
-            800,
-        )
-        .await;
-        if crystallized.is_none() {
-            // Try improve any installed skill mentioned in the turn.
-            for sk in skills {
-                if text.to_ascii_lowercase().contains(&sk.name)
-                    || reply.to_ascii_lowercase().contains(&sk.name)
-                {
-                    let md = format!(
-                        "---\nname: {}\ndescription: {}\n---\n\n{}",
-                        sk.name, sk.description, sk.body
-                    );
-                    let _ = pirs_claw::learn::maybe_improve_skill(
-                        provider.clone(),
-                        model,
-                        key_for_learn.clone(),
-                        &sk.name,
-                        &md,
-                        &transcript,
-                        400,
-                    )
-                    .await;
+        let skills_owned: Vec<(String, String, String)> = skills
+            .iter()
+            .map(|sk| (sk.name.clone(), sk.description.clone(), sk.body.clone()))
+            .collect();
+        let text_l = text.to_ascii_lowercase();
+        let reply_l = reply.to_ascii_lowercase();
+        let provider_bg = provider.clone();
+        let model_bg = model.to_string();
+        let key_bg = key_for_learn.clone();
+        tokio::spawn(async move {
+            let crystallized = pirs_claw::learn::maybe_crystallize_skill(
+                provider_bg.clone(),
+                &model_bg,
+                key_bg.clone(),
+                &transcript,
+                800,
+            )
+            .await;
+            if crystallized.is_none() {
+                for (name, description, body) in skills_owned {
+                    if text_l.contains(&name) || reply_l.contains(&name) {
+                        let md =
+                            format!("---\nname: {name}\ndescription: {description}\n---\n\n{body}");
+                        let _ = pirs_claw::learn::maybe_improve_skill(
+                            provider_bg.clone(),
+                            &model_bg,
+                            key_bg.clone(),
+                            &name,
+                            &md,
+                            &transcript,
+                            400,
+                        )
+                        .await;
+                    }
                 }
             }
-        }
+        });
     }
     CliChannel.deliver(&OutboundReply::to(&inbound, reply))?;
     eprintln!(

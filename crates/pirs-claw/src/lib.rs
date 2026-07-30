@@ -376,21 +376,61 @@ impl ScheduleStore {
             .collect())
     }
 
+    /// Hermes at-most-once claim: **advance `next_fire` before execute**.
+    ///
+    /// If the process dies mid-job, the job will not re-fire for the same slot
+    /// (trade: possible skip on crash). Prefer this for tick/serve paths.
+    /// Returns the claimed job snapshots (for running the agent) after the
+    /// store has already advanced.
+    pub fn claim_due(&self, now: u64) -> anyhow::Result<Vec<ScheduleEntry>> {
+        let mut f = self.read()?;
+        let mut claimed = Vec::new();
+        for j in &mut f.jobs {
+            if !j.enabled || j.next_fire > now {
+                continue;
+            }
+            // Snapshot for the runner (deliver/prompt/model still needed).
+            let snap = j.clone();
+            j.last_run = Some(now);
+            j.last_status = Some("running".into());
+            j.last_error = None;
+            if j.cron.is_some() {
+                j.next_fire = next_fire_for_job(j, now).unwrap_or(now + 60);
+            } else if j.every_secs == 0 {
+                // One-shot: disable immediately so a crash cannot re-dispatch.
+                j.enabled = false;
+            } else {
+                j.next_fire = now.saturating_add(j.every_secs);
+            }
+            claimed.push(snap);
+        }
+        if !claimed.is_empty() {
+            self.write(&f)?;
+        }
+        Ok(claimed)
+    }
+
+    /// Mark a successful fire. When the job was already claimed via
+    /// [`claim_due`], `next_fire` is left alone (already advanced). Manual
+    /// `schedule run` paths that skip claim still advance here.
     pub fn mark_fired(&self, id: &str, now: u64) -> anyhow::Result<()> {
         let mut f = self.read()?;
         for j in &mut f.jobs {
             if j.id == id {
+                let already_claimed = j.last_status.as_deref() == Some("running");
                 j.last_run = Some(now);
                 j.last_status = Some("ok".into());
                 j.last_error = None;
                 // Successful fire clears the fail streak (Hermes-class recoverability).
                 j.fail_count = 0;
-                if j.cron.is_some() {
-                    j.next_fire = next_fire_for_job(j, now).unwrap_or(now + 60);
-                } else if j.every_secs == 0 {
-                    j.enabled = false;
-                } else {
-                    j.next_fire = now.saturating_add(j.every_secs);
+                if !already_claimed {
+                    if j.cron.is_some() {
+                        j.next_fire = next_fire_for_job(j, now).unwrap_or(now + 60);
+                    } else if j.every_secs == 0 {
+                        j.enabled = false;
+                    } else {
+                        j.next_fire = now.saturating_add(j.every_secs);
+                    }
                 }
             }
         }
@@ -632,7 +672,17 @@ pub fn claw_system_prompt() -> String {
          Computer use (only if enabled): computer_screenshot / computer_click / computer_type.\n\
          Use session_search to recall past conversations across channels.\n",
     );
-    s.push_str(&pirs_skills::soul_prompt_section());
+    // Session-stable soul (frozen once per process) — not re-read every turn.
+    s.push_str(&pirs_skills::session_soul_prompt_section());
+    s
+}
+
+/// Build claw system prompt with optional frozen memory digest (session-stable).
+pub fn claw_system_prompt_with_memory(memory_section: &str) -> String {
+    let mut s = claw_system_prompt();
+    if !memory_section.trim().is_empty() {
+        s.push_str(memory_section);
+    }
     s
 }
 
@@ -757,6 +807,33 @@ mod tests {
         let listed = store.list().unwrap();
         assert_eq!(listed[0].last_status.as_deref(), Some("ok"));
         assert!(listed[0].last_error.is_none());
+    }
+
+    #[test]
+    fn claim_due_is_at_most_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScheduleStore::open(dir.path().join("schedule.json")).unwrap();
+        // every 60s recurring, due immediately
+        let job = store
+            .add_full("tick me", 60, 0, DeliverTarget::Cli, None, vec![], None)
+            .unwrap();
+        let now = now_secs() + 1;
+        assert_eq!(store.due(now).unwrap().len(), 1);
+        let claimed = store.claim_due(now).unwrap();
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].id, job.id);
+        // Second claim in the same second: nothing due (next_fire advanced).
+        assert!(store.claim_due(now).unwrap().is_empty());
+        assert!(store.due(now).unwrap().is_empty());
+        // mark_fired after claim must not double-advance interval wildly
+        let before = store.list().unwrap()[0].next_fire;
+        store.mark_fired(&job.id, now).unwrap();
+        let after = store.list().unwrap()[0].next_fire;
+        assert_eq!(
+            before, after,
+            "claimed job should not re-advance on mark_fired"
+        );
+        assert_eq!(store.list().unwrap()[0].last_status.as_deref(), Some("ok"));
     }
 
     #[test]

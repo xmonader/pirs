@@ -107,8 +107,9 @@ pub fn build_system_prompt_full(
         prompt.push_str(&format!("\nCurrent working directory: {}\n", cwd.display()));
     }
 
-    // Durable user identity (same soul.md as pirs-claw) — keep harness/claw consistent.
-    prompt.push_str(&pirs_skills::soul_prompt_section());
+    // Durable user identity (same soul.md as pirs-claw). Session-frozen so the
+    // system prefix stays cache-stable across turns (Hermes volatile tier).
+    prompt.push_str(&pirs_skills::session_soul_prompt_section());
 
     // Soulforge-style auto-detected toolchain commands.
     prompt.push_str(&pirs_tools::detect_profile(cwd).prompt_section());

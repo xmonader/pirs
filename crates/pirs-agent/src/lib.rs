@@ -21,7 +21,10 @@ pub mod use_tool;
 pub mod validate;
 
 pub use agent::{Agent, AgentError, QueueMode};
-pub use agent_loop::{looks_like_freeform_tool_text, validate_tool_call_payload, ToolCallData};
+pub use agent_loop::{
+    apply_soft_steer_to_last_tool_result, format_soft_steer_marker, looks_like_freeform_tool_text,
+    validate_tool_call_payload, ToolCallData,
+};
 pub use audit::{
     audit_enabled, audit_listener, default_audit_path, is_secret_key_name,
     looks_like_secret_string, redact_value, wrap_emit, AuditLog,

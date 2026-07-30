@@ -57,6 +57,12 @@ pub struct Cli {
     #[arg(long)]
     pub plan_model: Option<String>,
 
+    /// Cheap model for auxiliary work (context compaction / summarize). When
+    /// set, auto-`/compact` uses this model instead of `--model` (Hermes-class
+    /// aux bus — avoid burning the main model on summaries).
+    #[arg(long, env = "PIRS_AUX_MODEL")]
+    pub aux_model: Option<String>,
+
     /// Run under a profile (a role: persona + model + strategy + tool policy +
     /// extension packs). Accepts a name resolved from .pirs/profiles/<name>.rhai
     /// (project then ~/.pirs), a built-in (`default`, `weak`), or a path to a

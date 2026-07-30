@@ -10,11 +10,11 @@ Hermes gap map: [HERMES-GAPS.md](HERMES-GAPS.md).
 |------|---------|--------|
 | **Code** | `pirs-claw -C repo "…"` / `code` | plan-exec + progressive skills + life tools |
 | **Chat** | `pirs-claw chat "…"` | multi-key session + FTS memory + learn loop |
-| **Schedule** | `schedule add/list/pause/resume/remove/run/tick` | durations; skill attach; gateway auto-ticks |
+| **Schedule** | `schedule add/list/pause/resume/remove/run/tick` | durations; `deliver=telegram:…`; **at-most-once** claim on tick |
 | **Gateway** | `serve --channel telegram\|all\|a,b` | multi-channel + 60s cron ticker |
 | **Sessions** | `sessions` | `(channel, peer)` + meta |
 | **Skills** | `skills list\|show\|add\|install\|validate\|remove\|usage` | [agentskills.io](https://agentskills.io) |
-| **Pair** | `pair list\|add\|remove` | gateway allowlist |
+| **Pair** | `pair list\|add\|remove\|code` | allowlist + short codes |
 | **Voice** | `transcribe <file>` + Telegram VN | multi-backend OpenAI-compatible STT/TTS ([speech.md](speech.md)); CLI whisper fallback |
 
 ## Skills (agentskills.io) — shared core
@@ -47,8 +47,10 @@ pirs-claw skills remove my-skill
 
 After chat/code turns (default on for CLI; off on gateway unless `PIRS_CLAW_LEARN=1`):
 
-1. **Memory nudge** — if the user message looks durable, extract ≤3 facts into FTS memory  
-2. **Skill crystallize** — after substantial transcripts, write a new `~/.pirs/skills/<name>/SKILL.md`
+1. **Memory nudge** — if the user message looks durable, extract ≤3 facts into FTS memory (and fold into `soul.md`)  
+2. **Skill crystallize** — after substantial transcripts, write a new `~/.pirs/skills/<name>/SKILL.md` **in the background** (does not block the reply)  
+
+**Session identity (Hermes-class):** soul + a memory digest are frozen into the system prompt once per process; turn-specific FTS hits go on the **user** message only (keeps prompt-cache prefixes stable).
 
 ```bash
 pirs-claw --no-learn chat "…"     # disable for one run

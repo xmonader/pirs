@@ -7,8 +7,8 @@ use pirs_claw::channel::InboundMessage;
 use pirs_claw::memory_bridge;
 use pirs_claw::registry;
 use pirs_claw::{
-    claw_system_prompt, empty_assistant_diag, extract_assistant_reply, require_llm_key,
-    GatewayReply, SessionId, SessionStore,
+    empty_assistant_diag, extract_assistant_reply, require_llm_key, GatewayReply, SessionId,
+    SessionStore,
 };
 use pirs_skills::{skills_prompt_section, Skill};
 
@@ -42,13 +42,15 @@ pub async fn handle_gateway_message(
         api_key: key,
         ..Default::default()
     };
-    let mut sys = claw_system_prompt();
+    // Session-stable system (soul frozen + memory digest). Turn recall → user msg.
+    let mem_digest = mem
+        .as_ref()
+        .map(|m| memory_bridge::session_memory_digest(m, 5))
+        .unwrap_or_default();
+    let mut sys = pirs_claw::claw_system_prompt_with_memory(&mem_digest);
     sys.push_str(&skills_prompt_section(skills));
     if allow_code_tools {
         sys.push_str(&pirs_tools::detect_profile(cwd).prompt_section());
-    }
-    if let Some(ref m) = mem {
-        sys.push_str(&memory_bridge::recall_context(m, &inbound.text, 5));
     }
     let attach_log = pirs_claw::attach::AttachmentLog::new();
     let out_dir = state.join("outbound").join(sid.key().replace('/', "_"));
@@ -76,7 +78,8 @@ pub async fn handle_gateway_message(
         }
         agent.messages = msgs;
     }
-    let new_msgs = agent.prompt(&inbound.text).await?;
+    let prompt_text = memory_bridge::user_text_with_turn_recall(mem.as_deref(), &inbound.text, 5);
+    let new_msgs = agent.prompt(prompt_text).await?;
     let reply = extract_assistant_reply(&new_msgs).ok_or_else(|| {
         anyhow::anyhow!(
             "empty assistant reply ({})",
@@ -98,37 +101,45 @@ pub async fn handle_gateway_message(
             &reply,
         )
         .await;
-        // Improve skills that were viewed this turn (Hermes-style self-improve).
+        // Crystallize / improve in background — don't block Telegram reply.
         let transcript = pirs_claw::learn::session_transcript(&inbound.text, &reply, "gateway");
-        // Long Telegram threads can crystallize skills (same gate as chat).
-        if transcript.chars().count() >= 800 {
-            let _ = pirs_claw::learn::maybe_crystallize_skill(
-                provider.clone(),
-                model,
-                key_for_learn.clone(),
-                &transcript,
-                800,
-            )
-            .await;
-        }
-        for sk in skills {
-            if reply.contains(&sk.name) || inbound.text.to_ascii_lowercase().contains(&sk.name) {
-                let md = format!(
-                    "---\nname: {}\ndescription: {}\n---\n\n{}",
-                    sk.name, sk.description, sk.body
-                );
-                let _ = pirs_claw::learn::maybe_improve_skill(
-                    provider.clone(),
-                    model,
-                    key_for_learn.clone(),
-                    &sk.name,
-                    &md,
+        let skills_owned: Vec<(String, String, String)> = skills
+            .iter()
+            .map(|sk| (sk.name.clone(), sk.description.clone(), sk.body.clone()))
+            .collect();
+        let inbound_l = inbound.text.to_ascii_lowercase();
+        let reply_c = reply.clone();
+        let provider_bg = provider.clone();
+        let model_bg = model.to_string();
+        let key_bg = key_for_learn.clone();
+        tokio::spawn(async move {
+            if transcript.chars().count() >= 800 {
+                let _ = pirs_claw::learn::maybe_crystallize_skill(
+                    provider_bg.clone(),
+                    &model_bg,
+                    key_bg.clone(),
                     &transcript,
-                    400,
+                    800,
                 )
                 .await;
             }
-        }
+            for (name, description, body) in skills_owned {
+                if reply_c.contains(&name) || inbound_l.contains(&name) {
+                    let md =
+                        format!("---\nname: {name}\ndescription: {description}\n---\n\n{body}");
+                    let _ = pirs_claw::learn::maybe_improve_skill(
+                        provider_bg.clone(),
+                        &model_bg,
+                        key_bg.clone(),
+                        &name,
+                        &md,
+                        &transcript,
+                        400,
+                    )
+                    .await;
+                }
+            }
+        });
     }
 
     // Collect attachments: explicit attach_file tool, write tool (code mode), fenced files.

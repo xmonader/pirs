@@ -557,6 +557,7 @@ async fn auto_compaction_fires_on_threshold() {
             reserve_tokens: 16_000,
             keep_recent_tokens: 10,
             min_recent_user_turns: 0,
+            aux_model: None,
         }));
     agent.messages = vec![
         Message::user("old task"),

@@ -23,6 +23,9 @@ pub struct CompactionConfig {
     /// Also keep at least this many recent user-turn blocks (user + following
     /// assistant/tool traffic) so follow-ups still see recent file/tool work.
     pub min_recent_user_turns: usize,
+    /// Optional cheap model for summary (Hermes auxiliary bus). When set,
+    /// compaction uses this model instead of the main agent model.
+    pub aux_model: Option<String>,
 }
 
 impl Default for CompactionConfig {
@@ -33,6 +36,7 @@ impl Default for CompactionConfig {
             // Stronger default retention for long coding runs (was 20k).
             keep_recent_tokens: 32_000,
             min_recent_user_turns: 4,
+            aux_model: None,
         }
     }
 }
@@ -421,7 +425,12 @@ pub async fn compact_messages(
     emit(AgentEvent::CompactionStart {
         reason: "threshold".into(),
     });
-    let result = summarize(provider, model, &messages[..cut], cancel).await;
+    let summary_model = config
+        .aux_model
+        .as_deref()
+        .filter(|m| !m.trim().is_empty())
+        .unwrap_or(model);
+    let result = summarize(provider, summary_model, &messages[..cut], cancel).await;
     match result {
         Ok((summary, usage)) => {
             *extra_usage.lock().unwrap() += usage;
@@ -732,6 +741,7 @@ mod tests {
             reserve_tokens: 10_000,
             keep_recent_tokens: 5_000,
             min_recent_user_turns: 0,
+            aux_model: None,
         };
         assert!(!should_compact(89_999, &cfg));
         assert!(should_compact(90_001, &cfg));
@@ -840,6 +850,7 @@ mod demote_tests {
             reserve_tokens: 100,
             keep_recent_tokens: 50,
             min_recent_user_turns: 0,
+            aux_model: None,
         };
         let emit: crate::events::Emit = std::sync::Arc::new(|_| {});
         let provider: Arc<dyn LlmProvider> = Arc::new(SummaryProvider);
