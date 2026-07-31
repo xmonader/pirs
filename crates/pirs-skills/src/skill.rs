@@ -37,23 +37,32 @@ pub fn skill_roots(cwd: &Path) -> Vec<PathBuf> {
     roots
 }
 
-/// Ensure shipped skills exist under `~/.pirs/skills` (idempotent).
+/// Ensure shipped skills exist under `~/.pirs/skills` (idempotent per skill).
 ///
-/// Office-documents skill teaches create/edit workflows; `read` extracts text
-/// natively for docx/pptx/xlsx/pdf so the model never dumps ZIP binary.
+/// Office-documents: create/edit workflows; `read` extracts OOXML/PDF text.
+/// Streaming-export: pull-based large/OOM export rules (moving-target class).
 pub fn ensure_bundled_skills() {
-    let root = default_skills_dir();
-    let office = root.join("office-documents");
-    let skill_md = office.join("SKILL.md");
+    write_bundled_skill(
+        "office-documents",
+        include_str!("../bundled/office-documents/SKILL.md"),
+    );
+    write_bundled_skill(
+        "streaming-export",
+        include_str!("../bundled/streaming-export/SKILL.md"),
+    );
+}
+
+fn write_bundled_skill(name: &str, body: &str) {
+    let root = default_skills_dir().join(name);
+    let skill_md = root.join("SKILL.md");
     if skill_md.is_file() {
         return;
     }
-    if let Err(e) = fs::create_dir_all(&office) {
-        eprintln!("[skills] could not create {}: {e}", office.display());
+    if let Err(e) = fs::create_dir_all(&root) {
+        eprintln!("[skills] could not create {}: {e}", root.display());
         return;
     }
-    const OFFICE: &str = include_str!("../bundled/office-documents/SKILL.md");
-    if let Err(e) = fs::write(&skill_md, OFFICE) {
+    if let Err(e) = fs::write(&skill_md, body) {
         eprintln!("[skills] could not write {}: {e}", skill_md.display());
     }
 }
@@ -560,5 +569,23 @@ mod tests {
         assert!(find_skill(&load_skills(dir.path()), "learned-thing").is_some());
         assert!(remove_skill("learned-thing", dir.path()).unwrap());
         assert!(load_skills(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn streaming_export_skill_states_three_rules() {
+        let body = include_str!("../bundled/streaming-export/SKILL.md");
+        assert!(
+            body.contains("pull-based iterable") || body.contains("pull-based"),
+            "iterable return rule"
+        );
+        assert!(
+            body.contains("First pull") || body.contains("first pull"),
+            "first-pull rule"
+        );
+        assert!(
+            body.contains("one-shot") && (body.contains("TOTAL") || body.contains("total")),
+            "no total-first-pass-only rule"
+        );
+        assert!(body.contains("name: streaming-export") || body.contains("streaming-export"));
     }
 }

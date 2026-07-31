@@ -121,7 +121,8 @@ pub struct Cli {
 
     /// Working directory for the session (project root). Equivalent to `cd DIR && pirs …`.
     /// Applied before config/registry/tools resolve. Env: `PIRS_CWD`.
-    #[arg(long, env = "PIRS_CWD", value_name = "DIR")]
+    /// Short `-C` is the same as `--cwd` (bench muscle memory; never silently ignored).
+    #[arg(short = 'C', long, env = "PIRS_CWD", value_name = "DIR")]
     pub cwd: Option<PathBuf>,
 
     /// Extra work-context roots (multi-repo). Repeatable. Paths resolve relative

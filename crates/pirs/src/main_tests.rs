@@ -1,6 +1,23 @@
 use super::*;
 
 #[test]
+fn short_c_flag_is_session_cwd() {
+    use clap::Parser;
+    // Bench muscle memory: -C DIR must set cwd the same as --cwd DIR.
+    // (Previously -C was ignored and agents edited the suite tree.)
+    let with_short =
+        Cli::try_parse_from(["pirs", "-C", "/tmp/bench-ws", "hello"]).expect("short -C");
+    let with_long =
+        Cli::try_parse_from(["pirs", "--cwd", "/tmp/bench-ws", "hello"]).expect("long --cwd");
+    assert_eq!(
+        with_short.cwd.as_deref(),
+        Some(std::path::Path::new("/tmp/bench-ws"))
+    );
+    assert_eq!(with_short.cwd, with_long.cwd);
+    assert_eq!(with_short.prompt, vec!["hello".to_string()]);
+}
+
+#[test]
 fn serve_token_is_random_and_long() {
     let a = generate_serve_token();
     let b = generate_serve_token();

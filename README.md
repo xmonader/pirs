@@ -47,6 +47,36 @@ export OPENAI_API_KEY=...            # or --api-key; OPENAI_BASE_URL for compati
 # see docs/WORK-CONTEXT.md
 ```
 
+### Recommended coding (day-to-day)
+
+Use a **dual-model strategy** for real coding work (strong plan, cheap exec). This
+is what scored best on the [shrimpswe](qa/shrimpswe/) process suite (4/5 vs 3/5
+for single-loop).
+
+```bash
+cd your-repo   # or: pirs --cwd /path/to/repo …   (short -C is the same as --cwd)
+
+# Preferred for multi-file / subtle bugs
+pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy weak-drive "fix the failing tests"
+
+# Or classic plan → exec
+pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy plan-exec "…"
+
+# Unattended / benches: always allow shell+tests (default "edit" blocks bash)
+pirs --cwd /path/to/ws --autonomy full --model … --plan-model … \
+  --strategy weak-drive "…"
+```
+
+| Do | Don't |
+|----|--------|
+| `--cwd DIR` or **`-C DIR`** for the project root | Assume `-C` is ignored (it is wired to cwd) |
+| `--autonomy full` for one-shot benches | Unattended runs stuck on `edit` (no bash) |
+| `weak-drive` / `plan-exec` + `--plan-model` | Swarm/orchestrator for normal single-repo fixes |
+
+Process bench (multi-site, red-herring, streaming redesign, …): **[qa/shrimpswe](qa/shrimpswe/)** · results [qa/shrimpswe/RESULTS.md](qa/shrimpswe/RESULTS.md).
+
 ### First-time TUI (≈ 60s)
 
 Full walkthrough: **[docs/TUI-JOURNEY.md](docs/TUI-JOURNEY.md)**.

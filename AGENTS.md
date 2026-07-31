@@ -33,6 +33,21 @@ channels, Skills Hub, Modal/Daytona, OpenClaw channel zoo.
 | Hybrid thrash→advisor (Rust) | `crates/pirs-agent/src/hybrid.rs` |
 | Strategy phase engine | `crates/pirs-agent/src/strategy.rs`, `crates/pirs/src/turn.rs` |
 
+## Recommended coding path (when using pirs on a repo)
+
+```bash
+# Dual-model (best process score on qa/shrimpswe: 4/5)
+# -C is an alias for --cwd
+pirs -C /path/to/repo --model <cheap> --plan-model <strong> \
+  --strategy weak-drive "…"                   # or plan-exec
+
+# Benches / unattended: shell must work
+pirs --cwd /path/to/ws --autonomy full --strategy weak-drive …
+```
+
+Do **not** run unattended agents at default `edit` autonomy (bash blocked).  
+Process suite: `qa/shrimpswe/` · streaming/OOM skill: `streaming-export`.
+
 ## Build & verify
 
 ```bash
