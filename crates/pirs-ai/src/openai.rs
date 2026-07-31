@@ -333,6 +333,34 @@ async fn stream_response(
         }
     }
 
+    match finish_stream_accumulator(acc, deltas_sent, provider, model) {
+        Ok(message) => StreamOutcome {
+            message,
+            deltas_sent,
+        },
+        Err(message) => {
+            let msg = message
+                .error_message
+                .clone()
+                .unwrap_or_else(|| "Stream ended without finish_reason".into());
+            let _ = tx.send(StreamEvent::Error(msg)).await;
+            StreamOutcome {
+                message,
+                deltas_sent,
+            }
+        }
+    }
+}
+
+/// Pure finish path after SSE ends: salvage content when `finish_reason` is
+/// missing (proxies/early EOF), else map to Error. Shared by `stream_response`
+/// and unit tests so coverage hits the real logic.
+fn finish_stream_accumulator(
+    mut acc: Accumulator,
+    deltas_sent: bool,
+    provider: &str,
+    model: &str,
+) -> Result<AssistantMessage, AssistantMessage> {
     if acc.finish_reason.is_none() {
         // Proxies and flaky connections often close after content without a
         // finish_reason. If we already received deltas/content, salvage as a
@@ -348,23 +376,15 @@ async fn stream_response(
             } else {
                 "stop".into()
             });
-            return StreamOutcome {
-                message: acc.into_message(provider, model),
-                deltas_sent,
-            };
+            return Ok(acc.into_message(provider, model));
         }
-        let msg = "Stream ended without finish_reason".to_string();
-        let _ = tx.send(StreamEvent::Error(msg.clone())).await;
-        return StreamOutcome {
-            message: error_message(provider, model, msg),
-            deltas_sent,
-        };
+        return Err(error_message(
+            provider,
+            model,
+            "Stream ended without finish_reason".to_string(),
+        ));
     }
-
-    StreamOutcome {
-        message: acc.into_message(provider, model),
-        deltas_sent,
-    }
+    Ok(acc.into_message(provider, model))
 }
 
 fn aborted_message(provider: &str, model: &str) -> AssistantMessage {
@@ -927,18 +947,20 @@ mod tests {
 
     #[test]
     fn early_eof_with_content_salvages_as_stop() {
-        // Stream ends without finish_reason after text deltas — salvage, don't discard.
+        // Drive real finish_stream_accumulator (same helper stream_response uses).
         let mut acc = Accumulator::default();
-        acc.apply_chunk(&json!({"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}));
+        let mut deltas_sent = false;
+        for ev in acc.apply_chunk(
+            &json!({"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}),
+        ) {
+            if matches!(ev, StreamEvent::TextDelta(_)) {
+                deltas_sent = true;
+            }
+        }
         assert!(acc.finish_reason.is_none());
-        assert!(!acc.text.is_empty());
-        // Same logic as stream_response salvage path:
-        acc.finish_reason = Some(if !acc.tool_calls.is_empty() {
-            "tool_calls".into()
-        } else {
-            "stop".into()
-        });
-        let msg = acc.into_message("openai", "gpt-test");
+        assert!(deltas_sent);
+        let msg = finish_stream_accumulator(acc, deltas_sent, "openai", "gpt-test")
+            .expect("salvage must succeed when text deltas arrived");
         assert_eq!(msg.stop_reason, StopReason::Stop);
         assert_eq!(msg.text(), "hello");
         assert!(msg.error_message.is_none());
@@ -947,18 +969,35 @@ mod tests {
     #[test]
     fn early_eof_with_tool_calls_salvages_as_tool_use() {
         let mut acc = Accumulator::default();
-        acc.apply_chunk(&json!({"choices":[{"delta":{"tool_calls":[
+        let mut deltas_sent = false;
+        for ev in acc.apply_chunk(&json!({"choices":[{"delta":{"tool_calls":[
             {"index":0,"id":"c1","function":{"name":"bash","arguments":"{\"command\":\"ls\"}"}}
-        ]},"finish_reason":null}]}));
+        ]},"finish_reason":null}]})) {
+            if matches!(ev, StreamEvent::ToolCallDelta) {
+                deltas_sent = true;
+            }
+        }
         assert!(acc.finish_reason.is_none());
-        acc.finish_reason = Some(if !acc.tool_calls.is_empty() {
-            "tool_calls".into()
-        } else {
-            "stop".into()
-        });
-        let msg = acc.into_message("openai", "gpt-test");
+        let msg = finish_stream_accumulator(acc, deltas_sent, "openai", "gpt-test")
+            .expect("salvage must succeed when tool deltas arrived");
         assert_eq!(msg.stop_reason, StopReason::ToolUse);
         assert_eq!(msg.tool_calls().len(), 1);
+        assert!(msg.error_message.is_none());
+    }
+
+    #[test]
+    fn early_eof_with_no_content_is_error() {
+        let acc = Accumulator::default();
+        let err = finish_stream_accumulator(acc, false, "openai", "gpt-test")
+            .expect_err("empty early EOF must be Error");
+        assert_eq!(err.stop_reason, StopReason::Error);
+        assert!(
+            err.error_message
+                .as_deref()
+                .is_some_and(|m| m.contains("finish_reason")),
+            "{:?}",
+            err.error_message
+        );
     }
 
     #[test]
