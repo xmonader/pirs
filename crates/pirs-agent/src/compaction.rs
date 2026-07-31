@@ -405,20 +405,18 @@ pub async fn compact_messages(
     if !tool_pairs_intact(&messages[cut..]) {
         return false;
     }
-    // Credit usage from assistant messages about to be spliced out (M-16).
-    // Without this, long sessions systematically under-report cost after compact.
-    {
-        let mut dropped = pirs_ai::Usage::default();
-        for m in &messages[..cut] {
-            if let Message::Assistant(a) = m {
-                dropped += a.usage.clone();
-            }
-        }
-        if dropped.input > 0 || dropped.output > 0 || dropped.total_tokens > 0 {
-            *extra_usage.lock().unwrap() += dropped;
+    // Compute dropped-range usage, but only credit it after summarize succeeds.
+    // Crediting before summarize permanently double-counts on every failed
+    // compaction (messages stay in the transcript AND land in extra_usage).
+    let mut dropped = pirs_ai::Usage::default();
+    for m in &messages[..cut] {
+        if let Message::Assistant(a) = m {
+            dropped += a.usage.clone();
         }
     }
     // Demote, don't destroy: the dropped range goes to searchable storage.
+    // On summarize failure messages remain in the transcript; memory may
+    // hold a copy — that is intentional (searchable history), not a cost issue.
     if let Some(mem) = crate::memory::global() {
         mem.add_messages(&messages[..cut]);
     }
@@ -433,7 +431,13 @@ pub async fn compact_messages(
     let result = summarize(provider, summary_model, &messages[..cut], cancel).await;
     match result {
         Ok((summary, usage)) => {
-            *extra_usage.lock().unwrap() += usage;
+            {
+                let mut extra = extra_usage.lock().unwrap();
+                if dropped.input > 0 || dropped.output > 0 || dropped.total_tokens > 0 {
+                    *extra += dropped;
+                }
+                *extra += usage;
+            }
             let summary_msg =
                 Message::user(format!("{SUMMARY_PREFIX}\n{summary}\n{SUMMARY_SUFFIX}"));
             messages.splice(..cut, [summary_msg]);
@@ -451,6 +455,7 @@ pub async fn compact_messages(
             true
         }
         Err(e) => {
+            // Do not credit dropped usage — assistants remain in messages.
             emit(AgentEvent::CompactionEnd {
                 reason: "threshold".into(),
                 aborted: true,
@@ -880,5 +885,75 @@ mod demote_tests {
         );
         // Prevent cross-test pollution of the process global.
         crate::memory::clear_global_for_tests();
+    }
+
+    /// Failed summarize must not credit dropped-range usage into extra_usage
+    /// (messages stay in the transcript; double-count would inflate cost).
+    #[tokio::test]
+    async fn failed_compaction_does_not_credit_dropped_usage() {
+        struct FailSummary;
+        #[async_trait]
+        impl LlmProvider for FailSummary {
+            async fn stream(
+                &self,
+                _model: &str,
+                _context: &Context,
+                _options: &pirs_ai::CompletionOptions,
+                _cancel: CancellationToken,
+            ) -> futures::stream::BoxStream<'static, StreamEvent> {
+                Box::pin(futures::stream::iter(vec![StreamEvent::Done(Box::new(
+                    AssistantMessage {
+                        stop_reason: StopReason::Error,
+                        error_message: Some("boom".into()),
+                        ..Default::default()
+                    },
+                ))]))
+            }
+        }
+
+        let mut messages = Vec::new();
+        for i in 0..40 {
+            messages.push(Message::user(format!("q {i}")));
+            messages.push(Message::Assistant(AssistantMessage {
+                content: vec![ContentBlock::text(format!("a {i}"))],
+                usage: pirs_ai::Usage {
+                    input: 100,
+                    output: 10,
+                    total_tokens: 110,
+                    ..Default::default()
+                },
+                ..Default::default()
+            }));
+        }
+        let before_len = messages.len();
+        let cfg = CompactionConfig {
+            context_window: 1_000,
+            reserve_tokens: 100,
+            keep_recent_tokens: 50,
+            min_recent_user_turns: 0,
+            aux_model: None,
+        };
+        let emit: crate::events::Emit = std::sync::Arc::new(|_| {});
+        let provider: Arc<dyn LlmProvider> = Arc::new(FailSummary);
+        let usage = std::sync::Arc::new(std::sync::Mutex::new(pirs_ai::Usage::default()));
+        let compacted = compact_messages(
+            &provider,
+            "m",
+            &mut messages,
+            &cfg,
+            &emit,
+            CancellationToken::new(),
+            &usage,
+        )
+        .await;
+        assert!(!compacted, "summarize failure must abort compaction");
+        assert_eq!(messages.len(), before_len, "messages must stay intact");
+        let extra = usage.lock().unwrap().clone();
+        assert_eq!(
+            extra.input, 0,
+            "dropped usage must not be credited on failure: {extra:?}"
+        );
+        assert_eq!(extra.output, 0);
+        assert_eq!(extra.total_tokens, 0);
     }
 }

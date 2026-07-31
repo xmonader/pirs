@@ -1,8 +1,7 @@
 //! Live smoke for multi-backend routing + serve failover.
 //!
-//! Runs only when `OPENROUTER_API_KEY` is set (skipped otherwise so CI stays
-//! offline-friendly). Proves a real OpenAI-compatible backend returns tokens
-//! through [`RoutingProvider`] under an alias.
+//! Opt-in only: requires `PIRS_LIVE=1` **and** the relevant API keys.
+//! Without the gate, unit/CI stays offline (AGENTS.md: no network in unit tests).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,6 +12,13 @@ use pirs_ai::{
     ServeTarget, StreamEvent,
 };
 
+fn live_enabled() -> bool {
+    matches!(
+        std::env::var("PIRS_LIVE").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
 fn openrouter_key() -> Option<String> {
     std::env::var("OPENROUTER_API_KEY")
         .ok()
@@ -21,6 +27,10 @@ fn openrouter_key() -> Option<String> {
 
 #[tokio::test]
 async fn live_openrouter_alias_returns_text() {
+    if !live_enabled() {
+        eprintln!("skip: set PIRS_LIVE=1 to run live routing smoke");
+        return;
+    }
     let Some(key) = openrouter_key() else {
         eprintln!("skip: OPENROUTER_API_KEY unset");
         return;
@@ -118,9 +128,13 @@ async fn live_openrouter_alias_returns_text() {
 }
 
 /// Dual-subscription smoke: plan alias → OpenRouter, exec alias → DashScope.
-/// Requires OPENROUTER_API_KEY and DASHSCOPE_API_KEY (skips if either missing).
+/// Requires PIRS_LIVE=1, OPENROUTER_API_KEY and DASHSCOPE_API_KEY.
 #[tokio::test]
 async fn live_dual_backend_plan_openrouter_exec_dashscope() {
+    if !live_enabled() {
+        eprintln!("skip: set PIRS_LIVE=1 to run live routing smoke");
+        return;
+    }
     let Some(or_key) = openrouter_key() else {
         eprintln!("skip: OPENROUTER_API_KEY unset");
         return;
@@ -255,6 +269,10 @@ fn deepseek_key() -> Option<String> {
 /// Product pitch live: strong plan on DeepSeek, weak exec on DashScope/qwen.
 #[tokio::test]
 async fn live_deepseek_plan_dashscope_exec() {
+    if !live_enabled() {
+        eprintln!("skip: set PIRS_LIVE=1 to run live routing smoke");
+        return;
+    }
     let Some(ds_key) = deepseek_key() else {
         eprintln!("skip: DEEPSEEK_API_KEY unset");
         return;
@@ -403,6 +421,10 @@ async fn complete_alias(router: &RoutingProvider, alias: &str, system: &str, use
 
 #[tokio::test]
 async fn live_two_aliases_same_backend_distinct_remote_ids() {
+    if !live_enabled() {
+        eprintln!("skip: set PIRS_LIVE=1 to run live routing smoke");
+        return;
+    }
     let Some(key) = openrouter_key() else {
         eprintln!("skip: OPENROUTER_API_KEY unset");
         return;

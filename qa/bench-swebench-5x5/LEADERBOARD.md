@@ -7,9 +7,27 @@ hidden grading.
 **Default model column = executor.** Only **weak-drive** also uses a second model
 (`deepseek-v4-pro` as `--plan-model` for readonly plan/review).
 
+## Honesty notes (read before citing scores)
+
+1. **PASS_TO_PASS sample.** Harness keep-green lists are capped at
+   `PIRS_MAX_KEEP_GREEN` (default **40**). Official SWE-bench oracle may run a
+   larger P2P set; scores here are harness-relative regression samples, not a
+   full-suite claim. Set `PIRS_MAX_KEEP_GREEN=0` to disable the cap (slower).
+2. **Strict oracle scrub (current harness).** Plain `PIRS_STRICT=1` defers
+   `/tmp/test.patch` until after the agent, and prunes git remotes/tags/reflog
+   so the agent cannot `cat` grade tests or `git show` a fetched gold commit.
+   Historical 34/50 weak-drive results predate this scrub; re-run before
+   treating them as fully issue-only.
+3. **strict_verify residual.** Shadow mode still mounts `test_patch` for the
+   mid-loop grader; a shellful agent *could* read that path. Prefer plain
+   strict for issue-only claims.
+4. **Git history.** Images usually check out base only; scrub removes remotes
+   but cannot invent absence of commits already in the local object store.
+   Report residual risk if an image ships extra history.
+
 | Campaign | Models | Dir | Score | Notes |
 |----------|--------|-----|------:|-------|
-| **pirs strict weak-drive** | **flash + pro** | `results_deepseek_v4_flash_strict_weak_drive_fifty` | **34/50** | `--model deepseek-v4-flash --plan-model deepseek-v4-pro --strategy weak-drive`; reports in dir |
+| **pirs strict weak-drive** | **flash + pro** | `results_deepseek_v4_flash_strict_weak_drive_fifty` | **34/50** | `--model deepseek-v4-flash --plan-model deepseek-v4-pro --strategy weak-drive`; P2P cap 40; pre-scrub campaign — see honesty notes |
 | pirs strict-verify-v2 | flash only | `results_deepseek_v4_flash_strict_verify_v2_fifty` | **32/50** | mono + hidden multi-attempt loop |
 | pirs strict-naive-v2 | flash only | `results_deepseek_v4_flash_strict_naive_v2_fifty` | **31/50** | export fix, `--no-strategy` |
 | pirs strict-v2 mono | flash only | `results_deepseek_v4_flash_strict_v2_fifty` | **29/50** | export fix, monolithic |

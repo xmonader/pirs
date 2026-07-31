@@ -334,6 +334,25 @@ async fn stream_response(
     }
 
     if acc.finish_reason.is_none() {
+        // Proxies and flaky connections often close after content without a
+        // finish_reason. If we already received deltas/content, salvage as a
+        // clean stop (tool_calls when tool deltas arrived) rather than
+        // discarding everything — matches Anthropic's tolerate-missing-stop path.
+        let has_content = deltas_sent
+            || !acc.text.is_empty()
+            || !acc.thinking.is_empty()
+            || !acc.tool_calls.is_empty();
+        if has_content {
+            acc.finish_reason = Some(if !acc.tool_calls.is_empty() {
+                "tool_calls".into()
+            } else {
+                "stop".into()
+            });
+            return StreamOutcome {
+                message: acc.into_message(provider, model),
+                deltas_sent,
+            };
+        }
         let msg = "Stream ended without finish_reason".to_string();
         let _ = tx.send(StreamEvent::Error(msg.clone())).await;
         return StreamOutcome {
@@ -543,22 +562,35 @@ fn parse_usage(v: &Value) -> Usage {
         .get("completion_tokens")
         .and_then(|x| x.as_u64())
         .unwrap_or(0);
+    // OpenAI: prompt_tokens_details.cached_tokens
+    // DeepSeek: prompt_cache_hit_tokens / prompt_cache_miss_tokens
     let cache_read = v
         .get("prompt_tokens_details")
         .and_then(|d| d.get("cached_tokens"))
         .and_then(|x| x.as_u64())
+        .or_else(|| v.get("prompt_cache_hit_tokens").and_then(|x| x.as_u64()))
         .unwrap_or(0);
+    // Prefer explicit miss tokens when present (DeepSeek); else prompt − cache.
+    let input = v
+        .get("prompt_cache_miss_tokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or_else(|| prompt.saturating_sub(cache_read));
     let reasoning = v
         .get("completion_tokens_details")
         .and_then(|d| d.get("reasoning_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0);
+    // total_tokens: prefer provider total when set; else reconstruct.
+    let total_tokens = v
+        .get("total_tokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or_else(|| prompt.max(input.saturating_add(cache_read)) + completion);
     Usage {
-        input: prompt.saturating_sub(cache_read),
+        input,
         output: completion,
         cache_read,
         cache_write: 0,
-        total_tokens: prompt + completion,
+        total_tokens,
         reasoning,
     }
 }
@@ -891,6 +923,71 @@ mod tests {
             }
             _ => panic!("expected tool call"),
         }
+    }
+
+    #[test]
+    fn early_eof_with_content_salvages_as_stop() {
+        // Stream ends without finish_reason after text deltas — salvage, don't discard.
+        let mut acc = Accumulator::default();
+        acc.apply_chunk(&json!({"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}));
+        assert!(acc.finish_reason.is_none());
+        assert!(!acc.text.is_empty());
+        // Same logic as stream_response salvage path:
+        acc.finish_reason = Some(if !acc.tool_calls.is_empty() {
+            "tool_calls".into()
+        } else {
+            "stop".into()
+        });
+        let msg = acc.into_message("openai", "gpt-test");
+        assert_eq!(msg.stop_reason, StopReason::Stop);
+        assert_eq!(msg.text(), "hello");
+        assert!(msg.error_message.is_none());
+    }
+
+    #[test]
+    fn early_eof_with_tool_calls_salvages_as_tool_use() {
+        let mut acc = Accumulator::default();
+        acc.apply_chunk(&json!({"choices":[{"delta":{"tool_calls":[
+            {"index":0,"id":"c1","function":{"name":"bash","arguments":"{\"command\":\"ls\"}"}}
+        ]},"finish_reason":null}]}));
+        assert!(acc.finish_reason.is_none());
+        acc.finish_reason = Some(if !acc.tool_calls.is_empty() {
+            "tool_calls".into()
+        } else {
+            "stop".into()
+        });
+        let msg = acc.into_message("openai", "gpt-test");
+        assert_eq!(msg.stop_reason, StopReason::ToolUse);
+        assert_eq!(msg.tool_calls().len(), 1);
+    }
+
+    #[test]
+    fn parse_usage_openai_cached_tokens() {
+        let u = parse_usage(&json!({
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "prompt_tokens_details": { "cached_tokens": 60 }
+        }));
+        assert_eq!(u.input, 40);
+        assert_eq!(u.cache_read, 60);
+        assert_eq!(u.output, 20);
+        assert_eq!(u.total_tokens, 120);
+    }
+
+    #[test]
+    fn parse_usage_deepseek_prompt_cache_hit_miss() {
+        // DeepSeek bills cache hits cheaper; hit/miss are top-level fields.
+        let u = parse_usage(&json!({
+            "prompt_tokens": 100,
+            "completion_tokens": 15,
+            "prompt_cache_hit_tokens": 80,
+            "prompt_cache_miss_tokens": 20,
+            "total_tokens": 115
+        }));
+        assert_eq!(u.cache_read, 80);
+        assert_eq!(u.input, 20);
+        assert_eq!(u.output, 15);
+        assert_eq!(u.total_tokens, 115);
     }
 
     #[test]

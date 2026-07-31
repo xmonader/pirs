@@ -187,6 +187,16 @@ pub fn builtin_portable_models() -> Vec<ModelEntry> {
                 ("deepseek", "deepseek-chat"),
             ],
         ),
+        // Flagship plan/critic model used by weak-drive / plan-exec docs.
+        // Prefer DeepSeek direct; OpenRouter slug for multi-key failover.
+        model(
+            "deepseek-v4-pro",
+            "strong",
+            &[
+                ("deepseek", "deepseek-v4-pro"),
+                ("openrouter", "deepseek/deepseek-v4-pro"),
+            ],
+        ),
         model(
             "deepseek-chat",
             "fast",
@@ -273,5 +283,18 @@ mod tests {
         assert!(reg.backends.iter().any(|b| b.name == "openrouter"));
         assert!(reg.backends.iter().any(|b| b.name == "dashscope"));
         assert!(reg.models.iter().any(|m| m.alias == "qwen-plus"));
+        // Flagship dual-model path must resolve portably (not only as a bare
+        // string on the default provider).
+        let pro = reg
+            .models
+            .iter()
+            .find(|m| m.alias == "deepseek-v4-pro")
+            .expect("deepseek-v4-pro portable alias");
+        assert!(
+            pro.serve.iter().any(|s| s.backend == "deepseek"),
+            "pro must serve via deepseek backend: {:?}",
+            pro.serve
+        );
+        assert!(reg.models.iter().any(|m| m.alias == "deepseek-v4-flash"));
     }
 }

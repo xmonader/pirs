@@ -272,13 +272,20 @@ async fn bash_failure_steers_different_command() {
         calls.len() >= 2,
         "cmd_fail should trigger a steered second turn"
     );
+    // Soft-steer injects into the last tool result (not a separate User message).
     let has_cmd_fail = calls.iter().any(|round| {
-        round.iter().any(|m| {
-            matches!(
-                m,
-                Message::User(u) if matches!(&u.content, pirs_ai::UserContent::Text(t)
-                    if t.contains("kind=cmd_fail") && t.contains("Do NOT re-run the same command"))
-            )
+        round.iter().any(|m| match m {
+            Message::ToolResult(tr) => {
+                let text = tr.model_text();
+                text.contains("kind=cmd_fail") && text.contains("Do NOT re-run the same command")
+            }
+            Message::User(u) => match &u.content {
+                pirs_ai::UserContent::Text(t) => {
+                    t.contains("kind=cmd_fail") && t.contains("Do NOT re-run the same command")
+                }
+                _ => false,
+            },
+            _ => false,
         })
     });
     assert!(

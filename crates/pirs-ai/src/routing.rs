@@ -248,9 +248,10 @@ pub struct ResolvedRef {
 
 fn options_for(resolved: &ResolvedRef, options: &CompletionOptions) -> CompletionOptions {
     let mut opts = options.clone();
-    if let Some(key) = resolved.api_key.clone() {
-        opts.api_key = Some(key);
-    }
+    // Always pin the resolved backend's key (or None). Never keep a caller's
+    // default-provider secret when this backend has no key — that would send
+    // the wrong vendor's credential to this backend's base URL (C2 / M-14).
+    opts.api_key = resolved.api_key.clone();
     let mut headers = resolved.headers.clone();
     headers.extend(opts.extra_headers.iter().cloned());
     opts.extra_headers = headers;
@@ -852,5 +853,104 @@ mod tests {
         }
         assert!(saw_error);
         assert_eq!(primary.calls.load(Ordering::SeqCst), 2);
+    }
+
+    /// Unkeyed pin must not forward the caller's default/cli API key to that backend.
+    #[tokio::test]
+    async fn unkeyed_backend_does_not_inherit_caller_api_key() {
+        let unkeyed = Arc::new(CaptureProvider {
+            seen: Mutex::new(Vec::new()),
+            label: "evil".into(),
+        });
+        let mut backends = HashMap::new();
+        backends.insert(
+            "evil".into(),
+            (
+                Arc::clone(&unkeyed) as Arc<dyn LlmProvider>,
+                None, // no key for this backend
+                vec![],
+            ),
+        );
+        let router = RoutingProvider::new(
+            Arc::clone(&unkeyed) as Arc<dyn LlmProvider>,
+            Some("default-secret".into()),
+            vec![],
+            backends,
+            vec![],
+        );
+
+        let _ = router
+            .stream(
+                "evil/remote-model",
+                &Context::default(),
+                &CompletionOptions {
+                    // Caller-level key must not leak to the unkeyed backend.
+                    api_key: Some("caller-default-secret".into()),
+                    ..Default::default()
+                },
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .next()
+            .await;
+
+        let seen = unkeyed.seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].0, "remote-model");
+        assert!(
+            seen[0].1.is_none(),
+            "unkeyed backend must receive None, not caller key; got {:?}",
+            seen[0].1
+        );
+    }
+
+    /// options_for always overwrites api_key from the resolved ref (including None).
+    #[test]
+    fn options_for_clears_caller_key_when_backend_has_none() {
+        let resolved = ResolvedRef {
+            alias: None,
+            backend_name: "x".into(),
+            remote_model: "m".into(),
+            provider: Arc::new(CaptureProvider {
+                seen: Mutex::new(Vec::new()),
+                label: "x".into(),
+            }),
+            api_key: None,
+            headers: vec![],
+        };
+        let opts = options_for(
+            &resolved,
+            &CompletionOptions {
+                api_key: Some("should-not-leak".into()),
+                ..Default::default()
+            },
+        );
+        assert!(opts.api_key.is_none());
+    }
+
+    #[test]
+    fn options_for_sets_backend_key_over_caller() {
+        let resolved = ResolvedRef {
+            alias: None,
+            backend_name: "x".into(),
+            remote_model: "m".into(),
+            provider: Arc::new(CaptureProvider {
+                seen: Mutex::new(Vec::new()),
+                label: "x".into(),
+            }),
+            api_key: Some("backend-key".into()),
+            headers: vec![("H".into(), "v".into())],
+        };
+        let opts = options_for(
+            &resolved,
+            &CompletionOptions {
+                api_key: Some("caller-key".into()),
+                extra_headers: vec![("X".into(), "y".into())],
+                ..Default::default()
+            },
+        );
+        assert_eq!(opts.api_key.as_deref(), Some("backend-key"));
+        assert!(opts.extra_headers.iter().any(|(k, v)| k == "H" && v == "v"));
+        assert!(opts.extra_headers.iter().any(|(k, v)| k == "X" && v == "y"));
     }
 }

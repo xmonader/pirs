@@ -26,13 +26,21 @@ fn tool_safe_edit(args) {
     );
     let n = new_content;
     n.trim();
+    // Sub-agent / host errors must not be written into the target file.
     if n == "" || n == content.trim() {
         return "safe_edit made no change";
+    }
+    if n.starts_with("sub-agent error:") || n.starts_with("error:") {
+        return `safe_edit aborted: editor model failed (${n})`;
     }
     if n.starts_with("```") {
         let lines = n.split("\n");
         let body = lines.extract(1, lines.len() - 2);
         n = str_join(body, "\n");
+        n.trim();
+        if n == "" || n == content.trim() {
+            return "safe_edit made no change";
+        }
     }
     fs_write(args.path, n + "\n");
     let before = content.split("\n").len();

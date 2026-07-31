@@ -217,11 +217,41 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
 
         test_patch_file = out_dir / f"{instance_id}.testpatch.diff"
         test_patch_file.write_text(inst["test_patch"])
-        sh(["docker", "cp", str(test_patch_file), f"{cname}:/tmp/test.patch"], stdout=log, stderr=log)
+        # Strict agent-only: do NOT place test.patch in the container until after
+        # the agent exits. The agent has a shell; /tmp/test.patch was an oracle leak.
+        # strict_verify needs the file mid-loop for --shadow-test-patch; fair/filtered
+        # need it pre-agent for apply. Only those modes copy it early.
+        need_test_patch_pre_agent = (not strict) or strict_verify
+        if need_test_patch_pre_agent:
+            sh(
+                ["docker", "cp", str(test_patch_file), f"{cname}:/tmp/test.patch"],
+                stdout=log, stderr=log,
+            )
+        else:
+            logline(
+                "strict=1: deferring /tmp/test.patch until after agent "
+                "(oracle scrub — agent must not cat the grade tests)"
+            )
 
         issue_file = out_dir / f"{instance_id}.issue.md"
         issue_file.write_text(inst["problem_statement"])
         sh(["docker", "cp", str(issue_file), f"{cname}:/tmp/issue.md"], stdout=log, stderr=log)
+
+        # Strict / strict_verify: scrub remotes and extra refs so the agent cannot
+        # `git fetch` / `git show <upstream-fix-sha>` the gold commit.
+        if strict or strict_verify:
+            scrub = (
+                "cd /testbed && "
+                "git remote 2>/dev/null | while read -r r; do git remote remove \"$r\" 2>/dev/null || true; done; "
+                "git tag -l 2>/dev/null | while read -r t; do git tag -d \"$t\" 2>/dev/null || true; done; "
+                "git for-each-ref --format='%(refname)' refs/remotes 2>/dev/null | "
+                "while read -r ref; do git update-ref -d \"$ref\" 2>/dev/null || true; done; "
+                "git reflog expire --expire=now --all 2>/dev/null || true; "
+                "git gc --prune=now 2>/dev/null || true; "
+                "echo scrub_ok remotes=$(git remote | wc -l)"
+            )
+            sh(["docker", "exec", cname, "bash", "-lc", scrub], stdout=log, stderr=log)
+            logline("strict oracle scrub: remotes/tags/reflog pruned")
 
         def as_list(v):
             return json.loads(v) if isinstance(v, str) else v
@@ -495,6 +525,11 @@ def run_instance(instance_id: str, model: str, max_turns: int, timeout_s: int, o
             if result["patch_copied"]:
                 result["patch_bytes"] = patch_out.stat().st_size
                 # Ensure clean base, apply test_patch only, then grade model patch.
+                # test.patch was deferred until after agent (oracle scrub).
+                sh(
+                    ["docker", "cp", str(test_patch_file), f"{cname}:/tmp/test.patch"],
+                    stdout=log, stderr=log,
+                )
                 sh(["docker", "exec", cname, "git", "-C", "/testbed", "reset", "--hard", base_sha],
                    stdout=log, stderr=log)
                 sh(["docker", "exec", cname, "bash", "-lc",
