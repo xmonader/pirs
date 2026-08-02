@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>pirs — coding agent you can program</title>
-  <meta name="description" content="pirs is an open-source coding agent. It edits your repo, runs tests, and you can customize how it works with short scripts." />
+  <title>pirs — self-hosted coding agent with dual models &amp; scripts</title>
+  <meta name="description" content="pirs is a self-hosted coding agent: strong model plans, cheap model codes, and you control behavior with short scripts. Open source, MIT, alpha." />
   <meta name="theme-color" content="#0c0f0e" />
   <meta property="og:title" content="pirs" />
-  <meta property="og:description" content="Open-source coding agent. Dual models, customizable with scripts." />
+  <meta property="og:description" content="Self-hosted coding agent. Dual models for cost. Scripts for control. Honest numbers." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://xmonader.github.io/pirs/" />
   <link rel="canonical" href="https://xmonader.github.io/pirs/" />
@@ -52,73 +52,104 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow">Open source · alpha</p>
-          <h1>A coding agent you can program.</h1>
+          <p class="eyebrow">Open source · self-hosted · alpha</p>
+          <h1>
+            Plan with a strong model.<br />
+            <span class="accent">Code with a cheap one.</span>
+          </h1>
           <p class="lede">
-            <strong>pirs</strong> sits in your terminal (or browser), reads the repo,
-            edits code, and runs tests — like other coding agents.
-            The difference: you can change how it behaves with short scripts,
-            and you can pair a cheap model for doing work with a strong model for planning.
+            <strong>pirs</strong> is a coding agent you run yourself.
+            It edits your repo and runs tests — and unlike most agents, you can
+            <strong>split work across two models</strong> and
+            <strong>program how it behaves</strong> with short scripts.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="#start">Try it</a>
-            <a class="btn btn-ghost" href="https://github.com/xmonader/pirs">Source on GitHub</a>
+            <a class="btn btn-primary" href="#start">Get started</a>
+            <a class="btn btn-ghost" href="strategies.html">See the numbers</a>
           </div>
+          <p class="hero-note">
+            Best fit if you care about cost control, custom tools/policy, or multi-model workflows.
+            If you want a polished all-in-one cloud IDE agent, start with those instead.
+          </p>
         </div>
-        <aside class="hero-panel" aria-label="Typical command">
+        <aside class="hero-panel" aria-label="Recommended command">
           <div class="terminal">
             <div class="terminal-bar">
               <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-              <span class="terminal-title">typical run</span>
+              <span class="terminal-title">recommended · dual model</span>
             </div>
             <pre class="terminal-body"><code><span class="t-prompt">$</span> pirs --model deepseek-v4-flash \
     --plan-model deepseek-v4-pro \
     --strategy weak-drive \
     "fix the failing tests"
 
-<span class="t-dim"># 1. strong model writes a plan</span>
-<span class="t-dim"># 2. cheap model edits code</span>
-<span class="t-dim"># 3. strong model reviews</span>
-<span class="t-dim"># 4. cheap model fixes if needed</span>
+<span class="t-dim">strong model</span>  plans + reviews
+<span class="t-dim">cheap model</span>   edits + runs tests
 
-<span class="t-ok">✓</span> tests pass</code></pre>
+<span class="t-ok">✓</span> 34/50 strict SWE Lite
+<span class="t-ok">✓</span> 4/5 process suite</code></pre>
           </div>
         </aside>
       </div>
     </section>
 
-    <section class="section section-alt">
+    <section class="proof-strip">
+      <div class="wrap proof-inner">
+        <div class="proof-item">
+          <span class="proof-num">34/50</span>
+          <span class="proof-label">strict SWE Lite with weak-drive</span>
+        </div>
+        <div class="proof-item">
+          <span class="proof-num">+5</span>
+          <span class="proof-label">vs single-loop mono on same set</span>
+        </div>
+        <div class="proof-item">
+          <span class="proof-num">4/5</span>
+          <span class="proof-label">multi-step process suite</span>
+        </div>
+        <div class="proof-item">
+          <span class="proof-num">MIT</span>
+          <span class="proof-label">run locally, keep your keys</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
       <div class="wrap">
         <header class="section-head">
-          <h2>Three things to know</h2>
+          <h2>Why people pick pirs</h2>
+          <p>Not “another chat that edits files.” Three reasons it exists.</p>
         </header>
         <div class="card-grid three">
           <a class="card card-link" href="strategies.html">
-            <h3>It can use two models</h3>
+            <div class="card-kicker">Cost shape</div>
+            <h3>Two models, one task</h3>
             <p>
-              One for thinking through the task, one for typing code.
-              That keeps cost down without giving up quality on hard steps.
+              Hard thinking (plan, review) on a strong model.
+              The long tool loop (read, edit, test) on a cheap one.
+              You pay for judgment where it matters.
             </p>
             <ul class="feature-list">
-              <li>Plan / review on a strong model</li>
-              <li>Edits and tests on a cheap one</li>
-              <li>Measured: weak-drive 34/50 strict, 4/5 process</li>
+              <li><code>--model</code> = executor</li>
+              <li><code>--plan-model</code> = planner / reviewer</li>
+              <li>Strategies define the playbook</li>
+              <li>weak-drive: 34/50 · mono: 29/50</li>
             </ul>
-            <span class="card-arrow">How strategies work →</span>
+            <span class="card-arrow">Strategies &amp; scores →</span>
           </a>
-          <a class="card card-link card-script" href="extend.html">
-            <h3>You can script it</h3>
+          <a class="card card-link" href="extend.html">
+            <div class="card-kicker">Control</div>
+            <h3>Script the agent</h3>
             <p>
-              Behavior is programmable with small Rhai files —
-              drop them in <code>.pirs/extensions/</code> or
-              <code>.pirs/strategies/</code>. No recompile.
+              Drop Rhai files into the project. No rebuild.
+              Encode team rules once — every run obeys them.
             </p>
             <ul class="feature-list">
-              <li>Add tools the model can call</li>
-              <li>Block shell patterns you never want</li>
-              <li>Hook the loop (context, stop, steering)</li>
-              <li>Write or override multi-step strategies</li>
-              <li>Ship packs already load (guards, goals, review…)</li>
+              <li>Add tools (internal APIs, checklists…)</li>
+              <li>Block shell you never want</li>
+              <li>Hook context, stop, steering</li>
+              <li>Override strategies per repo</li>
+              <li>Optional packs: guards, goals, review…</li>
             </ul>
             <pre class="card-snippet" aria-hidden="true"><code>fn on_tool_call(id, name, args) {
   if name == "bash"
@@ -128,77 +159,123 @@
   }
   ()
 }</code></pre>
-            <span class="card-arrow">How to extend →</span>
+            <span class="card-arrow">How scripting works →</span>
           </a>
           <a class="card card-link" href="features.html">
-            <h3>It’s a full coding toolkit</h3>
+            <div class="card-kicker">Depth</div>
+            <h3>Built for real repos</h3>
             <p>
-              Same agent from the terminal, browser, editor, or Telegram —
-              with search, git/PR helpers, and safety controls built in.
+              Terminal or browser, code intelligence, git/PR helpers,
+              audit trail, and an optional always-on Telegram agent.
             </p>
             <ul class="feature-list">
-              <li>TUI, web UI, ACP, one-shot CLI</li>
-              <li>Code map, LSP, PR tooling</li>
-              <li>Audit log, undo, optional sandbox</li>
+              <li>TUI · web · CLI · editor (ACP)</li>
+              <li>Code map, LSP, AST edit</li>
+              <li>Undo + audit log</li>
+              <li><code>pirs-claw</code> for Telegram</li>
             </ul>
-            <span class="card-arrow">What it can do →</span>
+            <span class="card-arrow">Feature list →</span>
           </a>
         </div>
       </div>
     </section>
 
-    <section class="section">
+    <section class="section section-alt">
+      <div class="wrap">
+        <header class="section-head">
+          <h2>Who it’s for</h2>
+        </header>
+        <div class="fit-grid">
+          <div class="card fit-yes">
+            <h3>Good fit</h3>
+            <ul>
+              <li>You already juggle multiple model APIs and care about <strong>$/task</strong></li>
+              <li>You want <strong>policy as code</strong> (guards, tools, plan-first workflows)</li>
+              <li>You’re fine with a terminal-first, self-hosted tool</li>
+              <li>You care whether strategies actually move scores</li>
+            </ul>
+          </div>
+          <div class="card fit-no">
+            <h3>Probably not</h3>
+            <ul>
+              <li>You want the least-friction cloud agent with zero config</li>
+              <li>You need a full multi-app chat bot (Slack/Discord/… at product depth)</li>
+              <li>You’re not willing to set an API key and try one dual-model command</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="start" class="section">
+      <div class="wrap">
+        <header class="section-head">
+          <h2>Get started in three steps</h2>
+          <p>One recommended path. Details live on <a href="examples.html">examples</a>.</p>
+        </header>
+
+        <div class="steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <div class="step-body">
+              <h3>Install</h3>
+              <pre class="code-block"><code>curl -fsSL https://raw.githubusercontent.com/xmonader/pirs/main/scripts/install.sh | sh</code></pre>
+              <p class="muted">Or <code>git clone</code> + <code>cargo build --release</code>. Puts binaries on your PATH (default <code>~/.local/bin</code>).</p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <div class="step-body">
+              <h3>Add a key</h3>
+              <pre class="code-block"><code>mkdir -p ~/.pirs
+echo 'OPENAI_API_KEY=sk-…' >> ~/.pirs/secrets.env
+# Anthropic, DeepSeek, OpenRouter, … also work</code></pre>
+            </div>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <div class="step-body">
+              <h3>Run on a real repo</h3>
+              <pre class="code-block"><code>cd your-project
+
+# Interactive
+pirs --mode tui
+
+# Recommended for real bugs (two models)
+pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy weak-drive "fix the failing tests"</code></pre>
+              <p class="muted">
+                Unattended / CI: add <code>--autonomy full</code> so bash and tests can run.
+                Default <code>edit</code> autonomy blocks the shell on purpose.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt">
       <div class="wrap">
         <header class="section-head">
           <h2>Two binaries, one core</h2>
-          <p>Most people only need the first one day to day.</p>
         </header>
         <div class="card-grid two">
           <article class="card product">
+            <div class="card-kicker">Day to day</div>
             <h3><code>pirs</code></h3>
-            <p>The coding agent. Point it at a repo and give it a task. TUI, web UI, or one-shot from the CLI.</p>
+            <p>
+              The coding agent. Point it at a repo. Use the TUI, browser UI, or one-shot CLI.
+              Strategies, tools, and scripts all land here.
+            </p>
           </article>
           <article class="card product">
+            <div class="card-kicker">Always on</div>
             <h3><code>pirs-claw</code></h3>
-            <p>Same agent, always on. Chat and schedules over Telegram (other chat apps are only stubs for now).</p>
+            <p>
+              Same agent over Telegram: chat, schedules, pairing.
+              Other chat apps are stubs only — depth is CLI + Telegram by design.
+            </p>
           </article>
-        </div>
-      </div>
-    </section>
-
-    <section id="start" class="section section-alt">
-      <div class="wrap">
-        <header class="section-head">
-          <h2>Get started</h2>
-        </header>
-        <div class="install-grid">
-          <div class="card install-card">
-            <h3>1. Install</h3>
-            <pre class="code-block"><code>curl -fsSL https://raw.githubusercontent.com/xmonader/pirs/main/scripts/install.sh | sh
-
-# or from source
-git clone https://github.com/xmonader/pirs.git
-cd pirs &amp;&amp; cargo build --release</code></pre>
-          </div>
-          <div class="card install-card">
-            <h3>2. Add an API key</h3>
-            <pre class="code-block"><code># any OpenAI-compatible or Anthropic key works
-export OPENAI_API_KEY=…
-# or put keys in ~/.pirs/secrets.env</code></pre>
-          </div>
-        </div>
-        <div class="card recipe">
-          <h3>3. Run it on a repo</h3>
-          <pre class="code-block"><code>cd your-project
-pirs --mode tui
-
-# or one-shot with two models (recommended for real bugs)
-pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
-  --strategy weak-drive "fix the failing tests"</code></pre>
-          <p class="muted">
-            More copy-paste recipes on the <a href="examples.html">examples</a> page.
-            Unattended runs need <code>--autonomy full</code> so the agent can run shell commands.
-          </p>
         </div>
       </div>
     </section>
@@ -206,27 +283,62 @@ pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
     <section class="section">
       <div class="wrap">
         <header class="section-head">
-          <h2>Does it work?</h2>
+          <h2>Results we publish</h2>
           <p>
-            On the same strict 50-bug SWE-bench Lite set (agent never sees the test patch):
-            <strong>weak-drive 34/50</strong>, no-strategy 31/50, monolithic 29/50
-            (flash executor; weak-drive also uses pro for plan/review).
-            On a 5-task process suite: weak-drive and plan-exec <strong>4/5</strong>, mono/naive <strong>3/5</strong>.
-            Full table and caveats on the <a href="strategies.html">strategies</a> page.
+            Same strict 50-bug SWE-bench Lite set (agent never sees the test patch).
+            Process suite = five multi-step traps (red herring, broken env, …).
           </p>
         </header>
+        <div class="strategy-table-wrap score-table">
+          <table class="strategy-table">
+            <thead>
+              <tr>
+                <th>Setup</th>
+                <th>Strict SWE Lite</th>
+                <th>Process</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="highlight-row">
+                <td><code>weak-drive</code> · flash + pro</td>
+                <td><strong>34/50</strong></td>
+                <td><strong>4/5</strong></td>
+              </tr>
+              <tr>
+                <td><code>plan-exec</code> · flash + pro</td>
+                <td>—</td>
+                <td><strong>4/5</strong></td>
+              </tr>
+              <tr>
+                <td>no strategy · flash</td>
+                <td>31/50</td>
+                <td>3/5</td>
+              </tr>
+              <tr>
+                <td><code>monolithic</code> · flash</td>
+                <td>29/50</td>
+                <td>3/5</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted" style="margin-top: 1rem">
+          Caveats (P2P sample cap, scrub notes, dual-model cost):
+          <a href="strategies.html">strategies page</a> ·
+          <a href="https://github.com/xmonader/pirs/blob/main/qa/bench-swebench-5x5/LEADERBOARD.md">LEADERBOARD.md</a>
+        </p>
       </div>
     </section>
 
     <section class="cta-band">
       <div class="wrap cta-inner">
         <div>
-          <h2>Still early. Ready to try.</h2>
-          <p>MIT licensed. Feedback and issues welcome.</p>
+          <h2>Self-hosted. Scriptable. Measured.</h2>
+          <p>MIT. Alpha. Bring your own keys. File issues when something’s wrong.</p>
         </div>
         <div class="cta-actions">
-          <a class="btn btn-primary" href="https://github.com/xmonader/pirs">GitHub</a>
-          <a class="btn btn-ghost" href="examples.html">Examples</a>
+          <a class="btn btn-primary" href="#start">Install</a>
+          <a class="btn btn-ghost" href="https://github.com/xmonader/pirs">GitHub</a>
         </div>
       </div>
     </section>
