@@ -523,7 +523,9 @@ code {
 }
 
 a.card-link {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   text-decoration: none;
   color: inherit;
   transition: border-color 0.15s, background 0.15s, transform 0.1s;
@@ -567,9 +569,38 @@ a.card-link:hover {
   margin-bottom: 0;
 }
 
+a.card-link .feature-list {
+  margin-top: 0.25rem;
+  flex: 1;
+}
+
+a.card-link .feature-list li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.card-snippet {
+  margin: 0.85rem 0 0;
+  padding: 0.75rem 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  color: var(--text-muted);
+}
+
+.card-snippet code {
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
 .card-arrow {
   display: inline-block;
-  margin-top: 0.75rem;
+  margin-top: 0.9rem;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   color: var(--accent);

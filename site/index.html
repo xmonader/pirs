@@ -99,22 +99,48 @@
               One for thinking through the task, one for typing code.
               That keeps cost down without giving up quality on hard steps.
             </p>
+            <ul class="feature-list">
+              <li>Plan / review on a strong model</li>
+              <li>Edits and tests on a cheap one</li>
+              <li>Measured: weak-drive 34/50 strict, 4/5 process</li>
+            </ul>
             <span class="card-arrow">How strategies work →</span>
           </a>
-          <a class="card card-link" href="extend.html">
+          <a class="card card-link card-script" href="extend.html">
             <h3>You can script it</h3>
             <p>
-              Add your own tools, block unsafe commands, or change the step-by-step
-              workflow — with small <a href="https://rhai.rs">Rhai</a> scripts, no rebuild.
+              Behavior is programmable with small Rhai files —
+              drop them in <code>.pirs/extensions/</code> or
+              <code>.pirs/strategies/</code>. No recompile.
             </p>
+            <ul class="feature-list">
+              <li>Add tools the model can call</li>
+              <li>Block shell patterns you never want</li>
+              <li>Hook the loop (context, stop, steering)</li>
+              <li>Write or override multi-step strategies</li>
+              <li>Ship packs already load (guards, goals, review…)</li>
+            </ul>
+            <pre class="card-snippet" aria-hidden="true"><code>fn on_tool_call(id, name, args) {
+  if name == "bash"
+      &amp;&amp; args.command.contains("rm -rf") {
+    return #{ block: true,
+              reason: "not allowed" };
+  }
+  ()
+}</code></pre>
             <span class="card-arrow">How to extend →</span>
           </a>
           <a class="card card-link" href="features.html">
             <h3>It’s a full coding toolkit</h3>
             <p>
-              Terminal UI, browser UI, editor protocol, code search, git/PR helpers,
-              and a Telegram bot if you want it always on.
+              Same agent from the terminal, browser, editor, or Telegram —
+              with search, git/PR helpers, and safety controls built in.
             </p>
+            <ul class="feature-list">
+              <li>TUI, web UI, ACP, one-shot CLI</li>
+              <li>Code map, LSP, PR tooling</li>
+              <li>Audit log, undo, optional sandbox</li>
+            </ul>
             <span class="card-arrow">What it can do →</span>
           </a>
         </div>
