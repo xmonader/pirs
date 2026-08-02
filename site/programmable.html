@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Programmable with Rhai — pirs</title>
+  <meta name="description" content="Extend pirs with Rhai: custom tools, lifecycle hooks, slash commands, profiles, and multi-phase strategies — without recompiling the Rust core." />
+  <meta name="theme-color" content="#0c0f0e" />
+  <link rel="canonical" href="https://xmonader.github.io/pirs/programmable.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230c0f0e'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-size='14' font-weight='700' fill='%23e8a54b'%3Ep%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="index.html" aria-label="pirs home">
+        <span class="brand-mark" aria-hidden="true">▸</span>
+        <span class="brand-name">pirs</span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="programmable.html" aria-current="page">Rhai</a>
+        <a href="strategies.html">Strategies</a>
+        <a href="capabilities.html">Capabilities</a>
+        <a href="examples.html">Examples</a>
+        <a class="nav-cta" href="https://github.com/xmonader/pirs">GitHub</a>
+      </nav>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu">
+        <span></span><span></span>
+      </button>
+    </div>
+    <nav id="mobile-nav" class="mobile-nav" hidden>
+      <a href="index.html">Home</a>
+      <a href="programmable.html" aria-current="page">Rhai</a>
+      <a href="strategies.html">Strategies</a>
+      <a href="capabilities.html">Capabilities</a>
+      <a href="examples.html">Examples</a>
+      <a href="https://github.com/xmonader/pirs">GitHub →</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="page-hero">
+      <div class="wrap">
+        <p class="eyebrow">Programmability</p>
+        <h1>A coding agent you can program with <span class="accent">Rhai</span></h1>
+        <p class="lede">
+          Mechanism stays in Rust (loop, tools gate, providers).
+          <strong>Policy lives in scripts</strong> — embedded packs, project overrides, and your own
+          <code>.rhai</code> files. No rebuild to change how the agent behaves.
+        </p>
+      </div>
+    </section>
+
+    <section class="section-sm">
+      <div class="wrap">
+        <div class="content-block">
+          <h2>What you can script</h2>
+          <div class="cap-grid">
+            <div class="cap-item">
+              <h3>Custom tools</h3>
+              <p><code>register_tool</code> + <code>fn tool_&lt;name&gt;</code> — the model can call your tools like any built-in.</p>
+            </div>
+            <div class="cap-item">
+              <h3>Lifecycle hooks</h3>
+              <p><code>on_tool_call</code>, <code>on_context</code>, <code>on_should_stop</code>, <code>on_steering</code>, <code>on_follow_up</code>, <code>on_event</code>.</p>
+            </div>
+            <div class="cap-item">
+              <h3>Slash commands</h3>
+              <p><code>register_command</code> + <code>fn cmd_&lt;name&gt;</code> — REPL / TUI commands you define.</p>
+            </div>
+            <div class="cap-item">
+              <h3>Strategies</h3>
+              <p>Multi-phase maps: plan → exec → review. Built-ins are Rhai; projects can shadow them.</p>
+            </div>
+            <div class="cap-item">
+              <h3>Profiles &amp; packs</h3>
+              <p>Select which extension packs load (<code>packs: "*"</code> or an explicit list).</p>
+            </div>
+            <div class="cap-item">
+              <h3>Host APIs</h3>
+              <p><code>exec</code>, <code>fs_read</code>/<code>fs_append</code>, <code>state_get</code>/<code>state_set</code>, checkpoints, skills index, and more.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Where scripts live</h2>
+          <div class="strategy-table-wrap">
+            <table class="strategy-table">
+              <thead>
+                <tr>
+                  <th>Kind</th>
+                  <th>Paths</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Extensions</td>
+                  <td><code>.pirs/extensions/</code> · <code>~/.pirs/extensions/</code></td>
+                  <td>Project / user packs; win on tool-name collisions</td>
+                </tr>
+                <tr>
+                  <td>Bundled packs</td>
+                  <td><code>extensions/*.rhai</code> (embedded)</td>
+                  <td>Loaded via profile <code>packs</code></td>
+                </tr>
+                <tr>
+                  <td>Strategies</td>
+                  <td><code>.pirs/strategies/&lt;name&gt;.rhai</code></td>
+                  <td>Shadows built-in of the same name</td>
+                </tr>
+                <tr>
+                  <td>Profiles</td>
+                  <td><code>.pirs/profiles/&lt;name&gt;.rhai</code></td>
+                  <td>Which packs + default strategy</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <strong>Safety rule:</strong> Rust hard denials (catastrophic shell, plan-profile gates) cannot be loosened from packs.
+            Packs may only <em>add</em> denials and policy.
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Example: custom tool + policy hook</h2>
+          <p>Drop this under <code>.pirs/extensions/word_count.rhai</code> (or <code>~/.pirs/extensions/</code>):</p>
+          <div class="example">
+            <div class="example-head">
+              <h3>Register a tool and block bad bash</h3>
+              <p>Backtick strings with <code>${…}</code> for interpolation (not double-quoted templates).</p>
+            </div>
+            <pre class="code-block"><code>register_tool("word_count", "Count words", #{
+    type: "object",
+    properties: #{ text: #{ type: "string" } },
+    required: ["text"]
+});
+
+fn tool_word_count(args) {
+    `${args.text.split(" ").len()} words`
+}
+
+fn on_tool_call(id, name, args) {
+    if name == "bash" && args.command.contains("rm -rf") {
+        return #{ block: true, reason: "rejected by policy" };
+    }
+    ()
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Example: minimal profile</h2>
+          <p>Load only the packs you want — full catalog is opt-in via <code>packs: "*"</code>.</p>
+          <div class="example">
+            <div class="example-head">
+              <h3>~/.pirs/profiles/minimal.rhai</h3>
+              <p>Then run <code>pirs --profile minimal</code></p>
+            </div>
+            <pre class="code-block"><code>#{
+    name: "minimal",
+    packs: ["goal", "btw", "guardrails", "auto-checkpoint"],
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Example: custom strategy (map shape)</h2>
+          <p>
+            Strategies are Rhai maps with phases. Readonly phases pin to <code>--plan-model</code>;
+            full phases use <code>--model</code>. See the full catalog on the
+            <a href="strategies.html">strategies</a> page.
+          </p>
+          <div class="example">
+            <div class="example-head">
+              <h3>.pirs/strategies/my-plan.rhai</h3>
+              <p>Templates: <code>{issue}</code>, <code>{targets}</code>, <code>{prev}</code>, <code>{prev_0}</code>, <code>{verdict}</code></p>
+            </div>
+            <pre class="code-block"><code>#{
+    name: "my-plan",
+    hybrid: false,
+    phases: [
+        #{
+            scope: "readonly",
+            system: "You plan only. Do not edit.",
+            prompt: "Plan a fix for:\n{issue}\n\nTests:\n{targets}",
+        },
+        #{
+            scope: "full",
+            system: "Execute the plan. Verify with tests.",
+            prompt: "Issue:\n{issue}\n\nPlan:\n{prev}\n\nImplement now.",
+        },
+    ],
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Shipped packs (sample)</h2>
+          <p>
+            Dozens of embedded packs ship with the binary. A few highlights — full list in
+            <a href="https://github.com/xmonader/pirs/blob/main/extensions/README.md">extensions/README.md</a>:
+          </p>
+          <div class="strategy-table-wrap">
+            <table class="strategy-table">
+              <thead>
+                <tr>
+                  <th>Pack</th>
+                  <th>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>weak-model</code></td>
+                  <td>Thrash detection, verify-after-edit, stop gate, plan pin</td>
+                </tr>
+                <tr>
+                  <td><code>guardrails</code> / <code>sandbox</code></td>
+                  <td>Destructive-bash policy; OS sandbox for <code>bash</code></td>
+                </tr>
+                <tr>
+                  <td><code>goal</code></td>
+                  <td>Session goal pin, compaction-proof</td>
+                </tr>
+                <tr>
+                  <td><code>review-gate</code> / <code>critic</code></td>
+                  <td>Independent review of diffs / mid-run critique</td>
+                </tr>
+                <tr>
+                  <td><code>skill-crystallizer</code></td>
+                  <td>Distill successful runs into reusable skills</td>
+                </tr>
+                <tr>
+                  <td><code>swarm</code> / <code>hive-note</code></td>
+                  <td>Multi-instance coordination</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="callout ok">
+          <strong>Next:</strong>
+          <a href="examples.html">worked examples</a> ·
+          <a href="strategies.html">strategy catalog</a> ·
+          <a href="https://github.com/xmonader/pirs/blob/main/extensions/README.md">pack docs on GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true">▸</span>
+        <span>pirs</span>
+      </div>
+      <nav class="footer-nav" aria-label="Footer">
+        <a href="programmable.html">Rhai</a>
+        <a href="strategies.html">Strategies</a>
+        <a href="capabilities.html">Capabilities</a>
+        <a href="examples.html">Examples</a>
+        <a href="https://github.com/xmonader/pirs">GitHub</a>
+      </nav>
+      <p class="footer-meta">
+        MIT · <a href="https://github.com/xmonader/pirs">xmonader/pirs</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

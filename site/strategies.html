@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Strategies — pirs</title>
+  <meta name="description" content="pirs multi-phase strategies: weak-drive, plan-exec, spark-ember, monolithic. Policy in Rhai, dual-model hybrid thrash→advisor." />
+  <meta name="theme-color" content="#0c0f0e" />
+  <link rel="canonical" href="https://xmonader.github.io/pirs/strategies.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230c0f0e'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-size='14' font-weight='700' fill='%23e8a54b'%3Ep%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="index.html" aria-label="pirs home">
+        <span class="brand-mark" aria-hidden="true">▸</span>
+        <span class="brand-name">pirs</span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="programmable.html">Rhai</a>
+        <a href="strategies.html" aria-current="page">Strategies</a>
+        <a href="capabilities.html">Capabilities</a>
+        <a href="examples.html">Examples</a>
+        <a class="nav-cta" href="https://github.com/xmonader/pirs">GitHub</a>
+      </nav>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu">
+        <span></span><span></span>
+      </button>
+    </div>
+    <nav id="mobile-nav" class="mobile-nav" hidden>
+      <a href="index.html">Home</a>
+      <a href="programmable.html">Rhai</a>
+      <a href="strategies.html" aria-current="page">Strategies</a>
+      <a href="capabilities.html">Capabilities</a>
+      <a href="examples.html">Examples</a>
+      <a href="https://github.com/xmonader/pirs">GitHub →</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="page-hero">
+      <div class="wrap">
+        <p class="eyebrow">Multi-phase policies</p>
+        <h1>Strategies shape the agent loop</h1>
+        <p class="lede">
+          Strategies are <strong>policy, not mechanism</strong>. Built-ins are Rhai maps embedded in the binary;
+          put <code>.pirs/strategies/&lt;name&gt;.rhai</code> in a project to override the same name.
+        </p>
+      </div>
+    </section>
+
+    <section class="section-sm">
+      <div class="wrap">
+        <div class="content-block">
+          <h2>Catalog</h2>
+          <div class="strategy-table-wrap">
+            <table class="strategy-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Aliases</th>
+                  <th>Shape</th>
+                  <th>Multi-model</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>monolithic</code></td>
+                  <td>—</td>
+                  <td>One growing loop</td>
+                  <td><code>--model</code> only</td>
+                </tr>
+                <tr>
+                  <td><code>plan-exec</code></td>
+                  <td>—</td>
+                  <td>Readonly plan → full exec</td>
+                  <td>Plan on <code>--plan-model</code></td>
+                </tr>
+                <tr>
+                  <td><code>plan-critic-exec</code></td>
+                  <td><code>plan-exec-critic</code></td>
+                  <td>Plan → critic → exec</td>
+                  <td>Plan/critic on plan-model</td>
+                </tr>
+                <tr>
+                  <td><code>spark-ember</code></td>
+                  <td><code>dual</code>, <code>soul-dual</code></td>
+                  <td>Parallel spark explore → ember code</td>
+                  <td>Spark ↔ plan, ember ↔ model</td>
+                </tr>
+                <tr class="highlight-row">
+                  <td><code>weak-drive</code></td>
+                  <td><code>advisor</code>, <code>weak-strong</code>, <code>advise-exec</code></td>
+                  <td>Strong plan → weak exec → strong review → weak fixup</td>
+                  <td><strong>hybrid</strong> thrash→advisor</td>
+                </tr>
+                <tr>
+                  <td><code>wide-plan-exec</code></td>
+                  <td>—</td>
+                  <td>Wide / fan plan variants</td>
+                  <td>Secondary</td>
+                </tr>
+                <tr>
+                  <td><code>plan-exec-weak</code></td>
+                  <td>—</td>
+                  <td>Weak-oriented plan-exec</td>
+                  <td>Secondary</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <strong>Day-to-day default:</strong>
+            <code>weak-drive</code> or <code>plan-exec</code> with dual models.
+            Pair with <code>--autonomy full</code> for unattended runs (default <code>edit</code> blocks bash).
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>weak-drive in depth</h2>
+          <p>
+            Agentpy-style hybrid as a first-class strategy: cheap model drives tools;
+            strong model at scheduled plan/review checkpoints — and mid-loop when thrash fires
+            (product path, when <code>hybrid: true</code> and <code>--plan-model</code> are set).
+          </p>
+          <div class="phase-steps">
+            <div class="phase-step">
+              <span class="phase-num">0</span>
+              <div>
+                <h4>Strong plan · readonly</h4>
+                <p><code>--plan-model</code> writes a self-contained plan for a weaker executor. No edits.</p>
+              </div>
+            </div>
+            <div class="phase-step">
+              <span class="phase-num">1</span>
+              <div>
+                <h4>Weak exec · full tools</h4>
+                <p><code>--model</code> implements the plan. Hybrid thrash→advisor + <code>ask_advisor</code> when hybrid is on.</p>
+              </div>
+            </div>
+            <div class="phase-step">
+              <span class="phase-num">2</span>
+              <div>
+                <h4>Strong review · readonly</h4>
+                <p>Sees original plan via <code>{prev_0}</code> and exec summary via <code>{prev}</code>. Outputs <code>APPROVE</code> or <code>REVISE</code>.</p>
+              </div>
+            </div>
+            <div class="phase-step">
+              <span class="phase-num">3</span>
+              <div>
+                <h4>Weak fixup · full tools</h4>
+                <p><code>skip_if_prev_prefix: "APPROVE"</code> — free skip when review approved. Otherwise apply recovery plan.</p>
+              </div>
+            </div>
+          </div>
+          <pre class="code-block"><code>pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy weak-drive "fix the failing tests"</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2>How strategies load</h2>
+          <ol>
+            <li><code>.pirs/strategies/&lt;name&gt;.rhai</code> (project)</li>
+            <li><code>~/.pirs/strategies/&lt;name&gt;.rhai</code> (user)</li>
+            <li>Built-in embedded script (same stem)</li>
+          </ol>
+          <p>
+            Aliases normalize before lookup (e.g. <code>advisor</code> → <code>weak-drive</code>).
+            Built-ins are parse-checked in unit tests — a bad shipped script fails CI-style tests.
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2>CLI shapes</h2>
+          <div class="example-grid">
+            <div class="example">
+              <div class="example-head">
+                <h3>Monolithic baseline</h3>
+              </div>
+              <pre class="code-block"><code>pirs --model deepseek-v4-flash --strategy monolithic "…"</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Classic plan → exec</h3>
+              </div>
+              <pre class="code-block"><code>pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy plan-exec "…"</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Verify loop (re-plan on gate fail)</h3>
+              </div>
+              <pre class="code-block"><code>pirs --model … --plan-model … --strategy plan-exec \
+  --verify "pytest -q" --max-attempts 3 "…"</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Weak runtime composition</h3>
+                <p>Tool-diet, sequential, retries ≥ 3, default plan-exec one-shot</p>
+              </div>
+              <pre class="code-block"><code>pirs --weak --plan-model deepseek-v4-pro "…"</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout">
+          Full semantics, template tokens, and hybrid wiring:
+          <a href="https://github.com/xmonader/pirs/blob/main/docs/STRATEGIES.md">docs/STRATEGIES.md</a>
+          · source:
+          <a href="https://github.com/xmonader/pirs/tree/main/crates/pirs-rhai/builtins">crates/pirs-rhai/builtins/*.rhai</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true">▸</span>
+        <span>pirs</span>
+      </div>
+      <nav class="footer-nav" aria-label="Footer">
+        <a href="programmable.html">Rhai</a>
+        <a href="strategies.html">Strategies</a>
+        <a href="capabilities.html">Capabilities</a>
+        <a href="examples.html">Examples</a>
+        <a href="https://github.com/xmonader/pirs">GitHub</a>
+      </nav>
+      <p class="footer-meta">
+        MIT · <a href="https://github.com/xmonader/pirs">xmonader/pirs</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

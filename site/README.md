@@ -1,12 +1,15 @@
 # pirs project site
 
-Static landing page for [GitHub Pages](https://xmonader.github.io/pirs/).
+Static multi-page site for [GitHub Pages](https://xmonader.github.io/pirs/).
 
-| File | Role |
+| Page | Role |
 |------|------|
-| `index.html` | Landing page |
-| `styles.css` | Layout & theme |
-| `script.js` | Header scroll + mobile nav |
+| `index.html` | Home — positioning, products, bench, install |
+| `programmable.html` | Rhai extensibility model + snippets |
+| `strategies.html` | Strategy catalog, weak-drive phases |
+| `capabilities.html` | Capability surface of the shared core |
+| `examples.html` | Pasteable CLI + Rhai examples |
+| `styles.css` / `script.js` | Shared theme & mobile nav |
 
 ## Local preview
 
@@ -18,16 +21,10 @@ python3 -m http.server 8080 --directory site
 
 ## Deploy
 
-Push to `main` (or merge a PR). The workflow
-[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) publishes
-`site/` to GitHub Pages.
+Push to `main`. Workflow: [`.github/workflows/pages.yml`](../.github/workflows/pages.yml).
 
-**One-time setup** (repo admin):
-
-1. **Settings → Pages → Build and deployment → Source:** GitHub Actions  
-2. Ensure the `pages` workflow has permission to deploy (default GITHUB_TOKEN is enough with `pages: write` in the workflow).
+**One-time:** Settings → Pages → Source: **GitHub Actions**.
 
 URL: **https://xmonader.github.io/pirs/**
 
-Edit copy in `index.html`; keep scores and claims aligned with
-`qa/bench-swebench-5x5/LEADERBOARD.md` and `docs/SWE-QA.md`.
+Keep scores aligned with `qa/bench-swebench-5x5/LEADERBOARD.md`.

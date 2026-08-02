@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Examples — pirs</title>
+  <meta name="description" content="pirs examples: dual-model weak-drive, custom Rhai tools, strategies, multi-backend pins, unattended bench runs." />
+  <meta name="theme-color" content="#0c0f0e" />
+  <link rel="canonical" href="https://xmonader.github.io/pirs/examples.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230c0f0e'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-size='14' font-weight='700' fill='%23e8a54b'%3Ep%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="index.html" aria-label="pirs home">
+        <span class="brand-mark" aria-hidden="true">▸</span>
+        <span class="brand-name">pirs</span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="programmable.html">Rhai</a>
+        <a href="strategies.html">Strategies</a>
+        <a href="capabilities.html">Capabilities</a>
+        <a href="examples.html" aria-current="page">Examples</a>
+        <a class="nav-cta" href="https://github.com/xmonader/pirs">GitHub</a>
+      </nav>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu">
+        <span></span><span></span>
+      </button>
+    </div>
+    <nav id="mobile-nav" class="mobile-nav" hidden>
+      <a href="index.html">Home</a>
+      <a href="programmable.html">Rhai</a>
+      <a href="strategies.html">Strategies</a>
+      <a href="capabilities.html">Capabilities</a>
+      <a href="examples.html" aria-current="page">Examples</a>
+      <a href="https://github.com/xmonader/pirs">GitHub →</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="page-hero">
+      <div class="wrap">
+        <p class="eyebrow">Hands-on</p>
+        <h1>Examples you can paste</h1>
+        <p class="lede">
+          CLI recipes and Rhai snippets. For the full programming model see
+          <a href="programmable.html">Rhai</a> and <a href="strategies.html">strategies</a>.
+        </p>
+      </div>
+    </section>
+
+    <section class="section-sm">
+      <div class="wrap">
+        <div class="content-block">
+          <h2>CLI · day-to-day coding</h2>
+          <div class="example-grid">
+            <div class="example">
+              <div class="example-head">
+                <h3>Dual-model weak-drive (recommended)</h3>
+                <p>Strong plan + review, weak exec · best process score on shrimpswe (4/5)</p>
+              </div>
+              <pre class="code-block"><code>cd your-repo   # or: pirs -C /path/to/repo …
+
+pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy weak-drive "fix the failing tests"</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Classic plan → exec</h3>
+              </div>
+              <pre class="code-block"><code>pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy plan-exec "add retry with exponential backoff to the client"</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Interactive TUI</h3>
+              </div>
+              <pre class="code-block"><code>pirs --mode tui
+# empty input: 1 / 2 / 3 for starters · type / then Tab · ? for keys · /tour</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Unattended / benches</h3>
+                <p>Default autonomy <code>edit</code> blocks bash — use <code>full</code> for shell+tests</p>
+              </div>
+              <pre class="code-block"><code>pirs -C /path/to/ws --autonomy full \
+  --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy weak-drive "…"</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>CLI · models &amp; backends</h2>
+          <div class="example-grid">
+            <div class="example">
+              <div class="example-head">
+                <h3>Pin a backend / portable name</h3>
+              </div>
+              <pre class="code-block"><code># keys in ~/.pirs/secrets.env or environment
+pirs backends
+pirs models search deepseek
+
+pirs --model dashscope/qwen3.5-plus "…"
+pirs --model qwen-plus --plan-model openrouter/anthropic/claude-sonnet-4 \
+  --strategy plan-exec "fix the failing test"</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Weak runtime flags</h3>
+                <p>Tool-diet, sequential tools, more retries, default plan-exec one-shot</p>
+              </div>
+              <pre class="code-block"><code>pirs --weak --plan-model deepseek-v4-pro "refactor the parser"</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Multi-repo work context</h3>
+              </div>
+              <pre class="code-block"><code>pirs --cwd ~/code/frontend --also ~/code/backend --mode tui
+# paths: //backend/src/…  or relative (tries each root)</code></pre>
+            </div>
+            <div class="example">
+              <div class="example-head">
+                <h3>Browser UI</h3>
+              </div>
+              <pre class="code-block"><code>pirs --serve
+# or: pirs --mode web</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Rhai · custom tool</h2>
+          <p>Save as <code>.pirs/extensions/word_count.rhai</code>:</p>
+          <div class="example">
+            <div class="example-head">
+              <h3>Tool the model can call</h3>
+              <p>Use backtick strings for <code>${…}</code> interpolation</p>
+            </div>
+            <pre class="code-block"><code>register_tool("word_count", "Count words", #{
+    type: "object",
+    properties: #{ text: #{ type: "string" } },
+    required: ["text"]
+});
+
+fn tool_word_count(args) {
+    `${args.text.split(" ").len()} words`
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Rhai · policy hook</h2>
+          <div class="example">
+            <div class="example-head">
+              <h3>Block patterns before tools run</h3>
+              <p>Packs can only add denials — Rust hard denials still apply</p>
+            </div>
+            <pre class="code-block"><code>fn on_tool_call(id, name, args) {
+    if name == "bash" && args.command.contains("rm -rf") {
+        return #{ block: true, reason: "rejected by policy" };
+    }
+    if name == "bash" && args.command.contains("git push --force") {
+        return #{ block: true, reason: "no force-push" };
+    }
+    ()
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Rhai · two-phase strategy</h2>
+          <p>Save as <code>.pirs/strategies/my-plan.rhai</code>, then <code>--strategy my-plan</code>:</p>
+          <div class="example">
+            <div class="example-head">
+              <h3>Readonly plan → full exec</h3>
+            </div>
+            <pre class="code-block"><code>#{
+    name: "my-plan",
+    phases: [
+        #{
+            scope: "readonly",
+            system: "You plan only. Investigate; do not edit.",
+            prompt: "Plan a fix.\n\n## Issue\n{issue}\n\n## Tests\n{targets}",
+        },
+        #{
+            scope: "full",
+            system: "Execute the approved plan. Verify with tests.",
+            prompt: "Issue:\n{issue}\n\nPlan:\n{prev}\n\nImplement and verify.",
+        },
+    ],
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>Rhai · profile with selected packs</h2>
+          <div class="example">
+            <div class="example-head">
+              <h3>~/.pirs/profiles/minimal.rhai</h3>
+            </div>
+            <pre class="code-block"><code>#{
+    name: "minimal",
+    packs: ["goal", "btw", "guardrails", "auto-checkpoint"],
+}
+
+# pirs --profile minimal</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2>More in the repo</h2>
+          <ul>
+            <li><a href="https://github.com/xmonader/pirs/tree/main/extensions">extensions/</a> — shipped packs (source of truth for real policy)</li>
+            <li><a href="https://github.com/xmonader/pirs/tree/main/crates/pirs-rhai/builtins">builtins/*.rhai</a> — embedded strategies including weak-drive</li>
+            <li><a href="https://github.com/xmonader/pirs/tree/main/qa/shrimpswe">qa/shrimpswe</a> — process suite prompts &amp; results</li>
+            <li><a href="https://github.com/xmonader/pirs/blob/main/docs/TUI-JOURNEY.md">docs/TUI-JOURNEY.md</a> — first-run TUI walkthrough</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true">▸</span>
+        <span>pirs</span>
+      </div>
+      <nav class="footer-nav" aria-label="Footer">
+        <a href="programmable.html">Rhai</a>
+        <a href="strategies.html">Strategies</a>
+        <a href="capabilities.html">Capabilities</a>
+        <a href="examples.html">Examples</a>
+        <a href="https://github.com/xmonader/pirs">GitHub</a>
+      </nav>
+      <p class="footer-meta">
+        MIT · <a href="https://github.com/xmonader/pirs">xmonader/pirs</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
