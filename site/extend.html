@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Examples — pirs</title>
-  <meta name="description" content="Copy-paste pirs examples: fix tests with two models, open the TUI, add a custom tool, write a simple strategy." />
+  <title>Extend pirs — scripts &amp; tools</title>
+  <meta name="description" content="Customize pirs with small Rhai scripts: add tools, block bad commands, change workflows — without recompiling." />
   <meta name="theme-color" content="#0c0f0e" />
-  <link rel="canonical" href="https://xmonader.github.io/pirs/examples.html" />
+  <link rel="canonical" href="https://xmonader.github.io/pirs/extend.html" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
@@ -24,10 +24,10 @@
       </a>
       <nav class="nav" aria-label="Primary">
         <a href="index.html">Home</a>
-        <a href="extend.html">Extend</a>
+        <a href="extend.html" aria-current="page">Extend</a>
         <a href="strategies.html">Strategies</a>
         <a href="features.html">Features</a>
-        <a href="examples.html" aria-current="page">Examples</a>
+        <a href="examples.html">Examples</a>
         <a class="nav-cta" href="https://github.com/xmonader/pirs">GitHub</a>
       </nav>
       <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu">
@@ -36,10 +36,10 @@
     </div>
     <nav id="mobile-nav" class="mobile-nav" hidden>
       <a href="index.html">Home</a>
-      <a href="extend.html">Extend</a>
+      <a href="extend.html" aria-current="page">Extend</a>
       <a href="strategies.html">Strategies</a>
       <a href="features.html">Features</a>
-      <a href="examples.html" aria-current="page">Examples</a>
+      <a href="examples.html">Examples</a>
       <a href="https://github.com/xmonader/pirs">GitHub →</a>
     </nav>
   </header>
@@ -47,46 +47,39 @@
   <main id="main">
     <section class="page-hero">
       <div class="wrap wrap-prose">
-        <p class="eyebrow">Copy and adapt</p>
-        <h1>Examples</h1>
-        <p class="lede">A few recipes people actually use. Nothing fancy.</p>
+        <p class="eyebrow">Customization</p>
+        <h1>Make it yours with short scripts</h1>
+        <p class="lede">
+          pirs is written in Rust, but you don’t need to recompile to change behavior.
+          Drop small <a href="https://rhai.rs">Rhai</a> files into a folder and they load next run.
+        </p>
       </div>
     </section>
 
     <section class="section-sm">
       <div class="wrap wrap-prose">
         <div class="content-block">
-          <h2>Fix failing tests (two models)</h2>
-          <pre class="code-block"><code>cd your-project
-
-pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
-  --strategy weak-drive "fix the failing tests"</code></pre>
+          <h2>What you can do</h2>
+          <ul>
+            <li><strong>Add a tool</strong> the model can call (e.g. hit your internal API).</li>
+            <li><strong>Block commands</strong> you never want run (<code>rm -rf</code>, force-push, …).</li>
+            <li><strong>Change the workflow</strong> — plan first, then code, then review (see <a href="strategies.html">strategies</a>).</li>
+            <li><strong>Turn packs on or off</strong> with a profile so sessions stay light.</li>
+          </ul>
         </div>
 
         <div class="content-block">
-          <h2>Interactive terminal UI</h2>
-          <pre class="code-block"><code>pirs --mode tui
-# type a task, or press 1/2/3 on first run for starters
-# type / then Tab for commands</code></pre>
+          <h2>Where files go</h2>
+          <ul>
+            <li><code>.pirs/extensions/</code> in a project — team policies and tools</li>
+            <li><code>~/.pirs/extensions/</code> — your personal packs</li>
+            <li><code>.pirs/strategies/name.rhai</code> — override or invent a strategy</li>
+          </ul>
         </div>
 
         <div class="content-block">
-          <h2>Unattended run (CI / overnight)</h2>
-          <p>By default the agent can’t run shell without a looser autonomy setting:</p>
-          <pre class="code-block"><code>pirs -C /path/to/project --autonomy full \
-  --model deepseek-v4-flash --plan-model deepseek-v4-pro \
-  --strategy weak-drive "fix the failing tests"</code></pre>
-        </div>
-
-        <div class="content-block">
-          <h2>Browser UI</h2>
-          <pre class="code-block"><code>pirs --serve
-# open the URL it prints</code></pre>
-        </div>
-
-        <div class="content-block">
-          <h2>Add a custom tool</h2>
-          <p><code>.pirs/extensions/word_count.rhai</code>:</p>
+          <h2>Example: add a tool</h2>
+          <p>Save as <code>.pirs/extensions/word_count.rhai</code>:</p>
           <pre class="code-block"><code>register_tool("word_count", "Count words", #{
     type: "object",
     properties: #{ text: #{ type: "string" } },
@@ -96,33 +89,36 @@ pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
 fn tool_word_count(args) {
     `${args.text.split(" ").len()} words`
 }</code></pre>
+          <p class="muted">Use backtick strings for <code>${…}</code> interpolation. The model can call <code>word_count</code> like any built-in tool.</p>
         </div>
 
         <div class="content-block">
-          <h2>Simple plan → code strategy</h2>
-          <p><code>.pirs/strategies/my-plan.rhai</code>, then <code>--strategy my-plan</code>:</p>
-          <pre class="code-block"><code>#{
-    name: "my-plan",
-    phases: [
-        #{
-            scope: "readonly",
-            system: "You plan only. Do not edit files.",
-            prompt: "Plan a fix.\n\n## Issue\n{issue}\n\n## Tests\n{targets}",
-        },
-        #{
-            scope: "full",
-            system: "Execute the plan. Run tests.",
-            prompt: "Issue:\n{issue}\n\nPlan:\n{prev}\n\nImplement now.",
-        },
-    ],
+          <h2>Example: block bad bash</h2>
+          <pre class="code-block"><code>fn on_tool_call(id, name, args) {
+    if name == "bash" && args.command.contains("rm -rf") {
+        return #{ block: true, reason: "not allowed" };
+    }
+    ()
 }</code></pre>
+          <p class="muted">
+            Scripts can only make things <em>stricter</em>. Dangerous patterns are also blocked in Rust even if you remove the pack.
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2>Shipped packs</h2>
+          <p>
+            pirs comes with many optional packs already (guards, goals, review helpers, sandboxes, …).
+            You don’t need to write any of that yourself unless you want to.
+            Browse them in the repo:
+            <a href="https://github.com/xmonader/pirs/tree/main/extensions">extensions/</a>.
+          </p>
         </div>
 
         <p class="muted">
-          More in the repo:
-          <a href="https://github.com/xmonader/pirs/tree/main/extensions">extensions/</a>,
-          <a href="https://github.com/xmonader/pirs/blob/main/docs/TUI-JOURNEY.md">TUI walkthrough</a>,
-          <a href="https://github.com/xmonader/pirs/blob/main/README.md">README</a>.
+          <a href="examples.html">More examples →</a>
+          ·
+          <a href="https://github.com/xmonader/pirs/blob/main/extensions/README.md">Pack docs on GitHub →</a>
         </p>
       </div>
     </section>

@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>pirs — programmable multi-model coding agent</title>
-  <meta name="description" content="pirs is a programmable coding agent harness in Rust. Extend it with Rhai: custom tools, policies, and multi-phase strategies. Dual-model weak-drive, honest SWE-bench, Telegram-first claw." />
+  <title>pirs — coding agent you can program</title>
+  <meta name="description" content="pirs is an open-source coding agent. It edits your repo, runs tests, and you can customize how it works with short scripts." />
   <meta name="theme-color" content="#0c0f0e" />
   <meta property="og:title" content="pirs" />
-  <meta property="og:description" content="Programmable multi-model coding agent — Rhai strategies &amp; extensions, dual-model hybrid, honest benches." />
+  <meta property="og:description" content="Open-source coding agent. Dual models, customizable with scripts." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://xmonader.github.io/pirs/" />
   <link rel="canonical" href="https://xmonader.github.io/pirs/" />
@@ -28,9 +28,9 @@
       </a>
       <nav class="nav" aria-label="Primary">
         <a href="index.html" aria-current="page">Home</a>
-        <a href="programmable.html">Rhai</a>
+        <a href="extend.html">Extend</a>
         <a href="strategies.html">Strategies</a>
-        <a href="capabilities.html">Capabilities</a>
+        <a href="features.html">Features</a>
         <a href="examples.html">Examples</a>
         <a class="nav-cta" href="https://github.com/xmonader/pirs">GitHub</a>
       </nav>
@@ -40,9 +40,9 @@
     </div>
     <nav id="mobile-nav" class="mobile-nav" hidden>
       <a href="index.html" aria-current="page">Home</a>
-      <a href="programmable.html">Rhai</a>
+      <a href="extend.html">Extend</a>
       <a href="strategies.html">Strategies</a>
-      <a href="capabilities.html">Capabilities</a>
+      <a href="features.html">Features</a>
       <a href="examples.html">Examples</a>
       <a href="https://github.com/xmonader/pirs">GitHub →</a>
     </nav>
@@ -52,57 +52,36 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow">Rust · Rhai · OpenAI / Anthropic compatible · alpha</p>
-          <h1>
-            A programmable coding agent.<br />
-            <span class="accent">Policy in Rhai. Mechanism in Rust.</span>
-          </h1>
+          <p class="eyebrow">Open source · alpha</p>
+          <h1>A coding agent you can program.</h1>
           <p class="lede">
-            <strong>pirs</strong> is a multi-model coding agent harness you can extend with
-            <a href="https://rhai.rs">Rhai</a> scripts — custom tools, lifecycle hooks, slash commands,
-            and multi-phase strategies. Plan on a strong model, execute on a cheap one.
+            <strong>pirs</strong> sits in your terminal (or browser), reads the repo,
+            edits code, and runs tests — like other coding agents.
+            The difference: you can change how it behaves with short scripts,
+            and you can pair a cheap model for doing work with a strong model for planning.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="#install">Get started</a>
-            <a class="btn btn-ghost" href="programmable.html">Program with Rhai</a>
+            <a class="btn btn-primary" href="#start">Try it</a>
+            <a class="btn btn-ghost" href="https://github.com/xmonader/pirs">Source on GitHub</a>
           </div>
-          <ul class="hero-stats" aria-label="Highlights">
-            <li>
-              <span class="stat-value">Rhai</span>
-              <span class="stat-label">tools · hooks · strategies</span>
-            </li>
-            <li>
-              <span class="stat-value">34/50</span>
-              <span class="stat-label">strict SWE Lite · weak-drive</span>
-            </li>
-            <li>
-              <span class="stat-value">hybrid</span>
-              <span class="stat-label">thrash → advisor</span>
-            </li>
-          </ul>
         </div>
-        <aside class="hero-panel" aria-label="Rhai extension example">
+        <aside class="hero-panel" aria-label="Typical command">
           <div class="terminal">
             <div class="terminal-bar">
               <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-              <span class="terminal-title">.pirs/extensions/policy.rhai</span>
+              <span class="terminal-title">typical run</span>
             </div>
-            <pre class="terminal-body"><code><span class="t-fn">register_tool</span>(<span class="t-str">"word_count"</span>, <span class="t-str">"Count words"</span>, #{
-    type: <span class="t-str">"object"</span>,
-    properties: #{ text: #{ type: <span class="t-str">"string"</span> } },
-    required: [<span class="t-str">"text"</span>]
-});
+            <pre class="terminal-body"><code><span class="t-prompt">$</span> pirs --model deepseek-v4-flash \
+    --plan-model deepseek-v4-pro \
+    --strategy weak-drive \
+    "fix the failing tests"
 
-<span class="t-kw">fn</span> <span class="t-fn">tool_word_count</span>(args) {
-    <span class="t-str">`${args.text.split(" ").len()} words`</span>
-}
+<span class="t-dim"># 1. strong model writes a plan</span>
+<span class="t-dim"># 2. cheap model edits code</span>
+<span class="t-dim"># 3. strong model reviews</span>
+<span class="t-dim"># 4. cheap model fixes if needed</span>
 
-<span class="t-kw">fn</span> <span class="t-fn">on_tool_call</span>(id, name, args) {
-    <span class="t-kw">if</span> name == <span class="t-str">"bash"</span> &amp;&amp; args.command.contains(<span class="t-str">"rm -rf"</span>) {
-        <span class="t-kw">return</span> #{ block: <span class="t-kw">true</span>, reason: <span class="t-str">"rejected by policy"</span> };
-    }
-    ()
-}</code></pre>
+<span class="t-ok">✓</span> tests pass</code></pre>
           </div>
         </aside>
       </div>
@@ -111,217 +90,117 @@
     <section class="section section-alt">
       <div class="wrap">
         <header class="section-head">
-          <p class="eyebrow">Explore</p>
-          <h2>What makes pirs different</h2>
-          <p>Deep pages for programmability, strategies, capabilities, and worked examples.</p>
+          <h2>Three things to know</h2>
         </header>
-        <div class="card-grid two">
-          <a class="card card-link" href="programmable.html">
-            <div class="card-kicker">Programmable</div>
-            <h3>Rhai extensions</h3>
-            <p>
-              Drop <code>.rhai</code> files to register tools, block dangerous commands,
-              add slash commands, and hook the agent loop — without recompiling.
-            </p>
-            <span class="card-arrow">Read more →</span>
-          </a>
+        <div class="card-grid three">
           <a class="card card-link" href="strategies.html">
-            <div class="card-kicker">Multi-model</div>
-            <h3>Strategies</h3>
+            <h3>It can use two models</h3>
             <p>
-              <code>weak-drive</code>, <code>plan-exec</code>, <code>spark-ember</code>, and more —
-              multi-phase policies as Rhai maps. Override any built-in per project.
+              One for thinking through the task, one for typing code.
+              That keeps cost down without giving up quality on hard steps.
             </p>
-            <span class="card-arrow">Strategy catalog →</span>
+            <span class="card-arrow">How strategies work →</span>
           </a>
-          <a class="card card-link" href="capabilities.html">
-            <div class="card-kicker">Surface</div>
-            <h3>Capabilities</h3>
+          <a class="card card-link" href="extend.html">
+            <h3>You can script it</h3>
             <p>
-              LSP, code graph, AST edit, audit/undo, fleet, browser CDP, office docs,
-              MCP connectors, TUI / web / ACP — one shared core.
+              Add your own tools, block unsafe commands, or change the step-by-step
+              workflow — with small <a href="https://rhai.rs">Rhai</a> scripts, no rebuild.
             </p>
-            <span class="card-arrow">Full list →</span>
+            <span class="card-arrow">How to extend →</span>
           </a>
-          <a class="card card-link" href="examples.html">
-            <div class="card-kicker">Hands-on</div>
-            <h3>Examples</h3>
+          <a class="card card-link" href="features.html">
+            <h3>It’s a full coding toolkit</h3>
             <p>
-              Dual-model recipes, custom tools, strategy snippets, and unattended bench runs
-              you can paste and adapt.
+              Terminal UI, browser UI, editor protocol, code search, git/PR helpers,
+              and a Telegram bot if you want it always on.
             </p>
-            <span class="card-arrow">See examples →</span>
+            <span class="card-arrow">What it can do →</span>
           </a>
         </div>
       </div>
     </section>
 
-    <section id="products" class="section">
+    <section class="section">
       <div class="wrap">
         <header class="section-head">
-          <p class="eyebrow">Portfolio</p>
-          <h2>Two products. One agent core.</h2>
-          <p>Everything else is a power tool or an extension pack — not a parallel stack.</p>
+          <h2>Two binaries, one core</h2>
+          <p>Most people only need the first one day to day.</p>
         </header>
         <div class="card-grid two">
           <article class="card product">
-            <div class="card-kicker">Harness</div>
             <h3><code>pirs</code></h3>
-            <p>
-              Multi-model strategies, model registry, <code>--weak</code> hardening,
-              TUI / REPL / web / RPC / ACP. Peer class: coding agent harnesses.
-            </p>
-            <ul class="feature-list">
-              <li>Streaming loop + built-in coding tools</li>
-              <li>Rhai strategies &amp; extension packs</li>
-              <li>LSP, code graph, AST edit, blast radius</li>
-              <li>Audit log, undo, doctor, PR &amp; fleet</li>
-            </ul>
+            <p>The coding agent. Point it at a repo and give it a task. TUI, web UI, or one-shot from the CLI.</p>
           </article>
           <article class="card product">
-            <div class="card-kicker">Agent</div>
             <h3><code>pirs-claw</code></h3>
-            <p>
-              Daily ops on the same core: chat, schedules, Telegram-first gateway,
-              pairing, local / docker / ssh exec. Depth over channel zoo.
-            </p>
-            <ul class="feature-list">
-              <li>Telegram gateway + session pairing</li>
-              <li>Schedules with fire / fail / timeout</li>
-              <li>Shared tools, skills, learn/crystallize</li>
-              <li>Channel stubs only for Discord/Slack/…</li>
-            </ul>
+            <p>Same agent, always on. Chat and schedules over Telegram (other chat apps are only stubs for now).</p>
           </article>
         </div>
-        <div class="power-tools">
-          <span class="label">Power tools</span>
-          <div class="chip-row">
-            <span class="chip"><code>pirs-bench</code> — honest red→green judge</span>
-            <span class="chip"><code>pirs-orchestrator</code> — multi-instance fleet</span>
-          </div>
-        </div>
       </div>
     </section>
 
-    <section id="bench" class="section section-alt">
+    <section id="start" class="section section-alt">
       <div class="wrap">
         <header class="section-head">
-          <p class="eyebrow">Honest evaluation</p>
-          <h2>SWE-bench Lite · measured, not marketed</h2>
-          <p>
-            <strong>Strict</strong> = agent never sees <code>test_patch</code> / fail-to-pass names.
-            Grade after with oracle tests.
-          </p>
-        </header>
-        <div class="bench-grid">
-          <div class="bench-score">
-            <div class="score-num">34<span class="score-den">/50</span></div>
-            <div class="score-meta">
-              <strong>strict weak-drive</strong><br />
-              flash + pro · dual-model hybrid
-            </div>
-          </div>
-          <div class="bench-notes">
-            <h3>How to read scores</h3>
-            <ul>
-              <li>Keep-green lists are capped (default 40) — harness-relative samples.</li>
-              <li>Fair / raw-ids scores are <em>not</em> comparable to strict.</li>
-              <li>Results land in-repo under <code>qa/bench-swebench-5x5/results_*</code>.</li>
-              <li>Process suite: <a href="https://github.com/xmonader/pirs/tree/main/qa/shrimpswe">qa/shrimpswe</a> (weak-drive 4/5).</li>
-            </ul>
-            <p class="muted">
-              Full notes:
-              <a href="https://github.com/xmonader/pirs/blob/main/qa/bench-swebench-5x5/LEADERBOARD.md">LEADERBOARD.md</a>
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="install" class="section">
-      <div class="wrap">
-        <header class="section-head">
-          <p class="eyebrow">Install</p>
-          <h2>Build from source or grab a release</h2>
+          <h2>Get started</h2>
         </header>
         <div class="install-grid">
           <div class="card install-card">
-            <h3>Quick install script</h3>
-            <pre class="code-block"><code>curl -fsSL https://raw.githubusercontent.com/xmonader/pirs/main/scripts/install.sh | sh</code></pre>
-            <p class="muted">Installs <code>pirs</code>, <code>pirs-claw</code>, <code>pirs-orchestrator</code> into <code>~/.local/bin</code>.</p>
+            <h3>1. Install</h3>
+            <pre class="code-block"><code>curl -fsSL https://raw.githubusercontent.com/xmonader/pirs/main/scripts/install.sh | sh
+
+# or from source
+git clone https://github.com/xmonader/pirs.git
+cd pirs &amp;&amp; cargo build --release</code></pre>
           </div>
           <div class="card install-card">
-            <h3>From source</h3>
-            <pre class="code-block"><code>git clone https://github.com/xmonader/pirs.git
-cd pirs &amp;&amp; cargo build --release
-export OPENAI_API_KEY=…   # or provider keys
-./target/release/pirs --mode tui</code></pre>
+            <h3>2. Add an API key</h3>
+            <pre class="code-block"><code># any OpenAI-compatible or Anthropic key works
+export OPENAI_API_KEY=…
+# or put keys in ~/.pirs/secrets.env</code></pre>
           </div>
         </div>
         <div class="card recipe">
-          <h3>Recommended coding recipe</h3>
-          <pre class="code-block"><code>pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+          <h3>3. Run it on a repo</h3>
+          <pre class="code-block"><code>cd your-project
+pirs --mode tui
+
+# or one-shot with two models (recommended for real bugs)
+pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
   --strategy weak-drive "fix the failing tests"</code></pre>
           <p class="muted">
-            More recipes on the <a href="examples.html">examples</a> page.
-            Keys: env or <code>~/.pirs/secrets.env</code>.
+            More copy-paste recipes on the <a href="examples.html">examples</a> page.
+            Unattended runs need <code>--autonomy full</code> so the agent can run shell commands.
           </p>
         </div>
       </div>
     </section>
 
-    <section id="docs" class="section section-alt">
+    <section class="section">
       <div class="wrap">
         <header class="section-head">
-          <p class="eyebrow">Documentation</p>
-          <h2>In-repo deep dives</h2>
+          <h2>Does it work?</h2>
+          <p>
+            On a strict SWE-bench Lite set of 50 bugs (agent never sees the test patch),
+            dual-model <code>weak-drive</code> scored <strong>34/50</strong>.
+            Details and caveats live in the
+            <a href="https://github.com/xmonader/pirs/blob/main/qa/bench-swebench-5x5/LEADERBOARD.md">leaderboard</a>
+            in the repo — we try not to overclaim.
+          </p>
         </header>
-        <div class="docs-grid">
-          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/STRATEGIES.md">
-            <span class="doc-title">Strategies</span>
-            <span class="doc-desc">weak-drive, hybrid, phase templates</span>
-          </a>
-          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/extensions/README.md">
-            <span class="doc-title">Extensions</span>
-            <span class="doc-desc">Pack catalog &amp; profiles</span>
-          </a>
-          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/PRODUCTS.md">
-            <span class="doc-title">Products</span>
-            <span class="doc-desc">Harness vs claw, channel policy</span>
-          </a>
-          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/DEVELOPMENT.md">
-            <span class="doc-title">Development</span>
-            <span class="doc-desc">Build, test, crate map</span>
-          </a>
-          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/MODELS.md">
-            <span class="doc-title">Models</span>
-            <span class="doc-desc">Backends, pins, portable names</span>
-          </a>
-          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/SWE-QA.md">
-            <span class="doc-title">SWE-QA</span>
-            <span class="doc-desc">Campaign protocol &amp; strict scoring</span>
-          </a>
-          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/TUI-JOURNEY.md">
-            <span class="doc-title">TUI journey</span>
-            <span class="doc-desc">First-run tour &amp; key bindings</span>
-          </a>
-          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/AGENTS.md">
-            <span class="doc-title">AGENTS.md</span>
-            <span class="doc-desc">Conventions for humans &amp; agents</span>
-          </a>
-        </div>
       </div>
     </section>
 
     <section class="cta-band">
       <div class="wrap cta-inner">
         <div>
-          <h2>Ship with dual models, not dual stacks.</h2>
-          <p>Open source under MIT. Status: alpha — core tested; feedback welcome.</p>
+          <h2>Still early. Ready to try.</h2>
+          <p>MIT licensed. Feedback and issues welcome.</p>
         </div>
         <div class="cta-actions">
-          <a class="btn btn-primary" href="https://github.com/xmonader/pirs">Star on GitHub</a>
-          <a class="btn btn-ghost" href="programmable.html">Write a pack</a>
+          <a class="btn btn-primary" href="https://github.com/xmonader/pirs">GitHub</a>
+          <a class="btn btn-ghost" href="examples.html">Examples</a>
         </div>
       </div>
     </section>
@@ -334,11 +213,10 @@ export OPENAI_API_KEY=…   # or provider keys
         <span>pirs</span>
       </div>
       <nav class="footer-nav" aria-label="Footer">
-        <a href="programmable.html">Rhai</a>
+        <a href="extend.html">Extend</a>
         <a href="strategies.html">Strategies</a>
-        <a href="capabilities.html">Capabilities</a>
+        <a href="features.html">Features</a>
         <a href="examples.html">Examples</a>
-        <a href="https://github.com/xmonader/pirs">GitHub</a>
       </nav>
       <p class="footer-meta">
         MIT · <a href="https://github.com/xmonader/pirs">xmonader/pirs</a>
