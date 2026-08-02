@@ -1,5 +1,7 @@
 # pirs
 
+**Website:** [xmonader.github.io/pirs](https://xmonader.github.io/pirs/) · source in [`site/`](site/)
+
 **Two products** over one agent core — see [docs/PRODUCTS.md](docs/PRODUCTS.md):
 
 | Product | Binary | Role |

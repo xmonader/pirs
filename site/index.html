@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>pirs — multi-model coding agent harness</title>
+  <meta name="description" content="pirs is a Rust coding agent harness and personal agent. Dual-model strategies, honest SWE-bench, Telegram-first claw. Plan on a strong model, execute on a cheap one." />
+  <meta name="theme-color" content="#0c0f0e" />
+  <meta property="og:title" content="pirs" />
+  <meta property="og:description" content="Multi-model coding agent harness + Telegram-first personal agent. Rust. Honest benches." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://xmonader.github.io/pirs/" />
+  <link rel="canonical" href="https://xmonader.github.io/pirs/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230c0f0e'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-size='14' font-weight='700' fill='%23e8a54b'%3Ep%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top" aria-label="pirs home">
+        <span class="brand-mark" aria-hidden="true">▸</span>
+        <span class="brand-name">pirs</span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="#products">Products</a>
+        <a href="#strategies">Strategies</a>
+        <a href="#bench">Bench</a>
+        <a href="#install">Install</a>
+        <a href="#docs">Docs</a>
+        <a class="nav-cta" href="https://github.com/xmonader/pirs">GitHub</a>
+      </nav>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu">
+        <span></span><span></span>
+      </button>
+    </div>
+    <nav id="mobile-nav" class="mobile-nav" hidden>
+      <a href="#products">Products</a>
+      <a href="#strategies">Strategies</a>
+      <a href="#bench">Bench</a>
+      <a href="#install">Install</a>
+      <a href="#docs">Docs</a>
+      <a href="https://github.com/xmonader/pirs">GitHub →</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section id="top" class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Rust · OpenAI / Anthropic compatible · alpha</p>
+          <h1>
+            Plan on a strong model.<br />
+            <span class="accent">Execute on a cheap one.</span>
+          </h1>
+          <p class="lede">
+            <strong>pirs</strong> is a multi-model coding agent harness and a Telegram-first personal agent
+            on one Rust core — strategies, tools, honest SWE-bench, no checkbox theater.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#install">Get started</a>
+            <a class="btn btn-ghost" href="https://github.com/xmonader/pirs">View source</a>
+          </div>
+          <ul class="hero-stats" aria-label="Highlights">
+            <li>
+              <span class="stat-value">34/50</span>
+              <span class="stat-label">strict SWE Lite · weak-drive</span>
+            </li>
+            <li>
+              <span class="stat-value">2</span>
+              <span class="stat-label">products · one core</span>
+            </li>
+            <li>
+              <span class="stat-value">hybrid</span>
+              <span class="stat-label">thrash → advisor</span>
+            </li>
+          </ul>
+        </div>
+        <aside class="hero-panel" aria-label="Example session">
+          <div class="terminal">
+            <div class="terminal-bar">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="terminal-title">weak-drive · dual model</span>
+            </div>
+            <pre class="terminal-body"><code><span class="t-prompt">$</span> pirs --model deepseek-v4-flash \
+    --plan-model deepseek-v4-pro \
+    --strategy weak-drive \
+    "fix the failing tests"
+
+<span class="t-dim"># 1. strong plan</span>   <span class="t-ok">readonly</span>
+<span class="t-dim"># 2. weak exec</span>    <span class="t-accent">full tools</span>
+<span class="t-dim"># 3. strong review</span> <span class="t-ok">APPROVE / REVISE</span>
+<span class="t-dim"># 4. weak fixup</span>   <span class="t-muted">skipped if APPROVE</span>
+
+<span class="t-ok">✓</span> tests green · role-split usage printed</code></pre>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="products" class="section">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow">Portfolio</p>
+          <h2>Two products. One agent core.</h2>
+          <p>Everything else is a power tool or an extension pack — not a parallel stack.</p>
+        </header>
+        <div class="card-grid two">
+          <article class="card product">
+            <div class="card-kicker">Harness</div>
+            <h3><code>pirs</code></h3>
+            <p>
+              Multi-model strategies, model registry, <code>--weak</code> hardening,
+              TUI / REPL / web / RPC / ACP. Peer class: coding agent harnesses (pi, …).
+            </p>
+            <ul class="feature-list">
+              <li>Streaming agent loop + built-in coding tools</li>
+              <li>Rhai strategies &amp; extension packs</li>
+              <li>LSP, code graph, AST edit, blast radius</li>
+              <li>Audit log, undo, doctor, PR &amp; fleet tools</li>
+            </ul>
+          </article>
+          <article class="card product">
+            <div class="card-kicker">Agent</div>
+            <h3><code>pirs-claw</code></h3>
+            <p>
+              Daily ops on the same core: chat, schedules, Telegram-first gateway,
+              pairing, local / docker / ssh exec. Depth over channel zoo.
+            </p>
+            <ul class="feature-list">
+              <li>Telegram gateway + session pairing</li>
+              <li>Schedules with fire / fail / timeout</li>
+              <li>Shared tools, skills, learn/crystallize</li>
+              <li>Channel stubs only for Discord/Slack/…</li>
+            </ul>
+          </article>
+        </div>
+        <div class="power-tools">
+          <span class="label">Power tools</span>
+          <div class="chip-row">
+            <span class="chip"><code>pirs-bench</code> — honest red→green judge</span>
+            <span class="chip"><code>pirs-orchestrator</code> — multi-instance fleet</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="strategies" class="section section-alt">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow">Strategies</p>
+          <h2>Policy in Rhai. Mechanism in Rust.</h2>
+          <p>
+            Built-in strategies are embedded maps — project files under
+            <code>.pirs/strategies/</code> shadow the same name.
+          </p>
+        </header>
+        <div class="strategy-table-wrap">
+          <table class="strategy-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Shape</th>
+                <th>Multi-model</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>monolithic</code></td>
+                <td>One growing loop</td>
+                <td><code>--model</code> only</td>
+              </tr>
+              <tr>
+                <td><code>plan-exec</code></td>
+                <td>Readonly plan → full exec</td>
+                <td>Plan on <code>--plan-model</code></td>
+              </tr>
+              <tr>
+                <td><code>plan-critic-exec</code></td>
+                <td>Plan → critic → exec</td>
+                <td>Plan/critic on plan-model</td>
+              </tr>
+              <tr>
+                <td><code>spark-ember</code></td>
+                <td>Parallel spark explore → ember code</td>
+                <td>Spark ↔ plan, ember ↔ model</td>
+              </tr>
+              <tr class="highlight-row">
+                <td><code>weak-drive</code></td>
+                <td>Strong plan → weak exec → strong review → weak fixup</td>
+                <td><strong>hybrid</strong> thrash→advisor</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout">
+          <strong>Recommended day-to-day:</strong>
+          dual-model <code>weak-drive</code> or <code>plan-exec</code>.
+          Use <code>--autonomy full</code> for unattended / bench runs
+          (default <code>edit</code> blocks bash).
+        </div>
+      </div>
+    </section>
+
+    <section id="bench" class="section">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow">Honest evaluation</p>
+          <h2>SWE-bench Lite · measured, not marketed</h2>
+          <p>
+            Same 50-instance set. <strong>Strict</strong> means the agent never sees
+            <code>test_patch</code> / fail-to-pass names. Grade after with oracle tests.
+          </p>
+        </header>
+        <div class="bench-grid">
+          <div class="bench-score">
+            <div class="score-num">34<span class="score-den">/50</span></div>
+            <div class="score-meta">
+              <strong>strict weak-drive</strong><br />
+              flash + pro · P2P sample cap 40
+            </div>
+          </div>
+          <div class="bench-notes">
+            <h3>How to read scores</h3>
+            <ul>
+              <li>Keep-green lists are capped (default 40) — harness-relative, not full-suite claims.</li>
+              <li>Fair / raw-ids scores are <em>not</em> comparable to strict.</li>
+              <li>Results land in-repo under <code>qa/bench-swebench-5x5/results_*</code>.</li>
+              <li>Process suite: <a href="https://github.com/xmonader/pirs/tree/main/qa/shrimpswe">qa/shrimpswe</a> (weak-drive 4/5).</li>
+            </ul>
+            <p class="muted">
+              Full leaderboard &amp; honesty notes in the repo —
+              <a href="https://github.com/xmonader/pirs/blob/main/qa/bench-swebench-5x5/LEADERBOARD.md">LEADERBOARD.md</a>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section section-alt">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow">Surface</p>
+          <h2>What ships in the core</h2>
+        </header>
+        <div class="card-grid three">
+          <article class="card">
+            <h3>Multi-backend models</h3>
+            <p>OpenRouter, DashScope, DeepSeek, OpenAI, Anthropic, Groq — pin with <code>backend/id</code> or portable names with failover.</p>
+          </article>
+          <article class="card">
+            <h3>Interfaces</h3>
+            <p>TUI console, REPL, browser UI (<code>--serve</code>), headless RPC, Agent Client Protocol for editors.</p>
+          </article>
+          <article class="card">
+            <h3>Code intelligence</h3>
+            <p>Tree-sitter graph, LSP (def/refs/hover/diagnostics/call hierarchy), <code>ast_edit</code>, blast-radius on edits.</p>
+          </article>
+          <article class="card">
+            <h3>Safety &amp; ops</h3>
+            <p>Approval modes, audit JSONL, session undo, worktrees, profiles, path/sandbox packs, secret redaction.</p>
+          </article>
+          <article class="card">
+            <h3>Extensibility</h3>
+            <p>Rhai packs: tools, hooks, slash commands, thrash gates, swarm/hive, skill crystallization.</p>
+          </article>
+          <article class="card">
+            <h3>Hybrid economics</h3>
+            <p>Role-split token usage; thrash→advisor when <code>hybrid: true</code> and <code>--plan-model</code> is set.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="install" class="section">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow">Install</p>
+          <h2>Build from source or grab a release</h2>
+        </header>
+        <div class="install-grid">
+          <div class="card install-card">
+            <h3>Quick install script</h3>
+            <pre class="code-block"><code>curl -fsSL https://raw.githubusercontent.com/xmonader/pirs/main/scripts/install.sh | sh</code></pre>
+            <p class="muted">Installs <code>pirs</code>, <code>pirs-claw</code>, <code>pirs-orchestrator</code> into <code>~/.local/bin</code> (override with <code>PIRS_INSTALL_DIR</code>).</p>
+          </div>
+          <div class="card install-card">
+            <h3>From source</h3>
+            <pre class="code-block"><code>git clone https://github.com/xmonader/pirs.git
+cd pirs
+cargo build --release
+
+export OPENAI_API_KEY=…   # or Anthropic / provider keys
+./target/release/pirs --mode tui</code></pre>
+          </div>
+        </div>
+        <div class="card recipe">
+          <h3>Recommended coding recipe</h3>
+          <pre class="code-block"><code>pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy weak-drive "fix the failing tests"
+
+# Unattended / benches — shell must work
+pirs -C /path/to/ws --autonomy full \
+  --model deepseek-v4-flash --plan-model deepseek-v4-pro \
+  --strategy weak-drive "…"</code></pre>
+          <p class="muted">Keys: env or <code>~/.pirs/secrets.env</code>. Never commit secrets.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="docs" class="section section-alt">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow">Documentation</p>
+          <h2>Start here in the repo</h2>
+        </header>
+        <div class="docs-grid">
+          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/PRODUCTS.md">
+            <span class="doc-title">Products</span>
+            <span class="doc-desc">Harness vs claw, power tools, channel policy</span>
+          </a>
+          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/STRATEGIES.md">
+            <span class="doc-title">Strategies</span>
+            <span class="doc-desc">weak-drive, plan-exec, hybrid semantics</span>
+          </a>
+          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/DEVELOPMENT.md">
+            <span class="doc-title">Development</span>
+            <span class="doc-desc">Build, test, crate map</span>
+          </a>
+          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/MODELS.md">
+            <span class="doc-title">Models</span>
+            <span class="doc-desc">Backends, pins, portable names</span>
+          </a>
+          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/SWE-QA.md">
+            <span class="doc-title">SWE-QA</span>
+            <span class="doc-desc">Campaign protocol &amp; strict scoring</span>
+          </a>
+          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/TUI-JOURNEY.md">
+            <span class="doc-title">TUI journey</span>
+            <span class="doc-desc">First-run tour &amp; key bindings</span>
+          </a>
+          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/docs/pirs-claw.md">
+            <span class="doc-title">pirs-claw</span>
+            <span class="doc-desc">Gateway, schedules, Telegram</span>
+          </a>
+          <a class="doc-link" href="https://github.com/xmonader/pirs/blob/main/AGENTS.md">
+            <span class="doc-title">AGENTS.md</span>
+            <span class="doc-desc">Conventions for humans &amp; agents</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-band">
+      <div class="wrap cta-inner">
+        <div>
+          <h2>Ship with dual models, not dual stacks.</h2>
+          <p>Open source under MIT. Status: alpha — core tested; feedback welcome.</p>
+        </div>
+        <div class="cta-actions">
+          <a class="btn btn-primary" href="https://github.com/xmonader/pirs">Star on GitHub</a>
+          <a class="btn btn-ghost" href="https://github.com/xmonader/pirs/issues">Open an issue</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true">▸</span>
+        <span>pirs</span>
+      </div>
+      <p class="footer-meta">
+        MIT · <a href="https://github.com/xmonader/pirs">xmonader/pirs</a>
+        · site source in <code>site/</code>
+      </p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
