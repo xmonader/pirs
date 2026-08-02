@@ -50,8 +50,9 @@
         <p class="eyebrow">How the agent works a task</p>
         <h1>Strategies</h1>
         <p class="lede">
-          A strategy is just the step-by-step playbook pirs follows for a task.
-          Pick one with <code>--strategy …</code>. You can also write your own as a script.
+          A strategy is the step-by-step playbook pirs follows for a task.
+          Pick one with <code>--strategy …</code>. Numbers below are from our own runs —
+          not marketing benchmarks from other tools.
         </p>
       </div>
     </section>
@@ -59,30 +60,121 @@
     <section class="section-sm">
       <div class="wrap wrap-prose">
         <div class="content-block">
+          <h2>Measured results</h2>
+          <p>
+            Same 50-bug SWE-bench Lite set, <strong>strict</strong> protocol:
+            the agent never sees the hidden test patch. Executor model is
+            <code>deepseek-v4-flash</code> unless noted.
+          </p>
+          <div class="strategy-table-wrap score-table">
+            <table class="strategy-table">
+              <thead>
+                <tr>
+                  <th>Strategy</th>
+                  <th>Models</th>
+                  <th>Strict SWE Lite</th>
+                  <th>Process suite</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="highlight-row">
+                  <td><code>weak-drive</code></td>
+                  <td>flash + pro</td>
+                  <td><strong>34/50</strong> (68%)</td>
+                  <td><strong>4/5</strong></td>
+                </tr>
+                <tr>
+                  <td><code>plan-exec</code></td>
+                  <td>flash + pro</td>
+                  <td>—</td>
+                  <td><strong>4/5</strong></td>
+                </tr>
+                <tr>
+                  <td>no strategy (naive)</td>
+                  <td>flash only</td>
+                  <td>31/50 (62%)</td>
+                  <td>3/5</td>
+                </tr>
+                <tr>
+                  <td><code>monolithic</code></td>
+                  <td>flash only</td>
+                  <td>29/50 (58%)</td>
+                  <td>3/5</td>
+                </tr>
+                <tr>
+                  <td>mono + shadow verify</td>
+                  <td>flash only</td>
+                  <td>32/50 (64%)</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td><code>spark-ember</code></td>
+                  <td>flash only</td>
+                  <td>4/5 smoke · 9/20 batch</td>
+                  <td>—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="muted">
+            <strong>Process suite</strong> = <a href="https://github.com/xmonader/pirs/blob/main/qa/shrimpswe/RESULTS.md">shrimpswe</a>
+            (5 multi-step coding traps: multi-site, red herring, needle, broken env, moving target).
+            Peer harness on the same strict SWE set: <strong>pi 27/50</strong>.
+          </p>
+          <p class="muted">
+            Caveats: keep-green regression sample is capped (default 40 tests);
+            the 34/50 weak-drive run predates a stricter git scrub — full notes in
+            <a href="https://github.com/xmonader/pirs/blob/main/qa/bench-swebench-5x5/LEADERBOARD.md">LEADERBOARD.md</a>.
+            Weak-drive is the only full-50 row that also uses a second (strong) model for plan/review.
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2>What that means in practice</h2>
+          <ul>
+            <li>
+              <strong>weak-drive (34/50, 4/5)</strong> — best measured default for real bugs.
+              Dual model pays off: +5 vs mono on strict SWE, +1 vs naive/mono on the process suite.
+            </li>
+            <li>
+              <strong>plan-exec (4/5 process)</strong> — same process score as weak-drive on shrimpswe;
+              we haven’t published a full strict-50 for it yet.
+            </li>
+            <li>
+              <strong>monolithic / naive (~29–31/50, 3/5)</strong> — fine for small tasks;
+              lose more on multi-step traps (red herring, broken env).
+            </li>
+            <li>
+              <strong>spark-ember</strong> — partial data only (5 + 20 instance slices), not a full-50 score.
+            </li>
+          </ul>
+        </div>
+
+        <div class="content-block">
           <h2>Start here</h2>
           <div class="phase-steps">
             <div class="phase-step">
               <span class="phase-num">★</span>
               <div>
-                <h4><code>weak-drive</code> — best default for real bugs</h4>
+                <h4><code>weak-drive</code> <span class="score-pill">34/50 · 4/5</span></h4>
                 <p>
                   Strong model plans → cheap model codes → strong model reviews → cheap model fixes if needed.
-                  Use two models: <code>--model</code> (cheap) and <code>--plan-model</code> (strong).
+                  Flags: <code>--model</code> (cheap) + <code>--plan-model</code> (strong).
                 </p>
               </div>
             </div>
             <div class="phase-step">
               <span class="phase-num">2</span>
               <div>
-                <h4><code>plan-exec</code> — simple two-step</h4>
-                <p>Plan once, then execute. Good when you want dual models without the full review loop.</p>
+                <h4><code>plan-exec</code> <span class="score-pill">4/5 process</span></h4>
+                <p>Plan once, then execute. Dual models without the full review loop.</p>
               </div>
             </div>
             <div class="phase-step">
               <span class="phase-num">3</span>
               <div>
-                <h4><code>monolithic</code> — one model, one loop</h4>
-                <p>Classic single conversation. Fine for small tasks or when you only have one model set up.</p>
+                <h4><code>monolithic</code> <span class="score-pill">29/50 · 3/5</span></h4>
+                <p>One model, one growing loop. Simple; weaker on hard multi-step tasks.</p>
               </div>
             </div>
           </div>
@@ -100,18 +192,18 @@
           </ol>
           <p class="muted">
             If the cheap model gets stuck mid-task, it can also ask the strong model for help
-            (when hybrid mode is on — the default for this strategy).
+            (hybrid mode — on by default for this strategy).
           </p>
         </div>
 
         <div class="content-block">
           <h2>Also available</h2>
           <ul>
-            <li><code>plan-critic-exec</code> — plan, then a critic pass, then execute</li>
-            <li><code>spark-ember</code> — explore in parallel, then code</li>
+            <li><code>plan-critic-exec</code> — plan, then a critic pass, then execute (no full-50 score yet)</li>
+            <li><code>spark-ember</code> — explore in parallel, then code (4/5 smoke, 9/20 follow-up batch)</li>
           </ul>
           <p class="muted">
-            Full names, aliases, and script format:
+            Script format and aliases:
             <a href="https://github.com/xmonader/pirs/blob/main/docs/STRATEGIES.md">docs/STRATEGIES.md</a>
           </p>
         </div>
@@ -119,7 +211,7 @@
         <div class="content-block">
           <h2>Write your own</h2>
           <p>
-            Strategies are plain scripts under <code>.pirs/strategies/</code>.
+            Strategies are scripts under <code>.pirs/strategies/</code>.
             See a minimal plan→exec example on the <a href="examples.html">examples</a> page,
             or the built-ins in
             <a href="https://github.com/xmonader/pirs/tree/main/crates/pirs-rhai/builtins">crates/pirs-rhai/builtins</a>.

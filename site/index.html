@@ -182,11 +182,11 @@ pirs --model deepseek-v4-flash --plan-model deepseek-v4-pro \
         <header class="section-head">
           <h2>Does it work?</h2>
           <p>
-            On a strict SWE-bench Lite set of 50 bugs (agent never sees the test patch),
-            dual-model <code>weak-drive</code> scored <strong>34/50</strong>.
-            Details and caveats live in the
-            <a href="https://github.com/xmonader/pirs/blob/main/qa/bench-swebench-5x5/LEADERBOARD.md">leaderboard</a>
-            in the repo — we try not to overclaim.
+            On the same strict 50-bug SWE-bench Lite set (agent never sees the test patch):
+            <strong>weak-drive 34/50</strong>, no-strategy 31/50, monolithic 29/50
+            (flash executor; weak-drive also uses pro for plan/review).
+            On a 5-task process suite: weak-drive and plan-exec <strong>4/5</strong>, mono/naive <strong>3/5</strong>.
+            Full table and caveats on the <a href="strategies.html">strategies</a> page.
           </p>
         </header>
       </div>
